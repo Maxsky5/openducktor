@@ -38,7 +38,7 @@ export type WorkspaceActivityBadges = {
 
 export type WorkspaceActivityState =
   | { kind: "unknown" }
-  | ({ kind: "ready" } & WorkspaceActivityBadges)
+  | ({ kind: "ready"; statusUnavailableReason: string | null } & WorkspaceActivityBadges)
   | { kind: "unavailable"; reason: string };
 
 export const UNKNOWN_WORKSPACE_ACTIVITY: WorkspaceActivityState = { kind: "unknown" };
@@ -58,7 +58,8 @@ export const sameWorkspaceActivityState = (
       right.kind === "ready" &&
       left.inputRequired === right.inputRequired &&
       left.error === right.error &&
-      left.active === right.active
+      left.active === right.active &&
+      left.statusUnavailableReason === right.statusUnavailableReason
     );
   }
   return true;
@@ -177,12 +178,15 @@ export const foldWorkspaceSessionLiveFacts = (
     const ownerKey = resolveWorkspaceSessionOwnerKey(sessions, key);
     const owner = owners.get(ownerKey) ?? {
       status: sessions.get(ownerKey)?.status ?? session.status,
-      statusUnavailableReason: sessions.get(ownerKey)?.statusUnavailableReason ?? null,
+      statusUnavailableReason: null,
       pendingQuestion: false,
       pendingPermission: false,
       pendingInputs: new Set<string>(),
       fault: null,
     };
+    const fault = faults.get(key);
+    owner.statusUnavailableReason ??=
+      session.statusUnavailableReason ?? (fault?.statusUnavailable ? fault.message : null);
     owner.pendingQuestion ||= session.pendingQuestions.length > 0;
     owner.pendingPermission ||= session.pendingApprovals.length > 0;
     for (const request of session.pendingQuestions) {
@@ -191,7 +195,7 @@ export const foldWorkspaceSessionLiveFacts = (
     for (const request of session.pendingApprovals) {
       owner.pendingInputs.add(JSON.stringify([key, "permission", pendingInputIdentity(request)]));
     }
-    owner.fault ??= faults.get(key)?.message ?? null;
+    owner.fault ??= fault?.message ?? null;
     owners.set(ownerKey, owner);
   }
 
@@ -223,24 +227,27 @@ export const foldWorkspaceSessionLiveFacts = (
 export const foldWorkspaceActivityBadges = (
   sessions: ReadonlyMap<string, WorkspaceActivitySession>,
   archivedSessionKeys: ReadonlySet<string>,
-): WorkspaceActivityBadges => {
+): WorkspaceActivityBadges & { statusUnavailableReason: string | null } => {
   const counted = new Map<string, WorkspaceActivitySession>();
+  let statusUnavailableReason: string | null = null;
   for (const [key, session] of sessions) {
     if (!isArchivedBranch(sessions, archivedSessionKeys, key)) {
       counted.set(key, session);
+      statusUnavailableReason ??= session.statusUnavailableReason;
     }
   }
 
   let inputRequired = false;
   let error = false;
   let active = false;
-  for (const { activityState } of foldWorkspaceSessionLiveFacts(counted, new Map()).values()) {
+  for (const facts of foldWorkspaceSessionLiveFacts(counted, new Map()).values()) {
+    const { activityState } = facts;
     if (activityState === "waiting_input") {
       inputRequired = true;
       continue;
     }
     if (isAgentSessionActivityWorking(activityState)) {
-      active = true;
+      active ||= facts.statusUnavailableReason === null;
       continue;
     }
     if (activityState === "error") {
@@ -248,5 +255,5 @@ export const foldWorkspaceActivityBadges = (
     }
   }
 
-  return { inputRequired, error, active };
+  return { inputRequired, error, active, statusUnavailableReason };
 };

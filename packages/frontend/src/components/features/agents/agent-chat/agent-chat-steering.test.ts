@@ -91,6 +91,15 @@ describe("steering rules", () => {
       null,
     ],
     [
+      "background-only Running takes a queued steer as a new turn",
+      () =>
+        queuedMessageSteerBlockedReason(
+          queued(command, image),
+          working({ foregroundTurnActive: false, steerBlockedReason: VERSION_REASON }),
+        ),
+      null,
+    ],
+    [
       "the runtime version reason comes before the content of a queued message",
       () =>
         queuedMessageSteerBlockedReason(

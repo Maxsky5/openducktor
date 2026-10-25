@@ -33,10 +33,30 @@ export const isAgentSessionActivityWorking = (
 ): activityState is WorkingAgentSessionActivityState =>
   activityState === "starting" || activityState === "running";
 
+export const isAgentSessionForegroundActive = (
+  session: Pick<
+    AgentSessionState,
+    "status" | "foregroundTurnActive" | "pendingUserMessageStartedAt"
+  >,
+): boolean =>
+  session.status === "starting" ||
+  session.pendingUserMessageStartedAt !== undefined ||
+  (session.foregroundTurnActive ?? session.status === "running");
+
 export const isAgentSessionActivityActive = (
   activityState: OptionalAgentSessionActivityState,
+  statusUnavailableReason?: string | null,
 ): activityState is ActiveAgentSessionActivityState =>
-  activityState === "waiting_input" || isAgentSessionActivityWorking(activityState);
+  activityState === "waiting_input" ||
+  (!statusUnavailableReason && isAgentSessionActivityWorking(activityState));
+
+export const visibleSessionActivity = (
+  activity: AgentSessionActivityState | null,
+  statusUnavailableReason?: string | null,
+): AgentSessionActivityState | null =>
+  statusUnavailableReason && (activity === "idle" || isAgentSessionActivityWorking(activity))
+    ? null
+    : activity;
 
 export const compareActiveAgentSessionActivityState = (
   left: ActiveAgentSessionActivityState,

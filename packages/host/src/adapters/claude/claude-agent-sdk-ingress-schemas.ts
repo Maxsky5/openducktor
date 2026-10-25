@@ -128,6 +128,7 @@ const claudeTaskUsageSchema = z.object({
 const claudeTaskMessageSchema = z.object({
   type: z.literal("system"),
   task_id: z.string(),
+  run_id: z.string().optional(),
   uuid: z.string(),
   session_id: z.string(),
 });
@@ -143,6 +144,7 @@ const claudeTaskStartedMessageSchema = claudeTaskMessageSchema.extend({
   skip_transcript: z.boolean().optional(),
   ambient: z.boolean().optional(),
   is_backgrounded: z.boolean().optional(),
+  parent_task_id: z.string().optional(),
 });
 
 const claudeTaskProgressMessageSchema = claudeTaskMessageSchema.extend({

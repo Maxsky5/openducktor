@@ -3271,6 +3271,56 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps unavailable status through completion and snapshot updates until native status confirms it", async () => {
+    const live = snapshot({ activity: "running" });
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [live] })));
+    const failure = "Live-session observation failed: The runtime lost this session.";
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit({ ...scopedFault(live.ref), statusUnavailable: true });
+        state.emit({
+          type: "session_upsert",
+          session: { ...live, statusUnavailableReason: failure, title: "Updated title" },
+        });
+        state.emit({
+          type: "transcript_event",
+          event: {
+            type: "session_turn_finished",
+            externalSessionId: live.ref.externalSessionId,
+            sessionRef: live.ref,
+            timestamp: "2026-10-23T18:10:00.000Z",
+            completionId: "result",
+            messageIds: [],
+            turnOutcome: "completed",
+          },
+        });
+      });
+      expect(state.harness.getLatest().getSessionFault(live.ref)).toEqual({
+        message: failure,
+        statusUnavailable: true,
+      });
+      expect(state.getSession()?.statusUnavailableReason).toBe(failure);
+      await state.harness.run(() =>
+        state.emit({
+          type: "transcript_event",
+          event: {
+            type: "session_status",
+            externalSessionId: live.ref.externalSessionId,
+            sessionRef: live.ref,
+            timestamp: "2026-10-23T18:10:01.000Z",
+            status: { type: "busy", message: null },
+          },
+        }),
+      );
+      expect(state.harness.getLatest().getSessionFault(live.ref)).toBeNull();
+      expect(state.getSession()?.statusUnavailableReason).toBeNull();
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("keeps a fault without a session reference as a repository failure", async () => {
     const state = createState((emit) => {
       emit({

@@ -87,6 +87,7 @@ describe("agent-session-runtime-snapshot", () => {
         workingDirectory: "/repo/worktree",
         startedAt: "2026-02-22T12:00:00.000Z",
         runtimeActivity: "running",
+        foregroundTurnActive: false,
         pendingApprovals: [],
         pendingQuestions: [],
       },
@@ -95,6 +96,7 @@ describe("agent-session-runtime-snapshot", () => {
     expect(snapshot).toEqual({
       availability: "runtime",
       classification: "running",
+      foregroundTurnActive: false,
       ref: {
         repoPath: "/repo",
         runtimeKind: "opencode",

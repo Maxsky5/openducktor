@@ -1,6 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  getAgentSessionActivityStateFromSession,
+  visibleSessionActivity,
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
@@ -87,14 +90,18 @@ export const deriveSelectedSessionViewProjection = ({
   }
 
   if (selectedSessionIdentity && matchesAgentSessionIdentity(session, selectedSessionIdentity)) {
+    const activityState = getAgentSessionActivityStateFromSession(session);
+    const unavailableReason =
+      session.statusUnavailableReason ??
+      (sessionFault?.statusUnavailable ? sessionFault.message : null);
     return {
-      activityState: getAgentSessionActivityStateFromSession(session),
+      activityState: visibleSessionActivity(activityState, unavailableReason),
       selectedModel: session.selectedModel,
       transcriptState: deriveLoadedAgentSessionTranscriptState({
         session,
         runtimeReadinessState,
       }),
-      sessionAuxiliaryError,
+      sessionAuxiliaryError: unavailableReason ?? sessionAuxiliaryError,
     };
   }
 

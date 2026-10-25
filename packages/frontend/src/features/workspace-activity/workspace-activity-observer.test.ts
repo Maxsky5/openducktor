@@ -116,6 +116,68 @@ const createHarness = ({
 };
 
 describe("createWorkspaceActivityObserver", () => {
+  test("keeps confirmed activity and input when one session group becomes unavailable", async () => {
+    const harness = createHarness();
+    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
+    await harness.settle();
+    const sessions = [
+      snapshot("/alpha", "uncertain", { activity: "running" }),
+      snapshot("/alpha", "child", {
+        parentExternalSessionId: "uncertain",
+        statusUnavailableReason: "Child stream lost",
+      }),
+      snapshot("/alpha", "running", { activity: "running" }),
+      snapshot("/alpha", "waiting", {
+        pendingApprovals: [
+          { requestId: "approval", requestType: "runtime_tool", title: "Allow tool" },
+        ],
+      }),
+      snapshot("/alpha", "failed"),
+    ];
+    harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions }));
+    harness.emit("/alpha", {
+      type: "transcript_event",
+      event: {
+        type: "session_error",
+        externalSessionId: "failed",
+        sessionRef: snapshot("/alpha", "failed").ref,
+        timestamp: "2026-10-23T18:10:00.000Z",
+        message: "Execution failed",
+      },
+    });
+    const partial = harness.observer.getWorkspaceActivity("alpha");
+    if (partial.kind !== "ready") throw new Error("Expected ready workspace activity");
+    expect(partial).toEqual({
+      kind: "ready",
+      inputRequired: true,
+      active: true,
+      error: true,
+      statusUnavailableReason: "Child stream lost",
+    });
+    harness.emit("/alpha", { type: "session_removed", ref: sessions[2]!.ref });
+    expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({ ...partial, active: false });
+    harness.emit("/alpha", {
+      type: "session_upsert",
+      session: { ...sessions[1]!, statusUnavailableReason: "Reconnect Claude" },
+    });
+    const changedCause = harness.observer.getWorkspaceActivity("alpha");
+    expect(changedCause).not.toBe(partial);
+    expect(changedCause).toMatchObject({
+      statusUnavailableReason: "Reconnect Claude",
+      active: false,
+    });
+    harness.archived.set("alpha", new Set([agentSessionIdentityKey(sessions[0]!.ref)]));
+    harness.notifyArchivedChanged();
+    expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
+      kind: "ready",
+      inputRequired: true,
+      active: false,
+      error: true,
+      statusUnavailableReason: null,
+    });
+    harness.observer.dispose();
+  });
+
   test("keeps a failed status read in the session list until a status update confirms it", () => {
     const harness = createHarness();
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
@@ -290,6 +352,7 @@ describe("createWorkspaceActivityObserver", () => {
     await harness.settle();
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: true,
@@ -315,12 +378,14 @@ describe("createWorkspaceActivityObserver", () => {
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: true,
     });
     expect(harness.observer.getWorkspaceActivity("beta")).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: false,
@@ -370,6 +435,7 @@ describe("createWorkspaceActivityObserver", () => {
     harness.emit("/alpha", createLiveSnapshotEnvelope({ repoPath: "/alpha", sessions: [] }));
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: false,
@@ -396,6 +462,7 @@ describe("createWorkspaceActivityObserver", () => {
     expect(harness.observer.getWorkspaceActivity("alpha")).toBe(ready);
     expect(ready).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: false,
@@ -428,6 +495,7 @@ describe("createWorkspaceActivityObserver", () => {
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: false,
@@ -486,6 +554,7 @@ describe("createWorkspaceActivityObserver", () => {
 
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "ready",
+      statusUnavailableReason: null,
       inputRequired: false,
       error: false,
       active: true,

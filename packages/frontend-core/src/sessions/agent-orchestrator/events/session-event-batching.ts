@@ -17,6 +17,7 @@ const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
   "turn_error",
   "session_error",
   "session_idle",
+  "session_turn_finished",
   "image_generation_turn_started",
   "image_generation_settled",
   "session_finished",

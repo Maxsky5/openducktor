@@ -13,6 +13,7 @@ const initializationResponse = (): SDKControlInitializeResponse => ({
   available_output_styles: [],
   models: [],
   account: {},
+  claude_code_version: "2.1.306",
 });
 
 describe("createClaudeExecutableProbe", () => {
@@ -120,6 +121,60 @@ describe("createClaudeExecutableProbe", () => {
 
     expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
   });
+
+  test.each([undefined, "not-a-version", "2.1.305", "2.0.999", "1.99.999"])(
+    "rejects unsupported native version %s and closes the query",
+    async (version) => {
+      let closed = false;
+      const initialization = initializationResponse();
+      if (version === undefined) delete initialization.claude_code_version;
+      else initialization.claude_code_version = version;
+      const probe = createClaudeExecutableProbe({
+        queryFactory() {
+          return {
+            initializationResult: async () => initialization,
+            async return() {
+              closed = true;
+              return { done: true, value: undefined };
+            },
+          };
+        },
+      });
+
+      const result = await Effect.runPromise(
+        Effect.result(probe.probeExecutable("/usr/local/bin/claude")),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") throw new Error("Expected an incompatible executable.");
+      expect(result.failure._tag).toBe("RuntimeExecutableIncompatibleError");
+      expect(result.failure.message).toContain("2.1.306 or later");
+      expect(result.failure.message).toContain("/usr/local/bin/claude");
+      expect(result.failure.message).toContain("Update Claude Code");
+      expect(closed).toBe(true);
+    },
+  );
+
+  test.each(["2.1.307", "2.2.0", "3.0.0"])(
+    "accepts compatible native version %s",
+    async (version) => {
+      const probe = createClaudeExecutableProbe({
+        queryFactory() {
+          return {
+            initializationResult: async () => ({
+              ...initializationResponse(),
+              claude_code_version: version,
+            }),
+            async return() {
+              return { done: true, value: undefined };
+            },
+          };
+        },
+      });
+
+      await Effect.runPromise(probe.probeExecutable("/usr/local/bin/claude"));
+    },
+  );
 
   test("preserves Agent SDK cleanup failures", async () => {
     const probe = createClaudeExecutableProbe({

@@ -12,6 +12,7 @@ import { type HostError, HostOperationError, HostValidationError } from "../../e
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { createSessionOperationOwner } from "./session-operation-owner";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
+import { isReadyForTurn } from "./session-foreground-readiness";
 
 /** Model stages run under the command owner's existing permit and lifetime. */
 export const createSessionModelPreparation = ({
@@ -23,11 +24,11 @@ export const createSessionModelPreparation = ({
   runtime: Pick<AgentSessionLiveStateService, "updateSessionModel" | "read">;
   turnPreparation: ReturnType<typeof createSessionTurnPreparation>;
 }) => {
-  const idleWaiters = new Map<
+  const waiters = new Map<
     string,
     { ref: AgentSessionLiveRef; waiter: Deferred.Deferred<void, HostError> }
   >();
-  const waitForIdle = (ref: AgentSessionLiveRef): Effect.Effect<void, HostError> =>
+  const waitUntilReady = (ref: AgentSessionLiveRef): Effect.Effect<void, HostError> =>
     Effect.gen(function* () {
       const key = agentSessionRefKey(ref);
       const guarded = yield* owner.options();
@@ -42,7 +43,7 @@ export const createSessionModelPreparation = ({
       });
       yield* assertCurrent;
       const waiter = Deferred.makeUnsafe<void, HostError>();
-      idleWaiters.set(key, { ref, waiter });
+      waiters.set(key, { ref, waiter });
       const { repoPath, runtimeKind, workingDirectory, externalSessionId } = ref;
       yield* runtime.read({ repoPath, runtimeKind, workingDirectory, externalSessionId }).pipe(
         Effect.flatMap((live) => {
@@ -51,14 +52,19 @@ export const createSessionModelPreparation = ({
               field: "externalSessionId",
               message: "The session is not attached. Reopen it before changing its settings.",
             });
-          return live.session.activity === "idle" ? Effect.void : Deferred.await(waiter);
+          if (live.session.statusUnavailableReason)
+            return new HostOperationError({
+              operation: "session.prepare-model",
+              message: live.session.statusUnavailableReason,
+            });
+          return isReadyForTurn(live.session) ? Effect.void : Deferred.await(waiter);
         }),
         Effect.andThen(assertCurrent),
-        Effect.ensuring(Effect.sync(() => idleWaiters.delete(key))),
+        Effect.ensuring(Effect.sync(() => waiters.delete(key))),
       );
     });
   const cancel = (ref: AgentSessionLiveRef): void => {
-    const waiter = idleWaiters.get(agentSessionRefKey(ref))?.waiter;
+    const waiter = waiters.get(agentSessionRefKey(ref))?.waiter;
     if (waiter)
       Deferred.doneUnsafe(
         waiter,
@@ -72,11 +78,25 @@ export const createSessionModelPreparation = ({
       );
   };
   const observe = (change: AgentSessionLiveEnvelope): void => {
+    if (change.type === "fault" && change.statusUnavailable && change.ref) {
+      const waiter = waiters.get(agentSessionRefKey(change.ref))?.waiter;
+      if (waiter)
+        Deferred.doneUnsafe(
+          waiter,
+          Exit.fail(
+            new HostOperationError({
+              operation: "session.prepare-model",
+              message: change.message,
+            }),
+          ),
+        );
+      return;
+    }
     if (change.type === "snapshot") {
       const sessions = new Map(
         change.sessions.map((session) => [agentSessionRefKey(session.ref), session]),
       );
-      for (const [key, pending] of idleWaiters) {
+      for (const [key, pending] of waiters) {
         if (pending.ref.repoPath !== change.repoPath) continue;
         const session = sessions.get(key);
         if (session) observe({ type: "session_upsert", session });
@@ -86,7 +106,7 @@ export const createSessionModelPreparation = ({
     }
     if (change.type !== "session_upsert" && change.type !== "session_removed") return;
     const ref = change.type === "session_upsert" ? change.session.ref : change.ref;
-    const waiter = idleWaiters.get(agentSessionRefKey(ref))?.waiter;
+    const waiter = waiters.get(agentSessionRefKey(ref))?.waiter;
     if (!waiter) return;
     if (change.type === "session_removed") {
       Deferred.doneUnsafe(
@@ -98,7 +118,17 @@ export const createSessionModelPreparation = ({
           }),
         ),
       );
-    } else if (change.session.activity === "idle") {
+    } else if (change.session.statusUnavailableReason) {
+      Deferred.doneUnsafe(
+        waiter,
+        Exit.fail(
+          new HostOperationError({
+            operation: "session.prepare-model",
+            message: change.session.statusUnavailableReason,
+          }),
+        ),
+      );
+    } else if (isReadyForTurn(change.session)) {
       Deferred.doneUnsafe(waiter, Exit.void);
     }
   };
@@ -198,5 +228,5 @@ export const createSessionModelPreparation = ({
       }),
     );
 
-  return { continuationModel, updateModel, waitForIdle, observe, cancel };
+  return { continuationModel, updateModel, waitUntilReady, observe, cancel };
 };

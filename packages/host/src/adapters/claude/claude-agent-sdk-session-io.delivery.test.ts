@@ -8,6 +8,7 @@ import {
   type SendAgentUserMessageInput,
 } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   createClaudeQueryFixture,
@@ -98,6 +99,38 @@ const failureOf = (promise: Promise<unknown>): Promise<Error | null> =>
   );
 
 describe("Claude session I/O message delivery", () => {
+  test("admits a new foreground turn while native background work keeps the session running", async () => {
+    const { pushed, queue } = recordingQueue();
+    const session = createClaudeSession({
+      queue,
+      activity: "running",
+      sdkState: "running",
+      foregroundTurnActive: false,
+    });
+    handleClaudeSdkMessage({
+      session,
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "background_tasks_changed",
+        tasks: [
+          {
+            task_id: "background-task",
+            run_id: "1",
+            task_type: "local_bash",
+            description: "Build",
+          },
+        ],
+      }),
+      timestamp: "2026-10-23T00:00:00.000Z",
+      modelSelection: (modelId) => ({ runtimeKind: "claude", providerId: "claude", modelId }),
+      emit: () => {},
+    });
+    const accepted = await send(session, messageInput());
+    expect(accepted.messageId).toBe(SENT_MESSAGE_ID);
+    expect(pushed).toHaveLength(1);
+    expect(session.foregroundTurnActive).toBe(true);
+  });
+
   test("returns a skill chip for live Claude skill commands", async () => {
     const { pushed, queue } = recordingQueue();
     const session = createClaudeSession({ queue });

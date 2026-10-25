@@ -45,4 +45,24 @@ describe("agent session options", () => {
       ),
     ).toBe("not-a-date · starting · shared-s");
   });
+
+  test.each(["running", "idle", "waiting_input", "error"] as const)(
+    "explains unavailable %s status without losing valid input or errors",
+    (activityState) => {
+      const description = formatAgentSessionOptionDescription(
+        createSession({
+          startedAt: "not-a-date",
+          activityState,
+          statusUnavailableReason: "Update Claude Code and reconnect the runtime.",
+        }),
+      );
+      expect(description).toContain(
+        "status unavailable: Update Claude Code and reconnect the runtime.",
+      );
+      if (activityState === "waiting_input") expect(description).toContain("waiting input");
+      if (activityState === "error") expect(description).toContain("error");
+      if (activityState === "running" || activityState === "idle")
+        expect(description).not.toContain(` · ${activityState} · `);
+    },
+  );
 });

@@ -44,8 +44,6 @@ export type MessageQueue = {
   sendingNewTurn: boolean;
   /** Counts completed turns, so a refused new turn can tell if a turn ended meanwhile. */
   completedTurns: number;
-  /** True when delivery waited for an answer to pending input. The answer releases it. */
-  waitsForInput: boolean;
 };
 
 /** Why the queue waits for the user. Only `snapshotOf` turns a pause into text. */

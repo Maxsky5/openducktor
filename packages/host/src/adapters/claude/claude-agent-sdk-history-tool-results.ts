@@ -9,18 +9,10 @@ import {
   projectClaudeBackgroundToolUse,
 } from "./claude-agent-sdk-background-tools";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
-import { hasActiveClaudeBackgroundWork } from "./claude-agent-sdk-event-session";
 import type { MutableAssistantHistoryMessage } from "./claude-agent-sdk-history-assistant";
-import { isNestedHistoryEntry, readHistorySessionId } from "./claude-agent-sdk-history-entry";
-import {
-  type ClaudeHistoryMessage,
-  isClaudeHistoryBackgroundTasksChangedMessage,
-} from "./claude-agent-sdk-history-messages";
-import {
-  type ClaudeLiveUserMessage,
-  readHistoryToolResults,
-} from "./claude-agent-sdk-history-support";
-import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
+import { readHistorySessionId } from "./claude-agent-sdk-history-entry";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
+import { readHistoryToolResults } from "./claude-agent-sdk-history-support";
 import {
   emitClaudeAgentToolResultSubagentPart,
   emitClaudeTaskStopSubagentPart,
@@ -50,41 +42,6 @@ export type ClaudeHistoryToolResultState = ClaudeBackgroundToolState & {
   todoProjectionState: ClaudeTodoProjectionState;
   todosById: ClaudeTodoState;
   transcriptExternalSessionId: string | undefined;
-};
-
-/** Live task IDs may be newer than saved snapshots or belong to a later prompt. */
-export const createClaudeHistoryTaskCheck = (
-  messages: readonly ClaudeHistoryMessage[],
-  options: {
-    currentBackgroundTaskIds?: ReadonlySet<string>;
-    includeNestedEntries?: boolean;
-  },
-  liveUserMessages: readonly ClaudeLiveUserMessage[],
-) => {
-  const lastSnapshot = messages.findLastIndex(isClaudeHistoryBackgroundTasksChangedMessage);
-  const lastReply = messages.findLastIndex(
-    (message) =>
-      message.type === "assistant" &&
-      !isClaudeSyntheticAssistantMessage(message) &&
-      (options.includeNestedEntries || !isNestedHistoryEntry(message)),
-  );
-  const replyTime = messages[lastReply]?.timestamp;
-  const newerPrompt = liveUserMessages.some(
-    (message) => !replyTime || Date.parse(message.timestamp) > Date.parse(replyTime),
-  );
-  return (index: number, state: ClaudeHistoryToolResultState): boolean => {
-    if (
-      options.currentBackgroundTaskIds !== undefined &&
-      index > lastSnapshot &&
-      index >= lastReply &&
-      !newerPrompt
-    ) {
-      return (
-        state.activeBackgroundSubagentTaskIds.size > 0 || options.currentBackgroundTaskIds.size > 0
-      );
-    }
-    return hasActiveClaudeBackgroundWork(state);
-  };
 };
 
 export const applyClaudeHistoryTaskSnapshot = (

@@ -170,6 +170,13 @@ export const createAgentSessionActivityPersistence = ({
               current.activity = "idle";
             }
             return;
+          case "session_turn_finished":
+            yield* record(ref, at);
+            if (current) {
+              yield* flush(ref, current);
+              current.untimedStatusChange = false;
+            }
+            return;
           case "session_idle":
             if (
               event.turnOutcome !== undefined ||

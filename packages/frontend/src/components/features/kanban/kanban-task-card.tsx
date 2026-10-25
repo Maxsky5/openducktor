@@ -30,6 +30,7 @@ import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import { cn } from "@/lib/utils";
@@ -73,7 +74,11 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
   onResetImplementation,
 }: CardProps): ReactElement {
-  const isActive = hasActiveSession ?? taskSessions.length > 0;
+  const isActive =
+    (hasActiveSession ?? true) &&
+    taskSessions.some((session) =>
+      isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason),
+    );
   const isWaitingInput = taskActivityState === "waiting_input";
   const cardActivityClassName = getCardActivityClassName({
     hasActiveSession: isActive,
@@ -112,6 +117,19 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           <NormalTaskIdentity task={task} onOpenDetails={onOpenDetails} />
         )}
         {isCompact ? <TaskStatus task={task} compact /> : <TaskMeta task={task} />}
+        {taskSessions.map((session) =>
+          session.statusUnavailableReason ? (
+            <p
+              key={agentSessionIdentityKey(session)}
+              role="status"
+              className="mt-1 break-words text-xs text-muted-foreground"
+            >
+              {AGENT_ROLE_LABELS[session.role]}
+              {session.activityState === "error" ? " error" : ""}. Status unavailable:{" "}
+              {session.statusUnavailableReason}
+            </p>
+          ) : null,
+        )}
         <TaskActions
           task={task}
           taskSessions={taskSessions}
@@ -218,7 +236,8 @@ const sameTaskSessions = (
       agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
       leftSession.startedAt !== rightSession.startedAt ||
-      leftSession.activityState !== rightSession.activityState
+      leftSession.activityState !== rightSession.activityState ||
+      leftSession.statusUnavailableReason !== rightSession.statusUnavailableReason
     ) {
       return false;
     }
@@ -268,6 +287,10 @@ const getSessionStatusLabel = ({
 }): string => {
   if (isWaitingInput) {
     return "Waiting input";
+  }
+
+  if (session.statusUnavailableReason) {
+    return "Status unavailable";
   }
 
   if (session.activityState === "starting") {

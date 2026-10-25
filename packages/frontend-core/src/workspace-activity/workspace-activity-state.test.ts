@@ -43,6 +43,7 @@ describe("foldWorkspaceActivityBadges", () => {
       inputRequired: false,
       error: false,
       active: false,
+      statusUnavailableReason: null,
     });
   });
 
@@ -56,7 +57,7 @@ describe("foldWorkspaceActivityBadges", () => {
         session("failed-1", { status: "error" }),
         session("failed-2", { status: "error" }),
       ]),
-    ).toEqual({ inputRequired: true, error: true, active: true });
+    ).toEqual({ inputRequired: true, error: true, active: true, statusUnavailableReason: null });
   });
 
   test("treats a starting session as active", () => {
@@ -64,6 +65,7 @@ describe("foldWorkspaceActivityBadges", () => {
       inputRequired: false,
       error: false,
       active: true,
+      statusUnavailableReason: null,
     });
   });
 
@@ -72,6 +74,7 @@ describe("foldWorkspaceActivityBadges", () => {
       inputRequired: true,
       error: false,
       active: false,
+      statusUnavailableReason: null,
     });
   });
 
@@ -80,13 +83,14 @@ describe("foldWorkspaceActivityBadges", () => {
       inputRequired: false,
       error: false,
       active: false,
+      statusUnavailableReason: null,
     });
   });
 
   test("skips a live subagent of an archived chat", () => {
     expect(
       fold([session("chat"), session("child", { parentKey: "chat", status: "running" })], ["chat"]),
-    ).toEqual({ inputRequired: false, error: false, active: false });
+    ).toEqual({ inputRequired: false, error: false, active: false, statusUnavailableReason: null });
   });
 
   test("skips a live subagent whose archived parent is not reported live", () => {
@@ -94,6 +98,7 @@ describe("foldWorkspaceActivityBadges", () => {
       inputRequired: false,
       error: false,
       active: false,
+      statusUnavailableReason: null,
     });
   });
 
@@ -103,7 +108,7 @@ describe("foldWorkspaceActivityBadges", () => {
         session("parent"),
         session("child", { parentKey: "parent", status: "error", pendingQuestions: [question()] }),
       ]),
-    ).toEqual({ inputRequired: true, error: false, active: false });
+    ).toEqual({ inputRequired: true, error: false, active: false, statusUnavailableReason: null });
   });
 
   test("counts a subagent whose parent is not reported", () => {
@@ -111,7 +116,24 @@ describe("foldWorkspaceActivityBadges", () => {
       inputRequired: false,
       error: false,
       active: true,
+      statusUnavailableReason: null,
     });
+  });
+
+  test("excludes unavailable groups from running while retaining other groups and valid input", () => {
+    const unavailable = session("uncertain", {
+      status: "running",
+      statusUnavailableReason: "Claude status stream ended. Reconnect the runtime.",
+    });
+    expect(fold([unavailable])).toMatchObject({ active: false });
+    expect(
+      fold([
+        unavailable,
+        session("running", { status: "running" }),
+        session("failed", { status: "error" }),
+        session("input", { pendingQuestions: [question()] }),
+      ]),
+    ).toMatchObject({ inputRequired: true, error: true, active: true });
   });
 
   test("stops at a parent cycle instead of looping", () => {
@@ -120,7 +142,7 @@ describe("foldWorkspaceActivityBadges", () => {
         session("a", { parentKey: "b", status: "running" }),
         session("b", { parentKey: "a", status: "running" }),
       ]),
-    ).toEqual({ inputRequired: false, error: false, active: false });
+    ).toEqual({ inputRequired: false, error: false, active: false, statusUnavailableReason: null });
   });
 });
 
@@ -178,5 +200,13 @@ describe("foldWorkspaceSessionLiveFacts", () => {
       pendingPermission: false,
       fault: null,
     });
+  });
+
+  test("uses the first unavailable member in snapshot order for the whole root", () => {
+    const result = facts([
+      session("child", { parentKey: "root", statusUnavailableReason: "Child status lost" }),
+      session("root", { status: "running", statusUnavailableReason: "Root status lost" }),
+    ]);
+    expect(result.get("root")?.statusUnavailableReason).toBe("Child status lost");
   });
 });

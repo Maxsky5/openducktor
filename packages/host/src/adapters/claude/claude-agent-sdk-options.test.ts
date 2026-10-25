@@ -448,7 +448,7 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
     }
   });
 
-  test("sets resume switches only for an explicit request", () => {
+  test("enables session state events and sets resume switches only for an explicit request", () => {
     const normal = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
       cwd: process.cwd(),
@@ -462,7 +462,7 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
       claudeExecutablePath: process.execPath,
       cwd: process.cwd(),
       processEnv: {
-        [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
+        [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "0",
         [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
         [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]: "1",
       },
@@ -471,7 +471,9 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
     expect(normal.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
     expect(resume.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBe("1");
     expect(inherited.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
-    expect(inherited.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBeUndefined();
+    expect(normal.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBe("1");
+    expect(resume.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBe("1");
+    expect(inherited.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBe("1");
     expect(normal.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]).toBeUndefined();
     expect(inherited.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV]).toBeUndefined();
   });

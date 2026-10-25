@@ -34,6 +34,8 @@ import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-envi
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import type { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import type { ClaudeNativeActivityState } from "./claude-agent-sdk-activity";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeWorkspaceFileSearch } from "./claude-agent-sdk-file-search";
 
@@ -57,7 +59,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   randomId?: () => string;
 };
 
-export type ClaudeAgentSdkEvent = AgentEvent;
+export type ClaudeAgentSdkEvent = AgentEvent & { readonly statusUnavailable?: true };
 export type ClaudeToolInput = ClaudeProtocolObject;
 
 export type ClaudeAgentSdkEventEmitter = (
@@ -115,6 +117,7 @@ export type ClaudePendingUserMessageAdmission = {
 };
 
 export type ClaudeSession = ClaudeBackgroundToolState &
+  ClaudeNativeActivityState &
   ErrorState & {
     disabledTools?: ReadonlySet<string>;
     appliedPermissionMode?: string;
@@ -125,6 +128,7 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     activeSdkUserTurnCount: number;
     abortController: AbortController;
     activity: ClaudeSessionActivity;
+    replyStartedAt?: string;
     externalSessionId: string;
     input: ClaudeSessionInput;
     lastAssistantTextMessageId?: string;
@@ -155,6 +159,8 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     subagentMessageIdsByTaskId: Map<string, string>;
     subagentAgentIdsByToolUseId?: Map<string, string>;
     subagentTaskIdsByToolUseId: Map<string, string>;
+    subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
+    subagentEventSessionsByTaskId?: Map<string, ClaudeEventSession>;
     toolEndedAtMsByCallId: Map<string, number>;
     toolStartedAtMsByCallId: Map<string, number>;
     todosById: Map<string, AgentSessionTodoItem>;
@@ -170,6 +176,7 @@ export type ClaudeSessionStore = {
   readonly sessions: Map<string, ClaudeSession>;
   /** Close local resources; the consumer can call this without joining itself. */
   close(session: ClaudeSession): void;
+  confirmClosed(session: ClaudeSession): Effect.Effect<void, HostOperationErrorAggregate>;
   ownConsumer(
     session: ClaudeSession,
     fiber: Fiber.Fiber<void, HostOperationErrorAggregate>,
@@ -183,6 +190,8 @@ export type ClaudeSessionStore = {
     timestamp?: string,
   ): void;
   get(externalSessionId: string): ClaudeSession | undefined;
+  /** Match the latest execution even after it leaves live state. */
+  isLatest(session: ClaudeSessionContext): boolean;
   /** Include consumers that still run after close removes their session. */
   getForCleanup(externalSessionId: string): ClaudeSession | undefined;
   probeSessionStatus(

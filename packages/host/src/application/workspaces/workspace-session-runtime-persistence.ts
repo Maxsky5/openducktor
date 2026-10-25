@@ -461,7 +461,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         if (event.type === "user_message") {
           yield* recordObservedMessage(event.sessionRef, event);
         } else if (
-          event.type === "session_idle" &&
+          (event.type === "session_idle" || event.type === "session_turn_finished") &&
           event.turnOutcome !== undefined &&
           titleSyncNeedsTurn(event.sessionRef.runtimeKind)
         ) {

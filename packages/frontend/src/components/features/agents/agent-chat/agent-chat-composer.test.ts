@@ -400,6 +400,32 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('aria-label="Preparing message" disabled');
   });
 
+  test.each([false, true])(
+    "uses foreground readiness for settings while aggregate Running stays visible: %s",
+    (foregroundTurnActive) => {
+      const html = renderToStaticMarkup(
+        createElement(AgentChatComposer, {
+          model: {
+            ...buildModel(),
+            isSessionWorking: true,
+            foregroundTurnActive,
+            canStopSession: true,
+          },
+        }),
+      );
+      const card = readComposerCard(html);
+      const profile = Array.from(card.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("Hephaestus (Deep Agent)"),
+      );
+      expect(profile).toBeDefined();
+      expect(profile?.hasAttribute("disabled")).toBe(foregroundTurnActive);
+      expect(card.querySelector('[aria-label="Stop session"]')?.hasAttribute("disabled")).toBe(
+        false,
+      );
+      expect(html).toContain('class="odt-border-ray"');
+    },
+  );
+
   // The reference keys stay, so the composer still teaches them while the agent works.
   for (const steerMessagesByDefault of [false, true]) {
     test.each<[string, Partial<AgentChatComposerModel>, string]>([
@@ -420,6 +446,13 @@ describe("AgentChatComposer", () => {
       [
         "an idle session with queued messages",
         { messageQueue: queuedFollowUp },
+        steerMessagesByDefault
+          ? `@ for files; / for commands; Enter to send now; ${steerShortcutLabel()} to queue`
+          : `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to send now`,
+      ],
+      [
+        "background-only running with queued messages",
+        { isSessionWorking: true, foregroundTurnActive: false, messageQueue: queuedFollowUp },
         steerMessagesByDefault
           ? `@ for files; / for commands; Enter to send now; ${steerShortcutLabel()} to queue`
           : `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to send now`,

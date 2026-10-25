@@ -66,20 +66,30 @@ export const acceptedThenFailed = (text: string, delivery: AgentUserMessageDeliv
 export const sessionState = ({
   activity,
   blocked = false,
+  foregroundTurnActive,
+  statusUnavailableReason,
 }: {
   readonly activity: AgentSessionActivity;
   readonly blocked?: boolean;
-}): AgentSessionLiveSnapshot => ({
-  ref,
-  activity,
-  title: "Chat",
-  startedAt: "2026-10-08T09:00:00.000Z",
-  pendingApprovals: blocked
-    ? [{ requestId: "approval-1", requestType: "command_execution", title: "Run tests" }]
-    : [],
-  pendingQuestions: [],
-  contextUsage: null,
-});
+  readonly foregroundTurnActive?: boolean;
+  readonly statusUnavailableReason?: string;
+}): AgentSessionLiveSnapshot => {
+  const snapshot: AgentSessionLiveSnapshot = {
+    ref,
+    activity,
+    title: "Chat",
+    startedAt: "2026-10-08T09:00:00.000Z",
+    pendingApprovals: blocked
+      ? [{ requestId: "approval-1", requestType: "command_execution", title: "Run tests" }]
+      : [],
+    pendingQuestions: [],
+    contextUsage: null,
+  };
+  if (foregroundTurnActive !== undefined) snapshot.foregroundTurnActive = foregroundTurnActive;
+  if (statusUnavailableReason !== undefined)
+    snapshot.statusUnavailableReason = statusUnavailableReason;
+  return snapshot;
+};
 
 const transcript = (event: TranscriptEvent): AgentSessionLiveEnvelope => ({
   type: "transcript_event",
@@ -104,6 +114,17 @@ export const turnError = (message: string) =>
     timestamp,
     message,
     sessionRef: ref,
+  });
+
+export const foregroundEnd = (turnOutcome: "completed" | "interrupted" | "failed" = "completed") =>
+  transcript({
+    type: "session_turn_finished",
+    externalSessionId: ref.externalSessionId,
+    timestamp,
+    sessionRef: ref,
+    completionId: crypto.randomUUID(),
+    messageIds: [],
+    turnOutcome,
   });
 
 export const editIdOf = (entry: AgentQueuedMessage | undefined): string =>

@@ -482,7 +482,6 @@ try {
     assert.equal((await readdir(project)).filter((file) => file.endsWith(".jsonl")).length, 2);
     assert.equal(await readFile(transcriptPath, "utf8"), original);
   }
-  process.stdout.write(`Claude reply ${scenario} contracts verified.\n`);
 } finally {
   for (const release of releases) release();
   query.mockRestore();
@@ -491,3 +490,4 @@ try {
   await Effect.runPromise(restartedStore.stopSessionsForRuntime("restarted-runtime"));
   await Effect.runPromise(restarted.dispose());
 }
+process.stdout.write(`Claude reply ${scenario} contracts verified.\n`);

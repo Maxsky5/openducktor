@@ -9,6 +9,7 @@ describe("WorkspaceRailActivityBadges", () => {
       <WorkspaceRailActivityBadges
         badges={workspaceActivityBadges({
           kind: "ready",
+          statusUnavailableReason: null,
           inputRequired: true,
           error: true,
           active: true,
@@ -70,6 +71,7 @@ describe("workspaceActivityBadges", () => {
     expect(
       workspaceActivityBadges({
         kind: "ready",
+        statusUnavailableReason: null,
         inputRequired: false,
         error: false,
         active: false,
@@ -77,13 +79,20 @@ describe("workspaceActivityBadges", () => {
     ).toEqual([]);
   });
 
-  test("orders input required, then error, then active", () => {
+  test("keeps known badges and appends the unavailable cause", () => {
     expect(
-      workspaceActivityBadges({ kind: "ready", inputRequired: true, error: true, active: true }),
+      workspaceActivityBadges({
+        kind: "ready",
+        statusUnavailableReason: "Claude status stream ended",
+        inputRequired: true,
+        error: true,
+        active: true,
+      }),
     ).toEqual([
       { key: "inputRequired", label: "Sessions waiting for input" },
       { key: "error", label: "Sessions failed" },
       { key: "active", label: "Sessions running" },
+      { key: "unavailable", label: "Session activity unavailable: Claude status stream ended" },
     ]);
   });
 

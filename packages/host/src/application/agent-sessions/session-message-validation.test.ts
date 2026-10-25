@@ -6,11 +6,17 @@ import {
   type AgentRuntimeCatalog,
   settingsSnapshotSchema,
   taskCardSchema,
+  type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
+import { handleClaudeSdkMessage } from "../../adapters/claude/claude-agent-sdk-events";
+import { createClaudeSession } from "../../adapters/claude/claude-agent-sdk-session-io.test-support";
+import { claudeSdkMessageFixture } from "../../adapters/claude/claude-agent-sdk-test-messages";
 import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
+import { toAgentSessionLiveEnvelope } from "./agent-session-live-envelope";
 import { createAgentSessionCommandService } from "./agent-session-command-service";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { createAgentMessageDeliveryService } from "./agent-message-delivery-service";
@@ -44,6 +50,7 @@ const setup = (
   runtimeKind: RuntimeKind,
   catalog?: Effect.Effect<AgentRuntimeCatalog>,
   activities: AgentSessionLiveSnapshot["activity"][] = [],
+  readLiveSnapshot?: () => AgentSessionLiveSnapshot,
 ) => {
   const recipient = { ...target, runtimeKind };
   let savedModel = { ...selection(), runtimeKind };
@@ -53,19 +60,28 @@ const setup = (
   const order: string[] = [];
   const background: Effect.Effect<void>[] = [];
   let activity: AgentSessionLiveSnapshot["activity"] = "idle";
+  let foregroundTurnActive: boolean | undefined;
+  let statusUnavailableReason: string | undefined;
   const native = { sends: 0, models: 0 };
   let readCount = 0;
   const waiting = Promise.withResolvers<void>();
-  const live = (): AgentSessionLiveSnapshot => ({
-    ref: recipient,
-    title: "Session",
-    startedAt: "2026-10-13T12:00:00Z",
-    activity,
-    model: savedModel,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    contextUsage: null,
-  });
+  const live = (): AgentSessionLiveSnapshot => {
+    if (readLiveSnapshot) return { ...readLiveSnapshot(), model: savedModel };
+    const snapshot: AgentSessionLiveSnapshot = {
+      ref: recipient,
+      title: "Session",
+      startedAt: "2026-10-13T12:00:00Z",
+      activity,
+      model: savedModel,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    };
+    if (foregroundTurnActive !== undefined) snapshot.foregroundTurnActive = foregroundTurnActive;
+    if (statusUnavailableReason !== undefined)
+      snapshot.statusUnavailableReason = statusUnavailableReason;
+    return snapshot;
+  };
   const taskReader = {
     getTask: () =>
       Effect.succeed(
@@ -156,7 +172,11 @@ const setup = (
         }),
       sendUserMessage: (input) =>
         Effect.suspend(() => {
-          if (activity === "running" && input.delivery !== "steer")
+          const snapshot = live();
+          if (
+            (snapshot.foregroundTurnActive ?? snapshot.activity === "running") &&
+            input.delivery !== "steer"
+          )
             return Effect.fail(
               new AgentSessionBusyError({
                 message: "Session is working",
@@ -241,10 +261,35 @@ const setup = (
     setActivity: (value: typeof activity) => {
       activity = value;
     },
+    setForeground: (value: boolean) => {
+      foregroundTurnActive = value;
+    },
+    setUnavailable: (value: string | undefined) => {
+      statusUnavailableReason = value;
+    },
   };
 };
 
 describe("message delivery uses prepared session settings", () => {
+  test("refuses a steer after the foreground ends while background work stays running", async () => {
+    const h = setup("opencode");
+    h.setActivity("running");
+    h.setForeground(false);
+    try {
+      const result = await Effect.runPromiseExit(
+        h.commands.sendUserMessage({
+          ...h.target,
+          delivery: "steer",
+          parts: [{ kind: "text", text: "Join the turn" }],
+        }),
+      );
+      expect(result._tag).toBe("Failure");
+      expect(h.native.sends).toBe(0);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
   test.each(["claude", "codex", "opencode"] as const)(
     "%s sends and steers without catalog or model work",
     async (kind) => {
@@ -316,7 +361,7 @@ describe("message delivery uses prepared session settings", () => {
   });
 });
 
-const settingsCatalog: AgentRuntimeCatalog = {
+const settingsCatalog = {
   models: {
     status: "available",
     catalog: {
@@ -333,9 +378,202 @@ const settingsCatalog: AgentRuntimeCatalog = {
       defaultModelsByProvider: { provider: "current" },
     },
   },
-};
+} satisfies AgentRuntimeCatalog;
 
 describe("explicit settings ordering", () => {
+  test("applies settings and delivers the queue after a Claude foreground turn reaches Idle", async () => {
+    const nativeSession = createClaudeSession({
+      externalSessionId: target.externalSessionId,
+      input: {
+        ...target,
+        runtimeKind: "claude",
+        runtimePolicy: { kind: "claude" },
+        systemPrompt: "Build",
+      },
+      summary: {
+        externalSessionId: target.externalSessionId,
+        runtimeKind: "claude",
+        workingDirectory: target.workingDirectory,
+        sessionAssociation: target.sessionScope,
+        startedAt: "2026-10-13T12:00:00Z",
+        status: "idle",
+      },
+    });
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary(target.repoPath, nativeSession.summary);
+    const claudeSettingsCatalog: AgentRuntimeCatalog = {
+      models: {
+        ...settingsCatalog.models,
+        catalog: {
+          ...settingsCatalog.models.catalog,
+          runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+        },
+      },
+    };
+    const h = setup("claude", Effect.succeed(claudeSettingsCatalog), [], () => {
+      const snapshot = state.readSnapshot({ ...target, runtimeKind: "claude" });
+      if (snapshot.type !== "live") throw new Error("Claude session must remain live");
+      return snapshot.session;
+    });
+    const changes: AgentSessionLiveEnvelope[] = [];
+    const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session: nativeSession,
+        message,
+        timestamp: "2026-10-13T12:01:00Z",
+        modelSelection: (modelId) => ({ runtimeKind: "claude", providerId: "provider", modelId }),
+        emit: (event) =>
+          changes.push(...state.applyEvent(nativeSession, event).map(toAgentSessionLiveEnvelope)),
+      });
+    const publish = async () => {
+      const pending = changes.splice(0);
+      for (const change of pending) await Effect.runPromise(h.commands.observeOperation(change));
+      h.delivery.observeChanges(pending);
+    };
+    try {
+      send(
+        claudeSdkMessageFixture({
+          type: "user",
+          origin: { kind: "auto-continuation" },
+          message: { content: "Continue the check" },
+        }),
+      );
+      await publish();
+      expect(h.live()).toMatchObject({ activity: "running", foregroundTurnActive: true });
+      expect(
+        await Effect.runPromise(
+          h.delivery.submit({
+            ...h.target,
+            submissionId: "queued",
+            mode: "default",
+            parts: [{ kind: "text", text: "Next" }],
+          }),
+        ),
+      ).toMatchObject({ kind: "queued" });
+      const updating = Effect.runPromiseExit(
+        h.commands.updateSessionModel({
+          ...h.target,
+          model: { providerId: "provider", modelId: "next", profileId: "build" },
+        }),
+      );
+      await h.waiting;
+      expect(h.native.models).toBe(0);
+      send(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          result: "Checks complete",
+          origin: { kind: "auto-continuation" },
+        }),
+      );
+      expect(h.live()).toMatchObject({ activity: "idle", foregroundTurnActive: false });
+      await publish();
+      expect(await updating).toMatchObject({ _tag: "Success" });
+      await Promise.all(h.background.splice(0).map((effect) => Effect.runPromise(effect)));
+      expect(h.order).toEqual(["settings", "send:next"]);
+      expect(h.delivery.listQueues(target.repoPath)).toEqual([]);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
+  test.each(["waiting_for_question", "waiting_for_permission"] as const)(
+    "keeps settings pending for child %s after the foreground turn ends",
+    async (activity) => {
+      const h = setup("opencode", Effect.succeed(settingsCatalog));
+      h.setActivity(activity);
+      h.setForeground(false);
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      );
+      try {
+        await h.waiting;
+        await Effect.runPromise(Effect.yieldNow);
+        expect(h.native.models).toBe(0);
+        h.setActivity("running");
+        await Effect.runPromise(
+          h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+        );
+        await updating;
+        expect(h.order).toEqual(["settings"]);
+      } finally {
+        await Effect.runPromise(h.commands.shutdownOperations());
+      }
+    },
+  );
+
+  test("applies settings before queue delivery between foreground turns with background work", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    h.setForeground(true);
+    h.delivery.observeChanges([{ type: "session_upsert", session: h.live() }]);
+    try {
+      await Effect.runPromise(
+        h.delivery.submit({
+          ...h.target,
+          submissionId: "queued",
+          mode: "default",
+          parts: [{ kind: "text", text: "Next" }],
+        }),
+      );
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      );
+      await h.waiting;
+      h.setForeground(false);
+      const free = { type: "session_upsert" as const, session: h.live() };
+      await Effect.runPromise(h.commands.observeOperation(free));
+      h.delivery.observeChanges([
+        {
+          type: "transcript_event",
+          event: {
+            type: "session_turn_finished",
+            sessionRef: h.target,
+            externalSessionId: h.target.externalSessionId,
+            timestamp: "2026-10-13T12:01:00Z",
+            completionId: "automatic-result",
+            messageIds: [],
+            turnOutcome: "completed",
+          },
+        },
+        free,
+      ]);
+      await Promise.all([
+        updating,
+        ...h.background.splice(0).map((effect) => Effect.runPromise(effect)),
+      ]);
+      expect(h.order).toEqual(["settings", "send:next"]);
+      expect(h.live().activity).toBe("running");
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
+  test("fails pending settings with the current status failure", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    h.setForeground(true);
+    const updating = Effect.runPromise(
+      h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+    ).catch((cause: Error) => cause);
+    try {
+      await h.waiting;
+      h.setForeground(false);
+      h.setUnavailable("Claude status is unavailable. Reconnect the session.");
+      await Effect.runPromise(
+        h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+      );
+      expect(await updating).toMatchObject({
+        message: "Claude status is unavailable. Reconnect the session.",
+      });
+      expect(h.native.models).toBe(0);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
   test.each(["waiting_for_question", "waiting_for_permission"] as const)(
     "keeps settings pending when the runtime read changes to %s",
     async (activity) => {

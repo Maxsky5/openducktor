@@ -612,7 +612,7 @@ describe("consumeClaudeSession lifecycle", () => {
 
     await Promise.all([contextRefreshStarted.promise, sessionFailed.promise]);
 
-    expect(sessionStore.get(session.externalSessionId)).toBe(session);
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
     expect(session.activity).toBe("stopped");
     expect(events.some((event) => event.type === "session_error")).toBe(true);
     expect(events.some((event) => event.type === "session_finished")).toBe(false);

@@ -70,6 +70,7 @@ describe("Claude usage-limit recovery", () => {
           subtype: "error_during_execution",
           session_id: "session-1",
           uuid: claudeSdkMessageUuidFixture(id),
+          user_message_uuid: id === "queued-result" ? "user-2" : "user-1",
           errors: ["Session limit. Wait for usage to reset."],
         });
       const rateLimit = rateLimitEvent({
@@ -259,6 +260,7 @@ describe("Claude usage-limit recovery", () => {
         type: "result",
         subtype: "error_during_execution",
         uuid: "00000000-0000-4000-8000-000000000003",
+        user_message_uuid: user.uuid,
         session_id: "session-1",
         is_error: true,
         errors: [text],

@@ -115,6 +115,7 @@ export const agentSessionLiveSnapshotSchema = z
     ref: agentSessionLiveRefSchema,
     repositoryScope: agentSessionRepositoryScopeSchema.optional(),
     activity: agentSessionActivitySchema,
+    foregroundTurnActive: z.boolean().optional(),
     title: nonEmptyStringSchema,
     startedAt: isoTimestampSchema,
     executionEpisodeId: nonEmptyStringSchema.optional(),

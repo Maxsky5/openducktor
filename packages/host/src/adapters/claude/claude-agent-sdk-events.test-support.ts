@@ -38,6 +38,7 @@ export const createEventTestSession = (
   acceptedUserMessages: [],
   activeBackgroundSubagentTaskIds: new Set<string>(),
   activeSdkUserTurnCount: 0,
+  foregroundTurnActive: activity === "running",
   activity,
   externalSessionId: "session-1",
   pendingApprovals: new Map<string, PendingApproval>(),

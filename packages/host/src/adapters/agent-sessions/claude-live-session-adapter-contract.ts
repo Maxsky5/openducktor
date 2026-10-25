@@ -64,6 +64,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   >;
   readonly sessionStore: {
     get(externalSessionId: string): ClaudeSessionContext | undefined;
+    isLatest(session: ClaudeSessionContext): boolean;
   };
   readonly workingDirectoryDependencies: RuntimeWorkingDirectoryDependencies;
 };

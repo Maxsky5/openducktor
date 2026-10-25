@@ -153,6 +153,43 @@ test("new input requests on subagents save the root date, but repeated requests 
   expect((await h.saved()).lastActivityAt).toBe(15_000);
 });
 
+test("saves foreground completion and final output before background activity becomes idle", async () => {
+  const h = await setup();
+  await h.observe({
+    type: "session_upsert",
+    session: h.snapshot({ activity: "running", foregroundTurnActive: true }),
+  });
+  await h.transcript(
+    { type: "assistant_message", messageId: "answer", message: "Background work continues" },
+    6_000,
+  );
+  expect(h.writes).toEqual([]);
+  await h.transcript(
+    {
+      type: "session_turn_finished",
+      completionId: "result",
+      messageIds: [],
+      turnOutcome: "completed",
+    },
+    7_000,
+  );
+  expect(h.writes).toEqual([7_000, 6_000]);
+  expect((await h.saved()).lastActivityAt).toBe(7_000);
+  await h.observe({
+    type: "session_upsert",
+    session: h.snapshot({ activity: "running", foregroundTurnActive: false }),
+  });
+  await h.transcript(
+    {
+      type: "session_status",
+      status: { type: "busy", message: null },
+      foregroundTurnActive: false,
+    },
+    8_000,
+  );
+  expect(h.writes).toEqual([7_000, 6_000]);
+});
+
 test("reports a failed activity save through the shared live channel", async () => {
   const h = await setup();
   const envelopes: AgentSessionLiveEnvelope[] = [];

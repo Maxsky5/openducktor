@@ -6,6 +6,48 @@ import {
 } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history assistant turns", () => {
+  test("keeps a completed peer reply when a later task notification produces no reply", () => {
+    const history = toClaudeHistoryMessages(
+      claudeHistoryMessagesFixture([
+        {
+          type: "user",
+          uuid: "peer-handback",
+          timestamp: "2026-10-24T14:53:42.194Z",
+          origin: { kind: "peer", from: "child", senderTaskId: "child", handback: true },
+          message: { role: "user", content: "The review is complete." },
+        },
+        {
+          type: "assistant",
+          uuid: "86e7ae2c-f54a-4a7c-8434-04a37f93e252",
+          timestamp: "2026-10-24T14:53:45.731Z",
+          message: {
+            id: "final-peer-response",
+            role: "assistant",
+            model: "claude-haiku-5-5",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "The review found no issues." }],
+          },
+        },
+        {
+          type: "user",
+          uuid: "task-notification",
+          timestamp: "2026-10-24T14:53:45.781Z",
+          origin: { kind: "task-notification" },
+          message: { role: "user", content: "The child task completed." },
+        },
+      ]),
+      () => "2026-10-24T15:00:00.000Z",
+    );
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      messageId: "final-peer-response",
+      text: "The review found no issues.",
+      model: { providerId: "claude", modelId: "claude-haiku-5-5", runtimeKind: "claude" },
+      durationMs: 3_537,
+      parts: [expect.objectContaining({ kind: "step", phase: "finish", reason: "stop" })],
+    });
+  });
+
   test("updates streamed text in place when the same response finishes with new text", () => {
     const history = toClaudeHistoryMessages(
       [
@@ -49,7 +91,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
       },
     ]);
   });
-  test("keeps a task-notification response open while an ordinary background task runs", () => {
+  test("completes a task-notification reply while an ordinary background task runs", () => {
     const entries = claudeHistoryMessagesFixture([
       {
         type: "system",
@@ -95,73 +137,15 @@ describe("claude-agent-sdk-history assistant turns", () => {
         origin: { kind: "task-notification" },
       },
     ]);
-    const nestedReply = toSessionMessage({
-      type: "assistant",
-      uuid: "nested-assistant",
-      session_id: "session-1",
-      parent_tool_use_id: "child-call",
-      timestamp: "2026-06-26T11:03:14.000Z",
-      message: {
-        role: "assistant",
-        content: [{ type: "text", text: "Child update" }],
-        stop_reason: "end_turn",
-      },
+    const history = toClaudeHistoryMessages(entries, () => "2026-06-26T12:00:00.000Z", [], {
+      currentBackgroundTaskIds: new Set(["bash-1"]),
     });
-    const cases: Array<
-      [Parameters<typeof toClaudeHistoryMessages>[0], ReadonlySet<string> | undefined]
-    > = [
-      [entries, undefined],
-      [entries.slice(1), new Set(["bash-1"])],
-      [[{ ...entries[0]!, tasks: [] }, ...entries.slice(1), nestedReply], new Set(["bash-1"])],
-      [
-        [
-          ...entries.slice(1, 3),
-          { ...entries[0]!, timestamp: "2026-06-26T11:03:12.500Z" },
-          entries[3]!,
-        ],
-        undefined,
-      ],
-    ];
-    for (const [messages, currentBackgroundTaskIds] of cases) {
-      const history = toClaudeHistoryMessages(
-        messages,
-        () => "2026-06-26T12:00:00.000Z",
-        [],
-        currentBackgroundTaskIds ? { currentBackgroundTaskIds } : {},
-      );
-      const response = history.find((message) => message.role === "assistant");
-      expect(response?.parts).not.toContainEqual(
-        expect.objectContaining({ kind: "step", phase: "finish" }),
-      );
-      expect(response?.model).toBeUndefined();
-    }
-
-    const laterSnapshot = { ...entries[0]!, timestamp: "2026-06-26T11:03:14.000Z" };
-    const earlierTurn = toClaudeHistoryMessages(
-      [...entries.slice(1), laterSnapshot],
-      () => "2026-06-26T12:00:00.000Z",
-      [],
-      { currentBackgroundTaskIds: new Set(["bash-1"]) },
-    );
-    const earlierResponse = earlierTurn.find((message) => message.role === "assistant");
-    expect(earlierResponse?.parts).toContainEqual(
+    const response = history.find((message) => message.role === "assistant");
+    expect(response?.parts).toContainEqual(
       expect.objectContaining({ kind: "step", phase: "finish" }),
     );
-    expect(earlierResponse?.model).toEqual(
-      expect.objectContaining({ modelId: "claude-sonnet-4-6" }),
-    );
-
-    const newerPrompt = toClaudeHistoryMessages(
-      entries.slice(1),
-      () => "2026-06-26T12:00:00.000Z",
-      [{ messageId: "next-user", text: "New request", timestamp: "2026-06-26T11:03:14.000Z" }],
-      { currentBackgroundTaskIds: new Set(["bash-1"]) },
-    );
-    const priorResponse = newerPrompt.find((message) => message.role === "assistant");
-    expect(priorResponse?.parts).toContainEqual(
-      expect.objectContaining({ kind: "step", phase: "finish" }),
-    );
-    expect(priorResponse?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
+    expect(response?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
+    expect(response?.durationMs).toBe(1_000);
   });
 
   test("hydrates one Claude response from split reasoning, text, and tool snapshots", () => {
@@ -383,7 +367,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
     expect(history[0]?.parts.filter((part) => part.kind === "step")).toHaveLength(1);
   });
 
-  test("hydrates peer responses as intermediate and the closing task response as final", () => {
+  test("preserves completed replies from each native human, peer, and task turn", () => {
     const history = toClaudeHistoryMessages(
       claudeHistoryMessagesFixture([
         toSessionMessage({
@@ -549,22 +533,12 @@ describe("claude-agent-sdk-history assistant turns", () => {
     const peerResponse = findAssistantResponse("Peer turn response");
     const taskResponse = findAssistantResponse("Task-notification response");
 
-    expect(humanResponse?.parts).toContainEqual(
-      expect.objectContaining({ kind: "step", phase: "finish" }),
-    );
-    expect(humanResponse?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
-    expect(firstTaskResponse?.parts).not.toContainEqual(
-      expect.objectContaining({ kind: "step", phase: "finish" }),
-    );
-    expect(firstTaskResponse?.model).toBeUndefined();
-    expect(peerResponse?.parts).not.toContainEqual(
-      expect.objectContaining({ kind: "step", phase: "finish" }),
-    );
-    expect(peerResponse?.model).toBeUndefined();
-    expect(taskResponse?.parts).toContainEqual(
-      expect.objectContaining({ kind: "step", phase: "finish" }),
-    );
-    expect(taskResponse?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
+    for (const response of [humanResponse, firstTaskResponse, peerResponse, taskResponse]) {
+      expect(response?.parts).toContainEqual(
+        expect.objectContaining({ kind: "step", phase: "finish" }),
+      );
+      expect(response?.model).toEqual(expect.objectContaining({ modelId: "claude-sonnet-4-6" }));
+    }
   });
 
   test("does not mark reasoning-only end-turn frames as completed turns before final text", () => {

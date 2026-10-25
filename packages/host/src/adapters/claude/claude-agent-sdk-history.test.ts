@@ -154,9 +154,28 @@ describe("claude-agent-sdk-history", () => {
     });
   });
 
-  test("hydrates failed Claude results as session errors", () => {
+  test("hydrates failed Claude results as session errors and starts the next human clock", () => {
     const history = toClaudeHistoryMessages(
       [
+        toSessionMessage({
+          type: "user",
+          uuid: "failed-user",
+          timestamp: "2026-06-26T11:03:14.000Z",
+          message: { role: "user", content: "Read the file." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "failed-assistant",
+          timestamp: "2026-06-26T11:03:15.000Z",
+          message: {
+            id: "failed-response",
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "read", name: "Read", input: { file_path: "next.ts" } },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
         {
           type: "result",
           subtype: "error_during_execution",
@@ -168,24 +187,40 @@ describe("claude-agent-sdk-history", () => {
           result: "Fallback failure text",
           usage: { input_tokens: 1, output_tokens: 1 },
         },
+        toSessionMessage({
+          type: "user",
+          uuid: "next-user",
+          timestamp: "2026-06-26T11:03:17.000Z",
+          message: { role: "user", content: "Try the next file." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "next-assistant",
+          timestamp: "2026-06-26T11:03:18.000Z",
+          message: {
+            id: "next-response",
+            role: "assistant",
+            content: [{ type: "text", text: "Done." }],
+            stop_reason: "end_turn",
+          },
+        }),
       ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
     );
 
-    expect(history).toEqual([
-      {
-        messageId: "result-error-1",
-        role: "system",
-        timestamp: "2026-06-26T11:03:16.287Z",
-        text: "Permission denied for Bash.",
-        notice: {
-          tone: "error",
-          reason: "session_error",
-          title: "Error",
-        },
-        parts: [],
+    expect(history).toContainEqual({
+      messageId: "result-error-1",
+      role: "system",
+      timestamp: "2026-06-26T11:03:16.287Z",
+      text: "Permission denied for Bash.",
+      notice: {
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
       },
-    ]);
+      parts: [],
+    });
+    expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 1_000 });
   });
 
   test("does not hydrate current context usage from Claude result totals", () => {

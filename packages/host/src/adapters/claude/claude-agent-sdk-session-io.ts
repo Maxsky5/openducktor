@@ -11,18 +11,22 @@ import {
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
+import { isClaudeForegroundTurnActive } from "./claude-agent-sdk-activity";
 import {
   flushClaudeLiveContextUsageRefresh,
   scheduleClaudeLiveContextUsageRefresh,
   shouldRefreshClaudeContextUsageForMessage,
 } from "./claude-agent-sdk-context-usage";
 import { isClaudeContinuationAdmission } from "./claude-agent-sdk-continuation-admission";
+import { withClaudeNativeProcessDiagnostic } from "./claude-agent-sdk-native-process";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
   ClaudeSessionError,
+  isClaudeSessionClosing,
   runAllSteps,
   toSessionError,
 } from "./claude-agent-sdk-session-lifecycle";
@@ -46,6 +50,7 @@ import {
   rejectPendingAdmissions,
   waitForUserMessageAdmission,
 } from "./claude-agent-sdk-user-message-admission";
+import { isClaudeWakeUserMessage } from "./claude-agent-sdk-user-messages";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 export const applyClaudeSessionModel = async (
@@ -129,8 +134,12 @@ export const consumeClaudeSession = (input: {
   now: () => string;
   onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   onContinuationAdmission?: () => void;
+  startupValidation?: Promise<boolean>;
   session: ClaudeSession;
-  sessionStore: Pick<ClaudeSessionStore, "close" | "get" | "finish" | "ownConsumer">;
+  sessionStore: Pick<
+    ClaudeSessionStore,
+    "close" | "confirmClosed" | "get" | "finish" | "ownConsumer"
+  >;
 }): Promise<void> => {
   const { emit, now, onBackgroundFailure, onContinuationAdmission, session, sessionStore } = input;
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
@@ -140,15 +149,32 @@ export const consumeClaudeSession = (input: {
   const wrapError = (cause: unknown): ClaudeSessionError =>
     new ClaudeSessionError(operation, [cause]);
   const emitEvent = (event: ClaudeAgentSdkEvent): void => emit(session, event);
+  let startupValid = input.startupValidation === undefined;
   const stream = Effect.tryPromise({
     try: async () => {
       for await (const message of session.query) {
+        if (!startupValid) {
+          startupValid = (await input.startupValidation) === true;
+          if (!startupValid) continue;
+        }
+        if (!isLiveSession() || isClaudeSessionClosing(session)) continue;
         const timestamp = readClaudeSdkMessageTimestamp(message, now);
+        // Peer hand-backs arrive as hidden replay frames.
+        if (
+          message.type === "user" &&
+          message.origin !== undefined &&
+          message.origin.kind !== "human" &&
+          !isClaudeForegroundTurnActive(session) &&
+          isClaudeWakeUserMessage(message, parseClaudeUserToolResultIngress(message))
+        ) {
+          session.replyStartedAt = timestamp;
+        }
         if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
           continuationAdmitted = true;
           onContinuationAdmission();
         }
-        if (applyClaudeUserMessageSignal({ emit: emitEvent, message, session })) continue;
+        if (applyClaudeUserMessageSignal({ emit: emitEvent, message, session, timestamp }))
+          continue;
         handleClaudeSdkMessage({ session, message, timestamp, emit: emitEvent, modelSelection });
         if (shouldRefreshClaudeContextUsageForMessage(message)) {
           scheduleClaudeLiveContextUsageRefresh({ emit, onBackgroundFailure, session, timestamp });
@@ -160,7 +186,7 @@ export const consumeClaudeSession = (input: {
     Effect.catch((cause) =>
       session.abortController.signal.aborted && cause.cause instanceof AbortError
         ? Effect.void
-        : Effect.fail(cause),
+        : Effect.fail(wrapError(withClaudeNativeProcessDiagnostic(session, cause.cause))),
     ),
   );
   const program = Effect.acquireUseRelease(
@@ -170,7 +196,6 @@ export const consumeClaudeSession = (input: {
         const exit = yield* Effect.exit(stream);
         if (Exit.isFailure(exit)) streamFailure = exit.cause;
         let reported = false;
-        session.activity = "stopped";
         yield* runAllSteps([
           Effect.try({
             try: () => {
@@ -186,24 +211,10 @@ export const consumeClaudeSession = (input: {
             },
             catch: wrapError,
           }),
+          Effect.try({ try: () => sessionStore.close(session), catch: wrapError }),
+          sessionStore.confirmClosed(session),
           Effect.tryPromise({
             try: () => flushClaudeLiveContextUsageRefresh(session),
-            catch: wrapError,
-          }),
-          Effect.try({
-            try: () => {
-              // A replacement must admit its continuation before it can finish the attached session.
-              if (isLiveSession() && continuationAdmitted) {
-                sessionStore.finish(
-                  session,
-                  Exit.isFailure(exit)
-                    ? "Claude Agent SDK session stream stopped after an error."
-                    : "Claude Agent SDK session stream ended.",
-                  emit,
-                  now(),
-                );
-              }
-            },
             catch: wrapError,
           }),
         ]);
@@ -212,7 +223,6 @@ export const consumeClaudeSession = (input: {
       }),
     () =>
       runAllSteps([
-        Effect.try({ try: () => sessionStore.close(session), catch: wrapError }),
         Effect.tryPromise({ try: () => session.query.return().then(() => {}), catch: wrapError }),
         Effect.try({
           try: () =>
@@ -220,6 +230,20 @@ export const consumeClaudeSession = (input: {
               session,
               new Error("The Claude Agent SDK stream ended before it acknowledged the message."),
             ),
+          catch: wrapError,
+        }),
+        Effect.try({
+          try: () => {
+            if (continuationAdmitted)
+              sessionStore.finish(
+                session,
+                streamFailure
+                  ? "Claude Agent SDK session stream stopped after an error."
+                  : "Claude Agent SDK session stream ended.",
+                emit,
+                now(),
+              );
+          },
           catch: wrapError,
         }),
       ]),
@@ -302,6 +326,7 @@ export const sendClaudeUserMessage = async (input: {
   const previousActivity = session.activity;
   const previousSdkState = session.sdkState;
   const previousPendingUserTurnCount = session.pendingUserTurnCount;
+  const previousForegroundTurnActive = session.foregroundTurnActive;
   if (isManualCompaction) {
     acceptedMessage.isManualCompaction = true;
   }
@@ -309,6 +334,7 @@ export const sendClaudeUserMessage = async (input: {
   session.acceptedUserMessages.push(acceptedMessage);
   session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
   session.activity = "running";
+  session.foregroundTurnActive = true;
   const admission = waitForUserMessageAdmission(session, messageId);
   try {
     input.assertCurrent?.();
@@ -330,6 +356,8 @@ export const sendClaudeUserMessage = async (input: {
     }
     session.pendingUserTurnCount = previousPendingUserTurnCount;
     session.activity = previousActivity;
+    if (previousForegroundTurnActive === undefined) delete session.foregroundTurnActive;
+    else session.foregroundTurnActive = previousForegroundTurnActive;
     if (previousSdkState === undefined) {
       delete session.sdkState;
     } else {
@@ -343,6 +371,7 @@ export const sendClaudeUserMessage = async (input: {
     externalSessionId: session.externalSessionId,
     timestamp,
     status: { type: "busy", message: null },
+    foregroundTurnActive: true,
   });
   try {
     await admission.admitted;
@@ -363,7 +392,7 @@ export const sendClaudeUserMessage = async (input: {
 };
 
 const assertAcceptingMessages = (session: ClaudeSession): void => {
-  if (session.activity !== "stopped") {
+  if (session.activity !== "stopped" && !isClaudeSessionClosing(session)) {
     return;
   }
   throw new HostValidationError({

@@ -11,7 +11,10 @@ import type {
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import { steersRunningTurn } from "@/components/features/agents/agent-chat/agent-chat-steering";
+import {
+  hasForegroundTurn,
+  steersRunningTurn,
+} from "@/components/features/agents/agent-chat/agent-chat-steering";
 import { findRunningTurnModelEntry } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { MISSING_RUNTIME_REASON } from "@/lib/agent-message-send-policy";
 import type { AsyncActivityTracker } from "@/lib/use-async-activity-tracker";
@@ -60,6 +63,7 @@ type UseAgentChatSendArgs = {
   /** The session transcript. */
   messages: readonly AgentChatMessage[] | undefined;
   isSessionWorking: boolean;
+  foregroundTurnActive?: boolean | undefined;
   isWaitingInput: boolean;
   /** The model that a new turn uses. */
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
@@ -88,6 +92,7 @@ export function useAgentChatSend({
   modelCatalog,
   messages,
   isSessionWorking,
+  foregroundTurnActive,
   isWaitingInput,
   selectedModelDescriptor,
   draftRules: { reusablePrompts, supportsAttachments },
@@ -171,7 +176,10 @@ export function useAgentChatSend({
           draft,
           reusablePrompts,
           // A steer joins the running turn, so the model of that turn checks the content.
-          modelDescriptor: steersRunningTurn(mode, isSessionWorking)
+          modelDescriptor: steersRunningTurn(
+            mode,
+            hasForegroundTurn({ foregroundTurnActive, isSessionWorking }),
+          )
             ? runningTurnModel
             : selectedModelDescriptor,
           supportsAttachments,
@@ -202,6 +210,7 @@ export function useAgentChatSend({
     },
     [
       isSessionWorking,
+      foregroundTurnActive,
       isWaitingInput,
       reusablePrompts,
       runningTurnModel,

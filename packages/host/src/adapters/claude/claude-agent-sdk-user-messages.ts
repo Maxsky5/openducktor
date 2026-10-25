@@ -28,14 +28,6 @@ export const readClaudeTurnOriginKind = (message: ClaudeUserTurn): string | unde
   return parsed.data.origin?.kind;
 };
 
-export const shouldFinalizeClaudeTurn = (
-  originKind: string | undefined,
-  activeBackgroundSubagentTaskCount: number,
-): boolean =>
-  originKind === undefined ||
-  originKind === "human" ||
-  (originKind === "task-notification" && activeBackgroundSubagentTaskCount === 0);
-
 export const isClaudeHumanUserMessage = (message: ClaudeUserTurn): boolean => {
   const parsed = claudeUserTurnSchema.safeParse(message);
   if (!parsed.success || parsed.data.isSynthetic === true || parsed.data.shouldQuery === false) {

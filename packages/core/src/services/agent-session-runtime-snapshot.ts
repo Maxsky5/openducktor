@@ -50,6 +50,7 @@ export type AgentSessionRuntimeSnapshotSource = {
   title: string;
   startedAt: string;
   runtimeActivity: AgentSessionRuntimeActivity;
+  foregroundTurnActive?: boolean;
   pendingApprovals: AgentPendingApprovalRequest[];
   pendingQuestions: AgentPendingQuestionRequest[];
 };
@@ -82,6 +83,9 @@ export const toAgentSessionRuntimeSnapshot = (
   };
   if (snapshot.parentExternalSessionId) {
     runtimeSnapshot.parentExternalSessionId = snapshot.parentExternalSessionId;
+  }
+  if (snapshot.foregroundTurnActive !== undefined) {
+    runtimeSnapshot.foregroundTurnActive = snapshot.foregroundTurnActive;
   }
   return runtimeSnapshot;
 };

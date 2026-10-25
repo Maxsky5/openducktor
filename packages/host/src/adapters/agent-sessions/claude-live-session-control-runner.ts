@@ -1,4 +1,8 @@
-import type { AgentSessionControlSummary, AgentSessionScope } from "@openducktor/contracts";
+import type {
+  AgentSessionControlSummary,
+  AgentSessionScope,
+  AgentSessionLiveRef,
+} from "@openducktor/contracts";
 import type { AgentSessionSummary, AgentSessionTitleUpdateResult } from "@openducktor/core";
 import { Effect } from "effect";
 import {
@@ -7,6 +11,7 @@ import {
 } from "../../application/agent-sessions/agent-session-control-summary";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type { createClaudeLiveSessionState } from "./claude-live-session-state";
+import type { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import type { HostError } from "../../effect/host-errors";
 import type {
@@ -30,6 +35,8 @@ export const createClaudeControlRunner = ({
   commit,
   applyControlSummary,
   reportProjectionFailure,
+  runSessionClosure,
+  removeSession,
 }: {
   runControlMutation: <Value>(
     effect: Effect.Effect<Value, HostError>,
@@ -41,6 +48,10 @@ export const createClaudeControlRunner = ({
     repoPath: string,
     failure: HostError,
   ) => Effect.Effect<void, HostError>;
+  runSessionClosure: ReturnType<
+    typeof createClaudeLiveSessionEventCoordinator
+  >["runSessionClosure"];
+  removeSession: ReturnType<typeof createClaudeLiveSessionState>["removeSession"];
 }) => {
   const retainSummary = (
     operation: string,
@@ -59,6 +70,17 @@ export const createClaudeControlRunner = ({
           : applyControlSummary(repoPath, summary, options),
     }));
   return {
+    runClosure: (
+      operation: string,
+      ref: AgentSessionLiveRef,
+      run: Effect.Effect<void, HostError>,
+    ) =>
+      runSessionClosure(ref.externalSessionId, run, () =>
+        commit(operation, () => ({
+          value: undefined,
+          changes: removeSession(ref),
+        })),
+      ),
     /** `repoPath` is the repository of the request. Summaries carry no repository. */
     runSummary: (
       operation: string,

@@ -168,13 +168,18 @@ for (const storage of ["memory", "disk"] as const) {
 }
 
 test.each([
-  { stopReason: null, activeTaskIds: [], interruptedByShutdown: false },
-  { stopReason: null, activeTaskIds: [], interruptedByShutdown: true },
-  { stopReason: "end_turn", activeTaskIds: [], interruptedByShutdown: true },
-  { stopReason: "end_turn", activeTaskIds: ["old-bash"], interruptedByShutdown: false },
+  { stopReason: null, activeTaskIds: [], interruptedByShutdown: false, completed: false },
+  { stopReason: null, activeTaskIds: [], interruptedByShutdown: true, completed: false },
+  { stopReason: "end_turn", activeTaskIds: [], interruptedByShutdown: true, completed: false },
+  {
+    stopReason: "end_turn",
+    activeTaskIds: ["old-bash"],
+    interruptedByShutdown: false,
+    completed: true,
+  },
 ])(
-  "keeps a reply unfinished with stop $stopReason, shutdown $interruptedByShutdown, and active tasks $activeTaskIds",
-  async ({ stopReason, activeTaskIds, interruptedByShutdown }) => {
+  "restores completion with stop $stopReason, shutdown $interruptedByShutdown, and active tasks $activeTaskIds",
+  async ({ stopReason, activeTaskIds, interruptedByShutdown, completed }) => {
     await withCompletionTranscript(
       stopReason,
       async (cwd, config) => {
@@ -197,9 +202,9 @@ test.each([
             { processEnv: { CLAUDE_CONFIG_DIR: config } },
           ),
         );
-        expect(history.at(-1)?.parts).not.toContainEqual(
-          expect.objectContaining({ kind: "step", phase: "finish" }),
-        );
+        expect(
+          history.at(-1)?.parts.some((part) => part.kind === "step" && part.phase === "finish"),
+        ).toBe(completed);
       },
       interruptedByShutdown,
     );
@@ -207,7 +212,7 @@ test.each([
 );
 
 test.each(["root", "nested"])(
-  "keeps a terminal task reply open while a live %s subagent runs",
+  "keeps a terminal task reply complete without a fork while a live %s subagent runs",
   async (scope) => {
     await withCompletionTranscript("end_turn", async (cwd, config) => {
       const input = {
@@ -221,6 +226,7 @@ test.each(["root", "nested"])(
         externalSessionId: sessionId,
         input: { ...input, sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
       });
+      session.activity = "running";
       if (scope === "root") {
         session.activeBackgroundSubagentTaskIds = new Set(["live-agent"]);
       } else {
@@ -234,14 +240,15 @@ test.each(["root", "nested"])(
           processEnv: { CLAUDE_CONFIG_DIR: config },
         }),
       );
-      expect(history.at(-1)?.parts).not.toContainEqual(
+      expect(history.at(-1)?.parts).toContainEqual(
         expect.objectContaining({ kind: "step", phase: "finish" }),
       );
+      expect(history.at(-1)).not.toHaveProperty("forkPoint");
     });
   },
 );
 
-test("keeps an earlier completed reply when a later user turn stops during shutdown", async () => {
+test("keeps an earlier reply and starts a new clock after shutdown", async () => {
   await withCompletionTranscript("end_turn", async (cwd, config, append) => {
     const base = { cwd, sessionId, isSidechain: false, type: "user" };
     await append([
@@ -254,13 +261,46 @@ test("keeps an earlier completed reply when a later user turn stops during shutd
       },
       {
         ...base,
-        uuid: "next-shutdown",
+        type: "assistant",
+        uuid: "interrupted-assistant",
         parentUuid: "next-user",
+        timestamp: "2026-10-21T10:00:11.500Z",
+        message: {
+          id: "interrupted-response",
+          role: "assistant",
+          content: [{ type: "text", text: "A partial reply" }],
+          stop_reason: "end_turn",
+        },
+      },
+      {
+        ...base,
+        uuid: "next-shutdown",
+        parentUuid: "interrupted-assistant",
         timestamp: "2026-10-21T10:00:12.000Z",
         interruptedByShutdown: true,
         message: {
           role: "user",
           content: [{ type: "text", text: "[Request interrupted by user]" }],
+        },
+      },
+      {
+        ...base,
+        uuid: "resumed-user",
+        parentUuid: "next-shutdown",
+        timestamp: "2026-10-21T10:00:13.000Z",
+        message: { role: "user", content: "Continue with the next file" },
+      },
+      {
+        ...base,
+        type: "assistant",
+        uuid: "resumed-assistant",
+        parentUuid: "resumed-user",
+        timestamp: "2026-10-21T10:00:14.000Z",
+        message: {
+          id: "resumed-response",
+          role: "assistant",
+          content: [{ type: "text", text: "The next file is checked." }],
+          stop_reason: "end_turn",
         },
       },
     ]);
@@ -278,11 +318,11 @@ test("keeps an earlier completed reply when a later user turn stops during shutd
         { processEnv: { CLAUDE_CONFIG_DIR: config } },
       ),
     );
+    expect(history.at(-1)).toMatchObject({ messageId: "resumed-response", durationMs: 1_000 });
     const earlierReply = history.find((message) => message.messageId === "final-response");
     expect(earlierReply?.parts).toContainEqual(
       expect.objectContaining({ kind: "step", phase: "finish", reason: "stop" }),
     );
-    expect(history.at(-1)).toMatchObject({ messageId: "next-user", role: "user" });
   });
 });
 
@@ -341,7 +381,7 @@ test.each([{ backgroundTaskId: null }, { backgroundTaskId: "old-bash" }])(
 );
 
 test.each([false, true])(
-  "keeps only the prior turn's last terminal reply after a new unfinished prompt, later wake %s",
+  "keeps prior completed replies after a new unfinished prompt, later wake %s",
   async (laterWake) => {
     await withCompletionTranscript("end_turn", async (cwd, config, append) => {
       const base = { cwd, sessionId, isSidechain: false };
@@ -433,7 +473,7 @@ test.each([false, true])(
       if (laterWake) {
         expect(
           history.find((message) => message.messageId === "final-response")?.parts,
-        ).not.toContainEqual(expect.objectContaining({ kind: "step", phase: "finish" }));
+        ).toContainEqual(expect.objectContaining({ kind: "step", phase: "finish" }));
       }
     });
   },

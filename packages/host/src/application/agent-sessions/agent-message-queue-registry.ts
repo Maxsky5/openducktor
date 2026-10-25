@@ -109,7 +109,6 @@ const createQueue = (key: string, target: AgentMessageTarget): MessageQueue => (
   pause: null,
   sendingNewTurn: false,
   completedTurns: 0,
-  waitsForInput: false,
 });
 
 const isUnusedQueue = (queue: MessageQueue) =>
