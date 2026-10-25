@@ -102,6 +102,15 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      # The release reads the Gradle cache that the CI builds of main write.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('bun.lock') }}
+          restore-keys: gradle-
+
       - name: Build the signed App Bundle
         working-directory: apps/mobile
         env:
@@ -116,7 +125,7 @@ jobs:
           bun run build:page
           bunx expo prebuild --platform android --clean --no-install
           cd android
-          JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew :app:bundleRelease --no-daemon
+          JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew :app:bundleRelease --build-cache --no-daemon
 
       - name: Upload to Google Play internal testing
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5

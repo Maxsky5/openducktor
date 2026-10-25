@@ -46,7 +46,8 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - Inject native modules through their interfaces, such as the network module of `src/platform/native-remote-transport.ts`. Do not mock modules.
 - Use `apps/mobile/src/test-support/simulated-remote-host.ts` for flows that need a remote host: discovery, negotiation, the event stream, refusals, unreachable hosts, and release. Add a helper to it when a mobile test needs more host behavior.
 - `packages/openducktor-web/src/mobile-host-session.integration.test.ts` starts a real TypeScript host with Remote control on and connects the mobile host session owner to it. Run it through the package `test` script, so the test preload gives the host a temporary config directory.
-- The CI jobs `Mobile iOS Build` and `Mobile Android Build` compile the iOS app for the simulator and the Android release APK for `arm64-v8a`. They run on each manual run and when a change reaches an input that the `mobile-changes` job of `ci.yml` lists.
+- The `Build workspaces` step of the quality jobs bundles the JavaScript of the app with `expo export`.
+- The native CI jobs run only when a change reaches a native input that the `mobile-changes` job of `ci.yml` lists. On a pull request, `Mobile Native Projects` runs `expo prebuild` for both platforms, which runs the config plugins. After a merge to `main` and on each manual run, `Mobile iOS Build` and `Mobile Android Build` compile Debug builds of the iOS app for the simulator and of the Android app, for `arm64` only.
 - Check native behavior, gestures, layout, and performance on real iOS and Android devices with release builds against a real host. See [Device validation](../apps/mobile/README.md#device-validation).
 
 ## Parallel runs

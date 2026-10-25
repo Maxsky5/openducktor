@@ -99,59 +99,97 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The inputs are the app, the workspace packages that it uses, and the install and CI files.
-      # A manual run has no base commit, so it builds the app.
-      - name: Compare the mobile inputs with the base commit
+      # Only native inputs can break a native build: the native modules, the config plugins, the app
+      # config and assets, the dependencies, and the CI files. The quality jobs check the JavaScript
+      # bundle. A manual run has no base commit, so it builds the app.
+      - name: Compare the native inputs with the base commit
         id: diff
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if [[ -z "$BASE" ]] || ! git diff --quiet "$BASE" HEAD -- apps/mobile packages/adapters-codex-app-server \
-            packages/contracts packages/core packages/frontend-core packages/host-client packages/path-support \
-            package.json bun.lock .github/actions .github/workflows/ci.yml; then
+          if [[ -z "$BASE" ]] || ! git diff --quiet "$BASE" HEAD -- apps/mobile/modules apps/mobile/plugins \
+            apps/mobile/app.config.ts apps/mobile/assets apps/mobile/package.json package.json bun.lock patches \
+            .github/actions .github/workflows/ci.yml; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+  # Pull requests generate the native projects, which runs the config plugins. The native builds run
+  # after a merge to main and on manual runs.
+  mobile-native-projects:
+    name: Mobile Native Projects
+    needs: mobile-changes
+    if: github.event_name == 'pull_request' && needs.mobile-changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      - name: Generate the iOS and Android projects
+        working-directory: apps/mobile
+        run: bunx expo prebuild --clean --no-install
 
   mobile-ios:
     name: Mobile iOS Build
     needs: mobile-changes
-    if: needs.mobile-changes.outputs.changed == 'true'
+    if: github.event_name != 'pull_request' && needs.mobile-changes.outputs.changed == 'true'
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/setup
 
-      # An unsigned simulator build compiles the Swift modules and the native dependencies.
+      # A Debug build for the simulator compiles the Swift modules and the native dependencies once,
+      # for the runner architecture, and skips the JavaScript bundle. It needs no store credentials.
       - name: Build the iOS app for the simulator
         working-directory: apps/mobile
         run: |
-          bun run build:page
           bunx expo prebuild --platform ios --clean --no-install
           (cd ios && pod install)
-          xcodebuild build -workspace ios/OpenDucktor.xcworkspace -scheme OpenDucktor -configuration Release \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+          xcodebuild build -quiet -workspace ios/OpenDucktor.xcworkspace -scheme OpenDucktor -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 CODE_SIGNING_ALLOWED=NO
 
   mobile-android:
     name: Mobile Android Build
     needs: mobile-changes
-    if: needs.mobile-changes.outputs.changed == 'true'
+    if: github.event_name != 'pull_request' && needs.mobile-changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/setup
 
-      # Without the upload key, the release build signs with the debug key. One ABI is enough to
-      # compile the native code.
-      - name: Build the Android release APK
+      # The Gradle and compiler caches carry over between the builds on main.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('bun.lock') }}
+          restore-keys: gradle-
+
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: android
+          max-size: 2G
+
+      # A Debug build compiles the Kotlin and C++ code for one ABI and skips the JavaScript bundle and
+      # R8. CMake reads the compiler launchers from the environment. Gradle installs the NDK of React
+      # Native on each run, so ccache checks the compiler by its content.
+      - name: Build the Android app
         working-directory: apps/mobile
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CCACHE_COMPILERCHECK: content
         run: |
-          bun run build:page
           bunx expo prebuild --platform android --clean --no-install
           cd android
-          JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew :app:assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew :app:assembleDebug --build-cache --no-daemon \
+            -PreactNativeArchitectures=arm64-v8a
