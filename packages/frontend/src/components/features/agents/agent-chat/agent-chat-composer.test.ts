@@ -400,31 +400,101 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('aria-label="Preparing message" disabled');
   });
 
-  test.each([false, true])(
-    "uses foreground readiness for settings while aggregate Running stays visible: %s",
-    (foregroundTurnActive) => {
-      const html = renderToStaticMarkup(
+  test.each<[string, Partial<AgentChatComposerModel>]>([
+    ["background work", { foregroundTurnActive: false }],
+    ["a foreground turn", { foregroundTurnActive: true }],
+    ["pending input", { isWaitingInput: true }],
+  ])("keeps settings enabled during %s while Running and Stop stay visible", (_name, state) => {
+    const baseModel = buildModel();
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...baseModel,
+          isSessionWorking: true,
+          ...state,
+          canStopSession: true,
+          modelPicker: {
+            ...baseModel.modelPicker,
+            selectionPolicy: {
+              kind: "runtime_locked",
+              runtimeKind: "opencode",
+              reason: "An existing session cannot change runtime.",
+            },
+          },
+          speed: {
+            key: "session",
+            choice: "standard",
+            levels: [{ id: "fast", label: "Fast" }],
+            blockedReason: undefined,
+            pending: false,
+            disabled: false,
+            error: null,
+            onChange: () => {},
+          },
+        },
+      }),
+    );
+    const card = readComposerCard(html);
+    const profile = Array.from(card.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Hephaestus (Deep Agent)"),
+    );
+    expect(profile).toBeDefined();
+    expect(profile?.hasAttribute("disabled")).toBe(false);
+    expect(
+      card
+        .querySelector('[aria-label="Select model, OpenCode, GPT-5.3 Codex"]')
+        ?.getAttribute("aria-disabled"),
+    ).toBe("false");
+    expect(
+      Array.from(card.querySelectorAll("button"))
+        .find((button) => button.textContent === "high")
+        ?.hasAttribute("disabled"),
+    ).toBe(false);
+    expect(card.querySelector('[aria-label="Speed: Standard"]')?.hasAttribute("disabled")).toBe(
+      false,
+    );
+    expect(card.querySelector('[aria-label="Stop session"]')?.hasAttribute("disabled")).toBe(false);
+    expect(card.querySelector(".odt-border-ray") !== null).toBe(!state.isWaitingInput);
+  });
+
+  test.each<[string, Partial<AgentChatComposerModel>]>([
+    ["starting", { isStarting: true }],
+    ["submitting", { isSending: true }],
+    ["loading the first catalog", { isModelSelectionPending: true }],
+    ["saving settings", { isSavingModel: true }],
+    ["read-only", { isReadOnly: true }],
+    ["unavailable", { isInteractionEnabled: false }],
+  ])("keeps session settings disabled while %s", (_name, state) => {
+    const baseModel = buildModel();
+    const card = readComposerCard(
+      renderToStaticMarkup(
         createElement(AgentChatComposer, {
           model: {
-            ...buildModel(),
-            isSessionWorking: true,
-            foregroundTurnActive,
-            canStopSession: true,
+            ...baseModel,
+            ...state,
+            modelPicker: {
+              ...baseModel.modelPicker,
+              selectionPolicy: {
+                kind: "runtime_locked",
+                runtimeKind: "opencode",
+                reason: "An existing session cannot change runtime.",
+              },
+            },
           },
         }),
-      );
-      const card = readComposerCard(html);
-      const profile = Array.from(card.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("Hephaestus (Deep Agent)"),
-      );
-      expect(profile).toBeDefined();
-      expect(profile?.hasAttribute("disabled")).toBe(foregroundTurnActive);
-      expect(card.querySelector('[aria-label="Stop session"]')?.hasAttribute("disabled")).toBe(
-        false,
-      );
-      expect(html).toContain('class="odt-border-ray"');
-    },
-  );
+      ),
+    );
+    expect(
+      card
+        .querySelector('[aria-label="Select model, OpenCode, GPT-5.3 Codex"]')
+        ?.getAttribute("aria-disabled"),
+    ).toBe("true");
+    expect(
+      Array.from(card.querySelectorAll("button"))
+        .find((button) => button.textContent === "high")
+        ?.hasAttribute("disabled"),
+    ).toBe(true);
+  });
 
   // The reference keys stay, so the composer still teaches them while the agent works.
   for (const steerMessagesByDefault of [false, true]) {
