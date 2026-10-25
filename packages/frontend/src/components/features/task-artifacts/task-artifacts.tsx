@@ -263,12 +263,16 @@ function ArtifactSectionFrame({
       >
         <section ref={sectionRef} aria-label="Task artifacts" className="flex flex-col gap-2">
           {isCollection ? (
-            <div className="-mx-2">{body}</div>
+            <>
+              <div className="-mx-2">{body}</div>
+              <CollectionNotice collection={collection} />
+            </>
           ) : (
+            // An open item fills the card to its edges, so the card stays the only frame.
             <div
               className={cn(
-                "flex flex-col overflow-hidden rounded-lg border border-border",
-                content && "h-[min(60dvh,36rem)] min-h-64",
+                "-mx-3 -mb-3 flex flex-col border-t border-border",
+                content && "h-[min(65dvh,40rem)] min-h-64",
               )}
             >
               {content ?? (
@@ -277,9 +281,12 @@ function ArtifactSectionFrame({
                   <div className="p-3">{body}</div>
                 </>
               )}
+              <CollectionNotice
+                collection={collection}
+                className="border-t border-border px-3 py-2"
+              />
             </div>
           )}
-          <CollectionNotice collection={collection} />
         </section>
       </CollapsibleCard>
       {dialog}
