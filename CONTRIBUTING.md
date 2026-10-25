@@ -97,6 +97,15 @@ bun run browser:client
 
 This command opens at `http://127.0.0.1:1421`. It does not load a default host or `/openducktor-config.json`. On the first visit, it shows the host connection screen. Later visits restore the host saved in this browser. To test a connection, keep `bun run browser:dev` running in another terminal, enable Settings, Remote control there, and paste its host address into the standalone frontend. The address needs no `/remote` suffix.
 
+Mobile app for iOS and Android, from the repository root:
+
+```sh
+bun run ios
+bun run android
+```
+
+Read [the mobile app setup](apps/mobile/README.md#setup) for the tools of each platform and the host connection.
+
 To connect a standalone external MCP client, copy the instance ID from the dev-server output:
 
 ```sh
@@ -134,7 +143,8 @@ bun run --filter @openducktor/host test
 
 Shared local Git hooks run on every commit once you have run `bun install`.
 
-- `pre-commit` runs `bun run format:check`, `bun run lint`, and `bun run typecheck` in that order.
+- `pre-commit` runs `bun run format:check`, `bun run lint`, `bun run typecheck`, and `bun run react-doctor:staged` in that order.
+- `react-doctor:staged` checks the staged files of the React projects that `doctor.config.json` lists.
 - `commit-msg` enforces Conventional Commits.
 - `bun run test` does not run during `pre-commit`.
 - `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.

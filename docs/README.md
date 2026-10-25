@@ -29,6 +29,7 @@ Use this index to find the document for your task.
 - [External MCP](external-mcp.md) defines package use, host bridge startup, workspace scope, and public task tools.
 - [Interactive terminal architecture](interactive-terminal-architecture.md) defines terminal ownership, transport, replay, and cleanup.
 - [Remote host protocol](remote-host-protocol.md) defines Electron and web enablement, discovery, compatibility, native transport, and recovery.
+- [Mobile app](../apps/mobile/README.md) defines the iOS and Android client architecture, setup, commands, native dependencies, tests, and release.
 - [Browser tabs](browser-tabs.md) defines browser tab ownership, engines, the CDP proxy, agent tools, annotations, and security.
 - [Web runner](web-runner.md) defines the local browser runner and its release package.
 - [Architecture decision records](adr/) record accepted and superseded technical decisions.
@@ -39,4 +40,4 @@ Use this index to find the document for your task.
 - [Dependency hygiene](dependency-hygiene.md) defines dependency checks and update rules.
 - [Build and packaging](build-and-packaging.md) describes bundles, runtime dependencies, size measurements, and package checks.
 - [Performance audits](performance-audits.md) explains how to diagnose CPU, memory, and response-time issues and verify fixes in Electron and the browser runner.
-- [Release process](release-process.md) defines desktop, web, MCP, and Homebrew releases.
+- [Release process](release-process.md) defines desktop, mobile, web, MCP, and Homebrew releases.

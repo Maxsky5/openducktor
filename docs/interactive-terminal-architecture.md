@@ -14,7 +14,9 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
 - Electron uses the shared `node-pty` adapter over a dedicated preload IPC bridge.
 - The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
-- `packages/frontend/src/features/terminals` owns the collection hook, terminal tabs, terminal layer, close dialog, transport controller, xterm renderer, and input rules. A transport lease shares one controller and one connection per terminal bridge across terminal views. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
+- `packages/frontend-core/src/terminals` owns the terminal bridge contract, the remote terminal bridge, the collection hook, the tab presentation state, the transport controller and pool, the output sequencer, and the keyboard, link, and URL rules. A transport lease shares one controller and one connection per terminal bridge across terminal views. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
+- `packages/frontend/src/features/terminals` owns the desktop terminal tabs, terminal layer, close dialog, and xterm renderer.
+- `apps/mobile/src/features/terminals` owns the mobile Terminals views. Its isolated page draws xterm.js and reports consumed output, input, and grid changes. React Native owns the socket, attachment, acknowledgements, and recovery through the shared transport controller.
 - `packages/frontend/src/features/session-panels` owns the panel, position, order, and selection of each terminal tab, and the visibility of the bottom panel. See [Terminal tabs in session panels](#terminal-tabs-in-session-panels).
 
 Create, run action, list, close, restart, and path setup use host commands. Input, resize, attach, detach, ACK, output, lifecycle, and title use terminal frames. Electron and web share the host PTY adapter and use separate transports.
@@ -146,7 +148,7 @@ When a chunk exceeds a consumer's remaining byte limit, the host retains it and 
 
 The host runs pause and resume in order. An ACK or detach can request resume while pause runs. The host resumes after pause finishes if output pressure has cleared.
 
-The frontend reconnects the frame transport and attaches mounted terminals again. The web transport waits for socket drain before it attaches another terminal after backpressure. It keeps messages in order for each terminal while other terminals can send input and ACK. A failed socket send fails the attachment. A transport loss removes attachments, not the PTY. If the host instance changes, old tabs become lost. A stale attach gets `terminal_forgotten`. Do not recreate a lost terminal.
+The frontend reconnects the frame transport and attaches mounted terminals again. It then sends the last grid size of each terminal again, because the PTY grid can change during the disconnection. A resize during the disconnection waits for the reconnect. The web transport waits for socket drain before it attaches another terminal after backpressure. It keeps messages in order for each terminal while other terminals can send input and ACK. A failed socket send fails the attachment. A transport loss removes attachments, not the PTY. If the host instance changes, old tabs become lost. A stale attach gets `terminal_forgotten`. Do not recreate a lost terminal.
 
 ## Close and clean up
 

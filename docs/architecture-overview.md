@@ -2,9 +2,9 @@
 
 Use this document to find the owner of a rule and trace a user action across packages.
 
-OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend-core` holds the client behavior that all clients share. `packages/frontend` is the shared browser UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux.
+OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend-core` holds the client behavior that all clients share. `packages/frontend` is the shared browser UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux. `apps/mobile` is the native iOS and Android client of a remote host.
 
-This guide covers the desktop app and browser runner. Read [the marketing website guide](../apps/marketing-website/README.md) for the public Astro website.
+This guide covers the desktop app, the browser runner, and the mobile app. Read [the marketing website guide](../apps/marketing-website/README.md) for the public Astro website.
 
 ## Layer ownership
 
@@ -20,6 +20,7 @@ This guide covers the desktop app and browser runner. Read [the marketing websit
 | Runtime orchestration | `packages/runtime-orchestration/src/*` | Shared runtime lifecycle, registry, admission, and lifecycle plans | Platform processes, task policy, and settings persistence |
 | Remote host | `packages/remote-host/src/*` | Remote access, connection lifetime, and shared HTTP, SSE, and WebSocket transport | Workflow policy and runtime lifecycle |
 | Shells | `apps/electron/src/*`, `packages/openducktor-web/src/*` | IPC, preload, HTTP/SSE, renderer start, URLs, and previews | Workflow policy and task-store rules |
+| Mobile client | `apps/mobile/src/*`, `apps/mobile/modules/*` | Native UI, saved hosts, native transport, device storage, app lifecycle | Host work, workflow policy, and shared client behavior |
 | MCP | `packages/openducktor-mcp/src/*` | stdio, schema checks, bridge readiness, and `odt_*` calls | UI state and direct SQLite access |
 
 The host supplies one `RuntimeDriver` per runtime kind to the shared orchestrator. [ADR 0010](adr/0010-own-runtime-orchestration-in-a-platform-independent-package.md) defines this boundary. Both shells use the remote host package. Read [the remote host protocol](remote-host-protocol.md) before you change that transport.
@@ -29,6 +30,8 @@ The host supplies one `RuntimeDriver` per runtime kind to the shared orchestrato
 `packages/frontend` exports `bootstrapOpenDucktorShell(...)` and the `ShellBridge` contract. The bootstrap creates one `ClientConnection` for the selected host, reads settings for the theme, selects browser or hash routing, and renders the app under `ClientConnectionProvider`. A host change from a local host first saves drafts and stays on the page when a save fails. A remote host keeps its drafts in page memory, so its host change does not wait for them. Then the host change unmounts the app, disposes the connection, and reloads the document. See [the frontend core](#frontend-core).
 
 `apps/electron` supplies IPC, preload events, context isolation, renderer sandboxing, and host cleanup. `packages/openducktor-web` starts a loopback host, injects config, serves the frontend, and maps HTTP/SSE to the same bridge.
+
+`apps/mobile` connects to one saved host at a time. For that host, it builds one `ClientConnection` with `createRemoteHostConnection`, a native transport, and device storage. Under its native UI, it uses the same frontend-core owners as desktop. Read [the mobile app](../apps/mobile/README.md) and [ADR 0012](adr/0012-build-the-mobile-client-as-an-expo-shell-over-frontend-core.md).
 
 ## Shared ownership rules
 
@@ -59,9 +62,13 @@ flowchart TD
 | Area | Folder | Owns |
 |---|---|---|
 | Connection | `connection/` | `HostConnection`, `ClientConnection`, query client defaults, React provider and hooks |
-| Platform ports | `platform/` | `ClientFeedback`, `ClientStorage`, `DeviceFileReference`, `NotificationBridge`, platform globals |
+| Platform ports | `platform/` | `ClientFeedback`, `ClientStorage`, `DeviceFileReference`, `NotificationBridge`, `AppVisibility`, platform globals |
 | Caches | `queries/` | Query keys, options, cache sync, and invalidation |
-| Sessions | `sessions/`, `workspace-activity/` | Session store, live projection, history, transcript, session actions |
+| App state | `app-state/`, `tasks/operations/` | State contexts, slice providers, and task operations that each platform composes |
+| Sessions | `sessions/`, `workspace-activity/` | Session store, live projection, history, transcript, session actions, session navigation and read state |
+| Session start and send | `sessions/start/`, `sessions/send/`, `sessions/model-selection/` | Start choices, validation, and launch; message send rules; model, effort, and speed choices |
+| Task workflow | `tasks/workflow/`, `tasks/board/`, `tasks/presentation/` | Task actions and their session starts, task card models, and status labels with a tone for each status |
+| Autopilot | `autopilot/` | Held-outcome reads and the first-message recovery |
 | Recovery | `recovery/`, `tasks/` | Remote host connection, recovery barrier, task streams, notification replay |
 | Notifications | `notifications/` | Occurrence preparation, delivery policy, failure state |
 | Drafts | `drafts/` | Chat drafts, queued-message edit drafts, inline comment drafts |
@@ -70,14 +77,15 @@ Connection rules:
 
 - A `ClientConnection` binds one host connection to one query client, one device storage scope, and its draft stores. `connectionHost(queryClient)` returns the host client of the connection that owns a query client, so a late response stays in its own cache. Query options and loaders take no host override, so one cache key always reads the host of its own connection. Named session ports, such as `AgentSessionReadPort`, stay explicit.
 - Code outside React receives the connection, its query client, or its host client as a parameter. Code in React reads it with `useClientConnection`, `useHostClient`, or `useHostConnection`. Module-level tables key each entry by query client, so each entry belongs to one connection.
-- Frontend stores that keep host state, such as the command palette Recent list, session panel layouts, and the selected workspace chat, read `ClientConnection` storage. `perConnection` in `packages/frontend/src/lib/per-connection.ts` gives each connection its own store.
+- Frontend stores that keep host state, such as the command palette Recent list, session panel layouts, and the selected workspace chat, read `ClientConnection` storage. `perConnection` in `packages/frontend-core/src/lib/per-connection.ts` gives each connection its own store. The mobile app uses it too.
 - React effects under `ClientConnectionProvider` own the event subscriptions. A platform unmounts that tree before it disposes the connection. The frontend uses `releaseShellConnection` for this order.
 - `saveDrafts()` writes every unsaved draft now. It rejects with an actionable message when a draft could not be saved, and that draft stays in memory.
 - `dispose()` starts `saveDrafts()` before its first `await`, cancels local reads, clears the cache, and releases the host transport. It rejects when a step failed, including a draft save. It sends no command that stops or changes host work, so admitted host work continues. Only the draft save can stage the attachments of an unsaved draft.
-- A local host stores drafts in device storage. A remote host stores drafts in connection memory. Its connection sets `saveDraftsOnDispose: false`, so disposal drops those drafts and does not wait for their attachment uploads.
-- Platforms supply transient feedback, device storage, the attachment stager, the remote transport, and notification delivery adapters. A device file reference is never a host path. The stager returns the host path.
+- A local host stores drafts in device storage. On desktop and web, a remote host stores drafts in connection memory. Its connection sets `saveDraftsOnDispose: false`, so disposal drops those drafts and does not wait for their attachment uploads. The mobile app stores the drafts of each saved host in a device store for that host. Its connection also sets `saveDraftsOnDispose: false`. Before a host switch, `closeSession` in `apps/mobile/src/host-session/host-session-owner.ts` saves the drafts only when the user keeps them, so a removed host or discarded drafts upload no attachment.
+- Platforms supply transient feedback, device storage, app visibility, the attachment stager, the remote transport, and notification delivery adapters. A device file reference is never a host path. The stager returns the host path.
 - UI facts, such as key labels, the command palette shortcut, scrollbars, and theme, come from the device (`lib/device-platform.ts` in the frontend). Host facts, such as host paths and the host platform, come from host data. Terminal key mapping uses the host platform, because its line-editing input goes to the host shell.
 - The frontend keeps presentation, provider composition, routing, terminals, generated-image decoding, and the browser implementations of the ports.
+- The session and activity providers read `WorkspaceScopeContext`: the open workspaces and the selected one. The desktop `WorkspaceStateProvider` supplies it with its workspace administration. The mobile app supplies only this scope.
 
 ## List tasks for the Kanban board
 
@@ -124,7 +132,8 @@ Session rules:
 
 - `spec`, `planner`, and `qa` reject mutating permission requests. If the reply fails, keep the request open and emit a system error.
 - Register and start the live adapter before the runtime can emit events. Release it when the runtime stops.
-- Read transcript history only for the selected session. A history read does not discover pending input or delay live state.
+- Read transcript history only for the selected session. A history read does not discover pending input or delay live state. Mobile also reads the history of active and recent sessions after a live gap, before the user opens them (see [the agent orchestrator module map](agent-orchestrator-module-map.md#transcript-history)).
+- Keep rendered transcripts current out of view with the transcript cache keeper. Mobile also builds the transcripts of active sessions before the user opens them, so a running session opens on its latest messages at once (see [the rendered transcript cache](agent-orchestrator-module-map.md#rendered-transcript-cache)).
 
 ## Autopilot
 

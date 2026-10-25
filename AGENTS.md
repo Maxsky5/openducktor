@@ -40,6 +40,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 |---|---|
 | `apps/electron` | Desktop shell, preload, IPC, and packaging |
 | `apps/marketing-website` | Public Astro website |
+| `apps/mobile` | Expo iOS and Android client of a remote host. Read [its README](apps/mobile/README.md) before you change it |
 | `packages/frontend` | Shared React UI |
 | `packages/frontend-core` | Client connections, caches, session projection, recovery, and drafts |
 | `packages/contracts` | Public Zod schemas and data contracts |
