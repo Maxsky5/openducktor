@@ -24,6 +24,13 @@ export type AgentChatTranscriptRow =
       parentExternalSessionId: string;
     }
   | {
+      kind: "compaction";
+      key: string;
+      status: "running" | "completed";
+      label: string;
+      context: string | null;
+    }
+  | {
       kind: "message";
       key: string;
       message: AgentChatMessage;
@@ -108,17 +115,27 @@ const appendMessageRows = (
   const shouldShowTurnDuration =
     isFinalAssistantChatMessage(message) && turnDurationMs !== undefined && turnDurationMs > 0;
   const rowKey = `${sessionKey}:${encodeURIComponent(message.id)}:${occurrence}`;
-  const forkBoundaryMeta =
-    message.meta?.kind === "session_notice" && message.meta.reason === "session_forked"
-      ? message.meta
-      : null;
+  const notice = message.meta?.kind === "session_notice" ? message.meta : null;
 
-  if (forkBoundaryMeta) {
+  if (notice?.reason === "session_compacted") {
+    const status = notice.compactionStatus === "running" ? "running" : "completed";
+    const context = status === "completed" ? notice.summary?.trim() || null : null;
+    rows.push({
+      kind: "compaction",
+      key: `${rowKey}:compaction`,
+      status,
+      label: context ? "Compacted" : message.content.trim() || "Compacted",
+      context,
+    });
+    return rowKey;
+  }
+
+  if (notice?.reason === "session_forked") {
     rows.push({
       kind: "fork_boundary",
       key: `${rowKey}:fork-boundary`,
-      label: forkBoundaryMeta.title,
-      parentExternalSessionId: forkBoundaryMeta.parentExternalSessionId,
+      label: notice.title,
+      parentExternalSessionId: notice.parentExternalSessionId,
     });
     return rowKey;
   }

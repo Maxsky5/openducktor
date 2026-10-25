@@ -133,61 +133,6 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).not.toContain('data-notification-attention-id="2026-02-22T10:21:51.000Z"');
   });
 
-  test("renders session compaction notices as informational cards", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "session-notice-compacted",
-          role: "system",
-          content: "Session compacted.",
-          timestamp: "2026-05-18T21:01:00.000Z",
-          meta: {
-            kind: "session_notice",
-            tone: "info",
-            reason: "session_compacted",
-            title: "Compacted",
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("border-info-border");
-    expect(html).toContain("bg-info-surface");
-    expect(html).toContain("text-info-surface-foreground");
-    expect(html).toContain("Session compacted.");
-    expect(html).toContain("Compacted");
-    expect(html).not.toContain("animate-spin");
-    expect(html).not.toContain("border-destructive-border");
-    expect(html).not.toContain("border-cancelled-border");
-    expect(html).not.toContain(">System<");
-    expect(html).not.toContain("<details");
-  });
-
-  test("renders running session compaction notices with a loader", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "session-notice-compacting",
-          role: "system",
-          content: "Session compaction started.",
-          timestamp: "2026-05-18T21:00:30.000Z",
-          meta: {
-            kind: "session_notice",
-            tone: "info",
-            reason: "session_compacted",
-            title: "Compacting",
-            compactionStatus: "running",
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("border-info-border");
-    expect(html).toContain("Session compaction started.");
-    expect(html).toContain("Compacting");
-    expect(html).toContain("animate-spin");
-  });
-
   test.each([
     { label: "Show system prompt", prefix: "System prompt:\n\n" },
     { label: "Show instruction update", prefix: AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX },

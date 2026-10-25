@@ -122,6 +122,83 @@ describe("agent chat transcript model", () => {
     ).toEqual(["Inherited parent prompt", "Inherited parent answer", "Child task", "Child result"]);
   });
 
+  test("renders compaction summaries only when the notice supplies one", () => {
+    const completed = buildMessage("system", "## Summary\n\nKeep the task store as the source.", {
+      id: "compaction-completed",
+      meta: {
+        kind: "session_notice",
+        tone: "info",
+        reason: "session_compacted",
+        title: "Compacted",
+        compactionStatus: "completed",
+        summary: "## Summary\n\nKeep the task store as the source.",
+      },
+    });
+    const running = buildMessage("system", "Session compaction started.", {
+      id: "compaction-running",
+      meta: {
+        kind: "session_notice",
+        tone: "info",
+        reason: "session_compacted",
+        title: "Compacting",
+        compactionStatus: "running",
+      },
+    });
+    const withoutSummary = buildMessage("system", "Session compacted.", {
+      id: "compaction-without-summary",
+      meta: {
+        kind: "session_notice",
+        tone: "info",
+        reason: "session_compacted",
+        title: "Compacted",
+      },
+    });
+    const noOp = buildMessage("system", "Not enough messages to compact.", {
+      id: "compaction-no-op",
+      meta: {
+        kind: "session_notice",
+        tone: "info",
+        reason: "session_compacted",
+        title: "Compacted",
+      },
+    });
+
+    const model = buildAgentChatTranscriptModel(
+      buildSession({ messages: [completed, running, withoutSummary, noOp] }),
+      { showThinkingMessages: true },
+    );
+
+    expect(model.rows.map((row) => row.kind)).toEqual([
+      "compaction",
+      "compaction",
+      "compaction",
+      "compaction",
+    ]);
+    expect(model.rows[0]).toMatchObject({
+      kind: "compaction",
+      status: "completed",
+      label: "Compacted",
+      context: "## Summary\n\nKeep the task store as the source.",
+    });
+    expect(model.rows[1]).toMatchObject({
+      kind: "compaction",
+      status: "running",
+      context: null,
+    });
+    expect(model.rows[2]).toMatchObject({
+      kind: "compaction",
+      status: "completed",
+      label: "Session compacted.",
+      context: null,
+    });
+    expect(model.rows[3]).toMatchObject({
+      kind: "compaction",
+      status: "completed",
+      label: "Not enough messages to compact.",
+      context: null,
+    });
+  });
+
   test("buildAgentChatTranscriptModel keeps message order without synthetic draft rows", () => {
     const session = buildSession({
       messages: [

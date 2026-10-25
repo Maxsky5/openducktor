@@ -304,7 +304,9 @@ describe("Claude manual compaction", () => {
           uuid: "compact-summary-1",
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:02.000Z",
+          parent_tool_use_id: "nested-agent-tool",
           isCompactSummary: true,
+          isVisibleInTranscriptOnly: true,
           promptId: "compact-prompt-1",
           message: {
             role: "user",
@@ -318,6 +320,7 @@ describe("Claude manual compaction", () => {
           session_id: "session-1",
           timestamp: "2026-07-23T10:00:00.100Z",
           promptId: "compact-prompt-1",
+          isMeta: true,
           message: {
             role: "user",
             content:
@@ -375,6 +378,51 @@ describe("Claude manual compaction", () => {
         parts: [],
       },
     ]);
+  });
+
+  test("hides a transcript-only compact summary and its hook output", () => {
+    const history = toClaudeHistoryMessages(
+      claudeHistoryMessagesFixture([
+        {
+          type: "system",
+          subtype: "compact_boundary",
+          uuid: "ab735562-906b-44e5-8e96-da22227afe6d",
+          session_id: "session-1",
+          timestamp: "2026-07-23T10:00:02.000Z",
+          compact_metadata: { trigger: "manual", pre_tokens: 12_000, post_tokens: 2_000 },
+        },
+        {
+          type: "user",
+          uuid: "compact-summary-1",
+          session_id: "session-1",
+          timestamp: "2026-07-23T10:00:02.000Z",
+          isCompactSummary: true,
+          isVisibleInTranscriptOnly: true,
+          promptId: "compact-prompt-1",
+          message: {
+            role: "user",
+            content:
+              "This session is being continued from a previous conversation that ran out of context.",
+          },
+        },
+        {
+          type: "user",
+          uuid: "compact-hook-output-1",
+          session_id: "session-1",
+          timestamp: "2026-07-23T10:00:02.100Z",
+          promptId: "compact-prompt-1",
+          message: {
+            role: "user",
+            content:
+              "<local-command-stdout>Compacted PreCompact hook completed successfully</local-command-stdout>",
+          },
+        },
+      ]),
+      () => "2026-07-23T11:00:00.000Z",
+    );
+
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ role: "system", text: "Session compacted." });
   });
 
   test("hydrates a manual compact no-op without a user or assistant duplicate", () => {

@@ -313,7 +313,7 @@ export const handleSessionCompacted = (
     ...current,
     messages: upsertSessionMessage(
       current,
-      buildSessionCompactedNoticeMessage(event.timestamp, event.message, messageId),
+      buildSessionCompactedNoticeMessage(event.timestamp, event.message, messageId, event.summary),
     ),
   }));
 };

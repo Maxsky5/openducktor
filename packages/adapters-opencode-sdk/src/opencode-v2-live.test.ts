@@ -4047,6 +4047,12 @@ describe("OpenCode V2 live observation", () => {
         recent: "Recent",
       },
     });
+    expect(start).toMatchObject([{ type: "session_compaction_started", messageId: "msg_compact" }]);
+    expect(projectMessage(projector.messages.get("msg_compact")!)).toMatchObject({
+      messageId: "msg_compact",
+      text: "Session compaction is running.",
+      notice: { reason: "session_compacted", compactionStatus: "running" },
+    });
     const end = projector.apply({
       id: "evt_compact_end",
       created: 5,
@@ -4061,13 +4067,22 @@ describe("OpenCode V2 live observation", () => {
     });
     expect(start).toMatchObject([{ type: "session_compaction_started", messageId: "msg_compact" }]);
     expect(end).toMatchObject([
-      { type: "session_compacted", messageId: "msg_compact", message: "Summary\nRecent" },
+      {
+        type: "session_compacted",
+        messageId: "msg_compact",
+        message: "Summary\nRecent",
+        summary: "Summary\nRecent",
+      },
     ]);
     expect([...projector.messages.keys()]).toEqual(["msg_compact"]);
     expect(projectMessage(projector.messages.get("msg_compact")!)).toMatchObject({
       messageId: "msg_compact",
       text: "Summary\nRecent",
-      notice: { reason: "session_compacted" },
+      notice: {
+        reason: "session_compacted",
+        compactionStatus: "completed",
+        summary: "Summary\nRecent",
+      },
     });
   });
   test("retains open text and tool progress when native snapshots omit ephemeral updates", () => {

@@ -418,6 +418,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     type: z.literal("session_compacted"),
     messageId: z.string().optional(),
     message: z.string(),
+    summary: z.string().optional(),
   }),
   transcriptEventSchema({
     type: z.literal("approval_required"),

@@ -375,6 +375,19 @@ export const historyToChatMessages = (
           const { usageLimit, ...notice } = message.notice;
           meta = { kind: "session_notice", ...notice };
           if (usageLimit) meta.usageLimit = usageLimit;
+        } else if (message.notice.reason === "session_compacted") {
+          const { compactionStatus, summary, ...notice } = message.notice;
+          const compactionNotice: Extract<
+            NonNullable<AgentChatMessage["meta"]>,
+            { reason: "session_compacted" }
+          > = { kind: "session_notice", ...notice };
+          if (compactionStatus) {
+            compactionNotice.compactionStatus = compactionStatus;
+          }
+          if (summary) {
+            compactionNotice.summary = summary;
+          }
+          meta = compactionNotice;
         } else {
           meta = { kind: "session_notice", ...message.notice };
         }

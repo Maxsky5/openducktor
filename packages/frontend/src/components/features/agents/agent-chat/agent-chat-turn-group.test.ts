@@ -250,6 +250,107 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(false);
   });
 
+  test("compaction rows stay stable until their status, label, or context changes", () => {
+    const props = baseProps({
+      turn: {
+        key: "turn-compaction",
+        rows: [
+          {
+            kind: "compaction",
+            key: "compaction-1",
+            status: "completed",
+            label: "Compacted",
+            context: "Summary",
+          },
+        ],
+        isActive: false,
+        activeStreamingAssistantMessageId: null,
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          // Keep the same runtimePresentation object so only the row changes.
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [
+              {
+                kind: "compaction",
+                key: "compaction-1",
+                status: "completed",
+                label: "Compacted",
+                context: "Summary",
+              },
+            ],
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [
+              {
+                kind: "compaction",
+                key: "compaction-1",
+                status: "running",
+                label: "Compacted",
+                context: "Summary",
+              },
+            ],
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [
+              {
+                kind: "compaction",
+                key: "compaction-1",
+                status: "completed",
+                label: "Session compacted.",
+                context: "Summary",
+              },
+            ],
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({
+          ...props,
+          turn: {
+            ...props.turn,
+            rows: [
+              {
+                kind: "compaction",
+                key: "compaction-1",
+                status: "completed",
+                label: "Compacted",
+                context: "Other",
+              },
+            ],
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   test("active streaming assistant id differences only invalidate the affected turn", () => {
     const previousProps = baseProps();
 

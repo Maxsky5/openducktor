@@ -143,6 +143,16 @@ export const createClaudeHistoryInputProjector = (options: {
     if (entry.type !== "user") {
       return notHandled;
     }
+
+    // A compact summary can be nested, so handle it before the nested-entry filter.
+    const promptId = readStringProp(entryValue, "promptId");
+    if (entry.isCompactSummary === true) {
+      if (promptId) {
+        compactPromptIds.add(promptId);
+      }
+      return handledWithoutMessage;
+    }
+
     if (
       (entry.parent_tool_use_id && !options.includeNestedEntries) ||
       isClaudeMetaHistoryMessage(entry) ||
@@ -159,14 +169,6 @@ export const createClaudeHistoryInputProjector = (options: {
       return handledWithoutMessage;
     }
 
-    const promptId = readStringProp(entryValue, "promptId");
-    const isCompactSummary = entry.isCompactSummary === true;
-    if (isCompactSummary) {
-      if (promptId) {
-        compactPromptIds.add(promptId);
-      }
-      return handledWithoutMessage;
-    }
     if (pendingQueuedPrompt?.text.trim().toLowerCase() === "/compact" && promptId) {
       compactPromptIds.add(promptId);
     }

@@ -128,6 +128,7 @@ export type AgentChatMessageMeta =
       reason: "session_compacted";
       title: string;
       compactionStatus?: "running" | "completed";
+      summary?: string;
     }
   | {
       kind: "session_notice";

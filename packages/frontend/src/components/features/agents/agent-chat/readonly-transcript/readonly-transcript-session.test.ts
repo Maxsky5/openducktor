@@ -3,6 +3,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createSubagentMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/subagent-messages";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import { buildAgentChatTranscriptModel } from "../agent-chat-transcript-model";
 import {
   createReadonlyTranscriptSession,
   mergeReadonlyRuntimeHistory,
@@ -76,6 +77,35 @@ describe("createReadonlyTranscriptSession", () => {
     });
 
     expect(forked.messages.version).not.toBe(compacted.messages.version);
+  });
+
+  test("maps a running compaction from runtime history to a compaction row", () => {
+    const session = createReadonlyTranscriptSession({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      history: [
+        {
+          messageId: "compact-1",
+          role: "system",
+          timestamp: "2026-10-25T12:00:00.000Z",
+          text: "Session compaction is running.",
+          notice: {
+            tone: "info",
+            reason: "session_compacted",
+            title: "Session compaction",
+            compactionStatus: "running",
+          },
+          parts: [],
+        },
+      ],
+    });
+
+    const model = buildAgentChatTranscriptModel(session, { showThinkingMessages: true });
+
+    expect(model.rows).toEqual([
+      expect.objectContaining({ kind: "compaction", status: "running", context: null }),
+    ]);
   });
 
   test("versions readonly transcripts when timestamp accuracy changes", () => {

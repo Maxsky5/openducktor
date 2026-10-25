@@ -74,7 +74,12 @@ describe("agent session transcript event contract", () => {
         todos: [{ id: "todo-1", content: "Test", status: "pending", priority: "high" }],
       },
       { ...base, type: "session_compaction_started", message: "Compacting" },
-      { ...base, type: "session_compacted", message: "Compacted" },
+      {
+        ...base,
+        type: "session_compacted",
+        message: "Compacted",
+        summary: "## Summary",
+      },
       {
         ...base,
         type: "approval_required",

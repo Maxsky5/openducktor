@@ -33,6 +33,11 @@ import {
   type ShellContext,
 } from "./opencode-shell-projection";
 
+type SessionHistoryCompactionNotice = Extract<
+  NonNullable<Extract<AgentSessionHistoryMessage, { role: "system" }>["notice"]>,
+  { reason: "session_compacted" }
+>;
+
 export const modelSelection = (model: ModelRef): AgentTranscriptModelSelection => {
   const selection: AgentTranscriptModelSelection = {
     providerId: model.providerID,
@@ -583,11 +588,23 @@ export const projectMessage = (
     text,
     parts: [],
   };
-  if (message.type === "compaction")
-    history.notice =
-      message.status === "failed"
-        ? { tone: "error", reason: "session_error", title: "Compaction failed" }
-        : { tone: "info", reason: "session_compacted", title: "Session compaction" };
+  if (message.type === "compaction") {
+    const summary = message.status === "completed" ? text.trim() : "";
+    if (message.status === "failed") {
+      history.notice = { tone: "error", reason: "session_error", title: "Compaction failed" };
+    } else {
+      const notice: SessionHistoryCompactionNotice = {
+        tone: "info",
+        reason: "session_compacted",
+        title: "Session compaction",
+        compactionStatus: message.status,
+      };
+      if (summary) {
+        notice.summary = summary;
+      }
+      history.notice = notice;
+    }
+  }
   if (message.type === "idle" && message.outcome === "interrupted")
     history.notice = { tone: "cancelled", reason: "session_interrupted", title: "Interrupted" };
   return agentSessionHistoryMessageSchema.parse(history);
@@ -647,20 +664,42 @@ export const messageEvents = (
         state: projected.state,
       },
     ];
-  if (message.type === "compaction")
+  if (message.type === "compaction") {
+    if (message.status === "running") {
+      return [
+        {
+          ...base,
+          type: "session_compaction_started",
+          messageId: projected.messageId,
+          message: projected.text,
+        },
+      ];
+    }
+    if (message.status === "completed") {
+      const summary =
+        projected.role === "system" && projected.notice?.reason === "session_compacted"
+          ? projected.notice.summary
+          : undefined;
+      const event: Extract<AgentEvent, { type: "session_compacted" }> = {
+        ...base,
+        type: "session_compacted",
+        messageId: projected.messageId,
+        message: projected.text,
+      };
+      if (summary) {
+        event.summary = summary;
+      }
+      return [event];
+    }
     return [
       {
         ...base,
-        type:
-          message.status === "running"
-            ? "session_compaction_started"
-            : message.status === "completed"
-              ? "session_compacted"
-              : "turn_error",
+        type: "turn_error",
         messageId: projected.messageId,
         message: projected.text,
       },
     ];
+  }
   if (projected.role === "system")
     return [
       {

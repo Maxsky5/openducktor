@@ -374,11 +374,12 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
           messageId: "compact-1",
           role: "system",
           timestamp: "2026-05-18T21:00:00.000Z",
-          text: "Session compacted.",
+          text: "## Summary",
           notice: {
             tone: "info",
             reason: "session_compacted",
             title: "Compacted",
+            summary: "## Summary",
           },
           parts: [],
         },
@@ -392,13 +393,14 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
       {
         id: "compact-1",
         role: "system",
-        content: "Session compacted.",
+        content: "## Summary",
         timestamp: "2026-05-18T21:00:00.000Z",
         meta: {
           kind: "session_notice",
           tone: "info",
           reason: "session_compacted",
           title: "Compacted",
+          summary: "## Summary",
         },
       },
     ]);

@@ -50,6 +50,68 @@ describe("AgentChatThreadRow", () => {
     expect(html.match(/aria-hidden/g)).toHaveLength(2);
   });
 
+  test("renders completed compaction rows as a collapsed separator with its context", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThreadRow, {
+        ...createBaseProps(),
+        row: {
+          kind: "compaction",
+          key: "compaction-1",
+          status: "completed",
+          label: "Compacted",
+          context: "## Summary\n\nThe task store is the source of truth.",
+        },
+      }),
+    );
+
+    expect(html).toContain("Compacted");
+    expect(html).toContain("lucide-shrink");
+    expect(html).toContain("<details");
+    expect(html).not.toContain("<details open");
+    expect(html).toContain("The task store is the source of truth.");
+    expect(html).not.toContain("animate-spin");
+  });
+
+  test("renders a compaction status without a disclosure when no context exists", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThreadRow, {
+        ...createBaseProps(),
+        row: {
+          kind: "compaction",
+          key: "compaction-1",
+          status: "completed",
+          label: "Not enough messages to compact.",
+          context: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("Not enough messages to compact.");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("lucide-chevron-down");
+  });
+
+  test("renders running compaction rows with a loader and no disclosure", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThreadRow, {
+        ...createBaseProps(),
+        row: {
+          kind: "compaction",
+          key: "compaction-1",
+          status: "running",
+          label: "Session compaction started.",
+          context: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("Compacting…");
+    expect(html).toContain("lucide-loader-circle");
+    expect(html).toContain("animate-spin");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("lucide-shrink");
+  });
+
   test("renders message rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThreadRow, {

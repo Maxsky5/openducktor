@@ -93,6 +93,8 @@ const sessionHistoryNoticeSchema = z.discriminatedUnion("reason", [
       tone: z.literal("info"),
       reason: z.literal("session_compacted"),
       title: nonEmptyStringSchema,
+      compactionStatus: z.enum(["running", "completed"]).optional(),
+      summary: z.string().optional(),
     })
     .strict(),
   z

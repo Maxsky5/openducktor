@@ -84,17 +84,22 @@ const buildSessionCompactionNoticeMessage = (
   title: string,
   status: "running" | "completed",
   id?: string,
+  summary?: string,
 ): AgentChatMessage => {
+  const meta: Extract<SessionNoticeMeta, { reason: "session_compacted" }> = {
+    kind: "session_notice",
+    tone: "info",
+    reason: "session_compacted",
+    title,
+    compactionStatus: status,
+  };
+  if (summary) {
+    meta.summary = summary;
+  }
   const input: Parameters<typeof buildSessionNoticeMessage>[0] = {
     timestamp,
     content: message,
-    meta: {
-      kind: "session_notice",
-      tone: "info",
-      reason: "session_compacted",
-      title,
-      compactionStatus: status,
-    },
+    meta,
   };
   if (id) {
     input.id = id;
@@ -106,8 +111,9 @@ export const buildSessionCompactedNoticeMessage = (
   timestamp: string,
   message: string,
   id?: string,
+  summary?: string,
 ): AgentChatMessage =>
-  buildSessionCompactionNoticeMessage(timestamp, message, "Compacted", "completed", id);
+  buildSessionCompactionNoticeMessage(timestamp, message, "Compacted", "completed", id, summary);
 
 export const buildSessionCompactionStartedNoticeMessage = (
   timestamp: string,
