@@ -97,6 +97,8 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
   }
   const effectiveToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter(toolDiscoveryInput);
   const runtimeStarterInput: Parameters<typeof createEffectOpenCodeRuntimeStarter>[0] = {
+    // Fresh fake-runtime wrappers took up to 2,004 ms to become ready on macOS.
+    startupTimeoutMs: 4_000,
     onConnectionReady: () => {},
     onConnectionClosed: () => {},
     launchDirectory: launchDirectory ?? tmpdir(),
@@ -632,7 +634,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             startForwarding: () => Effect.void,
             discard: () => Effect.void,
           }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-unexpected-close",
       });
 
@@ -688,7 +689,6 @@ describe("createOpenCodeRuntimeStarter", () => {
             startForwarding: () => Effect.void,
             discard: () => Effect.void,
           }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-crash-cleanup",
       });
 
@@ -748,7 +748,6 @@ describe("createOpenCodeRuntimeStarter", () => {
               discard: () => Effect.void,
             };
           }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-observation-lost",
       });
       const exits: string[] = [];
@@ -789,7 +788,6 @@ describe("createOpenCodeRuntimeStarter", () => {
               discard: () => Effect.void,
             };
           }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-observation-stop",
       });
       const exits: string[] = [];
@@ -842,7 +840,6 @@ describe("createOpenCodeRuntimeStarter", () => {
                 discardCalls += 1;
               }),
           }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-register-failure",
       });
 
@@ -901,7 +898,6 @@ describe("createOpenCodeRuntimeStarter", () => {
               ),
             discard: () => Effect.void,
           }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-forward-failure",
       });
 
@@ -931,7 +927,6 @@ describe("createOpenCodeRuntimeStarter", () => {
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-tree",
       });
 
@@ -1019,7 +1014,6 @@ describe("createOpenCodeRuntimeStarter", () => {
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        startupTimeoutMs: 2_000,
         // The child must own its working directory before cleanup tests stop it on Windows.
         runtimeId: () => "runtime-failure",
         processTreeTerminator: ({ pid }) => {
@@ -1056,7 +1050,6 @@ describe("createOpenCodeRuntimeStarter", () => {
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-retry",
         liveSessionLifecycle: {
           registerRuntimeAdapter: () => Effect.void,
@@ -1170,7 +1163,6 @@ describe("createOpenCodeRuntimeStarter", () => {
           platform: "win32",
         }),
         readEnv: () => ({ ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" }),
-        startupTimeoutMs: 2_000,
         runtimeId: () => "runtime-path",
       });
 
