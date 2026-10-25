@@ -4,19 +4,18 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import {
-  modelPickerResourceFromCatalogQuery,
   type ModelPickerRuntime,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
-} from "@/components/features/agents/model-picker";
-import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type SessionModelTarget = {
   identity: AgentSessionIdentity | null;
   runtimeKind?: AgentSessionIdentity["runtimeKind"];
-  runtimeRef?: RuntimeWorkingDirectoryRef;
-  updateDraft?: (selection: AgentModelSelection | null) => void;
+  /** The runtime and directory of the catalog that the session uses. */
+  runtimeRef: RuntimeWorkingDirectoryRef;
+  updateDraft: (selection: AgentModelSelection | null) => void;
   /** Saves a speed change without the model lock, so the other controls keep their state. */
   updateSpeed?: (
     identity: AgentSessionIdentity | null,
@@ -33,52 +32,38 @@ export type SessionModelTarget = {
   ) => Promise<void> | void;
 };
 
+/** The runtimes of the model picker of a chat. Only the runtime of its session has a catalog. */
 export function projectWorkspaceModelResources(
   definitions: readonly ModelPickerRuntime["descriptor"][],
   availableDefinitions: readonly ModelPickerRuntime["descriptor"][],
-  resources: readonly RuntimeModelCatalogQueryResource[],
-  selection: AgentModelSelection | null,
-  session?: SessionModelTarget,
+  session: SessionModelTarget,
 ) {
   const availableKinds = new Set(availableDefinitions.map((definition) => definition.kind));
-  const sessionRuntimeKind = session?.identity?.runtimeKind ?? session?.runtimeKind;
-  const runtimeKind = sessionRuntimeKind ?? selection?.runtimeKind ?? null;
-  const catalog = session
-    ? session.catalog
-    : (resources.find((resource) => resource.runtimeKind === runtimeKind)?.catalog ?? null);
-  const runtimes: ModelPickerRuntime[] = definitions.map((descriptor) => {
-    if (session) {
-      return {
-        descriptor,
-        isEnabledForFavorites: availableKinds.has(descriptor.kind),
-        resource:
-          descriptor.kind === sessionRuntimeKind
-            ? toModelPickerCatalogResource({
-                catalog: session.catalog,
-                isLoading: session.isLoading,
-                error: session.error,
-                isAvailable: true,
-                unavailableReason: "Session model catalog is unavailable.",
-                retry: session.retry,
-              })
-            : unavailableModelPickerCatalogResource("Start a new session to use another runtime."),
-      };
-    }
-    const resource = resources.find((entry) => entry.runtimeKind === descriptor.kind);
-    return {
-      descriptor,
-      isEnabledForFavorites: availableKinds.has(descriptor.kind),
-      resource: modelPickerResourceFromCatalogQuery(resource, "Runtime catalog is unavailable."),
-    };
-  });
+  const sessionRuntimeKind = session.identity?.runtimeKind ?? session.runtimeKind;
+  const runtimeKind = sessionRuntimeKind ?? session.selection?.runtimeKind ?? null;
+  const runtimes: ModelPickerRuntime[] = definitions.map((descriptor) => ({
+    descriptor,
+    isEnabledForFavorites: availableKinds.has(descriptor.kind),
+    resource:
+      descriptor.kind === sessionRuntimeKind
+        ? toModelPickerCatalogResource({
+            catalog: session.catalog,
+            isLoading: session.isLoading,
+            error: session.error,
+            isAvailable: true,
+            unavailableReason: "Session model catalog is unavailable.",
+            retry: session.retry,
+          })
+        : unavailableModelPickerCatalogResource("Start a new session to use another runtime."),
+  }));
   return {
     runtimes,
-    catalog,
+    catalog: session.catalog,
     runtimeKind,
     sessionRuntimeKind,
     supportsProfiles:
       definitions.find((entry) => entry.kind === runtimeKind)?.capabilities.optionalSurfaces
         .supportsProfiles ?? false,
-    isLoading: session ? session.isLoading : resources.some((entry) => entry.isLoading),
+    isLoading: session.isLoading,
   };
 }

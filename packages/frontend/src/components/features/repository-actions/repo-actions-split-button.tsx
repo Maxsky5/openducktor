@@ -1,4 +1,8 @@
 import type { RepoAction, RepoActions } from "@openducktor/contracts";
+import {
+  MISSING_DEFAULT_ACTION_MESSAGE,
+  splitRepoActions,
+} from "@openducktor/frontend-core/terminals/repo-actions";
 import { type LucideIcon, Plus, Settings2, TriangleAlert } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import {
@@ -25,7 +29,7 @@ export function RepoActionsSplitButton({
   onManageActions,
 }: Props): ReactElement {
   const [menuOpen, setMenuOpen] = useState(false);
-  const split = splitActions(actions);
+  const split = splitRepoActions(actions);
   if (split.kind === "empty") return <AddActionButton onClick={onManageActions} />;
   if (split.kind === "missing_default") {
     return <MissingDefaultActionButton onClick={onManageActions} />;
@@ -144,11 +148,6 @@ function AddActionButton({ onClick }: { onClick: () => void }): ReactElement {
   );
 }
 
-const MISSING_DEFAULT_ACTION_MESSAGE =
-  "The default action no longer exists. Choose a default action in the repository actions.";
-
-// Saved settings always name an existing default action. This state shows a broken config instead
-// of a run button that cannot work.
 function MissingDefaultActionButton({ onClick }: { onClick: () => void }): ReactElement {
   return (
     <Tooltip>
@@ -170,20 +169,4 @@ function MissingDefaultActionButton({ onClick }: { onClick: () => void }): React
       </TooltipContent>
     </Tooltip>
   );
-}
-
-type SplitActions =
-  | { kind: "empty" }
-  | { kind: "missing_default" }
-  | { kind: "ready"; defaultAction: RepoAction; otherActions: RepoAction[] };
-
-function splitActions({ items, defaultActionId }: RepoActions): SplitActions {
-  if (items.length === 0) return { kind: "empty" };
-  const defaultAction = items.find((action) => action.id === defaultActionId);
-  if (!defaultAction) return { kind: "missing_default" };
-  return {
-    kind: "ready",
-    defaultAction,
-    otherActions: items.filter((action) => action.id !== defaultAction.id),
-  };
 }

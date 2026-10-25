@@ -2,10 +2,14 @@ import { ChevronDown, ImageIcon, type LucideIcon } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { cn } from "@/lib/utils";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
-import { getToolDuration } from "./tool-duration";
-import { getToolLifecyclePhase, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
+import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
+import {
+  getToolLifecyclePhase,
+  isToolMessageActive,
+  isToolMessageFailure,
+} from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 
 /** A detail of an action tool call. A section with no text does not show. */
 export type ActionToolSection = { label: string; text: string; tone?: "error" };

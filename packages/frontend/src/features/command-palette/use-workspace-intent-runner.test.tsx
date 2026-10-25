@@ -7,8 +7,9 @@ import {
   useWorkspacePreviewTransitionGuard,
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
-import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
-import { TasksStateContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import { TasksStateContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
@@ -17,7 +18,7 @@ import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { TasksStateContextValue } from "@/types/state-slices";
+import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
 import {
   useWorkspaceIntentRunner,
   type WorkspaceIntent,

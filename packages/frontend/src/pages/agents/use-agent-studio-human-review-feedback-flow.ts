@@ -1,20 +1,21 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
+import { submitHumanReviewFeedback } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-flow";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
-} from "@/features/human-review-feedback/human-review-feedback-state";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
+} from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-state";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
+import { useHumanReviewFeedbackController } from "@openducktor/frontend-core/tasks/workflow/use-human-review-feedback-controller";
+import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
+import type { SessionStartExistingSessionOption } from "@openducktor/frontend-core/sessions/start/session-start-types";
+import type { SessionStartLaunchRequest } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type {
-  SessionLaunchActionId,
-  SessionStartExistingSessionOption,
-  SessionStartLaunchRequest,
   SessionStartPostAction,
   SessionStartWorkflowResult,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -96,6 +97,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     setIsSubmittingHumanReviewFeedback(true);
     try {
       const result = await submitHumanReviewFeedback({
+        feedback: sonnerFeedback,
         state: humanReviewFeedbackState,
         builderSessions: sessionsForTask,
         startRequestChangesSession: async (request) => {

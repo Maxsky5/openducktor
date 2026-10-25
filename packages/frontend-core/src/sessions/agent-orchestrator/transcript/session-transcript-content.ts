@@ -10,6 +10,7 @@ export const hasLoadedSessionHistory = (
   session: Pick<AgentSessionState, "historyLoadState">,
 ): boolean =>
   session.historyLoadState === "loaded" ||
+  session.historyLoadState === "unverified" ||
   session.historyLoadState === "stale" ||
   session.historyLoadState === "refreshing";
 

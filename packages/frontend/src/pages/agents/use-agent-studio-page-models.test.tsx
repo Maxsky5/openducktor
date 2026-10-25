@@ -1,6 +1,6 @@
 import { MemoryRouter } from "react-router";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
+import { createAgentChatSendFixture } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement, createRef } from "react";
@@ -20,7 +20,7 @@ import {
   type AgentSessionSummary,
   toAgentSessionSummary,
 } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { ActiveWorkspaceContext } from "@/state/app-state-contexts";
+import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
@@ -35,7 +35,7 @@ import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/
 import {
   type AgentStudioChatDraftScope,
   agentStudioChatDraftScopeKey,
-} from "./agent-studio-chat-draft";
+} from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,

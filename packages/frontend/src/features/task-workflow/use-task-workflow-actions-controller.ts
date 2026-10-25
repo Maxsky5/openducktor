@@ -1,42 +1,43 @@
-import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
-import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
+import type { PullRequest } from "@openducktor/contracts";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
-import type { SessionStartModalModel } from "@/components/features/agents";
-import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import {
-  createGitConflictActionsModel,
-  useGitConflictResolution,
-} from "@/features/git-conflict-resolution";
-import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
-import { useSessionStartWorkflowRunner } from "@/features/session-start";
-import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { gitProviderReadError as toGitProviderReadError } from "@/lib/git-provider-health";
+import { toast } from "sonner";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
+import type { WorkflowPendingState } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
+import { createGitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
+import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
+import { useSessionStartWorkflowRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-workflow-runner";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { gitProviderReadError as toGitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
+import { openExternalUrl } from "@/lib/open-external-url";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type {
   TaskApprovalModalModel,
   TaskGitConflictDialogModel,
-  TaskResetImplementationModalModel,
-} from "@/pages/kanban/kanban-page-model-types";
+} from "@openducktor/frontend-core/tasks/approval/task-approval-types";
+import { useTaskApprovalFlow } from "@openducktor/frontend-core/tasks/approval/use-task-approval-flow";
+import { useTaskGitConflictResolver } from "@openducktor/frontend-core/tasks/workflow/use-task-git-conflict-resolver";
+import { buildWorkflowPendingState } from "@openducktor/frontend-core/tasks/workflow/task-workflow-pending-state";
 import { useKanbanSessionStartFlow } from "@/pages/kanban/use-kanban-session-start-flow";
-import { useTaskApprovalFlow } from "@/pages/kanban/use-task-approval-flow";
-import { useTaskResetFlow } from "@/pages/kanban/use-task-reset-flow";
 import {
-  useAgentSessionSummaries,
-  useTasksState,
-  useWorkspaceState,
-} from "@/state/app-state-provider";
-import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+  type TaskResetImplementationModalModel,
+  useTaskResetFlow,
+} from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
+import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
+import { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
+import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
+import { useNotificationContext } from "@/state/notifications/notification-context";
 import {
   buildActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
-} from "@/pages/kanban/use-kanban-board-model";
+} from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import {
   type TaskConfirmDialogHostModel,
   useTaskConfirmDialogHost,
 } from "./task-confirm-dialog-host";
-import type { TaskWorkflowActions } from "./task-workflow-actions-context";
+import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   type TaskWorkflowTaskComposerModel,
   useTaskWorkflowComposer,
@@ -83,8 +84,11 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     resetTaskImplementation,
     humanApproveTask,
   } = useTasksState();
+  const { sessionStartNotifications } = useNotificationContext();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
+    repoPath: workspaceRepoPath,
+    notifications: sessionStartNotifications,
   });
 
   const {
@@ -155,72 +159,31 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     closeTaskDetails,
   });
 
-  const assertSessionCanSend = useAgentMessageSendPolicy();
-  const conflictWorkspaceKey = JSON.stringify([activeWorkspaceId, workspaceRepoPath]);
-  const conflictWorkspace = useRef({ key: conflictWorkspaceKey, version: 0 });
-  useLayoutEffect(() => {
-    if (conflictWorkspace.current.key !== conflictWorkspaceKey)
-      conflictWorkspace.current = {
-        key: conflictWorkspaceKey,
-        version: conflictWorkspace.current.version + 1,
-      };
-  }, [conflictWorkspaceKey]);
-  const { handleResolveGitConflict } = useGitConflictResolution({
-    workspaceId: activeWorkspaceId,
-    startConflictResolutionSession: async (request) => {
-      const intent: Parameters<typeof startSessionIntent>[0] = {
-        taskId: request.taskId,
-        role: request.role,
-        launchActionId: "build_rebase_conflict_resolution",
-        initialStartMode: request.initialStartMode,
-        targetWorkingDirectory: request.targetWorkingDirectory,
-        initialSourceSession: request.initialSourceSession,
-        existingSessionOptions: request.existingSessionOptions,
-        postStartAction: "send_message",
-        message: request.message,
-      };
-      if (request.assertCanSubmit) intent.assertCanSubmit = request.assertCanSubmit;
-      return startSessionIntent(intent);
-    },
-  });
-  const handleResolveTaskGitConflict = useCallback(
-    (conflict: Parameters<typeof handleResolveGitConflict>[0], taskId: string) => {
-      const version = conflictWorkspace.current.version;
-      const assertCurrent = () => {
-        if (conflictWorkspace.current.version !== version) throw new GitConflictRequestCancelled();
-      };
-      const task = tasks.find((entry) => entry.id === taskId) ?? null;
-      const builderSessions = sessions.filter(
-        (entry) => entry.role === "build" && entry.taskId === taskId,
-      );
-      return handleResolveGitConflict(
-        conflict,
-        {
+  const openBuilderSession = useCallback(
+    (taskId: string, identity: AgentSessionIdentity): void => {
+      if (!activeWorkspaceId) {
+        throw new Error("No active workspace is selected.");
+      }
+      navigate(
+        buildSessionNavigationHref({
+          kind: "task_session",
+          workspaceId: activeWorkspaceId,
           taskId,
-          task,
-          builderSessions,
-          currentViewSession: null,
-          onOpenSession: (session) => {
-            if (!activeWorkspaceId) {
-              throw new Error("No active workspace is selected.");
-            }
-            navigate(
-              buildSessionNavigationHref({
-                kind: "task_session",
-                workspaceId: activeWorkspaceId,
-                taskId,
-                role: "build",
-                identity: toAgentSessionIdentity(session),
-              }),
-            );
-          },
-        },
-        assertSessionCanSend,
-        assertCurrent,
+          role: "build",
+          identity,
+        }),
       );
     },
-    [activeWorkspaceId, handleResolveGitConflict, navigate, sessions, tasks, assertSessionCanSend],
+    [activeWorkspaceId, navigate],
   );
+  const handleResolveTaskGitConflict = useTaskGitConflictResolver({
+    activeWorkspaceId,
+    workspaceRepoPath,
+    tasks,
+    sessions,
+    startSessionIntent,
+    openBuilderSession,
+  });
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeWorkspace,
@@ -233,6 +196,8 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     humanApproveTask,
     openResetImplementation,
     onResolveGitConflict: handleResolveTaskGitConflict,
+    showPullRequestCreated: showPullRequestCreatedToast,
+    showGitProviderContextLoadFailure: showGitProviderContextLoadFailureToast,
   });
 
   const { onCreateTask, onEdit, composer } = useTaskWorkflowComposer({ activeWorkspace, tasks });
@@ -260,13 +225,13 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     () => buildActiveTaskSessionContextByTaskId(sessions),
     [sessions],
   );
-  const approvingTaskId = getApprovingTaskId(taskApprovalModal);
-  const requestingChangesTaskId = humanReviewFeedbackModal?.isSubmitting
-    ? humanReviewFeedbackModal.taskId
-    : null;
-  const resettingImplementationTaskId = resetImplementationModal?.isSubmitting
-    ? resetImplementationModal.taskId
-    : null;
+  const { approvingTaskId, requestingChangesTaskId, resettingImplementationTaskId } =
+    buildWorkflowPendingState({
+      isSessionStarting,
+      taskApprovalModal,
+      humanReviewFeedbackModal,
+      resetImplementationModal,
+    });
   const kanbanPendingState = useMemo<WorkflowPendingState>(
     () => ({
       isSessionStarting,
@@ -366,8 +331,28 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   };
 }
 
-function getApprovingTaskId(modal: TaskApprovalModalModel | null): string | null {
-  return modal && (modal.isSubmitting || (modal.stage === "approval" && modal.isLoading))
-    ? modal.taskId
-    : null;
-}
+const showPullRequestCreatedToast = (pullRequest: PullRequest): void => {
+  toast.success("Pull request created", {
+    description: `PR #${pullRequest.number}`,
+    action: {
+      label: "Open",
+      onClick: () => {
+        void openExternalUrl(pullRequest.url).catch((error) => {
+          toast.error("Failed to open pull request", {
+            description: errorMessage(error),
+          });
+        });
+      },
+    },
+  });
+};
+
+const showGitProviderContextLoadFailureToast = (description: string, retry: () => void): void => {
+  toast.error("Failed to load Git provider context", {
+    description,
+    action: {
+      label: "Retry",
+      onClick: retry,
+    },
+  });
+};

@@ -1,0 +1,815 @@
+import "../../test-support/dom-environment";
+import { describe, expect, mock, test } from "bun:test";
+import type {
+  AgentRuntimeCatalog,
+  AgentSessionHistoryMessage,
+  AgentSessionScope,
+} from "@openducktor/core";
+import type { PropsWithChildren } from "react";
+import { ClientConnectionProvider } from "../../connection/client-connection-react";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { IsolatedQueryWrapper } from "../../test-support/isolated-query-wrapper";
+import { HostRuntimeStatusContext } from "../session-contexts";
+import { createHostRuntimeStatusContextValue } from "../../test-support/shared-test-fixtures";
+import { createRuntimeDefinitionsContextValue } from "../../test-support/runtime-hook-harness";
+import { RuntimeDefinitionsContext } from "../../app-state/app-state-contexts";
+import {
+  AgentOperationsContext,
+  AgentSessionHistoryLoadContext,
+  AgentSessionReadModelStateContext,
+} from "../session-contexts";
+import { useAgentOperationsContext } from "../session-contexts";
+import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
+import { runtimeCatalogQueryKeys } from "../../queries/runtime-catalog";
+import { settingsSnapshotQueryOptions } from "../../queries/workspace";
+import { createHookHarness } from "../../test-support/react-hook-harness";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+  createRuntimeCatalogFixture,
+  createSettingsSnapshotFixture,
+} from "../../test-support/shared-test-fixtures";
+import type { AgentSessionState } from "../../types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "../../types/session-slices";
+import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
+
+const readyRuntimeStatus = createHostRuntimeStatusContextValue();
+
+const session = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
+  createAgentSessionFixture(
+    {
+      externalSessionId: "thread-1",
+      sessionAssociation: { kind: "unbound" },
+
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-07-16T08:00:00.000Z",
+      historyLoadState: "not_requested",
+      messages: createSessionMessagesState("thread-1"),
+    },
+    overrides,
+  );
+
+const operations = (
+  loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"],
+  readSessionHistory: AgentOperationsContextValue["readSessionHistory"] = async () => [],
+): AgentOperationsContextValue => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected beginGeneratedImageBatch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected releaseGeneratedImageBatch");
+  },
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
+  readSessionTodos: async () => [],
+  readSessionHistory,
+  loadAgentSessionHistory,
+  loadAgentSessionContext: async () => undefined,
+  sendAgentMessage: async () => null,
+  manageAgentMessageQueue: async () => {},
+  stopAgentSession: async () => undefined,
+  continueInterruptedTurn: async () => undefined,
+  updateAgentSessionModel: async () => undefined,
+  replyAgentApproval: async () => undefined,
+  answerAgentQuestion: async () => undefined,
+});
+
+const HistoryOwner = ({ children }: PropsWithChildren) => {
+  const { loadAgentSessionHistory } = useAgentOperationsContext();
+  return (
+    <AgentSessionHistoryLoadContext.Provider value={{ loadAgentSessionHistory }}>
+      <AgentSessionReadModelStateContext.Provider
+        value={{
+          sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+          reloadSessionReadModel: () => {},
+          getSessionFault: () => null,
+          workspaceSessionRecordsError: null,
+        }}
+      >
+        {children}
+      </AgentSessionReadModelStateContext.Provider>
+    </AgentSessionHistoryLoadContext.Provider>
+  );
+};
+
+const createHarness = (
+  liveSession: AgentSessionState,
+  readSessionHistory: AgentOperationsContextValue["readSessionHistory"],
+  targetSessionScope?: AgentSessionScope,
+  loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"] = async () =>
+    null,
+) => {
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <IsolatedQueryWrapper>
+      <HostRuntimeStatusContext value={readyRuntimeStatus}>
+        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+          <AgentOperationsContext.Provider
+            value={operations(loadAgentSessionHistory, readSessionHistory)}
+          >
+            <HistoryOwner>{children}</HistoryOwner>
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </HostRuntimeStatusContext>
+    </IsolatedQueryWrapper>
+  );
+  const target: Parameters<typeof useRuntimeTranscriptSessionHistory>[0]["target"] = {
+    externalSessionId: liveSession.externalSessionId,
+    runtimeKind: liveSession.runtimeKind,
+    workingDirectory: liveSession.workingDirectory,
+  };
+  if (targetSessionScope) {
+    target.sessionScope = targetSessionScope;
+  }
+  return createHookHarness(
+    useRuntimeTranscriptSessionHistory,
+    {
+      isOpen: true,
+      repoPath: "/repo",
+      target,
+      runtimeReadinessState: "ready" as const,
+      liveSession,
+    },
+    { wrapper },
+  );
+};
+
+describe("useRuntimeTranscriptSessionHistory", () => {
+  test("uses a workflow target for a matching unbound live session", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(
+      session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
+      readSessionHistory,
+      { kind: "workflow", taskId: "task-1", role: "build" },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses a repository target for a matching unbound live session", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(
+      session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
+      readSessionHistory,
+      { kind: "repository" },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionScope: { kind: "repository" } }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the canonical owner for a registered workflow transcript", async () => {
+    const readSessionHistory = mock(async () => []);
+    const loadAgentSessionHistory = mock(async () => null);
+    const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const live = session({ runtimeKind: "opencode", sessionAssociation: workflowScope });
+    const harness = createHarness(live, readSessionHistory, workflowScope, loadAgentSessionHistory);
+    try {
+      await harness.mount();
+      expect(loadAgentSessionHistory).toHaveBeenCalledWith({
+        externalSessionId: live.externalSessionId,
+        runtimeKind: live.runtimeKind,
+        workingDirectory: live.workingDirectory,
+      });
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      await harness.update({
+        isOpen: true,
+        repoPath: "/repo",
+        target: { ...live, sessionScope: workflowScope },
+        runtimeReadinessState: "ready",
+        liveSession: { ...live, historyLoadState: "loaded" },
+      });
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().session?.messages).toBe(live.messages);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects conflicting target and live workflow scopes", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(
+      session({
+        runtimeKind: "opencode",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+      readSessionHistory,
+      {
+        kind: "workflow",
+        taskId: "task-2",
+        role: "qa",
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.transcriptState.kind === "failed");
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().transcriptState).toEqual({
+        kind: "failed",
+        message:
+          "Cannot load transcript history for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the requested workflow scope for task 'task-2' and role 'qa'.",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("forwards repository scope unchanged to the history request", async () => {
+    const readSessionHistory = mock(async () => []);
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <IsolatedQueryWrapper>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </IsolatedQueryWrapper>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "repository-thread",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          sessionScope: { kind: "repository" },
+        },
+        runtimeReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "repository-thread",
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "opencode" },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads a completed child transcript without a live projection entry", async () => {
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "assistant-child-1",
+        role: "assistant",
+        timestamp: "2026-07-17T08:00:00.000Z",
+        text: "Completed child output",
+        parts: [],
+      },
+    ];
+    const readSessionHistory = mock(async () => history);
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <IsolatedQueryWrapper>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </IsolatedQueryWrapper>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "child-thread",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
+        runtimeReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "child-thread",
+        runtimePolicy: { kind: "opencode" },
+      });
+      expect(harness.getLatest().session?.messages.items[0]?.content).toBe(
+        "Completed child output",
+      );
+      expect(harness.getLatest().interactionSession).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads completed Codex child history through a policy-bound runtime ref", async () => {
+    const readSessionHistory = mock(async () => []);
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ClientConnectionProvider connection={connection}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </ClientConnectionProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "child-thread",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+        },
+        runtimeReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "child-thread",
+          runtimePolicy: expect.objectContaining({ kind: "codex" }),
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps pending input visible while selected history remains unresolved", async () => {
+    const never = new Promise<AgentSessionHistoryMessage[]>(() => undefined);
+    const readSessionHistory = mock(async () => never);
+    const liveSession = session({
+      runtimeKind: "opencode",
+      pendingApprovals: [
+        {
+          requestId: "opaque-1",
+          requestType: "command_execution",
+          title: "Run command",
+        },
+      ],
+    });
+    const harness = createHarness(liveSession, readSessionHistory);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+      expect(harness.getLatest().interactionSession?.pendingApprovals).toHaveLength(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a background question that arrives while history is loading", async () => {
+    const history = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readSessionHistory = mock(() => history.promise);
+    const harness = createHarness(session({ runtimeKind: "opencode" }), readSessionHistory);
+    const question = {
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Environment",
+          question: "Which environment?",
+          options: [
+            { label: "Staging", description: "Staging" },
+            { label: "Production", description: "Production" },
+          ],
+        },
+      ],
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+      await harness.update({
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "thread-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
+        runtimeReadinessState: "ready",
+        liveSession: session({ runtimeKind: "opencode", pendingQuestions: [question] }),
+      });
+      await harness.run(() => {
+        history.resolve([]);
+      });
+      await harness.waitFor((state) => !state.isRetryingHistory);
+
+      expect(harness.getLatest().session?.pendingQuestions).toEqual([question]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows Claude history before the runtime catalog resolves", async () => {
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "user-skill-1",
+        role: "user",
+        timestamp: "2026-07-27T10:00:00.000Z",
+        text: "/grill-me",
+        displayParts: [{ kind: "text", text: "/grill-me" }],
+        state: "read",
+        parts: [],
+      },
+    ];
+    const readSessionHistory = mock(async () => history);
+    let resolveCatalog: ((catalog: AgentRuntimeCatalog) => void) | undefined;
+    const loadRepoRuntimeCatalog = mock(
+      () =>
+        new Promise<AgentRuntimeCatalog>((resolve) => {
+          resolveCatalog = resolve;
+        }),
+    );
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ClientConnectionProvider connection={connection}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </ClientConnectionProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "claude-thread",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+        },
+        runtimeReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+      await harness.waitFor(() => loadRepoRuntimeCatalog.mock.calls.length === 1);
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      });
+      expect(harness.getLatest().session?.messages.items[0]?.content).toBe("/grill-me");
+      expect(harness.getLatest().session?.messages.items[0]?.meta).toMatchObject({
+        kind: "user",
+        parts: [{ kind: "text", text: "/grill-me" }],
+      });
+
+      resolveCatalog?.(
+        createRuntimeCatalogFixture({
+          skills: {
+            skills: [
+              {
+                id: "grill-me",
+                name: "grill-me",
+                path: "grill-me",
+                title: "grill-me",
+              },
+            ],
+          },
+        }),
+      );
+      await harness.waitFor((state) => {
+        const meta = state.session?.messages.items[0]?.meta;
+        return (
+          meta?.kind === "user" &&
+          meta.parts?.some((part) => part.kind === "skill_mention") === true
+        );
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces a failed skill read and retries it", async () => {
+    const readSessionHistory = mock(async () => []);
+    let attempt = 0;
+    const loadRepoRuntimeCatalog = mock(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new Error("catalog offline");
+      }
+      return createRuntimeCatalogFixture({
+        skills: {
+          skills: [{ id: "grill-me", name: "grill-me", path: "grill-me" }],
+        },
+      });
+    });
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ClientConnectionProvider connection={connection}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </ClientConnectionProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "claude-thread",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+        },
+        runtimeReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.skillSurfaceError !== null);
+
+      expect(harness.getLatest().skillSurfaceError).toBe("catalog offline");
+      expect(harness.getLatest().retrySkills).not.toBeNull();
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+
+      await harness.run((state) => {
+        state.retrySkills?.();
+      });
+      await harness.waitFor((state) => state.skillSurfaceError === null);
+
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("hides a failed skill read and its retry while the runtime is not ready", async () => {
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
+      throw new Error("catalog offline");
+    });
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ClientConnectionProvider connection={connection}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(
+                async () => null,
+                mock(async () => []),
+              )}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </ClientConnectionProvider>
+    );
+    const props: Parameters<typeof useRuntimeTranscriptSessionHistory>[0] = {
+      isOpen: true,
+      repoPath: "/repo",
+      target: {
+        externalSessionId: "claude-thread",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      },
+      runtimeReadinessState: "ready",
+      liveSession: null,
+    };
+    const harness = createHookHarness(useRuntimeTranscriptSessionHistory, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.skillSurfaceError !== null);
+
+      await harness.update({ ...props, runtimeReadinessState: "checking" });
+
+      expect(harness.getLatest().skillSurfaceError).toBeNull();
+      expect(harness.getLatest().retrySkills).toBeNull();
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("drops retained skill mentions after a failed background refresh", async () => {
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "user-skill-1",
+        role: "user",
+        timestamp: "2026-07-27T10:00:00.000Z",
+        text: "/grill-me",
+        displayParts: [{ kind: "text", text: "/grill-me" }],
+        state: "read",
+        parts: [],
+      },
+    ];
+    const readSessionHistory = mock(async () => history);
+    let rejectRefresh: ((reason: Error) => void) | undefined;
+    const refresh = new Promise<AgentRuntimeCatalog>((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+    const catalogRequests = [
+      Promise.resolve(
+        createRuntimeCatalogFixture({
+          skills: { skills: [{ id: "grill-me", name: "grill-me", path: "grill-me" }] },
+        }),
+      ),
+      refresh,
+    ];
+    const loadRepoRuntimeCatalog = mock(() => {
+      const request = catalogRequests.shift();
+      if (!request) {
+        throw new Error("unexpected catalog request");
+      }
+      return request;
+    });
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ClientConnectionProvider connection={connection}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </ClientConnectionProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "claude-thread",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+        },
+        runtimeReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+    const catalogKey = runtimeCatalogQueryKeys.catalog({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree",
+    });
+    const messageHasSkillMention = (): boolean => {
+      const item = harness.getLatest().session?.messages.items[0];
+      return (
+        item?.meta?.kind === "user" &&
+        item.meta.parts?.some((part) => part.kind === "skill_mention") === true
+      );
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => messageHasSkillMention());
+
+      await harness.run(() => {
+        void queryClient.invalidateQueries({ queryKey: catalogKey, exact: true });
+      });
+      await harness.waitFor(
+        () => queryClient.getQueryState(catalogKey)?.fetchStatus === "fetching",
+      );
+      expect(messageHasSkillMention()).toBe(true);
+
+      rejectRefresh?.(new Error("catalog offline"));
+      await harness.waitFor((state) => state.skillSurfaceError === "catalog offline");
+
+      expect(messageHasSkillMention()).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not request history again after it is loaded", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(session({ historyLoadState: "loaded" }), readSessionHistory);
+
+    try {
+      await harness.mount();
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+});

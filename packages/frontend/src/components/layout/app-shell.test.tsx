@@ -27,8 +27,8 @@ import { toast } from "sonner";
 import {
   buildMessage,
   buildSession,
-} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import { useAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/use-agent-chat-transcript-model";
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import * as repositoryModal from "@/components/features/repository/open-repository-modal";
 import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -36,14 +36,16 @@ import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/wor
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  ChecksStateContext,
   RuntimeDefinitionsContext,
   TaskControlContext,
   TasksStateContext,
+  useActiveWorkspaceContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
+  ChecksStateContext,
   WorkspaceBranchStateContext,
   WorkspacePresenceContext,
   WorkspaceStateContext,
-  useActiveWorkspaceContext,
 } from "@/state/app-state-contexts";
 import {
   AgentSessionsContext,
@@ -70,13 +72,13 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
 import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
-import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { DiagnosticsPanelProvider } from "@/components/features/diagnostics";
 import {
   type TaskWorkflowActions,
   TaskWorkflowActionsContext,
-} from "@/features/task-workflow/task-workflow-actions-context";
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import {
   createChecksStateFixture,
@@ -93,10 +95,10 @@ import {
   localOnlyProviderSetupClient,
   localOnlyWorkspaceDetails,
 } from "@/test-utils/workspace-provider-setup-fixture";
+import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
 import type {
   ActiveWorkspace,
   ChecksStateContextValue,
-  TasksStateContextValue,
   WorkspaceBranchStateContextValue,
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,

@@ -1,62 +1,51 @@
-import { type PropsWithChildren, type ReactElement, useMemo, useSyncExternalStore } from "react";
+import { type PropsWithChildren, type ReactElement, useMemo } from "react";
+import type { RemoteAccessBridge } from "@openducktor/contracts";
 import type {
-  AgentMessageQueueSnapshot,
-  AgentSessionLiveRef,
-  RemoteAccessBridge,
-} from "@openducktor/contracts";
-import type {
-  AgentSessionIdentity,
-  AgentSessionState,
-} from "@openducktor/frontend-core/types/agent-orchestrator";
+  DelegationStateContextValue,
+  SpecStateContextValue,
+  TasksStateContextValue,
+} from "@openducktor/frontend-core/types/state-slices";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
   AgentSessionReadModelStateContextValue,
   ChecksStateContextValue,
-  DelegationStateContextValue,
-  SpecStateContextValue,
-  TasksStateContextValue,
   WorkspaceBranchStateContextValue,
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { createAgentRuntimeServices } from "@openducktor/frontend-core/sessions/agent-runtime-services";
-import type { AgentSessionVisiblePendingInput } from "@openducktor/frontend-core/sessions/agent-session-visible-pending-input";
-import type {
-  AgentActivitySessionsSnapshot,
-  AgentSessionSummary,
-} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
-  ChecksStateContext,
   DelegationStateContext,
   SpecStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
   useRequiredContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
+  ChecksStateContext,
   useWorkspaceBranchStateContext,
   useWorkspacePresenceContext,
   useWorkspaceStateContext,
 } from "./app-state-contexts";
 import {
-  useAgentMessageQueuesContext,
   useAgentOperationsContext,
   useAgentSessionReadModelStateContext,
-  useAgentSessionsContext,
 } from "@openducktor/frontend-core/sessions/session-contexts";
-import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
+import { AgentStudioStateProvider } from "@openducktor/frontend-core/app-state/providers/agent-studio-state-provider";
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
-import { AppRuntimeProvider } from "./providers/app-runtime-provider";
+import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/providers/app-runtime-provider";
 import { AutopilotProvider } from "./providers/autopilot-provider";
 import { ChecksStateProvider } from "./providers/checks-state-provider";
-import { DelegationStateProvider } from "./providers/delegation-state-provider";
+import { DelegationStateProvider } from "@openducktor/frontend-core/app-state/providers/delegation-state-provider";
 import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
-import { HostRuntimeStatusProvider } from "./providers/host-runtime-status-provider";
+import { HostRuntimeStatusProvider } from "@openducktor/frontend-core/app-state/providers/host-runtime-status-provider";
 import { ManualPullRequestSyncProvider } from "./providers/manual-pull-request-sync-provider";
-import { SpecStateProvider } from "./providers/spec-state-provider";
-import { TasksStateProvider } from "./providers/tasks-state-provider";
+import { SpecStateProvider } from "@openducktor/frontend-core/app-state/providers/spec-state-provider";
+import { TasksStateProvider } from "@openducktor/frontend-core/app-state/providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 import { NotificationProvider } from "./providers/notification-provider";
-import { WorkspaceActivityProvider } from "./providers/workspace-activity-provider";
+import { WorkspaceActivityProvider } from "@openducktor/frontend-core/app-state/providers/workspace-activity-provider";
 import { TerminalActivityProvider } from "./providers/terminal-activity-provider";
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -143,49 +132,3 @@ export const useAgentOperations = (): AgentOperationsContextValue => useAgentOpe
 
 export const useAgentSessionReadModelState = (): AgentSessionReadModelStateContextValue =>
   useAgentSessionReadModelStateContext();
-
-export const useAgentActivitySnapshot = (): AgentActivitySessionsSnapshot => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    sessionStore.getActivitySnapshot,
-    sessionStore.getActivitySnapshot,
-  );
-};
-
-export const useAgentSessionSummaries = (): AgentSessionSummary[] =>
-  useAgentActivitySnapshot().sessions;
-
-export const useAgentSession = (
-  identity: AgentSessionIdentity | null,
-): AgentSessionState | null => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    () => sessionStore.getSessionSnapshot(identity),
-    () => sessionStore.getSessionSnapshot(identity),
-  );
-};
-
-/** Reads the host message queue of one session, or null when it has nothing to show. */
-export const useAgentMessageQueue = (
-  ref: AgentSessionLiveRef | null,
-): AgentMessageQueueSnapshot | null => {
-  const queues = useAgentMessageQueuesContext();
-  return useSyncExternalStore(
-    queues.subscribe,
-    () => queues.getQueue(ref),
-    () => queues.getQueue(ref),
-  );
-};
-
-export const useAgentSessionVisiblePendingInput = (
-  identity: AgentSessionIdentity | null,
-): AgentSessionVisiblePendingInput => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribe,
-    () => sessionStore.getVisiblePendingInputSnapshot(identity),
-    () => sessionStore.getVisiblePendingInputSnapshot(identity),
-  );
-};

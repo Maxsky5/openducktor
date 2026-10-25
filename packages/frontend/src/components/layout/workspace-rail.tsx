@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { useWorkspaceActivity } from "@/state/workspace-activity/workspace-activity-context";
+import { useWorkspaceActivity } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import {
   WorkspaceCloseDialog,
   WorkspaceRemovalRecoveryDialog,
@@ -51,7 +51,7 @@ import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
 import { WorkspaceTile } from "./workspace-tile";
 import { HostSwitcher } from "./host-connection";
 import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
-import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
+import { workspaceActivityBadges } from "@openducktor/frontend-core/workspace-activity/workspace-activity-badges";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";
 
 const DRAG_DISTANCE_PX = 6;

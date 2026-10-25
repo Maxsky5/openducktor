@@ -1,4 +1,3 @@
-import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { memo } from "react";
@@ -7,11 +6,12 @@ import {
   type PullRequestReviewContextQueryInput,
   pullRequestReviewContextQueryOptions,
 } from "@openducktor/frontend-core/queries/pull-request-review";
-import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import {
-  TaskExecutionCiPanelState,
-  type TaskExecutionCiPanelStateProps,
-} from "./task-execution-ci-panel-state";
+  pullRequestReviewContextStateCopy,
+  TASK_EXECUTION_CI_PANEL_COPY,
+} from "@openducktor/frontend-core/review/task-execution-ci-panel-copy";
+import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
+import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 
 export type TaskExecutionCiChecksPanelModel = {
   isActive: boolean;
@@ -19,42 +19,9 @@ export type TaskExecutionCiChecksPanelModel = {
   unavailableReason?: string | null;
 };
 
-type NonLoadedPullRequestReviewContext = Exclude<PullRequestReviewContext, { status: "loaded" }>;
-
 const INACTIVE_QUERY_INPUT: PullRequestReviewContextQueryInput = {
   repoPath: "__inactive_pr_review__",
   taskId: "__inactive__",
-};
-
-const pullRequestStateProps = (
-  context: NonLoadedPullRequestReviewContext,
-): TaskExecutionCiPanelStateProps => {
-  if (context.status === "no_pull_request") {
-    return {
-      title: "No pull request found",
-      message:
-        "Create or link a pull request for this branch to see CI checks and review comments.",
-      kind: "empty",
-      detail: context.reason,
-    };
-  }
-
-  if (context.status === "error") {
-    return {
-      title: "Could not load CI checks",
-      message:
-        "The pull request provider returned an error while reading checks or review comments.",
-      kind: "error",
-      detail: context.reason,
-    };
-  }
-
-  return {
-    title: "Pull request checks unavailable",
-    message: "Check the repository provider integration, command-line tool, and authentication.",
-    kind: "unavailable",
-    detail: context.reason,
-  };
 };
 
 export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPanel({
@@ -71,40 +38,25 @@ export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPan
   if (model.unavailableReason) {
     return (
       <TaskExecutionCiPanelState
-        title="Pull request checks unavailable"
-        message="The configured Git provider cannot load CI checks or review comments."
+        {...TASK_EXECUTION_CI_PANEL_COPY.providerUnavailable}
         detail={model.unavailableReason}
-        kind="unavailable"
       />
     );
   }
 
   if (!queryInput) {
-    return (
-      <TaskExecutionCiPanelState
-        title="No repository selected"
-        message="Open a task in a repository to load pull request checks and review comments."
-      />
-    );
+    return <TaskExecutionCiPanelState {...TASK_EXECUTION_CI_PANEL_COPY.noRepository} />;
   }
 
   if (reviewQuery.isLoading) {
-    return (
-      <TaskExecutionCiPanelState
-        title="Loading CI checks"
-        message="Reading the current pull request, check runs, and review threads."
-        kind="loading"
-      />
-    );
+    return <TaskExecutionCiPanelState {...TASK_EXECUTION_CI_PANEL_COPY.loading} />;
   }
 
   if (reviewQuery.isError) {
     return (
       <TaskExecutionCiPanelState
-        title="Could not load CI checks"
-        message="OpenDucktor could not read pull request review data."
+        {...TASK_EXECUTION_CI_PANEL_COPY.readFailed}
         detail={errorMessage(reviewQuery.error)}
-        kind="error"
         actionLabel="Retry"
         actionPendingLabel="Retrying"
         isActionPending={reviewQuery.isFetching}
@@ -118,8 +70,7 @@ export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPan
   if (!reviewQuery.data) {
     return (
       <TaskExecutionCiPanelState
-        title="No CI data loaded"
-        message="OpenDucktor has not received a pull request review snapshot yet."
+        {...TASK_EXECUTION_CI_PANEL_COPY.noData}
         actionLabel="Retry"
         actionPendingLabel="Retrying"
         isActionPending={reviewQuery.isFetching}
@@ -133,7 +84,7 @@ export const TaskExecutionCiChecksPanel = memo(function TaskExecutionCiChecksPan
   if (reviewQuery.data.status !== "loaded") {
     return (
       <TaskExecutionCiPanelState
-        {...pullRequestStateProps(reviewQuery.data)}
+        {...pullRequestReviewContextStateCopy(reviewQuery.data)}
         actionLabel="Refresh"
         actionPendingLabel="Refreshing"
         isActionPending={reviewQuery.isFetching}

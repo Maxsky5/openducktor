@@ -21,7 +21,10 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import { toAgentStudioTranscriptTarget } from "@/pages/agents/agent-studio-transcript";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { ActiveWorkspaceContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ActiveWorkspaceContext,
+  RuntimeDefinitionsContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
@@ -34,7 +37,7 @@ import {
   createSessionMessagesState,
 } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import {
   createAgentSessionFixture,
   createChatSettingsFixture,
@@ -45,14 +48,18 @@ import {
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage, buildSession, presentRegularToolCall } from "./agent-chat-test-fixtures";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
+import {
+  buildMessage,
+  buildSession,
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentSessionTranscriptDialog as TranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
   type OpenAgentSessionTranscriptRequest,
   useAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
 
 function AgentSessionTranscriptDialog(

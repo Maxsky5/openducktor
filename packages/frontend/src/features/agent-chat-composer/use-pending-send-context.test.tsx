@@ -7,7 +7,7 @@ import {
   createTextSegment,
   draftToSerializedText,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import {
   browserAnnotationStoreOf,
   toBrowserAnnotationOwnerKey,
@@ -18,6 +18,7 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
+import { VISIBLE_APP } from "@openducktor/frontend-core/test-support/app-visibility-fake";
 import { usePendingSendContext } from "./use-pending-send-context";
 
 const OWNERS: InlineCommentOwner[] = [
@@ -76,9 +77,18 @@ describe.each(OWNERS)("usePendingSendContext for $kind owners", (owner) => {
   });
 
   const renderContext = (onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>) =>
-    renderHook(() => usePendingSendContext({ owner, workingDirectory: "/repo", onSend }), {
-      wrapper,
-    });
+    renderHook(
+      () =>
+        usePendingSendContext({
+          owner,
+          workingDirectory: "/repo",
+          onSend,
+          visibility: VISIBLE_APP,
+        }),
+      {
+        wrapper,
+      },
+    );
 
   test("shows separate counts and sends both groups after the user text", async () => {
     const sent: AgentChatComposerDraft[] = [];

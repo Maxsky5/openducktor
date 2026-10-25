@@ -6,13 +6,13 @@ import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { AGENT_ROLE_LABELS } from "@/types";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import { buildRoleEnabledMapForTask } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
   buildLiveSessionByRoleMap,
-  buildRoleEnabledMapForTask,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,

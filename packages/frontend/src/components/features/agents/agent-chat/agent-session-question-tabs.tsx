@@ -5,10 +5,11 @@ import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
+  agentQuestionTitle,
   isAgentQuestionAnswered,
-} from "./agent-session-question-draft";
-import { buildQuestionContentEntries } from "./agent-session-question-keys";
-import { QUESTION_SUMMARY_TAB_ID } from "./use-agent-session-question-draft";
+} from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-draft";
+import { buildQuestionContentEntries } from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-keys";
+import { QUESTION_SUMMARY_TAB_ID } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-draft";
 
 type QuestionTabsProps = {
   request: AgentQuestionRequest;
@@ -68,7 +69,7 @@ export function QuestionTabs({
                 )}
               />
             )}
-            {question.header?.trim() || `Question ${index + 1}`}
+            {agentQuestionTitle(question, index)}
           </SegmentedControlItem>
         );
       })}

@@ -1,8 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { useAgentStudioGitConflictHeaderModel } from "./use-agent-studio-git-conflict-header-model";
 import { createAgentStudioHeaderModelFixture } from "./use-agents-page-shell-model.test-support";
 

@@ -7,7 +7,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { TaskExecutionCiChecksList } from "./task-execution-ci-checks-list";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
-import { checksSummaryLabel } from "./task-execution-ci-presentation";
+import { checksSummaryLabel } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 type LoadedPullRequestReviewContext = Extract<PullRequestReviewContext, { status: "loaded" }>;
 type RefreshState = "idle" | "refreshing";

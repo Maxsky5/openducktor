@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   agentSessionHistorySchema,
   agentSessionTranscriptEventSchema,
@@ -19,13 +19,13 @@ import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/
 import { applyLoadedSessionHistory } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
 import { createSessionTurnState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-turn-state";
 import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
-import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionHistoryLoadContextValue } from "@/types/state-slices";
-import { buildMessage } from "./agent-chat-test-fixtures";
-import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
-import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import { toAgentChatTranscriptSession } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-session";
+import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 
 test.each([
   [false, false],
@@ -369,106 +369,3 @@ test.each([
   },
   5_000,
 );
-
-test("stops an inactive build when selection evicts its cache entry", () => {
-  const sessions = Array.from({ length: 7 }, (_, index) =>
-    createAgentSessionFixture({
-      externalSessionId: `session-eviction-${index}`,
-      historyLoadState: "loaded",
-      messages: createSessionMessagesState(`session-eviction-${index}`, [
-        buildMessage("assistant", `Answer ${index}`, { id: `answer-${index}` }),
-      ]),
-    }),
-  );
-  const firstSession = sessions[0]!;
-  const store = createAgentSessionsStore("/repo");
-  for (const session of sessions) {
-    store.replaceSession(session);
-  }
-  let latest: ReturnType<typeof useAgentChatTranscriptModel> | undefined;
-  const Probe = ({ identity }: { identity: AgentSessionIdentity }) => {
-    const session = useSyncExternalStore(store.subscribe, () => store.getSessionSnapshot(identity));
-    latest = useAgentChatTranscriptModel({
-      session: session ? toAgentChatTranscriptSession(session) : null,
-      showThinkingMessages: true,
-    });
-    return null;
-  };
-  const view = (identity: AgentSessionIdentity) =>
-    createElement(
-      AgentSessionsContext.Provider,
-      { value: store },
-      createElement(Probe, { identity }),
-    );
-  type Timer = ReturnType<typeof globalThis.setTimeout>;
-  const timers = new Map<Timer, () => void>();
-  const clock: {
-    setTimeout: (callback: () => void, delay?: number) => Timer;
-    clearTimeout: (timer: Timer) => void;
-  } = globalThis;
-  const setTimeout = clock.setTimeout;
-  const clearTimeout = clock.clearTimeout;
-  const schedule = spyOn(clock, "setTimeout").mockImplementation((callback, delay) => {
-    if (delay !== 0) {
-      return setTimeout(callback, delay);
-    }
-    const timer = setTimeout(() => {}, 60_000);
-    clearTimeout(timer);
-    timers.set(timer, callback);
-    return timer;
-  });
-  const cancel = spyOn(clock, "clearTimeout").mockImplementation((timer) => {
-    timers.delete(timer);
-    clearTimeout(timer);
-  });
-  const runChunk = () => {
-    const next = timers.entries().next().value;
-    if (!next) {
-      throw new Error("Expected a queued transcript build.");
-    }
-    timers.delete(next[0]);
-    act(next[1]);
-  };
-  const rendered = render(view(toAgentChatTranscriptSession(firstSession)));
-
-  try {
-    for (const session of sessions.slice(1, 6)) {
-      rendered.rerender(view(toAgentChatTranscriptSession(session)));
-      runChunk();
-      expect(latest?.hasCurrentRowsForActiveSession).toBe(true);
-    }
-    let reads = 0;
-    const messages = Array.from({ length: 1_000 }, (_, index) => ({
-      ...buildMessage("assistant", `New answer ${index}`),
-      get id() {
-        reads += 1;
-        return `new-answer-${index}`;
-      },
-    }));
-    act(() => {
-      store.replaceSession({
-        ...firstSession,
-        messages: createSessionMessagesState(firstSession.externalSessionId, messages, 1),
-      });
-    });
-    rendered.rerender(view(toAgentChatTranscriptSession(sessions[6]!)));
-    const beforeChunk = reads;
-    runChunk();
-    expect(reads).toBeGreaterThan(beforeChunk);
-    expect(timers.size).toBe(2);
-    const afterChunk = reads;
-
-    runChunk();
-    expect(latest?.hasCurrentRowsForActiveSession).toBe(true);
-    expect(timers.size).toBe(0);
-    expect(reads).toBe(afterChunk);
-
-    rendered.rerender(view(toAgentChatTranscriptSession(firstSession)));
-    expect(latest?.isTranscriptModelMissing).toBe(true);
-    expect(latest?.transcriptState.rows).toEqual([]);
-  } finally {
-    rendered.unmount();
-    schedule.mockRestore();
-    cancel.mockRestore();
-  }
-});

@@ -2,11 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import type { GitFileDiff, GitChangeGroup } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useMemo, useState } from "react";
-import {
-  type DiffScope,
-  type GitChangeIntent,
-  gitChangeIntentKey,
-} from "@/features/agent-studio-git";
+import type { DiffScope, GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";

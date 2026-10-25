@@ -1,18 +1,18 @@
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
-import type { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import type { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import type { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
-import type { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
+import type { useSelectedSessionContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/use-selected-session-context-usage";
 import {
   getAgentSessionWaitingInputPlaceholder,
   isAgentSessionBlockedOnInput,
 } from "@openducktor/frontend-core/lib/agent-session-waiting-input";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import type { projectWorkspaceSessionChatState } from "./workspace-session-chat-state";
-import type { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
+import type { projectWorkspaceSessionChatState } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-chat-state";
+import type { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
 import type { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import type { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
-import type { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
+import type { SessionPromptInput } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-session-prompt-input";
 
 type WorkspaceSessionComposerInput = {
   state: ReturnType<typeof projectWorkspaceSessionChatState>;
@@ -25,7 +25,7 @@ type WorkspaceSessionComposerInput = {
   pendingSend: ReturnType<typeof usePendingSendContext>;
   draftPersistence: ReturnType<typeof createWorkspaceSessionChatDraftPersistence>;
   picker: ReturnType<typeof useWorkspaceSessionModelPicker>;
-  promptInput: ReturnType<typeof useWorkspaceSessionPromptInput>;
+  promptInput: SessionPromptInput;
   contextUsage: ReturnType<typeof useSelectedSessionContextUsage>;
   stopSession: AgentOperationsContextValue["stopAgentSession"];
 };

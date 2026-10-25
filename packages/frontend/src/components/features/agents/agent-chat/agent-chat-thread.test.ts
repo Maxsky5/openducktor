@@ -7,25 +7,27 @@ import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/
 import {
   createAnimationFrameTestDriver,
   withAnimationFrameTestDriver,
-} from "@/test-utils/animation-frame-test-driver";
+} from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import type { AgentChatTranscriptNotice } from "./agent-chat.types";
+import type { AgentChatTranscriptNotice } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import {
   type AgentChatThreadModelInput,
-  buildApprovalRequest,
   buildBaseModel,
   buildEmptyTranscript,
-  buildMessage,
-  buildQuestionRequest,
-  buildSession,
   buildSessionTranscript,
   buildTodoItem,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
+import {
+  buildApprovalRequest,
+  buildMessage,
+  buildQuestionRequest,
+  buildSession,
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 
 enableReactActEnvironment();

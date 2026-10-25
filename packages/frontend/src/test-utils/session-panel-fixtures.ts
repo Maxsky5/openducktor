@@ -3,7 +3,7 @@ import type {
   SessionPanelModel,
   SessionPanelsModel,
 } from "@/features/session-panels";
-import type { TerminalSessionsModel } from "@/features/terminals";
+import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 
 export const createTerminalSessionsFixture = (
   overrides: Partial<TerminalSessionsModel> = {},

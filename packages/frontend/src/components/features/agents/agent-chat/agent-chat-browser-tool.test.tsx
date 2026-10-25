@@ -5,7 +5,7 @@ import { enableReactActEnvironment } from "@openducktor/frontend-core/test-suppo
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { BrowserToolMessage } from "./agent-chat-browser-tool";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 
 enableReactActEnvironment();
 

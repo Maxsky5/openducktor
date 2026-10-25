@@ -7,10 +7,10 @@ import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   type AgentChatThreadModelInput,
   buildBaseModel,
-  buildSession,
   buildSessionTranscript,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
+import { buildSession } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 
 enableReactActEnvironment();

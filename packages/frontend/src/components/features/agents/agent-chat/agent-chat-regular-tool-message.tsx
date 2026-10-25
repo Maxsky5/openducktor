@@ -1,35 +1,19 @@
 import { AgentToolResultContentView } from "./agent-tool-result-content";
 import { type ReactElement, useState } from "react";
+import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
-  extractAllFileEditData,
-  formatRawJsonLikeText,
-  hasNonEmptyInput,
-  hasNonEmptyText,
-  type QuestionToolDetail,
-  questionToolDetails,
-} from "./agent-chat-message-card-model";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+  buildQuestionDetailEntries,
+  FILE_DIFF_UNAVAILABLE_MESSAGE,
+  hasExpandableToolDetails,
+  NO_ANSWER_YET_LABEL,
+  readToolDetailAvailability,
+  readToolFileEdits,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import { RegularToolSummary } from "./agent-chat-regular-tool-summary";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
-
-const buildQuestionDetailRenderEntries = (
-  callId: string,
-  questionDetails: QuestionToolDetail[],
-): Array<{ key: string; detail: QuestionToolDetail }> => {
-  const countsByBaseKey = new Map<string, number>();
-
-  return questionDetails.map((detail) => {
-    const baseKey = `${callId}:question:${detail.prompt}:${detail.answers.join("|")}`;
-    const nextCount = (countsByBaseKey.get(baseKey) ?? 0) + 1;
-    countsByBaseKey.set(baseKey, nextCount);
-    return {
-      key: `${baseKey}:${nextCount}`,
-      detail,
-    };
-  });
-};
 
 type RegularToolMessageProps = {
   meta: ToolMeta;
@@ -49,19 +33,14 @@ export const RegularToolMessage = ({
   displayName,
 }: RegularToolMessageProps): ReactElement => {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const hasInput = hasNonEmptyInput(meta.input);
-  const hasOutput = Boolean(meta.resultContent?.length) || hasNonEmptyText(meta.output);
-  const hasError = hasNonEmptyText(meta.error);
-  const hasExpandableDetails = hasInput || hasOutput || hasError;
-  const fileEditData =
-    meta.toolType === "file_edit" ? extractAllFileEditData(meta, sessionWorkingDirectory) : [];
-  const fileDiffUnavailable =
-    meta.status === "completed" && fileEditData.some((data) => data.kind === "path");
-  const questionDetails = questionToolDetails(meta);
-  const questionDetailRenderEntries = buildQuestionDetailRenderEntries(
-    meta.callId,
-    questionDetails,
+  const availability = readToolDetailAvailability(meta);
+  const { hasInput, hasOutput, hasError } = availability;
+  const hasExpandableDetails = hasExpandableToolDetails(availability);
+  const { edits: fileEditData, diffUnavailable: fileDiffUnavailable } = readToolFileEdits(
+    meta,
+    sessionWorkingDirectory,
   );
+  const questionDetailRenderEntries = buildQuestionDetailEntries(meta);
 
   const summaryRow = (
     <RegularToolSummary
@@ -123,7 +102,7 @@ export const RegularToolMessage = ({
         summaryRow
       )}
 
-      {questionDetails.length > 0 ? (
+      {questionDetailRenderEntries.length > 0 ? (
         <details className="ml-5 rounded border border-border bg-muted/90">
           <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-foreground">
             Questions and answers
@@ -139,7 +118,7 @@ export const RegularToolMessage = ({
                     detail.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground"
                   }
                 >
-                  {detail.answers.length > 0 ? detail.answers.join(", ") : "No answer yet"}
+                  {detail.answers.length > 0 ? detail.answers.join(", ") : NO_ANSWER_YET_LABEL}
                 </AgentChatTranscriptProse>
               </div>
             ))}
@@ -151,9 +130,7 @@ export const RegularToolMessage = ({
         <AgentChatFileEditCard key={data.filePath} data={data} />
       ))}
       {fileDiffUnavailable ? (
-        <p className="text-xs text-muted-foreground">
-          File diff unavailable. The runtime did not return the applied changes.
-        </p>
+        <p className="text-xs text-muted-foreground">{FILE_DIFF_UNAVAILABLE_MESSAGE}</p>
       ) : null}
     </div>
   );

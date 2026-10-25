@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  collectTaskDescriptionAssetIds,
-  collectTaskDescriptionAssetsForSubmit,
-} from "./task-description-assets";
+import { selectSubmittedTaskDescriptionAssets } from "@openducktor/frontend-core/tasks/description/task-description-assets";
+import { collectTaskDescriptionAssetIds } from "./task-description-assets";
 
 describe("task description asset references", () => {
   test("collects distinct logical image references and ignores code and links", () => {
@@ -58,9 +56,11 @@ describe("task description asset references", () => {
     const unreferenced = "750e8400-e29b-41d4-a716-446655440001";
     const markdown = `![Architecture][diagram]\n\n[diagram]: odt-asset:${referenced}`;
 
-    const result = collectTaskDescriptionAssetsForSubmit(markdown, [referenced, unreferenced]);
+    const referencedAssetIds = collectTaskDescriptionAssetIds(markdown);
 
-    expect(Array.from(result.referencedAssetIds)).toEqual([referenced]);
-    expect(result.stagedAssetIds).toEqual([referenced]);
+    expect(Array.from(referencedAssetIds)).toEqual([referenced]);
+    expect(
+      selectSubmittedTaskDescriptionAssets(referencedAssetIds, [referenced, unreferenced]),
+    ).toEqual([referenced]);
   });
 });

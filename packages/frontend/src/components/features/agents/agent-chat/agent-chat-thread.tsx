@@ -9,17 +9,20 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import type { AgentChatUserMessageAnchor } from "./agent-chat-transcript-model";
+import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
-import { buildQuestionCardKey } from "./agent-session-question-keys";
+import { buildQuestionCardKey } from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-keys";
 import { MINIMAP_GUTTER_PX } from "./conversation-minimap/constants";
 import { ConversationMinimap } from "./conversation-minimap/conversation-minimap";
 import { useMinimapRailHeight } from "./conversation-minimap/use-minimap-rail-height";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
-import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import {
+  getActionableSessionTodo,
+  getVisibleSessionTodos,
+} from "@openducktor/frontend-core/sessions/session-view/agent-session-todo-panel-model";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
 import {

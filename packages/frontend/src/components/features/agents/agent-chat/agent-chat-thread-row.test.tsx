@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 
 const createBaseProps = () => ({
   isStreamingAssistantMessage: false,

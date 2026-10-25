@@ -13,7 +13,7 @@ import { TaskExecutionSelectedFilePreview } from "../task-execution-file-preview
 import { ChatFileLinkProvider } from "./agent-chat-file-link-provider";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
 
 type AgentSessionTranscriptDialogProps = {

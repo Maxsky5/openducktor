@@ -10,9 +10,9 @@ import type {
   AgentChatEmptyStateModel,
   AgentChatInterruptedTurnResumeModel,
   AgentChatRuntimePresentation,
-  AgentChatSurfaceModel,
-  AgentChatTranscriptPresentation,
-} from "./agent-chat.types";
+} from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatSurfaceModel } from "./agent-chat.types";
+import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 import {
   type AgentChatComposerConfig,
   invokeStopAgentSession,

@@ -1,4 +1,4 @@
-import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
+import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type {
@@ -29,6 +29,8 @@ import {
   ActiveWorkspaceContext,
   RuntimeDefinitionsContext,
   TaskSnapshotContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
   WorkspaceBranchStateContext,
   WorkspacePresenceContext,
   WorkspaceStateContext,

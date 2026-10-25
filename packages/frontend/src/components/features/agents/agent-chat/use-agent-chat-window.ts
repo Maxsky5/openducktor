@@ -1,6 +1,9 @@
 import type { RefObject } from "react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
-import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
+import type {
+  AgentChatTranscriptRow,
+  AgentChatTurnAnchor,
+} from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { useAgentChatRowWindow } from "./use-agent-chat-row-window";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
 import {

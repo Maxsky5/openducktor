@@ -1,104 +1,94 @@
-import type { AgentModelSelection } from "@openducktor/core";
-import { useCallback, useMemo, useState } from "react";
+import type { AgentModelSelection, RuntimeKind } from "@openducktor/core";
+import { useCallback, useMemo } from "react";
 import {
   selectableModelPickerCatalog,
+  type ModelPickerRuntime,
   type ModelPickerValue,
-} from "@/components/features/agents/model-picker";
-import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
-import {
-  type ChatComposerModelSelectionSource,
-  resolveChatComposerModelSelections,
-} from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
-import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
-import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
-import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
+import { resolveModelSelectionOptions } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
+import { useModelSelectionActions } from "@openducktor/frontend-core/sessions/model-selection/use-model-selection-actions";
+import { useSpeedControl } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import { withSpeed } from "@openducktor/frontend-core/lib/model-catalog-selection";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import { useRefreshStaleRuntimeCatalog } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
-import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
+import { useWorkspaceSessionCreateModel } from "@openducktor/frontend-core/workspace-sessions/create/use-workspace-session-create-model";
 import {
   projectWorkspaceModelResources,
   type SessionModelTarget,
 } from "./workspace-session-model-resources";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
-const rejectMissingSessionUpdate = (): never => {
-  throw new Error("No existing session is selected.");
-};
-const noCreationResources = [] as const;
-
-/** Uses the existing model picker and selection policies for both creation and chat. */
-export function useWorkspaceSessionModelPicker(
-  repoPath: string,
-  session?: SessionModelTarget,
-  defaultSelection?: AgentModelSelection | null,
-) {
+/** The props of the model picker, with the favorites of the host. */
+function useModelPickerProps({
+  runtimes,
+  selection,
+  sessionRuntimeKind,
+  onValueChange,
+  onOpenChange,
+}: {
+  runtimes: ModelPickerRuntime[];
+  selection: AgentModelSelection | null;
+  /** The runtime of an existing session, which the picker cannot change. */
+  sessionRuntimeKind: RuntimeKind | undefined;
+  onValueChange: (value: ModelPickerValue) => void;
+  onOpenChange: () => void;
+}) {
   const host = useHostClient();
-  const { availableRuntimeDefinitions, allRuntimeDefinitions, loadRepoRuntimeCatalog } =
-    useRuntimeAvailabilityContext();
-  const [draftSelection, setDraftSelection] = useState<AgentModelSelection | null>(null);
-  const definitions = session ? allRuntimeDefinitions : availableRuntimeDefinitions;
-  const runtimeKinds = useMemo(() => definitions.map((entry) => entry.kind), [definitions]);
-  const hasSession = session !== undefined;
-  const liveSession = session?.identity != null;
-  const enabledRuntimeKinds = useMemo(
-    () => (hasSession ? [] : runtimeKinds),
-    [runtimeKinds, hasSession],
-  );
-  const { resources } = useRuntimeModelCatalogs({
-    repoPath,
-    runtimeKinds,
-    enabledRuntimeKinds,
-    loadRuntimeCatalog: loadRepoRuntimeCatalog,
-  });
   const favoriteState = useAgentModelFavorites({
     saveAgentModelFavorites: host.workspaceUpdateAgentModelFavorites,
   });
-  const creationDefaultSelection = useMemo(() => {
-    const defaultRuntimeKind = defaultSelection?.runtimeKind;
-    if (!defaultSelection || !defaultRuntimeKind) {
-      return null;
-    }
-    const defaultCatalog =
-      resources.find((entry) => entry.runtimeKind === defaultRuntimeKind)?.catalog ?? null;
-    if (!defaultCatalog) {
-      return null;
-    }
-    return coerceVisibleSelectionToCatalog(defaultCatalog, defaultSelection);
-  }, [defaultSelection, resources]);
-  const modelSelections = useMemo(() => {
-    let source: ChatComposerModelSelectionSource;
-    if (session?.identity) {
-      source = {
-        kind: "session",
-        modelCatalog: session.catalog,
-        selectedSessionModel: session.selection,
-      };
-    } else {
-      source = {
-        kind: "new_session",
-        composerCatalog: null,
-        draftSelection: session ? session.selection : (draftSelection ?? creationDefaultSelection),
-      };
-    }
-    return resolveChatComposerModelSelections({
-      source,
-      defaultSelection: liveSession ? (defaultSelection ?? null) : null,
-    });
-  }, [session, draftSelection, creationDefaultSelection, defaultSelection, liveSession]);
-  const selection = modelSelections.selectedModelSelection;
-  const creationResources = session ? noCreationResources : resources;
+  return useMemo(
+    () => ({
+      runtimes,
+      value: selection?.runtimeKind
+        ? {
+            runtimeKind: selection.runtimeKind,
+            providerId: selection.providerId,
+            modelId: selection.modelId,
+          }
+        : null,
+      selectionPolicy: sessionRuntimeKind
+        ? {
+            kind: "runtime_locked" as const,
+            runtimeKind: sessionRuntimeKind,
+            reason: "An existing session cannot change runtime.",
+          }
+        : { kind: "editable" as const },
+      favoriteState,
+      onValueChange,
+      onOpenChange,
+    }),
+    [runtimes, selection, sessionRuntimeKind, favoriteState, onValueChange, onOpenChange],
+  );
+}
+
+/** The model picker of a new chat, with the repository Default Model. */
+export function useWorkspaceSessionCreateModelPicker(
+  repoPath: string,
+  defaultSelection: AgentModelSelection | null,
+) {
+  const model = useWorkspaceSessionCreateModel(repoPath, defaultSelection);
+  const modelPicker = useModelPickerProps({
+    runtimes: model.runtimes,
+    selection: model.selection,
+    sessionRuntimeKind: undefined,
+    onValueChange: model.selectModel,
+    onOpenChange: model.onCatalogSelectorOpen,
+  });
+  return { ...model, modelPicker };
+}
+
+/** The model picker of a chat, with the model selection policies of its session. */
+export function useWorkspaceSessionModelPicker(repoPath: string, session: SessionModelTarget) {
+  const { availableRuntimeDefinitions, allRuntimeDefinitions, loadRepoRuntimeCatalog } =
+    useRuntimeAvailabilityContext();
+  const liveSession = session.identity != null;
+  const selection = session.selection;
   const projected = useMemo(
     () =>
-      projectWorkspaceModelResources(
-        definitions,
-        availableRuntimeDefinitions,
-        creationResources,
-        selection,
-        session,
-      ),
-    [definitions, availableRuntimeDefinitions, creationResources, selection, session],
+      projectWorkspaceModelResources(allRuntimeDefinitions, availableRuntimeDefinitions, session),
+    [allRuntimeDefinitions, availableRuntimeDefinitions, session],
   );
   const { catalog, runtimes, runtimeKind, sessionRuntimeKind, supportsProfiles, isLoading } =
     projected;
@@ -112,16 +102,16 @@ export function useWorkspaceSessionModelPicker(
     [liveSession, catalog, selection],
   );
   const actions = useModelSelectionActions({
-    loadedSessionIdentity: session?.identity ?? null,
-    updateAgentSessionModel: session?.update ?? rejectMissingSessionUpdate,
-    applyDraftSelection: session?.updateDraft ?? setDraftSelection,
+    loadedSessionIdentity: session.identity,
+    updateAgentSessionModel: session.update,
+    applyDraftSelection: session.updateDraft,
     selectedModelSelection: selection,
     selectionCatalog: catalog,
     selectedRuntimeKind: runtimeKind,
   });
   const { handleSelectModelPair, handleSelectSpeed } = actions;
-  const updateSpeed = session?.updateSpeed;
-  const identity = session?.identity ?? null;
+  const updateSpeed = session.updateSpeed;
+  const identity = session.identity;
   const selectSpeed = useCallback(
     async (speed: string) => {
       if (!updateSpeed || !selection) return handleSelectSpeed(speed);
@@ -146,39 +136,18 @@ export function useWorkspaceSessionModelPicker(
     [runtimes, handleSelectModelPair],
   );
   const refreshRuntimeCatalog = useRefreshStaleRuntimeCatalog(loadRepoRuntimeCatalog);
-  const onCatalogSelectorOpen = useCallback(() => {
-    if (session?.runtimeRef) {
-      refreshRuntimeCatalog(session.runtimeRef);
-      return;
-    }
-    const kinds = selection?.runtimeKind ? [selection.runtimeKind] : runtimeKinds;
-    for (const runtimeKind of kinds) {
-      refreshRuntimeCatalog({ repoPath, runtimeKind, workingDirectory: repoPath });
-    }
-  }, [refreshRuntimeCatalog, repoPath, runtimeKinds, selection?.runtimeKind, session?.runtimeRef]);
-  const modelPicker = useMemo(
-    () => ({
-      runtimes,
-      value: selection?.runtimeKind
-        ? {
-            runtimeKind: selection.runtimeKind,
-            providerId: selection.providerId,
-            modelId: selection.modelId,
-          }
-        : null,
-      selectionPolicy: sessionRuntimeKind
-        ? {
-            kind: "runtime_locked" as const,
-            runtimeKind: sessionRuntimeKind,
-            reason: "An existing session cannot change runtime.",
-          }
-        : { kind: "editable" as const },
-      favoriteState,
-      onValueChange,
-      onOpenChange: onCatalogSelectorOpen,
-    }),
-    [runtimes, selection, sessionRuntimeKind, favoriteState, onValueChange, onCatalogSelectorOpen],
+  const runtimeRef = session.runtimeRef;
+  const onCatalogSelectorOpen = useCallback(
+    () => refreshRuntimeCatalog(runtimeRef),
+    [refreshRuntimeCatalog, runtimeRef],
   );
+  const modelPicker = useModelPickerProps({
+    runtimes,
+    selection,
+    sessionRuntimeKind,
+    onValueChange,
+    onOpenChange: onCatalogSelectorOpen,
+  });
   return {
     selection,
     catalog,

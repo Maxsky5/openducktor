@@ -1,19 +1,20 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   type TaskWorkflowTaskComposerModel,
   useTaskWorkflowComposer,
 } from "@/features/task-workflow/use-task-workflow-composer";
-import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
-import { WorkflowArtifactControls } from "@/components/features/task-artifacts/artifact-controls";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
+  ActiveWorkspaceContext,
   SpecStateContext,
   TasksStateContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import { WorkflowArtifactControls } from "@/components/features/task-artifacts/artifact-controls";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   createTaskCardFixture,
   createTaskWorkflowActionsFixture,
@@ -21,12 +22,9 @@ import {
 import type {
   SpecStateContextValue,
   TasksStateContextValue,
-  WorkspaceStateContextValue,
-} from "@/types/state-slices";
-import {
-  type TaskCreateDestination,
-  useTaskCreateModalController,
-} from "./use-task-create-modal-controller";
+} from "@openducktor/frontend-core/types/state-slices";
+import type { WorkspaceStateContextValue } from "@/types/state-slices";
+import { useTaskCreateModalController } from "./use-task-create-modal-controller";
 
 const workspaceState = {
   isSwitchingWorkspace: false,
@@ -130,198 +128,6 @@ const createTasksState = (
 
 type Controller = ReturnType<typeof useTaskCreateModalController>;
 
-const renderController = (
-  initialTask: ReturnType<typeof createTaskCardFixture> | null,
-  updateTask: TasksStateContextValue["updateTask"],
-  createTask: TasksStateContextValue["createTask"] = async () => {},
-  destination: TaskCreateDestination | null = null,
-  initialTitle = "",
-) => {
-  let latest: Controller | null = null;
-
-  const Probe = ({ task }: { task: ReturnType<typeof createTaskCardFixture> | null }): null => {
-    latest = useTaskCreateModalController({
-      open: true,
-      onOpenChange: () => {},
-      tasks: task ? [task] : [],
-      task,
-      destination,
-      initialTitle,
-    });
-    return null;
-  };
-
-  const providers = (children: ReactNode): ReactElement => (
-    <QueryProvider>
-      <WorkspaceStateContext.Provider value={workspaceState}>
-        <TasksStateContext.Provider value={createTasksState(updateTask, createTask)}>
-          <SpecStateContext.Provider value={specState}>{children}</SpecStateContext.Provider>
-        </TasksStateContext.Provider>
-      </WorkspaceStateContext.Provider>
-    </QueryProvider>
-  );
-
-  const view = render(providers(<Probe task={initialTask} />));
-  return {
-    getController: (): Controller => {
-      if (!latest) {
-        throw new Error("Controller did not render.");
-      }
-      return latest;
-    },
-    replaceTask: (task: ReturnType<typeof createTaskCardFixture>): void => {
-      view.rerender(providers(<Probe task={task} />));
-    },
-    unmount: view.unmount,
-  };
-};
-
-describe("useTaskCreateModalController", () => {
-  test.each(["create", "edit"])(
-    "locks a held %s request and restores the draft after failure",
-    async (mode) => {
-      let rejectRequest: ((reason: Error) => void) | undefined;
-      const pendingRequest = new Promise<void>((_resolve, reject) => {
-        rejectRequest = reject;
-      });
-      const createTask = mock(async () => pendingRequest);
-      const updateTask = mock(async () => pendingRequest);
-      const task = mode === "edit" ? createTaskCardFixture({ id: "task-1" }) : null;
-      const harness = renderController(task, updateTask, createTask);
-      try {
-        act(() =>
-          harness.getController().updateState({ title: "Draft", description: "Draft body" }),
-        );
-        let submission: Promise<void> | undefined;
-        act(() => {
-          submission = harness.getController().submit();
-        });
-        expect(harness.getController().isFormDisabled).toBe(true);
-        expect(mode === "create" ? createTask : updateTask).toHaveBeenCalledTimes(1);
-
-        await act(async () => {
-          rejectRequest?.(new Error("Save failed"));
-          await submission;
-        });
-        expect(harness.getController().isFormDisabled).toBe(false);
-        expect(harness.getController().state.description).toBe("Draft body");
-        expect(harness.getController().footerError).toBe("Save failed");
-      } finally {
-        harness.unmount();
-      }
-    },
-  );
-
-  test("creates a new task only in the workspace that was active when it opened", async () => {
-    const createTask = mock(async () => {});
-    const harness = renderController(null, async () => {}, createTask, {
-      workspaceId: "workspace-2",
-      workspaceName: "Other workspace",
-    });
-    try {
-      act(() => harness.getController().updateState({ title: "Draft" }));
-      expect(harness.getController().footerError).toBe(
-        "This task is for Other workspace. Open Other workspace again to create it.",
-      );
-
-      await act(async () => {
-        await harness.getController().submit();
-      });
-
-      expect(createTask).not.toHaveBeenCalled();
-      expect(harness.getController().state.title).toBe("Draft");
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("creates a new task when its workspace is active", async () => {
-    const createTask = mock(async () => {});
-    const harness = renderController(null, async () => {}, createTask, {
-      workspaceId: "workspace-1",
-      workspaceName: "Workspace",
-    });
-    try {
-      act(() => harness.getController().updateState({ title: "Draft" }));
-      expect(harness.getController().footerError).toBeNull();
-
-      await act(async () => {
-        await harness.getController().submit();
-      });
-
-      expect(createTask).toHaveBeenCalledTimes(1);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("starts a new task with the requested title", () => {
-    const harness = renderController(null, async () => {}, undefined, null, "Write docs");
-    try {
-      expect(harness.getController().state.title).toBe("Write docs");
-      expect(harness.getController().step).toBe("type");
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("rehydrates an untouched draft when the open task changes with the same ID", async () => {
-    const original = createTaskCardFixture({
-      id: "task-1",
-      title: "Original",
-      description: "Original description",
-    });
-    const replacement = createTaskCardFixture(original, {
-      title: "Updated",
-      description: "Updated description",
-      updatedAt: "2026-07-25T11:00:00.000Z",
-    });
-    const harness = renderController(original, async () => {});
-
-    await act(async () => {
-      harness.replaceTask(replacement);
-    });
-
-    expect(harness.getController().state.title).toBe("Updated");
-    expect(harness.getController().state.description).toBe("Updated description");
-    expect(harness.getController().footerError).toBeNull();
-    harness.unmount();
-  });
-
-  test("keeps a dirty draft and blocks saving after a same-task external change", async () => {
-    const updateCalls: string[] = [];
-    const original = createTaskCardFixture({
-      id: "task-1",
-      title: "Original",
-      description: "Original description",
-    });
-    const replacement = createTaskCardFixture(original, {
-      description: "Changed elsewhere",
-      updatedAt: "2026-07-25T11:00:00.000Z",
-    });
-    const harness = renderController(original, async (taskId) => {
-      updateCalls.push(taskId);
-    });
-
-    act(() => {
-      harness.getController().updateState({ description: "Local draft" });
-    });
-    await act(async () => {
-      harness.replaceTask(replacement);
-    });
-
-    expect(harness.getController().state.description).toBe("Local draft");
-    expect(harness.getController().footerError).toBe(
-      "This task changed while you were editing. Close and reopen it to load the latest version before saving.",
-    );
-    await act(async () => {
-      await harness.getController().submit();
-    });
-    expect(updateCalls).toEqual([]);
-    harness.unmount();
-  });
-});
-
 describe("workflow artifact editor shortcuts", () => {
   test.each([
     { section: "spec", label: "Spec", markdown: "# Saved specification" },
@@ -331,6 +137,7 @@ describe("workflow artifact editor shortcuts", () => {
     async ({ section, label, markdown }) => {
       const task = createTaskCardFixture({ id: "task-edit-shortcut" });
       const tasks = [task];
+      const workspace = workspaceState.activeWorkspace;
       let controller: Controller;
       const getController = () => controller;
       const spec = {
@@ -346,10 +153,7 @@ describe("workflow artifact editor shortcuts", () => {
         return null;
       };
       const EditorFlow = (): ReactElement => {
-        const workflow = useTaskWorkflowComposer({
-          activeWorkspace: workspaceState.activeWorkspace,
-          tasks,
-        });
+        const workflow = useTaskWorkflowComposer({ activeWorkspace: workspace, tasks });
         return (
           <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture(workflow)}>
             <TooltipProvider>
@@ -371,11 +175,15 @@ describe("workflow artifact editor shortcuts", () => {
       const view = render(
         <QueryProvider>
           <WorkspaceStateContext.Provider value={workspaceState}>
-            <TasksStateContext.Provider value={createTasksState(async () => {})}>
-              <SpecStateContext.Provider value={spec}>
-                <EditorFlow />
-              </SpecStateContext.Provider>
-            </TasksStateContext.Provider>
+            <ActiveWorkspaceContext.Provider
+              value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
+            >
+              <TasksStateContext.Provider value={createTasksState(async () => {})}>
+                <SpecStateContext.Provider value={spec}>
+                  <EditorFlow />
+                </SpecStateContext.Provider>
+              </TasksStateContext.Provider>
+            </ActiveWorkspaceContext.Provider>
           </WorkspaceStateContext.Provider>
         </QueryProvider>,
       );
@@ -434,11 +242,17 @@ describe("task workflow editor save ownership", () => {
       const tree = (workspace: typeof workspaceA, task: typeof taskA): ReactElement => (
         <QueryProvider>
           <WorkspaceStateContext.Provider value={{ ...workspaceState, activeWorkspace: workspace }}>
-            <TasksStateContext.Provider value={{ ...createTasksState(updateTask), tasks: [task] }}>
-              <SpecStateContext.Provider value={specState}>
-                <ComposerProbe workspace={workspace} task={task} />
-              </SpecStateContext.Provider>
-            </TasksStateContext.Provider>
+            <ActiveWorkspaceContext.Provider
+              value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
+            >
+              <TasksStateContext.Provider
+                value={{ ...createTasksState(updateTask), tasks: [task] }}
+              >
+                <SpecStateContext.Provider value={specState}>
+                  <ComposerProbe workspace={workspace} task={task} />
+                </SpecStateContext.Provider>
+              </TasksStateContext.Provider>
+            </ActiveWorkspaceContext.Provider>
           </WorkspaceStateContext.Provider>
         </QueryProvider>
       );

@@ -362,7 +362,7 @@ describe("Workspace Session metadata UI", () => {
         archivedRecords = [];
         finish(record());
       });
-      await view.findByText("No archived sessions.", {}, { timeout: 800 });
+      await view.findByText("No archived chats.", {}, { timeout: 800 });
       expect(view.getByRole("searchbox", { name: "Filter archived chats" })).toBeTruthy();
     } finally {
       view.unmount();

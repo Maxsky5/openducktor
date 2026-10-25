@@ -10,8 +10,9 @@ import {
   useSessionPanels,
 } from "@/features/session-panels";
 import { SessionTerminalHost } from "@/features/session-panels/session-terminal-host";
-import { SessionViewContext } from "@/features/session-navigation/session-view-context";
-import type { TerminalSessionsModel, TerminalTab } from "@/features/terminals";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useAgentStudioTerminals } from "./use-agent-studio-terminals";

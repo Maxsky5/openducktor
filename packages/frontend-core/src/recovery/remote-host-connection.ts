@@ -1,10 +1,14 @@
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
+  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   type AgentSessionLiveAttachInput,
   type HostEventEnvelope,
 } from "@openducktor/contracts";
-import { createAgentSessionLiveAttachment } from "@openducktor/host-client";
+import {
+  createAgentSessionLiveAttachment,
+  liveSessionStreamEventName,
+} from "@openducktor/host-client";
 import {
   createRemoteHostClient,
   type RemoteHostClient,
@@ -60,9 +64,10 @@ export const createRemoteHostConnection = ({
   const recoveryOwners = new Set<RemoteRecoveryOwner>();
   const controls = new Set<ConnectionControlListener>();
   const waitForAdmission = (signal?: AbortSignal) => waitForRemoteAdmission(remote, signal);
-  const restoreLive = (owner: LiveOwner): Promise<void> => {
+  /** Attaches the owner. `gap` drops the changes held since the connection dropped. */
+  const restoreLive = (owner: LiveOwner, gap: boolean): Promise<void> => {
     if (owner.restoring) return owner.restoring;
-    owner.attachment.restart();
+    if (gap) owner.attachment.restart();
     const restoring = waitForAdmission()
       .then(() => remote.client.agentSessionLiveAttach(owner.input))
       .then((snapshot) => {
@@ -79,7 +84,21 @@ export const createRemoteHostConnection = ({
   const synchronize = async (context: RemoteSynchronizationContext) => {
     // State owners must apply stream snapshots before current-state reads.
     await taskOwners.synchronize();
-    await Promise.all([...live].map(restoreLive));
+    // The replay ran before this step. When it has every missed live change of a repository, its
+    // owner keeps its state and transcripts and receives those changes in order, as if the
+    // connection had stayed up. A gap or another host needs a new snapshot and history.
+    const hostChanged =
+      context.hostReplay.hostChanged ||
+      context.previousHostInstanceId !== context.host.hostInstanceId;
+    const gaps = new Set(context.hostReplay.gaps);
+    await Promise.all(
+      [...live].map((owner) => {
+        if (hostChanged || gaps.has(liveSessionStreamEventName(owner.input.repoPath)))
+          return restoreLive(owner, true);
+        owner.attachment.resume();
+        return owner.restoring;
+      }),
+    );
     await Promise.all([...recoveryOwners].map((recover) => recover(context.signal)));
     context.signal.throwIfAborted();
     // Fresh bootstrap reads can await connect; later attempts must recover owners that failed.
@@ -99,7 +118,8 @@ export const createRemoteHostConnection = ({
       appVersion: version,
       supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
       requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
-      optionalCapabilities: [],
+      // Without heartbeats, the client keeps a silent stream, as an older host sends none.
+      optionalCapabilities: [REMOTE_STREAM_HEARTBEAT_CAPABILITY],
     },
     transport,
     synchronize,
@@ -109,7 +129,7 @@ export const createRemoteHostConnection = ({
     if (state.status === "disconnected" || state.status === "failed" || state.status === "idle") {
       notifications.fail(new Error(state.failure?.message ?? "The remote connection was lost."));
       taskOwners.invalidate();
-      for (const owner of live) owner.attachment.restart();
+      for (const owner of live) owner.attachment.suspend();
       for (const listener of controls)
         logListenerFailure(listener(connectionStreamWarningEvent(state.failure?.message)));
     }
@@ -131,7 +151,11 @@ export const createRemoteHostConnection = ({
     };
   };
   // Admission starts before mounting. View owners add their synchronization work as they mount.
-  void remote.connect().catch((cause) => console.error("Remote host connection failed", cause));
+  // A disconnect by the owner, as when the user cancels Add Host, ends the attempt and leaves the
+  // connection idle. That is no failure, so only a real failure goes to the log.
+  void remote.connect().catch((cause) => {
+    if (remote.readState().status !== "idle") console.error("Remote host connection failed", cause);
+  });
   return {
     client: remote.client,
     remote,
@@ -180,7 +204,7 @@ export const createRemoteHostConnection = ({
       };
       live.add(owner);
       try {
-        await restoreLive(owner);
+        await restoreLive(owner, false);
       } catch (cause) {
         live.delete(owner);
         throw cause;

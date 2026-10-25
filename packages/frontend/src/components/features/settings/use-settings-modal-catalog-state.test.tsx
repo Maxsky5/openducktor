@@ -12,7 +12,7 @@ import type {
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {

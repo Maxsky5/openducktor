@@ -2,7 +2,7 @@ import { planSubtaskIssueTypeSchema, type SourceIssue } from "@openducktor/contr
 import { ChevronDown, CircleAlert, CircleCheck, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
-import { toPriorityComboboxOptions } from "@/components/features/task-composer/utils";
+import { toPrioritySelectOptions } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import { Button } from "@/components/ui/button";
 import { Collapsible } from "@/components/ui/collapsible-root";
 import { CollapsibleContent } from "@/components/ui/collapsible-content";
@@ -12,10 +12,21 @@ import { Label } from "@/components/ui/label";
 import { IssueMarkdownRenderer } from "@/components/features/issue-source/issue-markdown-renderer";
 import { TagSelector } from "@/components/ui/tag-selector";
 import { cn } from "@/lib/utils";
-import { initialReview, type ImportOutcome, type IssueReview } from "./issue-import-dialog-state";
+import {
+  ISSUE_IMPORT_ISSUE_TYPES,
+  ISSUE_IMPORT_LABELS,
+  issueImportItemTitle,
+  issueImportReviewStatus,
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
+import {
+  initialReview,
+  type ImportOutcome,
+  type IssueReview,
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 
-const ISSUE_TYPE_COMBOBOX_OPTIONS: ComboboxOption[] = ISSUE_TYPE_OPTIONS.filter(
-  (option) => option.value !== "epic",
+const ISSUE_IMPORT_ISSUE_TYPE_SET = new Set<string>(ISSUE_IMPORT_ISSUE_TYPES);
+const ISSUE_TYPE_COMBOBOX_OPTIONS: ComboboxOption[] = ISSUE_TYPE_OPTIONS.filter((option) =>
+  ISSUE_IMPORT_ISSUE_TYPE_SET.has(option.value),
 ).map((option) => {
   const Icon = option.icon;
   return {
@@ -25,7 +36,7 @@ const ISSUE_TYPE_COMBOBOX_OPTIONS: ComboboxOption[] = ISSUE_TYPE_OPTIONS.filter(
     icon: <Icon className="size-4" />,
   };
 });
-const PRIORITY_COMBOBOX_OPTIONS = toPriorityComboboxOptions();
+const PRIORITY_COMBOBOX_OPTIONS = toPrioritySelectOptions();
 const LABEL_COMMIT_KEYS = ["Enter"] as const;
 
 type IssueReviewStepProps = {
@@ -101,10 +112,7 @@ function IssueReviewCard({
 }): ReactElement {
   const fieldsDisabled = isSubmitting || outcome?.outcome === "created";
   const wasCreated = outcome?.outcome === "created";
-  let statusText: string | null = null;
-  if (outcome?.outcome === "created") statusText = `Created Task ${outcome.taskId}`;
-  else if (item.linkedTaskId) statusText = `Already linked to Task ${item.linkedTaskId}`;
-  else if (outcome?.outcome === "failed") statusText = outcome.reason;
+  const statusText = issueImportReviewStatus(item, outcome)?.text ?? null;
   return (
     <section
       aria-label={`Review ${item.title}`}
@@ -112,9 +120,7 @@ function IssueReviewCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold">
-            #{item.number} {item.title}
-          </p>
+          <p className="text-sm font-semibold">{issueImportItemTitle(item)}</p>
           <p className="text-xs text-muted-foreground">{item.creator}</p>
         </div>
         <Button
@@ -125,13 +131,13 @@ function IssueReviewCard({
           onClick={onRemove}
         >
           <Trash2 className="size-4" />
-          Remove
+          {ISSUE_IMPORT_LABELS.remove}
         </Button>
       </div>
       <Collapsible className="rounded-md bg-muted/50">
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" className="group w-full justify-between px-3">
-            Description
+            {ISSUE_IMPORT_LABELS.description}
             <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
           </Button>
         </CollapsibleTrigger>
@@ -150,13 +156,13 @@ function IssueReviewCard({
               className="break-words prose-code:text-rose-700 dark:prose-code:text-rose-300 [&_img]:max-h-48 [&_img]:rounded-md [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap [&_pre]:break-all"
             />
           ) : (
-            <p className="text-sm text-muted-foreground">No description</p>
+            <p className="text-sm text-muted-foreground">{ISSUE_IMPORT_LABELS.noDescription}</p>
           )}
         </CollapsibleContent>
       </Collapsible>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label id={`issue-type-label-${item.sourceId}`}>Issue type</Label>
+          <Label id={`issue-type-label-${item.sourceId}`}>{ISSUE_IMPORT_LABELS.issueType}</Label>
           <Combobox
             disabled={fieldsDisabled}
             value={review.issueType}
@@ -169,7 +175,7 @@ function IssueReviewCard({
           />
         </div>
         <div className="grid gap-2">
-          <Label id={`priority-label-${item.sourceId}`}>Priority</Label>
+          <Label id={`priority-label-${item.sourceId}`}>{ISSUE_IMPORT_LABELS.priority}</Label>
           <Combobox
             disabled={fieldsDisabled}
             value={String(review.priority)}
@@ -181,7 +187,7 @@ function IssueReviewCard({
         </div>
       </div>
       <div className="grid gap-2">
-        <Label>Labels</Label>
+        <Label>{ISSUE_IMPORT_LABELS.labels}</Label>
         <TagSelector
           value={review.labels}
           suggestions={item.tags}
@@ -216,7 +222,7 @@ function IssueReviewCard({
           disabled={isSubmitting || isRefreshing}
           onClick={onRefresh}
         >
-          {isRefreshing ? "Refreshing..." : "Refresh item"}
+          {isRefreshing ? ISSUE_IMPORT_LABELS.refreshingItem : ISSUE_IMPORT_LABELS.refreshItem}
         </Button>
       ) : null}
     </section>

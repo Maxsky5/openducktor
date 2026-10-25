@@ -1,5 +1,5 @@
 import { type RefObject, useLayoutEffect, useRef } from "react";
-import type { SessionNavigationModel } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import type { SessionSelection } from "./session-navigation-selection";
 
 /**

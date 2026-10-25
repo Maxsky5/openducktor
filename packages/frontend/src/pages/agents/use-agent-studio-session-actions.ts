@@ -1,7 +1,5 @@
-import {
-  type AgentChatSend,
-  useAgentChatSend,
-} from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import type { AgentChatSend } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
@@ -17,26 +15,27 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import type { SessionStartModalModel } from "@/components/features/agents";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
-import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
-import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
-import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
-import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import { isRoleAvailableForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
+import { useInterruptedTurnResume } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-resume";
+import { useAgentSessionApprovalActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-approval-actions";
+import { useAgentSessionQuestionActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-actions";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import type {
   RunSessionStartWorkflow,
   SessionStartLaunchRequest,
-  SessionStartWorkflowResult,
-} from "@/features/session-start";
-import { LAUNCH_ACTION_LABELS, type SessionLaunchActionId } from "@/features/session-start";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
+import { LAUNCH_ACTION_LABELS } from "@openducktor/frontend-core/sessions/start/session-start-prompts";
+import { type SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
-import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
@@ -50,7 +49,10 @@ import {
 import { useAgentStudioSessionStartFlow } from "./session-start/use-agent-studio-session-start-flow";
 import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
 
-export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
+export type {
+  NewSessionStartDecision,
+  NewSessionStartRequest,
+} from "@openducktor/frontend-core/sessions/start/session-start-types";
 
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze(new Array<AgentApprovalRequest>());
 const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze(new Array<AgentQuestionRequest>());

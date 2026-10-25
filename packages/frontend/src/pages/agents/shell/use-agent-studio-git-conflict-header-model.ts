@@ -1,10 +1,10 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import {
   type AgentStudioQuickActionOption,
   withGitConflictQuickAction,
-} from "../agent-studio-quick-actions";
+} from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { AgentStudioWorkflowHeaderModel } from "../agents-page-view-model";
 
 /** Adds the git conflict quick action to the chat header while the git actions report a conflict. */

@@ -1,38 +1,19 @@
-import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { TASK_SESSION_HISTORY_ERROR_TOAST_ID } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useTasksState, useWorkspaceState } from "@/state";
-import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
 import { showsHorizontalScrollbars } from "@/lib/horizontal-scrollbars";
-import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { KanbanPageModels } from "./kanban-page-model-types";
-import { useKanbanBoardFilterModel } from "./use-kanban-board-filter-model";
+import { useKanbanBoardData } from "@openducktor/frontend-core/tasks/board/use-kanban-board-data";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
   actions: TaskWorkflowActions;
-};
-
-const EMPTY_KANBAN_TASKS: TaskCard[] = [];
-
-export const isKanbanForegroundLoading = (args: {
-  hasActiveWorkspace: boolean;
-  isForegroundLoadingTasks: boolean;
-  isSettingsPending: boolean;
-  doneVisibleDays: number | undefined;
-  isKanbanPending: boolean;
-}): boolean => {
-  if (args.isForegroundLoadingTasks || !args.hasActiveWorkspace || args.isSettingsPending) {
-    return args.isForegroundLoadingTasks || (args.hasActiveWorkspace && args.isSettingsPending);
-  }
-
-  return args.doneVisibleDays !== undefined && args.isKanbanPending;
 };
 
 export function useKanbanPageModels({
@@ -46,21 +27,18 @@ export function useKanbanPageModels({
     refreshTasks,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
-    isForegroundLoadingTasks,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
-    tasks,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
-  const queryClient = useQueryClient();
-  const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
+  const board = useKanbanBoardData({
+    workspaceId: activeWorkspaceId,
+    repoPath: workspaceRepoPath,
+  });
+  const { settingsQuery: settingsSnapshotQuery, filter } = board;
   const taskCardViewState = useKanbanTaskCardView();
-  const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const horizontalScrollbarVisibility =
     settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility;
-  const emptyColumnDisplay =
-    settingsSnapshotQuery.data?.kanban.emptyColumnDisplay ??
-    DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay;
   useEffect(() => {
     if (!settingsSnapshotQuery.isError) {
       reportedSettingsErrorRef.current = null;
@@ -82,23 +60,7 @@ export function useKanbanPageModels({
       ? showsHorizontalScrollbars(horizontalScrollbarVisibility)
       : null;
 
-  const kanbanTasks =
-    workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
-  const kanbanTaskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
-  const { filter, matchingTasks } = useKanbanBoardFilterModel(activeWorkspaceId, kanbanTasks);
-  const shouldLoadHistoricalSessions = workspaceRepoPath !== null && kanbanTaskIds.length > 0;
-  const historicalSessionLists = useAgentSessionLists({
-    repoPath: workspaceRepoPath,
-    taskIds: kanbanTaskIds,
-    enabled: shouldLoadHistoricalSessions,
-    queryClient,
-  });
-  const historicalSessionsByTaskId = useMemo(
-    () =>
-      new Map(kanbanTaskIds.map((taskId) => [taskId, historicalSessionLists.data[taskId] ?? []])),
-    [historicalSessionLists.data, kanbanTaskIds],
-  );
-  const historicalSessionsError = historicalSessionLists.error ?? undefined;
+  const historicalSessionsError = board.historicalSessionsError ?? undefined;
   const reportedHistoricalSessionsErrorRef = useRef<string | null>(null);
   useEffect(() => {
     if (!historicalSessionsError) {
@@ -117,13 +79,7 @@ export function useKanbanPageModels({
       description,
     });
   }, [historicalSessionsError]);
-  const isLoadingKanbanTasks = isKanbanForegroundLoading({
-    hasActiveWorkspace: workspaceRepoPath !== null,
-    isForegroundLoadingTasks,
-    isSettingsPending: settingsSnapshotQuery.isPending,
-    doneVisibleDays,
-    isKanbanPending: false,
-  });
+  const isLoadingKanbanTasks = board.isLoadingTasks;
 
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
@@ -132,13 +88,13 @@ export function useKanbanPageModels({
   const content = useKanbanBoardModel({
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
-    emptyColumnDisplay,
+    emptyColumnDisplay: board.emptyColumnDisplay,
     taskCardView: taskCardViewState.taskCardView ?? DEFAULT_KANBAN_SETTINGS.taskCardView,
     showHorizontalScrollbars,
-    tasks: matchingTasks,
-    hasLoadedTasks: kanbanTasks.length > 0,
+    tasks: board.matchingTasks,
+    hasLoadedTasks: board.kanbanTasks.length > 0,
     filter,
-    historicalSessionsByTaskId,
+    historicalSessionsByTaskId: board.historicalSessionsByTaskId,
     pendingState: actions.kanbanPendingState,
     taskSessionsByTaskId: actions.taskSessionsByTaskId,
     activeTaskSessionContextByTaskId: actions.activeTaskSessionContextByTaskId,

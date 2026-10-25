@@ -1,8 +1,8 @@
 import { Reply } from "lucide-react";
 import { createElement } from "react";
-import { workspaceSessionReadKey } from "@/features/session-navigation/session-read-keys";
-import { useSessionUnreadKey } from "@/features/session-navigation/session-read-state";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import { workspaceSessionReadKey } from "@openducktor/frontend-core/sessions/navigation/session-read-keys";
+import { useSessionUnreadKey } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { paletteChatActions } from "./command-palette-chat-actions";
 import { filterActions } from "./command-palette-search";
 import type { PaletteTaskView } from "./command-palette-task-model";

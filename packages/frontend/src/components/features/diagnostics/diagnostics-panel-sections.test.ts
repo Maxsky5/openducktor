@@ -10,7 +10,7 @@ import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
+import { buildDiagnosticsPanelModel } from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 import { DiagnosticsStatusPill } from "./diagnostics-status";
 
@@ -20,6 +20,7 @@ const renderSections = (workspace: ModelInput["workspace"], overrides: Partial<M
   renderToStaticMarkup(
     createElement(DiagnosticsPanelSections, {
       model: buildDiagnosticsPanelModel({
+        connectionLive: true,
         runtimeDefinitions: [
           OPENCODE_RUNTIME_DESCRIPTOR,
           CODEX_RUNTIME_DESCRIPTOR,

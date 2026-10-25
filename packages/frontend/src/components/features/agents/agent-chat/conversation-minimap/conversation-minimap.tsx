@@ -10,8 +10,8 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
-import { readUserMessageSummary } from "../agent-chat-user-message-text";
-import type { AgentChatUserMessageAnchor } from "../agent-chat-transcript-model";
+import { readUserMessageSummary } from "@openducktor/frontend-core/sessions/messages/agent-chat-user-message-content";
+import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "../use-agent-chat-transcript-navigation";
 import {
   MINIMAP_CARD_CLOSE_DELAY_MS,

@@ -2,7 +2,7 @@ import { WORKSPACE_ABBREVIATION_MAX_LENGTH } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { deriveWorkspaceInitials } from "@/lib/workspace-tile-appearance";
+import { deriveWorkspaceInitials } from "@openducktor/frontend-core/workspaces/workspace-tile-appearance";
 import { WorkspaceTileColorPicker } from "./workspace-tile-color-picker";
 
 type WorkspaceIdentityFieldsProps = {

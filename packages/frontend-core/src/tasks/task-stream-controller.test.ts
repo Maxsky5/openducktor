@@ -769,6 +769,23 @@ describe("task stream controller recovery", () => {
     }
   });
 
+  test("a stop reports no failure when the closing connection rejects the unsubscribe", async () => {
+    const harness = createHarness({
+      onSubscribe: async (record) => ({
+        subscriptionId: "subscription-1",
+        acknowledge: record.acknowledge,
+        unsubscribe: async () => {
+          throw new Error("signal is aborted without reason");
+        },
+      }),
+    });
+    await harness.controller.start();
+
+    await harness.controller.stop();
+
+    expect(harness.onDegraded).not.toHaveBeenCalled();
+  });
+
   test("a stopped stream starts no live refresh for its snapshot", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const heldRead = deferred<TaskAgentSessions[]>();

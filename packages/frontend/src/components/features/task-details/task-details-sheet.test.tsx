@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -10,9 +10,13 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
-import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
+import type {
+  TaskStopImpactState,
+  useTaskStopImpact,
+} from "@openducktor/frontend-core/queries/use-task-stop-impact";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
@@ -80,10 +84,17 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   },
 });
 
+const createActiveWorkspaceValue = () => ({
+  activeWorkspace: createWorkspaceStateValue().activeWorkspace,
+  setActiveWorkspace: () => {},
+});
+
 const IsolatedProviders = ({ children }: PropsWithChildren) => (
   <QueryProvider>
     <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
-      {children}
+      <ActiveWorkspaceContext value={createActiveWorkspaceValue()}>
+        {children}
+      </ActiveWorkspaceContext>
     </WorkspaceStateContext.Provider>
   </QueryProvider>
 );
@@ -102,6 +113,7 @@ const createTaskCleanupImpactHookMock = () =>
 const createTaskStopImpactHookMock = () =>
   mock((_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
     stoppableSessionCount: null,
+    removedWorktreeCount: null,
     isLoading: false,
     error: null,
   }));
@@ -140,7 +152,7 @@ describe("TaskDetailsSheet", () => {
     async (kind) => {
       const { TaskDetailsSheet } = await import("./task-details-sheet");
       const { TaskWorkflowActionsContext } =
-        await import("@/features/task-workflow/task-workflow-actions-context");
+        await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
       const actions = createTaskWorkflowActionsValue();
       actions.gitProviderContext = createGitProviderContextFixture();
       const busyTaskIds = new Set(["TASK-1", "TASK-2"]);
@@ -193,7 +205,8 @@ describe("TaskDetailsSheet", () => {
   );
 
   test("passes activeWorkspace into task details view model", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
 
     const childTask = createTaskCardFixture({
       id: "TASK-2",
@@ -254,10 +267,12 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("keeps delete confirm readiness tied to the authoritative stop-impact read", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const loadingStopImpact: TaskStopImpactState = {
       stoppableSessionCount: null,
+      removedWorktreeCount: null,
       isLoading: true,
       error: null,
     };
@@ -295,17 +310,20 @@ describe("TaskDetailsSheet", () => {
       await harness.mount();
       await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
 
-      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoading).toBe(false);
+      // The worktree count comes with the stop impact, so the cleanup line waits for it too.
+      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoading).toBe(true);
       expect(harness.getLatest().deleteConfirm.dialog.impact.isLoadingStopImpact).toBe(true);
 
       taskStopImpactHookMock.mockImplementation(
         (_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
           stoppableSessionCount: 0,
+          removedWorktreeCount: null,
           isLoading: false,
           error: null,
         }),
       );
       await harness.update({ ...harnessOptions });
+      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoading).toBe(false);
       expect(harness.getLatest().deleteConfirm.dialog.impact.isLoadingStopImpact).toBe(false);
       expect(harness.getLatest().deleteConfirm.dialog.impact.activeSessionCount).toBe(0);
     } finally {
@@ -314,7 +332,8 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("surfaces stop-impact preview failures to the delete dialog model", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
@@ -341,6 +360,7 @@ describe("TaskDetailsSheet", () => {
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
       taskStopImpactHook: () => ({
         stoppableSessionCount: null,
+        removedWorktreeCount: null,
         isLoading: false,
         error: "host unavailable",
       }),
@@ -360,7 +380,8 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("loads cleanup impact only for an available action's open confirmation", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const childTask = createTaskCardFixture({ id: "TASK-2", title: "Task 2" });
     const task = createTaskCardFixture({
       id: "TASK-1",
@@ -436,7 +457,8 @@ describe("TaskDetailsSheet", () => {
     ["open_builder", [false]],
     ["human_approve", []],
   ] as const)("closes the sheet after %s only when it opens a session", async (action, closes) => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const onOpenChange = mock((_open: boolean) => {});
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
@@ -461,7 +483,8 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("routes close_task to the confirmation dialog before invoking close", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Task 1",
@@ -514,7 +537,8 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("keeps close dialog open and surfaces close failures", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const { useTaskDetailsSheetViewModel } =
+      await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-2", title: "Task 2" });
     const onCloseTask = mock(async () => {
       throw new Error("close failed");
@@ -659,7 +683,7 @@ describe("TaskDetailsSheet", () => {
   test("keeps the sheet open when focus moves into its confirm dialog", async () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
     const { TaskWorkflowActionsContext } =
-      await import("@/features/task-workflow/task-workflow-actions-context");
+      await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Task 1",
@@ -752,7 +776,7 @@ describe("TaskDetailsSheet", () => {
   test("dispatches a workflow action through the task workflow context", async () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
     const { TaskWorkflowActionsContext } =
-      await import("@/features/task-workflow/task-workflow-actions-context");
+      await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
 
     const task = createTaskCardFixture({
       id: "TASK-1",
@@ -778,19 +802,23 @@ describe("TaskDetailsSheet", () => {
           WorkspaceStateContext.Provider,
           { value: createWorkspaceStateValue() },
           createElement(
-            TaskWorkflowActionsContext.Provider,
-            { value: actions },
-            createElement(TaskDetailsSheet, {
-              activeWorkspace: {
-                workspaceId: "workspace-a",
-                workspaceName: "Workspace A",
-                repoPath: "/repo-a",
-              },
-              task,
-              allTasks: [task],
-              open: true,
-              onOpenChange: () => {},
-            }),
+            ActiveWorkspaceContext,
+            { value: createActiveWorkspaceValue() },
+            createElement(
+              TaskWorkflowActionsContext.Provider,
+              { value: actions },
+              createElement(TaskDetailsSheet, {
+                activeWorkspace: {
+                  workspaceId: "workspace-a",
+                  workspaceName: "Workspace A",
+                  repoPath: "/repo-a",
+                },
+                task,
+                allTasks: [task],
+                open: true,
+                onOpenChange: () => {},
+              }),
+            ),
           ),
         ),
       ),

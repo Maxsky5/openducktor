@@ -2,10 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { type RefObject, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { useLocation } from "react-router";
 import type { TaskDetailsSheetControllerHandle } from "@/components/features/task-details/task-details-sheet-controller";
-import {
-  SESSIONS_PATH,
-  SESSIONS_QUERY_KEYS,
-} from "@/features/session-navigation/session-navigation-target";
+import { SESSIONS_PATH, SESSIONS_QUERY_KEYS } from "@/features/session-navigation/sessions-route";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type TaskWorkflowTaskDetailsSheetModel = {

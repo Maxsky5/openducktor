@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { UseTaskExecutionFilePreviewControllerResult } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 /**
  * Protect unsaved task file edits when a session, workspace, page, or repository branch change

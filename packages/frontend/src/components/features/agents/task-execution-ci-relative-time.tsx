@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { formatCiRelativeTime } from "./task-execution-ci-relative-time-format";
+import { formatCiRelativeTime } from "@openducktor/frontend-core/review/task-execution-ci-relative-time-format";
 
 export function TaskExecutionCiRelativeTime({ timestamp }: { timestamp: string }): ReactElement {
   return (

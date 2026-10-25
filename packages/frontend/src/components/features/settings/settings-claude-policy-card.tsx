@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { z } from "zod";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { ClaudeListEditor } from "./settings-claude-list-editor";
 import { readClaudePolicyField, updateClaudePolicyField } from "./settings-claude-policy";
 import {

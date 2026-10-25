@@ -22,10 +22,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { updateWorkspaceSessionQueries } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { workspaceSessionExternalQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-import";
-import { useMountedRef } from "./use-mounted-ref";
+import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 import { WorkspaceSessionImportSearch } from "./workspace-session-import-search";
 import { WorkspaceSessionImportResults } from "./workspace-session-import-results";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";

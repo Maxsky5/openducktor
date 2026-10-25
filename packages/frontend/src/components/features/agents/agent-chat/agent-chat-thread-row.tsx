@@ -1,13 +1,14 @@
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
-import type { AgentChatRuntimePresentation, AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
-import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { AgentCompactionSeparator } from "./agent-compaction-separator";
 import { AgentTranscriptSeparator } from "./agent-transcript-separator";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
-import type { ParentSessionRuntimeContext } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 
 type AgentChatTranscriptRowProps = {
   row: AgentChatTranscriptRow;

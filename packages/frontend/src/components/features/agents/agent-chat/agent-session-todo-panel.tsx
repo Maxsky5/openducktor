@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
+import {
+  getActionableSessionTodo,
+  getVisibleSessionTodos,
+} from "@openducktor/frontend-core/sessions/session-view/agent-session-todo-panel-model";
 
 type AgentSessionTodoPanelProps = {
   todos: readonly AgentSessionTodoItem[];

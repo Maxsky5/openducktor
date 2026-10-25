@@ -16,10 +16,10 @@ import type { IssueImageContext } from "@/components/features/issue-source/githu
 import type { MermaidPreviews } from "@/components/ui/markdown-mermaid-state";
 import { TaskDescriptionEditorLoading } from "./task-description-editor-loading";
 import type { MarkdownImageRenderer } from "./task-description-image-context";
-import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
+import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
 import { TaskDescriptionMarkdownSource } from "./task-description-markdown-source";
 import type { VisualMarkdownCompatibility } from "./task-description-markdown-compatibility";
-import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
+import type { TaskDescriptionAssetUpload } from "@openducktor/frontend-core/tasks/description/use-task-description-asset-draft";
 
 const loadTaskDescriptionMarkdown = () => import("./task-description-markdown");
 const loadTaskDescriptionVisualEditor = () => import("./task-description-visual-editor");

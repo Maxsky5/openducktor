@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import type { GitDiffRefresh } from "@openducktor/frontend-core/git/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { forEachSessionMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { isWorkflowAgentSession } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/workflow-session";

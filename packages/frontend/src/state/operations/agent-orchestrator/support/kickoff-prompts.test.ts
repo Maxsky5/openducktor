@@ -3,7 +3,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import {
   resolveBuildContinuationLaunchAction,
   resolveBuildRequestChangesLaunchAction,
-} from "@/features/session-start/session-start-launch-options";
+} from "@openducktor/frontend-core/lib/session-launch-actions";
 import { kickoffPrompt } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/kickoff-prompts";
 
 const taskFixture: TaskCard = {

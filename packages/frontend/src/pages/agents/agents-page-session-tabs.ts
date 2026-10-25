@@ -1,7 +1,8 @@
 import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { firstLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
+import { firstLaunchAction } from "@openducktor/frontend-core/sessions/start/session-start-prompts";
+import { type SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type AgentSessionOptionSummary,
@@ -9,11 +10,13 @@ import {
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
-} from "@/lib/agent-session-options";
-import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
+} from "@openducktor/frontend-core/lib/agent-session-options";
+import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import type { AgentWorkflowStepLiveSession, AgentWorkflowStepState } from "@/types/agent-workflow";
+import type {
+  AgentWorkflowStepLiveSession,
+  AgentWorkflowStepState,
+} from "@openducktor/frontend-core/types/agent-workflow";
 
 export type SessionCreateOption = {
   id: string;
@@ -72,16 +75,6 @@ export const buildLatestSessionByTaskMap = (
     }
   }
   return next;
-};
-
-export const buildRoleEnabledMapForTask = (task: TaskCard | null) => {
-  const workflowsByRole = resolveRoleWorkflowMapForTask(task);
-  return {
-    spec: workflowsByRole.spec.available,
-    planner: workflowsByRole.planner.available,
-    build: workflowsByRole.build.available,
-    qa: workflowsByRole.qa.available,
-  } satisfies Record<AgentRole, boolean>;
 };
 
 export const buildWorkflowStateByRole = (params: {

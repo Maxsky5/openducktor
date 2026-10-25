@@ -17,15 +17,15 @@ import {
   SESSIONS_PATH,
   SESSIONS_QUERY_KEYS,
   WORKSPACE_SESSION_QUERY_KEYS,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { WorkspaceSessionArchiveDialog } from "@/pages/workspace-sessions/workspace-session-archive-dialog";
 import { WorkspaceSessionRenameDialog } from "@/pages/workspace-sessions/workspace-session-rename-dialog";
-import { useMountedRef } from "@/pages/workspace-sessions/use-mounted-ref";
-import { useRequiredContext } from "@/state/app-state-contexts";
-import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
+import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
+import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { useArchiveWorkspaceSession } from "@openducktor/frontend-core/workspace-sessions/use-archive-workspace-session";
 import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
-import type { SessionNavigationWorkspace } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationWorkspace } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 
 type SessionMenuTarget = {
   action: "rename" | "archive";
@@ -130,7 +130,6 @@ function SessionMenuDialogs({
     worktreeConfirmation?: WorkspaceSessionArchiveInput["worktreeConfirmation"],
   ) => {
     const apply = async () => {
-      archive.reset();
       try {
         await archive.mutateAsync({
           workspaceId: workspace.workspaceId,

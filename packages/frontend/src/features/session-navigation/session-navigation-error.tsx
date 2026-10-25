@@ -2,7 +2,7 @@ import { ChevronDown, CircleAlert, LoaderCircle, RefreshCcw } from "lucide-react
 import { type ReactElement, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { SessionNavigationRecovery } from "./use-session-navigation-recovery";
+import type { SessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 
 export function SessionNavigationError({
   scopeLabel,

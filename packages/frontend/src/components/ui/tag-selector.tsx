@@ -3,6 +3,7 @@ import { type KeyboardEvent, type ReactElement, useMemo, useState } from "react"
 import { Input } from "@/components/ui/input";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { cn } from "@/lib/utils";
+import { normalizeTaskLabel } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 
 const EMPTY_SUGGESTIONS: string[] = [];
 const DEFAULT_COMMIT_KEYS = ["Enter", ","] as const;
@@ -15,8 +16,6 @@ type TagSelectorProps = {
   placeholder?: string;
   commitKeys?: readonly ("Enter" | ",")[];
 };
-
-const normalizeTag = (label: string): string => label.trim().replace(/\s+/g, "-").toLowerCase();
 
 export function TagSelector({
   value,
@@ -35,7 +34,7 @@ export function TagSelector({
     return Array.from(merged).sort((left, right) => left.localeCompare(right));
   }, [suggestions, value]);
 
-  const candidateTag = normalizeTag(query);
+  const candidateTag = normalizeTaskLabel(query);
   const filteredSuggestions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return allSuggestions.filter((label) => {
@@ -56,7 +55,7 @@ export function TagSelector({
     !disabled && isFocused && (filteredSuggestions.length > 0 || canCreateCandidate);
 
   const addTag = (label: string): void => {
-    const normalized = normalizeTag(label);
+    const normalized = normalizeTaskLabel(label);
     if (!normalized || selectedSet.has(normalized)) {
       return;
     }

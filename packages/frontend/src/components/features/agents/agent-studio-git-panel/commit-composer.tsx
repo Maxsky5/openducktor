@@ -2,7 +2,7 @@ import { GitCommitHorizontal, LoaderCircle } from "lucide-react";
 import { type KeyboardEvent, memo, type ReactElement, useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { GitCommitMode } from "@/features/agent-studio-git";
+import type { GitCommitMode } from "@openducktor/frontend-core/git/contracts";
 import { isApplePlatform } from "@/lib/device-platform";
 import { cn } from "@/lib/utils";
 import {

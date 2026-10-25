@@ -13,9 +13,12 @@ import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   TaskWorkflowActionsContext,
   type TaskWorkflowActions,
-} from "@/features/task-workflow/task-workflow-actions-context";
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { RECENT_ITEMS_STORAGE_KEY } from "@/features/command-palette/constants";
-import { collectDeleteImpactTaskIds, toSubtasks } from "./task-details-sheet-model";
+import {
+  collectDeleteImpactTaskIds,
+  toSubtasks,
+} from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 import { QueryProvider } from "@/test-utils/query-provider";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {

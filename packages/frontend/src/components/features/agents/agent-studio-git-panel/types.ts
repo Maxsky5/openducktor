@@ -12,7 +12,7 @@ import type {
   GitCommitMode,
   GitConflict,
   GitConflictAction,
-} from "@/features/agent-studio-git";
+} from "@openducktor/frontend-core/git/contracts";
 import type { GitPanelTab } from "./constants";
 import type { GitPanelConflict } from "./use-git-conflict-panel";
 import type { PanelFileLists } from "./use-panel-file-lists";

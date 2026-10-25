@@ -6,14 +6,13 @@ import type {
   Terminal,
 } from "@xterm/xterm";
 import {
-  createHttpLinkProvider,
-  type HttpLinkProvider,
-  type LinkTarget,
   rangeHasCell,
   sameLink,
-} from "./terminal-link-provider";
+  type TerminalLinkTarget as LinkTarget,
+} from "@openducktor/frontend-core/terminals/terminal-link-targets";
+import { checkHttpUrl } from "@openducktor/frontend-core/terminals/terminal-url-policy";
+import { createHttpLinkProvider, type HttpLinkProvider } from "./terminal-link-provider";
 import { LINK_DRAG_PX, LINK_POINTER_CLASS, LINKS_ENABLED_CLASS } from "./constants";
-import { checkHttpUrl } from "./terminal-url-policy";
 
 type LinkPress = {
   startX: number;

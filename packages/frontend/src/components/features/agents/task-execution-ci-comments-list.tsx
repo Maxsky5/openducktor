@@ -10,61 +10,26 @@ import {
   useMemo,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { TaskExecutionCiCommentCard } from "./task-execution-ci-comment-card";
 import {
-  persistTaskExecutionCiCommentFilters,
-  readTaskExecutionCiCommentFilters,
-} from "./task-execution-ci-comment-filters";
-import { isBotCommentAuthor } from "./task-execution-ci-presentation";
-
-type CommentFilter = "all" | "humans" | "bots";
-
-const COMMENT_FILTERS: Array<{ id: CommentFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "humans", label: "Humans" },
-  { id: "bots", label: "Bots" },
-];
+  countPullRequestComments,
+  filterPullRequestComments,
+  PULL_REQUEST_COMMENT_FILTERS,
+  type PullRequestCommentAuthorFilter,
+  useHideResolvedComments,
+} from "@openducktor/frontend-core/review/pull-request-comment-filters";
+import { isBotCommentAuthor } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 const COMMENT_BODY_BATCH_SIZE = 4;
 
 type TaskExecutionCiCommentsListProps = {
   comments: PullRequestReviewActivity[];
-};
-
-const commentTimestamp = (comment: PullRequestReviewActivity): number => {
-  const timestamp = Date.parse(comment.createdAt ?? comment.updatedAt ?? "");
-  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-};
-
-const filterComments = (
-  comments: readonly PullRequestReviewActivity[],
-  filter: CommentFilter,
-  hideResolved: boolean,
-): PullRequestReviewActivity[] => {
-  const commentsByResolution = hideResolved
-    ? comments.filter((comment) => comment.isResolved !== true)
-    : comments;
-  let commentsByAuthor = commentsByResolution;
-  if (filter !== "all") {
-    commentsByAuthor = commentsByResolution.filter((comment) => {
-      const isBot = isBotCommentAuthor(comment.author);
-      if (filter === "bots") {
-        return isBot;
-      }
-      return !isBot;
-    });
-  }
-  return commentsByAuthor.toSorted(
-    (left, right) => commentTimestamp(right) - commentTimestamp(left),
-  );
 };
 
 const selectNextBodyBatchIds = (
@@ -87,29 +52,18 @@ const selectNextBodyBatchIds = (
 export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiCommentsList({
   comments,
 }: TaskExecutionCiCommentsListProps): ReactElement {
-  const [filter, setFilter] = useState<CommentFilter>("all");
-  const [commentFilters, setCommentFilters] = useState(readTaskExecutionCiCommentFilters);
+  const [filter, setFilter] = useState<PullRequestCommentAuthorFilter>("all");
+  const { hideResolved, setHideResolved } = useHideResolvedComments();
   const hideResolvedId = useId();
   const deferredComments = useDeferredValue(comments);
   const deferredFilter = useDeferredValue(filter);
-  const deferredHideResolved = useDeferredValue(commentFilters.hideResolved);
-  const countableComments = useMemo(
-    () =>
-      commentFilters.hideResolved
-        ? comments.filter((comment) => comment.isResolved !== true)
-        : comments,
-    [commentFilters.hideResolved, comments],
-  );
+  const deferredHideResolved = useDeferredValue(hideResolved);
   const counts = useMemo(
-    () => ({
-      all: countableComments.length,
-      bots: countableComments.filter((comment) => isBotCommentAuthor(comment.author)).length,
-      humans: countableComments.filter((comment) => !isBotCommentAuthor(comment.author)).length,
-    }),
-    [countableComments],
+    () => countPullRequestComments(comments, hideResolved),
+    [comments, hideResolved],
   );
   const visibleComments = useMemo(
-    () => filterComments(deferredComments, deferredFilter, deferredHideResolved),
+    () => filterPullRequestComments(deferredComments, deferredFilter, deferredHideResolved),
     [deferredComments, deferredFilter, deferredHideResolved],
   );
   const [readyBodyIds, setReadyBodyIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -139,18 +93,6 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
       globalThis.cancelAnimationFrame(frameId);
     };
   }, [nextBodyBatchIds]);
-
-  const updateHideResolved = (hideResolved: boolean): void => {
-    const nextFilters = { hideResolved };
-    try {
-      persistTaskExecutionCiCommentFilters(nextFilters);
-      setCommentFilters(nextFilters);
-    } catch (error) {
-      toast.error("Failed to save comment filters", {
-        description: errorMessage(error),
-      });
-    }
-  };
 
   let filteredCommentsContent: ReactElement;
   if (visibleComments.length === 0) {
@@ -184,7 +126,7 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
       <div className="flex flex-col gap-3 px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="grid min-w-0 flex-1 grid-cols-3 rounded-md border border-border bg-muted/30 p-1">
-            {COMMENT_FILTERS.map((item) => {
+            {PULL_REQUEST_COMMENT_FILTERS.map((item) => {
               const isActive = filter === item.id;
               return (
                 <Button
@@ -228,8 +170,8 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
                 </label>
                 <Switch
                   id={hideResolvedId}
-                  checked={commentFilters.hideResolved}
-                  onCheckedChange={updateHideResolved}
+                  checked={hideResolved}
+                  onCheckedChange={setHideResolved}
                 />
               </div>
             </PopoverContent>

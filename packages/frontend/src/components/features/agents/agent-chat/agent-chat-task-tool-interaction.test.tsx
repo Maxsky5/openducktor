@@ -8,8 +8,8 @@ import {
 import {
   ActiveWorkspaceContext,
   TaskSnapshotContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 

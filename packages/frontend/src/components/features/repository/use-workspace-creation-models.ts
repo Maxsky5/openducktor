@@ -6,9 +6,9 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo, useState } from "react";
-import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,

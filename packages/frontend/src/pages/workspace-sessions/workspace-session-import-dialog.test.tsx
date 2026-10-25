@@ -14,7 +14,7 @@ import { act, Fragment, StrictMode, type ComponentProps } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog";
 
 const definitions = [

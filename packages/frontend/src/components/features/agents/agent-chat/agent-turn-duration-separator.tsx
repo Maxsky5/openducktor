@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { AgentTranscriptSeparator } from "./agent-transcript-separator";
-import { formatAgentDuration } from "./format-agent-duration";
+import { formatTurnDurationLabel } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 
 type AgentTurnDurationSeparatorProps = {
   durationMs: number;
@@ -13,7 +13,7 @@ export function AgentTurnDurationSeparator({
 }: AgentTurnDurationSeparatorProps): ReactElement {
   return (
     <AgentTranscriptSeparator
-      label={`Worked for ${formatAgentDuration(durationMs)}`}
+      label={formatTurnDurationLabel(durationMs)}
       {...(className ? { className } : {})}
     />
   );

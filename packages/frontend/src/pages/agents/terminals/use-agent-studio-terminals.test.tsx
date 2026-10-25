@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { act, waitFor } from "@testing-library/react";
-import { terminalTabLabel } from "@/features/terminals";
+import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
   bottomEntryId,
   bottomTerminalIds,

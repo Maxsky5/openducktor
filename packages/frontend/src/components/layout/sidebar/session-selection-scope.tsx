@@ -1,7 +1,7 @@
 import type { SidebarSessionGrouping } from "@openducktor/contracts";
 import { type ReactElement, type ReactNode, useMemo } from "react";
-import { useVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
-import type { SessionNavigationModel } from "@/state/read-models/session-navigation-read-model";
+import { useVisibleSessionTarget } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import type { SessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { SessionSelectionContext, selectSessionEntry } from "./session-navigation-selection";
 import { useRevealSelectedSession } from "./use-reveal-selected-session";
 

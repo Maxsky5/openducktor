@@ -1,7 +1,8 @@
 import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { SpeedSelect, type SpeedControlModel } from "./speed-select";
+import { SpeedSelect } from "./speed-select";
+import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 
 enableReactActEnvironment();
 const model = (overrides: Partial<SpeedControlModel> = {}): SpeedControlModel => ({

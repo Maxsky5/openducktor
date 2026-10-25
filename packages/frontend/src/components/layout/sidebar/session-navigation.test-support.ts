@@ -3,13 +3,13 @@ import type { AgentRole, RuntimeKind } from "@openducktor/contracts";
 import {
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import type {
   SessionNavigationEntry,
   SessionNavigationGroupId,
   SessionNavigationModel,
   SessionNavigationWorkspace,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 
 export const NOW = Date.parse("2026-09-30T12:00:00.000Z");
 
@@ -170,6 +170,7 @@ export const navigationModel = (
     groups: orderedGroups,
     entryCount: orderedGroups.reduce((count, group) => count + group.entries.length, 0),
     isLoading: false,
+    loadingWorkspaceIds: [],
     issues: [],
     taskBlocks: [],
     ...overrides,

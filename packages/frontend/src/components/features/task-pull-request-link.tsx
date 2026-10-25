@@ -12,6 +12,10 @@ import { badgeVariants } from "@/components/ui/badge-variants";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
+import {
+  PULL_REQUEST_OPEN_FAILED_TITLE,
+  pullRequestLabel,
+} from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
 
 const PULL_REQUEST_STATUS_STYLES = {
   open: "text-emerald-600 dark:text-emerald-400",
@@ -38,7 +42,7 @@ export function TaskPullRequestLink({
 
   const openPullRequest = (): void => {
     void openExternalUrl(pullRequest.url).catch((error) => {
-      toast.error("Failed to open pull request", {
+      toast.error(PULL_REQUEST_OPEN_FAILED_TITLE, {
         description: errorMessage(error),
       });
     });
@@ -55,7 +59,7 @@ export function TaskPullRequestLink({
       )}
     >
       <StatusIcon className={cn("size-3.5", PULL_REQUEST_STATUS_STYLES[pullRequest.state])} />
-      <span>PR #{pullRequest.number}</span>
+      <span>{pullRequestLabel(pullRequest)}</span>
       <ExternalLink className="size-3" />
     </button>
   );

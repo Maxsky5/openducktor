@@ -11,10 +11,11 @@ import {
   buildSessionPreviewModel,
   type SessionPreviewModel,
 } from "@/features/session-navigation/session-preview-model";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { agentModelInfoParts } from "@/lib/agent-model-presentation";
-import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
+import { agentModelInfoParts } from "@openducktor/frontend-core/lib/agent-model-presentation";
+import { statusBadgeClassName } from "@/lib/task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { cn } from "@/lib/utils";
 import { runtimeDefinitionsQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { createHostRuntimeCatalogOperations } from "@openducktor/frontend-core/runtime/runtime-catalog-operations";
@@ -23,14 +24,15 @@ import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/
 import type {
   SessionNavigationEntry,
   SessionNavigationWorkspace,
-} from "@/state/read-models/session-navigation-read-model";
-import { useWorkspaceActivityProjection } from "@/state/workspace-activity/workspace-activity-context";
-import { sessionEntryTimeText } from "./session-navigation-entry-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { useWorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
+import { sessionEntryTimeText } from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
 import { SessionEntryRuntimeIcon } from "./session-navigation-parts";
 import { SessionPreviewPendingRequests } from "./session-preview-pending-input";
 import { useSessionMenu } from "./session-menu-provider";
 import { SessionPreviewCommands } from "./session-command-activity";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { SESSION_MENU_LABELS } from "@openducktor/frontend-core/workspace-sessions/workspace-session-menu";
 
 export function SessionPreviewContent({
   entry,
@@ -198,8 +200,8 @@ function SessionPreviewArchiveButton({
       variant="ghost"
       size="icon"
       className="size-7 text-muted-foreground hover:text-foreground"
-      aria-label="Archive session"
-      title="Archive session"
+      aria-label={SESSION_MENU_LABELS.archive}
+      title={SESSION_MENU_LABELS.archive}
       onClick={() => {
         onOpenDialog();
         requestDialog({ action: "archive", workspace, record, onCloseAutoFocus });

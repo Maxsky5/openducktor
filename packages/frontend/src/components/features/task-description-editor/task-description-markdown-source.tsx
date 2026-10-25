@@ -4,7 +4,7 @@ import { type ReactElement, type Ref, useImperativeHandle, useRef } from "react"
 import type { EditorFocus } from "@/types/editor-focus";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
+import type { TaskDescriptionAssetUpload } from "@openducktor/frontend-core/tasks/description/use-task-description-asset-draft";
 
 export function TaskDescriptionMarkdownSource({
   markdown,

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from "react";
-import type { AgentChatUserMessageAnchor } from "../agent-chat-transcript-model";
+import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "../use-agent-chat-transcript-navigation";
 import {
   areMinimapMarkersEqual,

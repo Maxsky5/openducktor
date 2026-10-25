@@ -5,12 +5,11 @@ import {
   appendAttachmentsToDraft,
   appendTextToDraft,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import { sendWithPendingItems } from "@/components/features/agents/agent-chat/agent-chat-pending-send";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import type {
-  AgentChatComposerModel,
-  AgentChatPendingSendGroup,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatComposerModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { sendWithPendingItems } from "@openducktor/frontend-core/sessions/composer/agent-chat-pending-send";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
+import type { AgentChatPendingSendGroup } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import {
   BROWSER_ANNOTATION_IMAGE_MIME,
   browserAnnotationImageName,
@@ -40,6 +39,7 @@ export function useBrowserAnnotationComposer({
   onSend: AgentChatComposerModel["onSend"];
 } {
   const annotationStore = useBrowserAnnotationStore();
+  const { feedback } = useClientConnection();
   const { ownerKey, annotations } = useBrowserAnnotations(owner);
   const pendingSendItems = useMemo(
     () => buildBrowserAnnotationSendGroup(annotations),
@@ -49,21 +49,27 @@ export function useBrowserAnnotationComposer({
     (draft: AgentChatComposerDraft, mode: AgentMessageSubmitMode): Promise<AgentChatSendResult> =>
       ownerKey === null
         ? onSend(draft, mode)
-        : sendWithPendingItems(draft, mode, onSend, {
-            itemName: "annotation",
-            lock: (current) =>
-              lockBrowserAnnotations(
-                annotationStore.getState(),
-                ownerKey,
-                current,
-                workingDirectory,
-              ),
-            complete: (submissionId) =>
-              annotationStore.getState().completeSubmittingAnnotations(submissionId),
-            restore: (submissionId) =>
-              annotationStore.getState().restoreSubmittingAnnotations(submissionId),
-          }),
-    [annotationStore, onSend, ownerKey, workingDirectory],
+        : sendWithPendingItems(
+            draft,
+            mode,
+            onSend,
+            {
+              itemName: "annotation",
+              lock: (current) =>
+                lockBrowserAnnotations(
+                  annotationStore.getState(),
+                  ownerKey,
+                  current,
+                  workingDirectory,
+                ),
+              complete: (submissionId) =>
+                annotationStore.getState().completeSubmittingAnnotations(submissionId),
+              restore: (submissionId) =>
+                annotationStore.getState().restoreSubmittingAnnotations(submissionId),
+            },
+            feedback,
+          ),
+    [annotationStore, feedback, onSend, ownerKey, workingDirectory],
   );
 
   return useMemo(

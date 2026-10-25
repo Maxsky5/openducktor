@@ -31,7 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import type { RuntimeExecutableValidationState } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { OpenCodePermissionsSettings } from "./settings-opencode-permissions";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";

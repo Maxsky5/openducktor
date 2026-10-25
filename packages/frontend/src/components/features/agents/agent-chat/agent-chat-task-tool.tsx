@@ -1,15 +1,7 @@
-import {
-  CreateTaskInputSchema,
-  SearchTasksInputSchema,
-  createTaskResultSchema,
-  searchTasksResultSchema,
-  taskSummarySchema,
-  type PublicTaskSummaryTask,
-} from "@openducktor/contracts";
+import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import { ImageIcon } from "lucide-react";
 import { lazy, Suspense, useMemo, useState, type ComponentProps, type ReactElement } from "react";
 import type { Components, ExtraProps } from "react-markdown";
-import type { ZodType } from "zod";
 import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
@@ -20,13 +12,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
-import { statusBadgeClassName, statusLabel } from "@/lib/task-status-presentation";
+import { statusBadgeClassName } from "@/lib/task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { cn } from "@/lib/utils";
 import { buildTaskDescriptionPreviewMarkdown } from "./agent-chat-task-description-preview";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import type { AgentChatTaskToolName } from "./agent-chat.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import type { AgentChatTaskToolName } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
-import { getToolLifecyclePhase } from "./tool-lifecycle";
+import {
+  buildTaskToolSummary,
+  INVALID_TASK_TOOL_RESULT_MESSAGE,
+  resolveTaskToolTask,
+  showsInvalidTaskToolAlert,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-task-tool-model";
 
 const TASK_DESCRIPTION_PREVIEW_CLASS_NAME = cn(
   "line-clamp-5 break-words text-muted-foreground",
@@ -62,49 +60,6 @@ const TASK_DESCRIPTION_PREVIEW_COMPONENTS: Components = {
 const TaskDetailsSheetViewer = lazy(
   () => import("@/components/features/tasks/task-details-sheet-viewer"),
 );
-
-const readTaskToolResult = <Result,>(
-  schema: ZodType<Result>,
-  output: string | undefined,
-): Result | null => {
-  if (!output) return null;
-  try {
-    const result = schema.safeParse(JSON.parse(output));
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
-};
-
-const taskSearchSummary = (meta: ToolMeta): string => {
-  const input = SearchTasksInputSchema.safeParse(meta.input);
-  const filters: string[] = [];
-  if (input.success) {
-    const { title, status, issueType, priority, tags, limit } = input.data;
-    if (title) filters.push(`title: ${title}`);
-    if (status) filters.push(`status: ${status}`);
-    if (issueType) filters.push(`type: ${issueType}`);
-    if (priority !== undefined) filters.push(`priority: P${priority}`);
-    if (tags) filters.push(`tags: ${tags.join(", ")}`);
-    filters.push(`limit: ${limit}`);
-  } else {
-    filters.push(meta.input ? "Invalid search filters" : "Waiting for filters");
-  }
-  const phase = getToolLifecyclePhase(meta);
-  if (phase === "completed") {
-    const result = readTaskToolResult(searchTasksResultSchema, meta.output);
-    if (result) {
-      const { totalCount, results } = result;
-      const count = `${totalCount} ${totalCount === 1 ? "result" : "results"}`;
-      filters.unshift(results.length < totalCount ? `${count}, ${results.length} returned` : count);
-    } else {
-      filters.push("Invalid search result");
-    }
-  }
-  if (phase === "failed") filters.push(meta.error || "Tool failed");
-  if (phase === "cancelled") filters.push("Tool cancelled");
-  return filters.join(" · ");
-};
 
 const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -156,49 +111,6 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
     </>
   );
 };
-const resolveRenderedTask = (
-  tool: AgentChatTaskToolName,
-  meta: ToolMeta,
-): PublicTaskSummaryTask | null => {
-  if (getToolLifecyclePhase(meta) !== "completed") {
-    return null;
-  }
-  if (tool === "create_task") {
-    const result = readTaskToolResult(createTaskResultSchema, meta.output);
-    return result ? result.task : null;
-  }
-  if (tool === "update_task") {
-    const result = readTaskToolResult(taskSummarySchema, meta.output);
-    return result ? result.task : null;
-  }
-  return null;
-};
-
-const buildTaskToolSummary = (
-  tool: AgentChatTaskToolName,
-  meta: ToolMeta,
-  task: PublicTaskSummaryTask | null,
-): string => {
-  const phase = getToolLifecyclePhase(meta);
-  if (tool === "search_tasks") return taskSearchSummary(meta);
-  if (phase === "failed") return meta.error || "Tool failed";
-  if (phase === "cancelled") return "Tool cancelled";
-  if (task) return task.title;
-  if (phase === "completed") return "Invalid task result";
-  const title = CreateTaskInputSchema.shape.title.safeParse(meta.input?.title);
-  if (title.success) return title.data;
-  return tool === "update_task" ? "Updating task" : "Creating task";
-};
-
-const showsInvalidTaskAlert = (
-  tool: AgentChatTaskToolName,
-  meta: ToolMeta,
-  task: PublicTaskSummaryTask | null,
-): boolean =>
-  (tool === "create_task" || tool === "update_task") &&
-  getToolLifecyclePhase(meta) === "completed" &&
-  task === null;
-
 export const AgentChatTaskTool = ({
   meta,
   tool,
@@ -214,7 +126,7 @@ export const AgentChatTaskTool = ({
   messageTimestamp: string;
   sessionWorkingDirectory?: string | null | undefined;
 }) => {
-  const task = resolveRenderedTask(tool, meta);
+  const task = resolveTaskToolTask(tool, meta);
   const summary = buildTaskToolSummary(tool, meta, task);
 
   return (
@@ -228,10 +140,9 @@ export const AgentChatTaskTool = ({
         displayName={tool}
       />
       {task && <TaskResultCard task={task} />}
-      {showsInvalidTaskAlert(tool, meta, task) && (
+      {showsInvalidTaskToolAlert(tool, meta, task) && (
         <p role="alert" className="text-sm text-destructive">
-          OpenDucktor returned an invalid task result. Expand the tool output to inspect the
-          response.
+          {INVALID_TASK_TOOL_RESULT_MESSAGE}
         </p>
       )}
     </section>

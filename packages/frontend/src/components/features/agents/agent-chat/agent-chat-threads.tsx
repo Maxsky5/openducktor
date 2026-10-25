@@ -1,6 +1,6 @@
 import { Activity, memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { MAX_CACHED_TRANSCRIPTS } from "./agent-chat-transcript-model-cache";
+import { MAX_CACHED_TRANSCRIPTS } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model-cache";
 import { AgentChatThread } from "./agent-chat-thread";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 

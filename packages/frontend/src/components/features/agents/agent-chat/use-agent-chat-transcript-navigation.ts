@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX, readMountedRows } from "./agent-chat-window-shared";
 
 // A jump puts the top of its target row this far below the top of the viewport.

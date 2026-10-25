@@ -10,7 +10,8 @@ import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries
 import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
+import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
+import { workspaceSessionGitSource } from "@/test-utils/workspace-session-git-source";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
 const commentOwner = {
@@ -32,17 +33,19 @@ function ToolsOwner({
     isVisible,
     repoPath: "/repo",
     workspaceSession: { workspaceId: commentOwner.workspaceId, sessionId: commentOwner.sessionId },
-    workingDirectory,
     contextMode,
-    branchKey: "feature",
-    currentBranch: { name: "feature", detached: false },
-    branchReady: true,
-    target: { branch: "main", remote: "origin" },
-    savedTarget: { branch: "main", remote: "origin" },
-    targetError: null,
+    git: workspaceSessionGitSource({
+      workingDirectory,
+      branchKey: "feature",
+      currentBranch: { name: "feature", detached: false },
+      branchReady: true,
+      target: { branch: "main", remote: "origin" },
+      savedTarget: { branch: "main", remote: "origin" },
+      targetError: null,
+      retryTarget: async () => {},
+      readBranch: async () => "feature",
+    }),
     applyTarget: async () => {},
-    retryTarget: async () => {},
-    readBranch: async () => "feature",
     isFilesActive: isVisible,
     selectedFile: null,
     onSelectFile: () => {},

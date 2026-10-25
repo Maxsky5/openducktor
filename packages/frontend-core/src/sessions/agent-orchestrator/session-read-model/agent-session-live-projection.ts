@@ -29,6 +29,7 @@ import type {
   AgentSessionState,
 } from "../../../types/agent-orchestrator";
 import { closeBackgroundQuestions } from "../support/background-questions";
+import { settleUnverifiedSessionHistory } from "../history/session-history-freshness";
 import { createSessionMessagesState } from "../support/messages";
 import { projectSessionTranscriptActivity } from "./agent-session-live-activity";
 
@@ -140,10 +141,15 @@ const toSessionIdentity = (ref: AgentSessionLiveRef): AgentSessionIdentity => ({
   workingDirectory: ref.workingDirectory,
 });
 
-const agentSessionLiveSnapshotIdentityKeys = (
+const agentSessionLiveSnapshotsByIdentityKey = (
   snapshots: readonly AgentSessionLiveSnapshot[],
-): ReadonlySet<string> =>
-  new Set(snapshots.map((snapshot) => agentSessionIdentityKey(toSessionIdentity(snapshot.ref))));
+): ReadonlyMap<string, AgentSessionLiveSnapshot> =>
+  new Map(
+    snapshots.map((snapshot) => [
+      agentSessionIdentityKey(toSessionIdentity(snapshot.ref)),
+      snapshot,
+    ]),
+  );
 
 const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =>
   status === "stopped" || status === "error";
@@ -568,17 +574,19 @@ export const buildAgentSessionLiveCollection = ({
   current: AgentSessionCollection;
   snapshots: readonly AgentSessionLiveSnapshot[];
 }): AgentSessionCollection => {
-  const liveSnapshotKeys = agentSessionLiveSnapshotIdentityKeys(snapshots);
+  const liveSnapshots = agentSessionLiveSnapshotsByIdentityKey(snapshots);
   let collection = current;
   for (const session of listAgentSessions(current)) {
-    const hasLiveSnapshot = liveSnapshotKeys.has(agentSessionIdentityKey(session));
-    if (!hasLiveSnapshot && !isRetainedWithoutLiveSnapshot(session)) {
+    const liveSnapshot = liveSnapshots.get(agentSessionIdentityKey(session));
+    if (!liveSnapshot && !isRetainedWithoutLiveSnapshot(session)) {
       collection = removeAgentSession(collection, session);
       continue;
     }
+    // The activity before the snapshot shows whether the session worked when coverage ended.
+    const settled = settleUnverifiedSessionHistory(session, liveSnapshot);
     collection = replaceAgentSession(
       collection,
-      resetSessionLiveStateForSnapshot(session, hasLiveSnapshot),
+      resetSessionLiveStateForSnapshot(settled, liveSnapshot !== undefined),
     );
   }
 

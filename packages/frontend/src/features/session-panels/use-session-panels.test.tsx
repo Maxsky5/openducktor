@@ -9,7 +9,8 @@ import type { ClientConnection } from "@openducktor/frontend-core/connection/cli
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
-import type { TerminalSessionsModel, TerminalTab } from "@/features/terminals";
+import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { inAppLinkTarget } from "@/lib/link-open";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
@@ -36,7 +37,7 @@ import {
 } from "./session-panel-layout-store";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "./use-right-panel-open";
 import { type SessionPanelBrowserModel, useSessionPanels } from "./use-session-panels";
-import { SessionViewContext } from "../session-navigation/session-view-context";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);
 const NO_TERMINAL_TABS: TerminalTab[] = [];
@@ -162,6 +163,7 @@ const creatingTab = (tabId: string): TerminalTab => ({
   label: "/repo",
   actionId: null,
   error: null,
+  outcomeUnknown: false,
   requestState: "creating",
 });
 

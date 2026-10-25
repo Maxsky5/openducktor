@@ -1,4 +1,4 @@
-import type { AgentChatTurnAnchor } from "./agent-chat-transcript-model";
+import type { AgentChatTurnAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 
 export const AGENT_CHAT_ROW_WINDOW_SIZE = 40;
 export const AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT = 10;

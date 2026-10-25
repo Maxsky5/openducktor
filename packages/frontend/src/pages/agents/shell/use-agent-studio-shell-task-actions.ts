@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import type { useTasksState } from "@/state/app-state-provider";
 import {
   type AgentStudioPullRequestModalModel,

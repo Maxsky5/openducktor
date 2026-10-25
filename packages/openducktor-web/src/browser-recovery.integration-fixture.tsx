@@ -38,7 +38,7 @@ const { ClientConnectionProvider } =
 const { configureShellBridge, createUnavailableShellBridge } =
   await import("@openducktor/frontend/lib/shell-bridge");
 const { HostRuntimeStatusProvider } =
-  await import("../../frontend/src/state/providers/host-runtime-status-provider");
+  await import("@openducktor/frontend-core/app-state/providers/host-runtime-status-provider");
 const { AutopilotProvider } = await import("../../frontend/src/state/providers/autopilot-provider");
 const { WorkspaceStateContext } = await import("../../frontend/src/state/app-state-contexts");
 const { HostRuntimeStatusContext, AgentOperationsContext } =
@@ -49,7 +49,7 @@ const fixtures = await import("../../frontend/src/test-utils/shared-test-fixture
 const { createAgentOperationsFixture } =
   await import("@openducktor/frontend-core/test-support/agent-operations-fixture");
 const { createTerminalTransportController } =
-  await import("../../frontend/src/features/terminals/terminal-transport-controller");
+  await import("@openducktor/frontend-core/terminals/terminal-transport-controller");
 const { createRemoteShellBridge } = await import("@openducktor/frontend/lib/remote/shell-bridge");
 const workspace = fixtures.createWorkspaceRecordFixture({
   workspaceId: "alpha",
@@ -370,7 +370,8 @@ try {
       });
       if (result.endsWith("fails")) {
         assert.ok(cause);
-        assert.equal(connection.readState().status, "failed");
+        // A failed synchronization keeps its failure and retries by itself.
+        assert.equal(connection.readState().status, "disconnected");
         assert.equal(connection.readState().failure?.code, "synchronization_failed");
       } else {
         assert.equal(cause, null);

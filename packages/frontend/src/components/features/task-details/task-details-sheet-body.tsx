@@ -1,4 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
+import { TASK_DOCUMENT_SECTION_COPY } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import { CircleHelp } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskArtifactsSection } from "@/components/features/task-artifacts/task-artifacts";
@@ -27,9 +28,9 @@ export function TaskDetailsSheetBody({
       <TaskDetailsDocumentSection
         key={`${task.id}:description`}
         icon={DESCRIPTION_ICON}
-        title="Description"
+        title={TASK_DOCUMENT_SECTION_COPY.description.title}
         markdown={task.description}
-        empty="No description yet."
+        empty={TASK_DOCUMENT_SECTION_COPY.description.empty}
         defaultExpanded
         taskId={task.id}
         stripTaskDescriptionFrontMatter

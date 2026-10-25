@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { createElement } from "react";
 import { workspaceSessionEntry } from "@/components/layout/sidebar/session-navigation.test-support";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import {
   createTaskCardFixture,
   createWorkspaceRecordFixture,

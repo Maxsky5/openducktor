@@ -11,6 +11,7 @@ import { CodeView, EditProvider } from "@pierre/diffs/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 
 enableReactActEnvironment();
 
@@ -99,12 +100,20 @@ describe("Pierre CodeView editor continuity", () => {
       font: "",
       measureText: (text) => createTextMetrics(text.length * 8),
     };
+    let view: ReturnType<typeof render> | undefined;
+    // The next test starts after this body ends, also when the test times out.
+    const endBody = restoreAfterTestBody(() => {
+      view?.unmount();
+      Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+        configurable: true,
+        value: originalGetContext,
+      });
+    });
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
       value: () => textMeasurementContext,
     });
     const attachedEditors: PierreEditor[] = [];
-    let view: ReturnType<typeof render> | undefined;
     try {
       view = render(
         <PierreSaveContinuityHarness onAttach={(editor) => attachedEditors.push(editor)} />,
@@ -143,11 +152,7 @@ describe("Pierre CodeView editor continuity", () => {
       act(() => editor.undo());
       expect(editor.getText()).toBe("one");
     } finally {
-      view?.unmount();
-      Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
-        configurable: true,
-        value: originalGetContext,
-      });
+      endBody();
     }
   }, 5000);
 });

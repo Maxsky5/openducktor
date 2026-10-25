@@ -14,7 +14,7 @@ import {
   type PullRequestReviewContextQueryInput,
   pullRequestReviewQueryKeys,
 } from "@openducktor/frontend-core/queries/pull-request-review";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import {
@@ -22,7 +22,7 @@ import {
   type TaskExecutionCiChecksPanelModel,
 } from "./task-execution-ci-checks-panel";
 import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
-import { isBotCommentAuthor } from "./task-execution-ci-presentation";
+import { isBotCommentAuthor } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 const queryInput = {
   repoPath: "/repo",

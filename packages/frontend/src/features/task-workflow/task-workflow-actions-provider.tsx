@@ -7,7 +7,7 @@ import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human
 import { TaskApprovalModal } from "@/pages/kanban/task-approval-modal";
 import { TaskResetImplementationModal } from "@/pages/kanban/task-reset-implementation-modal";
 import { TaskConfirmDialogHost } from "./task-confirm-dialog-host";
-import { TaskWorkflowActionsContext } from "./task-workflow-actions-context";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { useTaskWorkflowActionsController } from "./use-task-workflow-actions-controller";
 
 export function TaskWorkflowActionsProvider({ children }: PropsWithChildren): ReactElement {

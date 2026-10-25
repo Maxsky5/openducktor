@@ -6,7 +6,10 @@ import type {
   WorkflowLaunchResult,
 } from "@openducktor/contracts";
 import { toast } from "sonner";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type {
+  AgentMessageSendReceipt,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AutopilotOutcomePresenterPorts,
   createAutopilotOutcomePresenter,
@@ -63,8 +66,12 @@ const createPorts = () => {
       return { claimed: true };
     }),
     sendMessage: mock(
-      async (identity: AgentSessionIdentity, instruction: AgentSessionUserMessagePart[]) => {
+      async (
+        identity: AgentSessionIdentity,
+        instruction: AgentSessionUserMessagePart[],
+      ): Promise<AgentMessageSendReceipt | null> => {
         sends.push([identity, instruction]);
+        return { outcome: "queued", recipient: identity };
       },
     ),
     markInAppFeedbackHandled: mock((_errorId: string) => {}),
@@ -87,12 +94,15 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 let info: ReturnType<typeof spyOn<typeof toast, "info">>;
 let error: ReturnType<typeof spyOn<typeof toast, "error">>;
 let dismiss: ReturnType<typeof spyOn<typeof toast, "dismiss">>;
+let warning: ReturnType<typeof spyOn<typeof toast, "warning">>;
 beforeEach(() => {
+  warning = spyOn(toast, "warning").mockReturnValue("warning");
   info = spyOn(toast, "info").mockReturnValue("info");
   error = spyOn(toast, "error").mockReturnValue("error");
   dismiss = spyOn(toast, "dismiss").mockReturnValue("dismiss");
 });
 afterEach(() => {
+  warning.mockRestore();
   info.mockRestore();
   error.mockRestore();
   dismiss.mockRestore();
@@ -189,13 +199,36 @@ describe("Autopilot outcome presenter", () => {
     expect(sends).toEqual([[identity, instruction]]);
   });
 
+  test("Retry message shows Result unknown when the send result is lost", async () => {
+    const { ports } = createPorts();
+    ports.sendMessage.mockImplementationOnce(async (recipient) => ({
+      outcome: "uncertain",
+      recipient,
+      submissionId: "submission-1",
+    }));
+    const presenter = createAutopilotOutcomePresenter(ports);
+    presenter.present(
+      failed(launch({ session, unsentInstruction: [{ kind: "text", text: "Kickoff" }] })),
+    );
+
+    clickAction(error.mock.calls[0]);
+    await flush();
+    clickAction(error.mock.calls[0]);
+    await flush();
+
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0]?.[0]).toBe("Result unknown");
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(ports.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
   test("Retry message does nothing while a send runs or after a send succeeds", async () => {
     const { ports } = createPorts();
     let finishSend = () => {};
     ports.sendMessage.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          finishSend = resolve;
+        new Promise<AgentMessageSendReceipt | null>((resolve) => {
+          finishSend = () => resolve(null);
         }),
     );
     const presenter = createAutopilotOutcomePresenter(ports);

@@ -1,14 +1,8 @@
-import { newWorktreeBranchState } from "./workspace-session-new-worktree-branch";
-import {
-  type WorkspaceSessionWorktreeInput,
-  type HostInvokeFailure,
-  type GitBranch,
-  workspaceSessionWorktreeNameSchema,
-} from "@openducktor/contracts";
+import type { GitBranch, WorkspaceSessionWorktreeInput } from "@openducktor/contracts";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { toBranchSelectorOptions } from "@openducktor/frontend-core/lib/branch-selector-model";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Combobox } from "@/components/ui/combobox";
@@ -17,15 +11,24 @@ import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import {
+  existingBranchError,
+  existingBranchUnavailableReason,
+  INVALID_BRANCH_NAME,
+  localWorktreeBranches,
+  newWorktreeBranchState,
+  selectExistingBranch,
+  WORKTREE_NAME_MAX_LENGTH,
+  worktreeDirectoryName,
+  worktreeNameError,
+  type WorkspaceSessionWorktreeFieldError,
+} from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 
 export type WorktreeInputProps = {
   value: WorkspaceSessionWorktreeInput;
   onChange: (value: WorkspaceSessionWorktreeInput) => void;
   disabled: boolean;
-  error: {
-    field: Extract<HostInvokeFailure, { kind: "workspace_session_validation" }>["field"];
-    message: string;
-  } | null;
+  error: WorkspaceSessionWorktreeFieldError | null;
 };
 
 function WorktreeBranchValidation({ message }: { message: string | null }) {
@@ -47,23 +50,15 @@ export function ExistingWorktreeBranchFields({
   error,
   branches,
 }: WorktreeInputProps & { branches: UseQueryResult<GitBranch[]> }) {
-  const localBranches = (branches.data ?? []).filter((branch) => !branch.isRemote);
+  const localBranches = localWorktreeBranches(branches.data);
   const branchOptions = toBranchSelectorOptions(localBranches).map((option, index) => {
     const branch = localBranches[index];
-    return branch?.worktreePath
-      ? { ...option, disabled: true, description: `Already checked out at ${branch.worktreePath}` }
+    const unavailableReason = branch ? existingBranchUnavailableReason(branch) : null;
+    return unavailableReason
+      ? { ...option, disabled: true, description: unavailableReason }
       : option;
   });
-  const selectedWorktree =
-    value.mode === "from_branch"
-      ? localBranches.find((branch) => branch.name === value.branchName)?.worktreePath
-      : undefined;
-  const branchFailure =
-    error?.field === "worktree.branchName"
-      ? error.message
-      : selectedWorktree
-        ? `This branch is already checked out at ${selectedWorktree}. Choose another branch or use Current checkout.`
-        : null;
+  const branchFailure = existingBranchError(value, localBranches, error);
 
   return (
     <div className="grid gap-1.5">
@@ -79,15 +74,7 @@ export function ExistingWorktreeBranchFields({
         options={branchOptions}
         placeholder={branches.isPending ? "Loading branches…" : "Select a local branch"}
         disabled={disabled || branches.isPending || branches.isError}
-        onValueChange={(branchName) => {
-          const name =
-            value.name ||
-            branchName
-              .replace(/[^a-zA-Z0-9_-]+/g, "-")
-              .replace(/^-+/, "")
-              .slice(0, 80);
-          onChange({ mode: "from_branch", name, branchName });
-        }}
+        onValueChange={(branchName) => onChange(selectExistingBranch(value, branchName))}
       />
       <p id="workspace-session-existing-branch-hint" className="text-xs text-muted-foreground">
         Uses this branch directly. It must not be checked out elsewhere.
@@ -98,13 +85,8 @@ export function ExistingWorktreeBranchFields({
 }
 
 export function WorktreeNameField({ value, onChange, disabled, error }: WorktreeInputProps) {
-  const parsedName = workspaceSessionWorktreeNameSchema.safeParse(value.name);
-  const nameError =
-    error?.field === "worktree.name"
-      ? error.message
-      : value.name.length > 0 && !parsedName.success
-        ? "Use letters, numbers, hyphens, or underscores, starting with a letter or number. Names must be at most 80 characters."
-        : null;
+  const directoryName = worktreeDirectoryName(value.name);
+  const nameError = worktreeNameError(value.name, error);
 
   return (
     <div className="grid gap-1.5" data-invalid={Boolean(nameError) || undefined}>
@@ -115,7 +97,7 @@ export function WorktreeNameField({ value, onChange, disabled, error }: Worktree
         onChange={(event) => onChange({ ...value, name: event.target.value })}
         placeholder="my-feature"
         autoComplete="off"
-        maxLength={80}
+        maxLength={WORKTREE_NAME_MAX_LENGTH}
         disabled={disabled}
         aria-invalid={Boolean(nameError)}
         aria-describedby={
@@ -127,9 +109,9 @@ export function WorktreeNameField({ value, onChange, disabled, error }: Worktree
       <p id="workspace-session-worktree-name-hint" className="text-xs text-muted-foreground">
         Spaces and slashes become hyphens in the directory name.
       </p>
-      {parsedName.success && (
+      {directoryName !== null && (
         <p className="break-all text-xs text-muted-foreground">
-          Directory: <span className="font-mono">{parsedName.data}</span>
+          Directory: <span className="font-mono">{directoryName}</span>
         </p>
       )}
       {nameError && (
@@ -195,9 +177,7 @@ export function NewWorktreeBranchFields({
               error?.field === "worktree.branchName" ? "workspace-session-branch-error" : undefined
             }
           />
-          {branchError && (
-            <p className="text-xs text-destructive">Enter a valid Git branch name.</p>
-          )}
+          {branchError && <p className="text-xs text-destructive">{INVALID_BRANCH_NAME}</p>}
         </div>
       </CollapsibleContent>
       {(value.branchName || defaultBranch) && (

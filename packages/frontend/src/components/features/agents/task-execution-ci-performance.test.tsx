@@ -6,7 +6,7 @@ import { type PropsWithChildren, type ReactElement, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { pullRequestReviewQueryKeys } from "@openducktor/frontend-core/queries/pull-request-review";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import { SessionPanel, type ToolTabKind } from "@/features/session-panels";

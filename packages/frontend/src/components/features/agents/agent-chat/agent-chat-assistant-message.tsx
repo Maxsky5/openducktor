@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { AgentChatForkButton } from "./agent-chat-fork-actions";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
-import { getAssistantFooterData } from "./agent-chat-message-card-model";
+import { getAssistantFooterData } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import { canCopyAssistantMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 
 type AssistantMessageProps = {
   message: AgentChatMessage;
@@ -117,6 +118,3 @@ function AssistantMessageCopyButton({
     />
   );
 }
-
-const canCopyAssistantMessage = (message: AgentChatMessage, streaming: boolean): boolean =>
-  message.role === "assistant" && message.content.trim().length > 0 && !streaming;

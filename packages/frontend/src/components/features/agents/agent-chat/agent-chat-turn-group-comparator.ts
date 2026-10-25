@@ -1,8 +1,8 @@
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import { isAssistantMessageStreaming } from "./agent-chat-streaming";
-import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
-import { getSubagentMessageSessionKey } from "./subagent-session-key";
+import { isAssistantMessageStreaming } from "@openducktor/frontend-core/sessions/transcript/agent-chat-streaming";
+import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
+import { getSubagentMessageSessionKey } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
 
 export type AgentChatTurnRowProps = {

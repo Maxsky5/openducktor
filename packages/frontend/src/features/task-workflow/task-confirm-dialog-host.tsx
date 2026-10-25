@@ -3,9 +3,9 @@ import { type ReactElement, useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
-import type { TaskConfirmRequestAction } from "@/components/features/task-details/task-confirm-dialog-types";
-import { useTaskConfirmDialog } from "@/components/features/task-details/use-task-confirm-dialog";
-import type { TaskWorkflowActions } from "./task-workflow-actions-context";
+import type { TaskConfirmRequestAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
+import { useTaskConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-confirm-dialog";
+import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 
 type TaskConfirmWorkspaceIdentity = { workspaceId: string; repoPath: string };
 
@@ -110,9 +110,10 @@ function RequestedTaskConfirmDialog({
   const currentTask = tasks.find((entry) => entry.id === request.taskId) ?? null;
   const [lastTask, setLastTask] = useState(currentTask);
   if (currentTask && currentTask !== lastTask) setLastTask(currentTask);
+  const task = currentTask ?? lastTask;
   const { dialog, subtasksCount } = useTaskConfirmDialog({
     action: request.action,
-    task: currentTask ?? lastTask,
+    task,
     allTasks: tasks,
     enabled: true,
     initiallyOpen: true,
@@ -124,7 +125,7 @@ function RequestedTaskConfirmDialog({
   });
   const dialogProps = {
     ...dialog,
-    taskId: request.taskId,
+    task: { id: request.taskId, title: task?.title ?? null },
     onCloseAutoFocus: (event: Event) => {
       event.preventDefault();
       if (request.returnFocus?.isConnected) request.returnFocus.focus({ preventScroll: true });

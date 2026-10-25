@@ -32,6 +32,11 @@ const snapshot: HostRuntimeSnapshot = {
   runtimes: [],
   mcpBridge: createHostMcpBridgeStatusFixture(),
 };
+const waitUntil = async (condition: () => boolean) => {
+  for (let wait = 0; wait < 400 && !condition(); wait += 1)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(condition());
+};
 const json = <T>(value: T, status = 200) => ({
   status,
   headers: {},
@@ -196,9 +201,10 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
     onWorkspaceFailures: () => {},
   });
   const started = controller.start().catch((cause: unknown) => cause);
+  // A failed task subscription retries by itself. A disabled host stops the retries.
   const failed = Promise.withResolvers<void>();
   const stopState = connection.subscribeState((state) => {
-    if (state.status === "failed") failed.resolve();
+    if (state.failure) failed.resolve();
   });
   const owner = createHostRuntimeStatusOwner({
     queryClient,
@@ -227,7 +233,8 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
     canceled.abort();
     await (await canceledSubscription)?.unsubscribe();
     owner.start();
-    await firstRead.promise;
+    // A read waits while the client retries, and fails at once when the retries stopped.
+    if (firstFailure === "remote_disabled") await firstRead.promise;
     assert.equal(owner.getConnection().hasBaseline, false);
     assert.equal(runtimeReads, 0);
     available = true;
@@ -264,10 +271,13 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
     if (readFails) runtimeGate.reject(new Error("Runtime unavailable."));
     else runtimeGate.resolve(snapshot);
     const cause = await retry;
-    assert.equal(runtimeReads, 1);
+    // The read that waited for the reconnect runs after the barrier.
+    if (firstFailure === "task_subscription") await waitUntil(() => runtimeReads === 2);
+    else assert.equal(runtimeReads, 1);
     if (readFails) {
       assert.ok(cause);
-      assert.equal(connection.readState().status, "failed");
+      // A failed synchronization keeps its failure and retries by itself.
+      assert.equal(connection.readState().status, "disconnected");
       assert.equal(connection.readState().failure?.code, "synchronization_failed");
     } else {
       assert.equal(cause, null);

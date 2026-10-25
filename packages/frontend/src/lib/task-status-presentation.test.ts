@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { laneTheme, statusBadgeClassName, statusLabel } from "./task-status-presentation";
+import { laneTheme, statusBadgeClassName } from "./task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 
 describe("task-status-presentation", () => {
   test("keeps badge and lane families aligned for workflow statuses", () => {

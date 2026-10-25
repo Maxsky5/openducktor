@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { KanbanTaskActivityState } from "@/components/features/kanban/kanban-task-activity";
+import type { KanbanTaskActivityState } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { KanbanPageContent } from "./kanban-page-content";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";

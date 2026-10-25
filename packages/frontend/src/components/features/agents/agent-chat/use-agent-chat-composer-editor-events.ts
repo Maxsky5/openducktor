@@ -26,11 +26,11 @@ import {
 } from "./agent-chat-composer-selection";
 import {
   AUTOCOMPLETE_NAVIGATION_KEYS,
-  type ReferenceMenuItem,
   type ReferenceMenuState,
   type SkillMenuState,
   type SlashMenuState,
 } from "./use-agent-chat-composer-editor-autocomplete";
+import { type ReferenceMenuItem } from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 import {
   deriveTextSelectionTargetAfterInput,
   parseComposerDraftFromRoot,

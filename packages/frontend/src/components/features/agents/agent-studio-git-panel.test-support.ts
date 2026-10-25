@@ -2,7 +2,7 @@ import { afterEach, beforeEach, spyOn } from "bun:test";
 import type { GitFileDiff, FileStatus, GitLocalChanges } from "@openducktor/contracts";
 import { type RenderResult, render as testingLibraryRender } from "@testing-library/react";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
-import type { DiffScope, DiffScopeState } from "@/features/agent-studio-git/contracts";
+import type { DiffScope, DiffScopeState } from "@openducktor/frontend-core/git/contracts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {

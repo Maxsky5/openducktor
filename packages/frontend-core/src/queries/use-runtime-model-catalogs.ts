@@ -9,7 +9,12 @@ import type {
   AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { type UseQueryResult, useQueries, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  type UseQueryResult,
+  useQueries,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { readRuntimeKindReadiness, type RuntimeReadinessSnapshot } from "../lib/runtime-readiness";
 import { normalizeWorkingDirectory } from "../lib/working-directory";
@@ -17,6 +22,7 @@ import { useHostRuntimeStatusContext } from "../sessions/session-contexts";
 import {
   catalogQueryOptions,
   RUNTIME_CATALOG_STALE_TIME_MS,
+  runtimeCatalogQueryKeys,
   type CachedRuntimeCatalog,
   resolveRuntimeModelCatalogSurface,
   retryCatalogRead,
@@ -101,8 +107,29 @@ const skippedSourceQueryOptions = (
 };
 
 /**
+ * The models of the runtime in another folder of the workspace, the root first. The folders of a
+ * workspace share its models, so a view in a new folder, such as a task worktree, shows their
+ * names at once while its own catalog loads.
+ */
+const workspaceModelSurface = (
+  queryClient: QueryClient,
+  runtimeRef: RuntimeWorkingDirectoryRef,
+): CachedRuntimeCatalog["models"] => {
+  const { repoPath, runtimeKind } = runtimeRef;
+  const root = queryClient.getQueryData<CachedRuntimeCatalog>(
+    runtimeCatalogQueryKeys.catalog({ repoPath, runtimeKind, workingDirectory: repoPath }),
+  );
+  if (root?.models?.status === "available") return root.models;
+  const folders = queryClient.getQueriesData<CachedRuntimeCatalog>({
+    queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope({ repoPath, runtimeKind }),
+  });
+  return folders.find(([, data]) => data?.models?.status === "available")?.[1]?.models;
+};
+
+/**
  * Reads the model catalog of one runtime directory, with the same loading and error rules as
- * `useRuntimeModelCatalogs`.
+ * `useRuntimeModelCatalogs`. Until the directory has a catalog, it shows the models of the runtime
+ * in another folder of the workspace.
  */
 export function useRuntimeModelCatalogQuery({
   runtimeRef,
@@ -131,9 +158,14 @@ export function useRuntimeModelCatalogQuery({
     await retryRuntimeCatalog({ queryClient, runtimeRef, loadRuntimeCatalog });
   }, [loadRuntimeCatalog, queryClient, runtimeRef]);
   const isEnabled = enabled && runtimeRef !== null;
+  const shownQuery = useMemo(() => {
+    if (query.data?.models || runtimeRef === null) return query;
+    const models = workspaceModelSurface(queryClient, runtimeRef);
+    return models ? { ...query, data: { ...query.data, models } } : query;
+  }, [query, queryClient, runtimeRef]);
   return useMemo(
-    () => toRuntimeModelCatalogResource({ query, readiness, isEnabled, retry }),
-    [isEnabled, query, readiness, retry],
+    () => toRuntimeModelCatalogResource({ query: shownQuery, readiness, isEnabled, retry }),
+    [isEnabled, shownQuery, readiness, retry],
   );
 }
 

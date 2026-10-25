@@ -28,6 +28,46 @@ test("copies the host address and confirms success", async () => {
   }
 });
 
+test("shows the copy action again when the host address changes", async () => {
+  const copy = mock(async (_value: string) => {});
+  const previous = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copy } });
+  try {
+    const view = render(<RemoteAddress endpoint={endpoint} connectedClients={1} />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy address" }));
+    await screen.findByRole("button", { name: "Copied" });
+    view.rerender(<RemoteAddress endpoint="http://192.168.1.10:51541" connectedClients={1} />);
+    expect(screen.getByRole("button", { name: "Copy address" })).toBeDefined();
+  } finally {
+    if (previous) Object.defineProperty(navigator, "clipboard", previous);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+test("shows a failed copy from the QR dialog inside the dialog", async () => {
+  const copy = mock(async (_value: string) => {
+    throw new DOMException("Clipboard access denied.", "NotAllowedError");
+  });
+  const previous = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copy } });
+  const encode = spyOn(QRCode, "toDataURL").mockImplementation(
+    async () => "data:image/png;base64,",
+  );
+  try {
+    render(<RemoteAddress endpoint={endpoint} connectedClients={0} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show QR code" }));
+    const dialog = await screen.findByRole("dialog", { name: "Host address" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Copy host address" }));
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.textContent).toBe("Could not copy the address. Select the address and copy it.");
+    expect(screen.getAllByRole("alert", { hidden: true })).toHaveLength(1);
+  } finally {
+    encode.mockRestore();
+    if (previous) Object.defineProperty(navigator, "clipboard", previous);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
 test("opens QR inside the host dialog and returns focus when it closes", async () => {
   const image = Promise.withResolvers<string>();
   const imageUrl =

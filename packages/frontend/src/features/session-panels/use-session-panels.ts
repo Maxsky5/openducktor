@@ -9,14 +9,14 @@ import {
   useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
-import { useSessionViewActive } from "../session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import {
   isTerminalToggleShortcut,
   type MountedTerminal,
   type TerminalCloseDialogModel,
-  type TerminalSessionsModel,
-  type TerminalTab,
 } from "@/features/terminals";
+import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
   type HostTabKind,
   isHostTabKind,

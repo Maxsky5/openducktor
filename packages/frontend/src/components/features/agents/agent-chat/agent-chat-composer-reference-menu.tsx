@@ -12,7 +12,7 @@ import {
   resolveAgentChatComposerReferenceMenuVisibility,
 } from "./agent-chat-composer-menu-state";
 import { AgentChatFileReferenceIcon } from "./agent-chat-file-reference-icon";
-import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
+import type { ReferenceMenuItem } from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 
 type AgentChatComposerReferenceMenuProps = {
   listboxId: string;

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { DeviceFileReference } from "../platform/device-file";
 import {
+  buildComposerAttachmentFromDeviceFile,
   buildComposerAttachmentFromPath,
   classifyAttachment,
   inferAttachmentMime,
@@ -185,5 +186,46 @@ describe("agent-chat-attachments", () => {
     ).toEqual({
       [second.id]: "Attachments must total 32 MiB or less.",
     });
+  });
+});
+
+describe("buildComposerAttachmentFromDeviceFile", () => {
+  test("keeps the picked file and its kind and media type", () => {
+    const file = createDeviceFile("brief.pdf", "application/pdf");
+
+    const attachment = buildComposerAttachmentFromDeviceFile(file);
+
+    expect(attachment).toMatchObject({ name: "brief.pdf", kind: "pdf", mime: "application/pdf" });
+    expect(attachment?.file).toBe(file);
+    expect(attachment?.path).toBeUndefined();
+  });
+
+  test("accepts a device photo by its extension when the type is unknown", () => {
+    const attachment = buildComposerAttachmentFromDeviceFile(createDeviceFile("IMG_0001.JPG", ""));
+
+    expect(attachment).toMatchObject({ name: "IMG_0001.JPG", kind: "image", mime: "image/jpeg" });
+  });
+
+  test("rejects a file that is not an image, audio file, video, or PDF", () => {
+    expect(
+      buildComposerAttachmentFromDeviceFile(createDeviceFile("notes.zip", "application/zip")),
+    ).toBeNull();
+  });
+
+  test("names an unnamed file for its kind and renames the file only when asked", () => {
+    const file = createDeviceFile("", "image/png");
+    const renamed: DeviceFileReference[] = [];
+
+    const kept = buildComposerAttachmentFromDeviceFile(file);
+    const withRename = buildComposerAttachmentFromDeviceFile(file, (picked, name) => {
+      const next = { ...picked, name };
+      renamed.push(next);
+      return next;
+    });
+
+    expect(kept).toMatchObject({ name: "pasted-image.png", kind: "image" });
+    expect(kept?.file).toBe(file);
+    expect(withRename?.file).toBe(renamed[0]);
+    expect(withRename?.file?.name).toBe("pasted-image.png");
   });
 });

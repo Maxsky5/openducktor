@@ -2,7 +2,7 @@ import { ClipboardList, FileCode, ScrollText } from "lucide-react";
 import type { ReactElement } from "react";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
-import type { EditTaskSection } from "@/types/task-composer";
+import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 type TaskEditSectionSwitcherProps = {
   section: EditTaskSection;

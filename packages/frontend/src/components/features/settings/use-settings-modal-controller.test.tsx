@@ -17,11 +17,8 @@ import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openduckt
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import {
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
-import { perConnection } from "@/lib/per-connection";
+import { perConnection } from "@openducktor/frontend-core/lib/per-connection";
 import { isToolTabKind, TOOL_TAB_KINDS } from "./panel-tab-kinds";
 import { fromV1Record, V1_STORAGE_PREFIX } from "./session-panel-layout-v1";
 import {

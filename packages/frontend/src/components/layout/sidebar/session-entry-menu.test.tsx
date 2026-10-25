@@ -6,14 +6,14 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { Link, MemoryRouter, useLocation } from "react-router";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
-import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
-import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
+import { usePublishVisibleSessionTarget } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
 } from "@openducktor/frontend-core/queries/workspace-sessions";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";
@@ -142,8 +142,8 @@ test.each(["list", "rail"] as const)(
     try {
       const initialAddress = view.getByLabelText("Current address").textContent;
       let menu = await openMenu(view, entry.title);
-      expect(menu.queryByRole("menuitem", { name: "Rename session" })).toBeNull();
-      expect(menu.queryByRole("menuitem", { name: "Archive session" })).toBeNull();
+      expect(menu.queryByRole("menuitem", { name: "Rename chat" })).toBeNull();
+      expect(menu.queryByRole("menuitem", { name: "Archive chat" })).toBeNull();
       expect(view.queryByRole("dialog") === null).toBe(true);
       fireEvent.click(menu.getByRole("menuitem", { name: "Mark as unread" }));
       const row = view.getByRole("button", { name: new RegExp(entry.title) });
@@ -196,7 +196,7 @@ test("workspace menu copies the external ID and renames in its own workspace wit
     fireEvent.click(menu.getByRole("menuitem", { name: "Copy external session ID" }));
     await waitFor(() => expect(copied).toEqual(["native-id"]));
     menu = await openMenu(view, entry.title);
-    fireEvent.click(menu.getByRole("menuitem", { name: "Rename session" }));
+    fireEvent.click(menu.getByRole("menuitem", { name: "Rename chat" }));
     const dialog = within(await view.findByRole("dialog", { name: "Rename chat" }));
     fireEvent.change(dialog.getByRole("textbox", { name: "Name" }), {
       target: { value: "Renamed chat" },
@@ -243,14 +243,14 @@ test.each(
     const openArchive = async () => {
       if (source === "menu") {
         const menu = await openMenu(view, entry.title);
-        fireEvent.click(menu.getByRole("menuitem", { name: "Archive session" }));
+        fireEvent.click(menu.getByRole("menuitem", { name: "Archive chat" }));
       } else {
         fireEvent.focus(row);
         const preview = await view.findByRole("dialog", { name: entry.title });
         fireEvent.keyDown(row, { key: "ArrowRight" });
         const header = preview.querySelector("header");
         if (!header) throw new Error("Expected a preview header.");
-        fireEvent.click(within(header).getByRole("button", { name: "Archive session" }));
+        fireEvent.click(within(header).getByRole("button", { name: "Archive chat" }));
       }
       const dialog = await view.findByRole("dialog", { name: "Archive chat" });
       await waitFor(() =>

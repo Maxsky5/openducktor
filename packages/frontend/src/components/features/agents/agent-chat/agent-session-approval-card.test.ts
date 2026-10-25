@@ -3,7 +3,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
-import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
+import { resolveApprovalReplyOutcomes } from "@openducktor/frontend-core/sessions/pending-input/agent-session-approval-card-model";
 
 const approvalRequest = {
   requestId: "approval-1",

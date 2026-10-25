@@ -7,7 +7,7 @@ import {
   LONG_TRANSCRIPT_SAMPLE,
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 describe("AgentChatMessageCard system messages", () => {
   test("renders a Claude permission mismatch as a warning card", () => {

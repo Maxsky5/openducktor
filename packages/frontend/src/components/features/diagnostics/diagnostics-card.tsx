@@ -14,7 +14,7 @@ import type {
   DiagnosticsCheckKey,
   DiagnosticsCheckModel,
   DiagnosticsDetailModel,
-} from "./diagnostics-panel-model";
+} from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import { DiagnosticsStatusPill } from "./diagnostics-status";
 
 type DiagnosticsGroupProps = {

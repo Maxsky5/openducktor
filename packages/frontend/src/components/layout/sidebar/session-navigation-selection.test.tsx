@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
-import { sessionNavigationTargetKey } from "@/features/session-navigation/session-navigation-target";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { sessionNavigationTargetKey } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import { selectSessionEntry } from "./session-navigation-selection";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";

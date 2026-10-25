@@ -7,7 +7,8 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
-import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
+import type { AgentChatComposerModel } from "./agent-chat.types";
+import type { AgentChatMessageQueueModel } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 

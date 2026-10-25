@@ -6,12 +6,12 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  type AgentStudioPendingDiscard,
-  type GitChangeIntent,
-  type GitConflict,
-  gitChangeIntentKey,
-} from "@/features/agent-studio-git";
+import type {
+  AgentStudioPendingDiscard,
+  GitChangeIntent,
+  GitConflict,
+} from "@openducktor/frontend-core/git/contracts";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import {
   CONFLICT_LOCK_REASON,

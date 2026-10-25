@@ -5,20 +5,21 @@ import { memo, type ReactElement, useId, useMemo } from "react";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
   IssueTypeBadge,
   PriorityBadge,
   QaRejectedBadge,
 } from "@/components/features/kanban/kanban-task-badges";
 import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
 import {
   getTaskFooter,
   type WorkflowPendingState,
-} from "@/components/features/kanban/kanban-task-footer";
-import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
+import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { TASK_ACTION_ICON } from "@/components/features/kanban/task-action-ui";
+import { taskSessionStatusLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { useCardFocus } from "@/components/features/kanban/use-kanban-card-focus";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
@@ -31,10 +32,10 @@ import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
-import { toDisplayTaskLabels } from "@/lib/task-labels";
-import { isQaRejectedTask } from "@/lib/task-qa";
+import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
+import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
 import { cn } from "@/lib/utils";
-import { AGENT_ROLE_LABELS } from "@/types";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { getPriorityStyle, ISSUE_TYPE_STYLES } from "./kanban-task-badge-model";
 
 type CardProps = {
@@ -276,28 +277,6 @@ const getSessionChipClassName = (isWaitingInput: boolean): string => {
   }
 
   return "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface";
-};
-
-const getSessionStatusLabel = ({
-  session,
-  isWaitingInput,
-}: {
-  session: KanbanTaskSession;
-  isWaitingInput: boolean;
-}): string => {
-  if (isWaitingInput) {
-    return "Waiting input";
-  }
-
-  if (session.statusUnavailableReason) {
-    return "Status unavailable";
-  }
-
-  if (session.activityState === "starting") {
-    return "Starting";
-  }
-
-  return "Running";
 };
 
 const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
@@ -735,7 +714,7 @@ function TaskActions({
               <span
                 className={taskActionSessionStatusClassName(compact, primarySessionIsWaitingInput)}
               >
-                {getSessionStatusLabel({
+                {taskSessionStatusLabel({
                   session: primaryActiveSession,
                   isWaitingInput: primarySessionIsWaitingInput,
                 })}

@@ -1,7 +1,7 @@
 import { agentRoleValues } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createLucideIcon, type LucideIcon } from "lucide-react";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 
 // Custom drawings on the lucide 24px grid, so role icons keep the same stroke and sizing as other app icons.
 export const SpecRoleIcon = createLucideIcon("role-spec", [

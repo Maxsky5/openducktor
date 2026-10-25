@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 

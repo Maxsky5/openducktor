@@ -1,12 +1,13 @@
 import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
-import type { AgentChatThreadModel, AgentChatTranscriptPresentation } from "./agent-chat.types";
+import type { AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
-import { isAssistantMessageStreaming } from "./agent-chat-streaming";
+import { isAssistantMessageStreaming } from "@openducktor/frontend-core/sessions/transcript/agent-chat-streaming";
 import type {
   AgentChatTranscriptRow,
   AgentChatUserMessageAnchor,
-} from "./agent-chat-transcript-model";
-import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
+} from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 

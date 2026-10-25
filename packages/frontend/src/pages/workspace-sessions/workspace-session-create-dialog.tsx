@@ -1,18 +1,15 @@
 import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
   type WorkspaceSession,
-  type WorkspaceSessionCreateInput,
-  type WorkspaceSessionLocation,
-  type WorkspaceSessionWorktreeInput,
 } from "@openducktor/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Folder, FolderGit2, GitBranch, LoaderCircle } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import type { ReactElement } from "react";
 import { WorkspaceSessionModelFields } from "./workspace-session-model-fields";
 import {
-  buildWorkspaceSessionCreateInput,
-  workspaceSessionValidationError,
-} from "./workspace-session-create-input";
+  NO_CUSTOM_AGENT_ROLE,
+  useWorkspaceSessionCreate,
+  useWorkspaceSessionCreateDefaults,
+} from "@openducktor/frontend-core/workspace-sessions/create/use-workspace-session-create";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -27,36 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { repoDefaultModelSelectionFor } from "@/features/session-start/session-start-selection";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import {
-  invalidateRepoBranchesQuery,
-  repoBranchesQueryOptions,
-} from "@openducktor/frontend-core/queries/git";
-import {
-  customAgentRolesQueryOptions,
-  updateWorkspaceSessionQueries,
-  workspaceSessionWorktreesQueryOptions,
-} from "@openducktor/frontend-core/queries/workspace-sessions";
-import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
-import {
-  repoConfigQueryOptions,
-  toRepoSettingsInput,
-} from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
-import { useMountedRef } from "./use-mounted-ref";
-import {
-  useWorkspaceSessionLocationTarget,
-  WorkspaceSessionTargetBranchField,
-} from "./workspace-session-target-branch-field";
-import {
-  useExistingWorktreeChoice,
-  WorkspaceSessionExistingWorktreeField,
-} from "./workspace-session-existing-worktree-field";
+import { useWorkspaceSessionCreateModelPicker } from "./use-workspace-session-model-picker";
+import { WorkspaceSessionExistingWorktreeField } from "./workspace-session-existing-worktree-field";
+import { WorkspaceSessionTargetBranchField } from "./workspace-session-target-branch-field";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
-import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type WorkspaceSessionCreateDialogProps = {
   open?: boolean;
@@ -73,73 +47,39 @@ export function WorkspaceSessionCreateDialog({
   onCreated,
   onCloseAutoFocus,
 }: WorkspaceSessionCreateDialogProps): ReactElement {
-  const host = useHostClient();
-  const queryClient = useQueryClient();
-  const roles = useQuery(customAgentRolesQueryOptions());
-  const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
-  const defaultModelSelection = useMemo(
-    () =>
-      repoConfig.data ? repoDefaultModelSelectionFor(toRepoSettingsInput(repoConfig.data)) : null,
-    [repoConfig.data],
+  const { repoConfig, defaultModelSelection } = useWorkspaceSessionCreateDefaults(
+    workspace.workspaceId,
   );
-  const model = useWorkspaceSessionModelPicker(
-    workspace.repoPath,
-    undefined,
-    defaultModelSelection,
-  );
-  const [name, setName] = useState("");
-  const [roleId, setRoleId] = useState("none");
-  const [worktree, setWorktree] = useState<WorkspaceSessionWorktreeInput>({
-    mode: "from_name",
-    name: "",
-    branchName: null,
-  });
-  const defaultTarget = repoConfig.data?.defaultTargetBranch ?? null;
-  const { location, targetBranch, changeLocation, pickTarget } =
-    useWorkspaceSessionLocationTarget(defaultTarget);
-  const branches = useQuery({ ...repoBranchesQueryOptions(workspace.repoPath), enabled: open });
-  const existing = useExistingWorktreeChoice(workspace.workspaceId, open, location);
-  const mounted = useMountedRef();
-  const create = useMutation({
-    mutationFn: (input: WorkspaceSessionCreateInput) => host.workspaceSessionCreate(input),
-    onSuccess: (result, input) => {
-      updateWorkspaceSessionQueries(queryClient, input.workspaceId, result.session);
-      void invalidateTerminalList(queryClient, {
-        kind: "workspace_session",
-        workspaceId: input.workspaceId,
-        sessionId: result.session.id,
-      });
-      if (input.location === "local_worktree")
-        void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
-      if (mounted.current) onCreated(result.session);
-    },
-    onError: (error, input) => {
-      if (workspaceSessionValidationError(error))
-        void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
-      // A new read shows a worktree that the failure removed as unavailable.
-      if (input.location === "existing_worktree")
-        void queryClient.invalidateQueries({
-          queryKey: workspaceSessionWorktreesQueryOptions(workspace.workspaceId).queryKey,
-        });
-    },
-  });
-  const worktreeError = newWorktreeError(location, create.error);
-  const input = buildWorkspaceSessionCreateInput({
-    workspaceId: workspace.workspaceId,
+  const model = useWorkspaceSessionCreateModelPicker(workspace.repoPath, defaultModelSelection);
+  const {
     name,
+    setName,
     roleId,
+    setRoleId,
     location,
+    selectLocation,
     worktree,
-    existingWorktree: existing.listedWorktree,
+    changeWorktree,
+    existing,
+    selectExistingWorktree,
     targetBranch,
-    selection: model.selection,
-    selectedModelAvailable: Boolean(model.selectedModelEntry),
-    rolesReady: roles.isSuccess,
-    availableBranches: branches.isSuccess ? branches.data : null,
+    defaultTarget,
+    pickTarget,
+    roles,
+    branches,
+    create,
+    worktreeError,
+    input,
+    submit,
+  } = useWorkspaceSessionCreate({
+    workspace,
+    model: {
+      selection: model.selection,
+      selectedModelAvailable: Boolean(model.selectedModelEntry),
+    },
+    open,
+    onCreated,
   });
-  const submit = () => {
-    if (!create.isPending && input) create.mutate(input);
-  };
   return (
     <Dialog
       open={open}
@@ -197,7 +137,7 @@ export function WorkspaceSessionCreateDialog({
                     onValueChange={setRoleId}
                     disabled={create.isPending || roles.isPending || roles.isError}
                     options={[
-                      { value: "none", label: "No role" },
+                      { value: NO_CUSTOM_AGENT_ROLE, label: "No role" },
                       ...(roles.data ?? []).map((role) => ({ value: role.id, label: role.name })),
                     ]}
                   />
@@ -218,10 +158,7 @@ export function WorkspaceSessionCreateDialog({
               </div>
               <WorkspaceSessionWorkLocationField
                 value={location}
-                onValueChange={(value) => {
-                  create.reset();
-                  changeLocation(value);
-                }}
+                onValueChange={selectLocation}
                 disabled={create.isPending}
                 options={[
                   {
@@ -248,10 +185,7 @@ export function WorkspaceSessionCreateDialog({
                 <WorkspaceSessionExistingWorktreeField
                   choice={existing}
                   disabled={create.isPending}
-                  onChange={(value) => {
-                    create.reset();
-                    existing.select(value);
-                  }}
+                  onChange={selectExistingWorktree}
                 />
               )}
               <WorkspaceSessionTargetBranchField
@@ -260,10 +194,7 @@ export function WorkspaceSessionCreateDialog({
                 allowUpstream={location === "local_repo_root"}
                 branches={branches}
                 disabled={create.isPending}
-                onChange={(value) => {
-                  create.reset();
-                  pickTarget(value);
-                }}
+                onChange={pickTarget}
               />
               {location === "local_worktree" && (
                 <WorkspaceSessionWorktreeFields
@@ -272,10 +203,7 @@ export function WorkspaceSessionCreateDialog({
                   disabled={create.isPending}
                   branches={branches}
                   error={worktreeError}
-                  onChange={(value) => {
-                    create.reset();
-                    setWorktree(value);
-                  }}
+                  onChange={changeWorktree}
                 />
               )}
               {create.error && !worktreeError && (
@@ -298,9 +226,4 @@ export function WorkspaceSessionCreateDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-/** Worktree name and branch errors belong to New worktree. Other locations show them below. */
-function newWorktreeError(location: WorkspaceSessionLocation, error: Error | null) {
-  return location === "local_worktree" ? workspaceSessionValidationError(error) : null;
 }

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { perConnection } from "@/lib/per-connection";
+import { perConnection } from "@openducktor/frontend-core/lib/per-connection";
 
 export const RIGHT_PANEL_OPEN_STORAGE_KEY = "openducktor:right-panel:open";
 const OLD_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-panel";

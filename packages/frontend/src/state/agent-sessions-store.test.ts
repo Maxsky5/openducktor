@@ -133,8 +133,14 @@ describe("createAgentSessionsStore session snapshots", () => {
           historyReplayGap: change === "gap",
         }),
       );
+      // A change that the stream recorded makes the transcript stale. Without a record, as after
+      // a gap or a closed observation, the snapshot projection of the read model settles it.
       expect(store.getSessionSnapshot(session)?.historyLoadState).toBe(
-        change === "sibling" ? "loaded" : "stale",
+        change === "sibling"
+          ? "loaded"
+          : change === "closed" || change === "gap"
+            ? "unverified"
+            : "stale",
       );
       expect(store.getSessionSnapshot(session)?.messages).toBe(session.messages);
       observation.close();

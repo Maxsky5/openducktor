@@ -1,5 +1,5 @@
 import { TERMINAL_PROTOCOL_SUBPROTOCOL, type TerminalFailure } from "@openducktor/contracts";
-import type { TerminalBridge } from "@openducktor/frontend";
+import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "../browser-config";
 import { runWebBoundary } from "@openducktor/remote-host/effect/web-errors";

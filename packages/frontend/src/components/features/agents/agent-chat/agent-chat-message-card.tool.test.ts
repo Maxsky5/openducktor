@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentToolData, RuntimeKind } from "@openducktor/contracts";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createDefaultTestChatSettings,
   createMessageCardElement,
   LONG_TRANSCRIPT_SAMPLE,
 } from "./agent-chat-message-card-test-harness";
-import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
-import { formatTime } from "./message-formatting";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
+import { formatTime } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 
 const TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 

@@ -19,19 +19,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { RuntimeImpactReviewState } from "@/components/features/runtimes/runtime-impact-review";
-import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
+import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { getAvailableRuntimeDefinitions } from "@openducktor/frontend-core/lib/agent-runtime";
 import {
   useRequiredContext,
   useRuntimeAvailabilityContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
 import type { RuntimeExecutableValidationState } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
-import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@/state/mutations/agent-model-favorites";
+import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@openducktor/frontend-core/sessions/model-selection/agent-model-favorites";
 import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "@/state/mutations/kanban-task-card-view";
-import { SIDEBAR_SESSION_GROUPING_MUTATION_KEY } from "@/state/mutations/sidebar-session-grouping";
-import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+import { SESSION_GROUPING_MUTATION_KEY } from "@openducktor/frontend-core/sessions/navigation/use-session-grouping";
+import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import {
   validateCustomAgentRoleDrafts,
   type CustomAgentRoleValidationState,
@@ -205,7 +205,7 @@ export const useSettingsModalController = ({
   const isKanbanTaskCardViewMutationPending =
     useIsMutating({ mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY }) > 0;
   const isSidebarSessionGroupingMutationPending =
-    useIsMutating({ mutationKey: SIDEBAR_SESSION_GROUPING_MUTATION_KEY }) > 0;
+    useIsMutating({ mutationKey: SESSION_GROUPING_MUTATION_KEY }) > 0;
   const workspacePolicy = useWorkspacePolicy(
     activeWorkspace?.repoPath ?? null,
     workspaceSelectionPolicy,

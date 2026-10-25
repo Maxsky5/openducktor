@@ -11,15 +11,14 @@ import {
   createSessionPanelsFixture,
   createTerminalSessionsFixture,
 } from "@/test-utils/session-panel-fixtures";
-import type { TerminalTab } from "@/features/terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   ActiveWorkspaceContext,
   TaskSnapshotContext,
   TasksStateContext,
-  WorkspacePresenceContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspacePresenceContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   createTaskCardFixture,
   createTasksStateFixture,
@@ -32,13 +31,13 @@ import {
   usePublishVisibleSessionTarget,
   useVisibleSessionReadKey,
   useVisibleSessionTarget,
-} from "@/features/session-navigation/visible-session-target";
+} from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { SessionsPage } from "./sessions-page";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import {
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useQueryClient } from "@tanstack/react-query";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";

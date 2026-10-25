@@ -1,10 +1,10 @@
-import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
+import { useAgentMessageSendPolicy } from "@openducktor/frontend-core/sessions/send/use-agent-message-send-policy";
 import { useCallback, useMemo } from "react";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
-import type { RunSessionStartWorkflow } from "@/features/session-start";
+import type { RunSessionStartWorkflow } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { useAgentOperations } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import type { AgentStudioChatDraftScope } from "../agent-studio-chat-draft";
+import type { AgentStudioChatDraftScope } from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";

@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactElement, useCallback, useState } from "react";
-import type { TerminalTab } from "@/features/terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   browserTabIdFixture,
@@ -15,13 +15,13 @@ import {
   createSessionPanelFixture,
   createSessionPanelsFixture,
 } from "@/test-utils/session-panel-fixtures";
-import { createTerminalActivityStore } from "@/features/terminals/terminal-activity-store";
-import { createTerminalTransportController } from "@/features/terminals/terminal-transport-controller";
+import { createTerminalActivityStore } from "@openducktor/frontend-core/terminals/terminal-activity-store";
+import { createTerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { SessionPanel } from "./session-panel";
 import {
   SessionViewContext,
   SessionViewShownContext,
-} from "../session-navigation/session-view-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { BrowserTabViewProps } from "./use-session-panel-browser-tabs";
 import type { ResolvedBrowserTab } from "./session-panel-layout";
 import { SessionPanelsRoot } from "./session-panels-root";

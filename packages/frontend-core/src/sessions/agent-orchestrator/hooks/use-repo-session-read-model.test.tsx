@@ -967,7 +967,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps current history through metadata snapshots and marks it stale on reconnect or stream failure", async () => {
+  test("keeps current history through metadata snapshots and unchanged reconnects, and marks it stale after a new run or a stream failure", async () => {
     const state = createState((emit) =>
       emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
     );
@@ -989,6 +989,18 @@ describe("useRepoSessionReadModel", () => {
           createLiveSnapshotEnvelope({ sessions: [snapshot()], isConnectionSnapshot: true }),
         ),
       );
+      // The session stayed idle in the same execution episode, so it has no new messages.
+      expect(state.getSession()?.historyLoadState).toBe("loaded");
+      await state.harness.run(() =>
+        state.emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot({ executionEpisodeId: "episode-after-gap" })],
+            isConnectionSnapshot: true,
+            historyReplayGap: true,
+          }),
+        ),
+      );
+      // A new execution episode means the session worked during the gap.
       expect(state.getSession()?.historyLoadState).toBe("stale");
       expect(state.getSession()?.messages).toBe(messages);
       await state.harness.run(() => {
@@ -1870,6 +1882,44 @@ describe("useRepoSessionReadModel", () => {
       });
       expect(state.getSession()).not.toBeNull();
     } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("becomes ready when a grown task set hydrates after the initial snapshot", async () => {
+    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const releaseSnapshot = createDeferred<void>();
+    const state = createState(
+      (emit) => {
+        void releaseSnapshot.promise.then(() => {
+          emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+        });
+      },
+      record,
+      { agentSessionsListForTasks: () => task2Hydration.promise },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+
+      // The task list grows while the first snapshot is on its way, as on a slow network.
+      await state.harness.update({ ...state.props, taskIds: ["task-1", "task-2"] });
+      await state.harness.run(async () => {
+        releaseSnapshot.resolve();
+        await releaseSnapshot.promise;
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.run(async () => {
+        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [] }]);
+        await task2Hydration.promise;
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+    } finally {
+      releaseSnapshot.resolve();
+      task2Hydration.resolve([]);
       await state.harness.unmount();
     }
   });

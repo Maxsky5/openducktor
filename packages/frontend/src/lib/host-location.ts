@@ -1,4 +1,4 @@
-import { remoteEndpointSchema } from "@openducktor/contracts";
+import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 
 const HOST_SELECTION_KEY = "openducktor:host-selection";
 
@@ -46,14 +46,19 @@ export function readHostTarget(
   if (value === "local") return { kind: localAvailable ? "local" : "picker" };
   const endpoint = value ?? defaultEndpoint;
   if (endpoint !== undefined && endpoint !== null) {
-    return { kind: "remote", endpoint: parseHostEndpoint(endpoint, url.protocol) };
+    return {
+      kind: "remote",
+      endpoint: parseRemoteHostEndpoint(endpoint, { requireHttps: url.protocol === "https:" }),
+    };
   }
   return { kind: localAvailable ? "local" : "picker" };
 }
 
 export function saveHostTarget(target: HostTarget, pageProtocol: string): void {
   const value =
-    target.kind === "remote" ? parseHostEndpoint(target.endpoint, pageProtocol) : target.kind;
+    target.kind === "remote"
+      ? parseRemoteHostEndpoint(target.endpoint, { requireHttps: pageProtocol === "https:" })
+      : target.kind;
   try {
     localStorage.setItem(HOST_SELECTION_KEY, value);
   } catch (cause) {
@@ -61,17 +66,6 @@ export function saveHostTarget(target: HostTarget, pageProtocol: string): void {
       cause,
     });
   }
-}
-
-export function parseHostEndpoint(value: string, pageProtocol: string): string {
-  const endpoint = value.trim();
-  const result = remoteEndpointSchema.safeParse(endpoint);
-  if (!result.success) throw new Error(result.error.issues.map((issue) => issue.message).join(" "));
-  const url = new URL(endpoint);
-  if (pageProtocol === "https:" && url.protocol !== "https:") {
-    throw new Error("This web app needs an HTTPS host address. Use the host's HTTPS endpoint.");
-  }
-  return url.href.replace(/\/$/, "");
 }
 
 /** A new document drops the old host's module state, reads, and event callbacks together. */

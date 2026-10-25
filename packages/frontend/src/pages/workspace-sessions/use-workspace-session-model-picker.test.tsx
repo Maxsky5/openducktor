@@ -19,7 +19,7 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   runtimeCatalogQueryKeys,
@@ -28,7 +28,6 @@ import {
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
@@ -43,83 +42,6 @@ const createSettingsConnection = (queryClient: QueryClient = createClientQueryCl
     queryClient,
     client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
   });
-
-test("allows a new workspace session model choice while a stale catalog refreshes", async () => {
-  const catalog: AgentModelCatalog = {
-    models: [
-      {
-        id: "openai/gpt-5",
-        providerId: "openai",
-        providerName: "OpenAI",
-        modelId: "gpt-5",
-        modelName: "GPT 5",
-        variants: ["low"],
-      },
-    ],
-    defaultModelsByProvider: {},
-  };
-  const runtimeCatalog = createRuntimeCatalogFixture({ models: catalog });
-  const runtimeRef = {
-    repoPath: "/repo",
-    runtimeKind: "opencode" as const,
-    workingDirectory: "/repo",
-  };
-  const client = new QueryClient();
-  client.setQueryData(runtimeCatalogQueryKeys.catalog(runtimeRef), runtimeCatalog, {
-    updatedAt: 0,
-  });
-  const refresh = createDeferred<AgentRuntimeCatalog>();
-  const loadRuntimeCatalog = mock(async () => refresh.promise);
-  const definitions: RuntimeDefinitionsContextValue = {
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-    isLoadingRuntimeSettings: false,
-    runtimeSettingsError: null,
-    hasRuntimeSettingsSnapshot: true,
-    refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: loadRuntimeCatalog,
-    loadRepoRuntimeFileSearch: async () => [],
-  };
-  const connection = createSettingsConnection(client);
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <ClientConnectionProvider connection={connection}>
-      <RuntimeDefinitionsContext value={definitions}>
-        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
-      </RuntimeDefinitionsContext>
-    </ClientConnectionProvider>
-  );
-  const harness = createHookHarness(() => useWorkspaceSessionModelPicker("/repo"), undefined, {
-    wrapper,
-  });
-
-  try {
-    await harness.mount();
-    await harness.waitFor(
-      (state) =>
-        loadRuntimeCatalog.mock.calls.length > 0 &&
-        state.modelPicker.runtimes[0]?.resource.status === "ready",
-      2000,
-    );
-    expect(loadRuntimeCatalog).toHaveBeenCalledWith(runtimeRef);
-    expect(harness.getLatest().isLoading).toBe(false);
-    await harness.run((state) =>
-      state.modelPicker.onValueChange({
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-      }),
-    );
-    expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
-  } finally {
-    refresh.resolve(runtimeCatalog);
-    await harness.unmount();
-    client.clear();
-  }
-});
 
 test("live model picker retains a disabled runtime and refreshes when catalog or selection changes", async () => {
   const catalog: AgentModelCatalog = {
@@ -157,6 +79,8 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
       externalSessionId: "native-1",
       workingDirectory: "/repo",
     },
+    runtimeRef: { repoPath: "/repo", runtimeKind: "opencode" as const, workingDirectory: "/repo" },
+    updateDraft: () => {},
     selection: {
       runtimeKind: "opencode" as const,
       providerId: "openai",
@@ -262,9 +186,10 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
     };
     const update = mock(() => {});
     const updateDraft = mock(() => {});
-    const target: NonNullable<Parameters<typeof useWorkspaceSessionModelPicker>[1]> = {
+    const target: Parameters<typeof useWorkspaceSessionModelPicker>[1] = {
       identity: null,
       runtimeKind: descriptor.kind,
+      runtimeRef: { repoPath: "/repo", runtimeKind: descriptor.kind, workingDirectory: "/repo" },
       selection: {
         runtimeKind: descriptor.kind,
         providerId: "provider",
@@ -336,68 +261,6 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
   },
 );
 
-test("prefills the creation picker from the repository Default Model when its catalog is ready", async () => {
-  const catalog: AgentModelCatalog = {
-    models: [
-      {
-        id: "openai/gpt-5",
-        providerId: "openai",
-        modelId: "gpt-5",
-        modelName: "GPT 5",
-        providerName: "OpenAI",
-        variants: ["low"],
-      },
-    ],
-    defaultModelsByProvider: {},
-  };
-  const runtimeCatalog: AgentRuntimeCatalog = createRuntimeCatalogFixture({ models: catalog });
-  const definitions: RuntimeDefinitionsContextValue = {
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-    isLoadingRuntimeSettings: false,
-    runtimeSettingsError: null,
-    hasRuntimeSettingsSnapshot: true,
-    refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => runtimeCatalog,
-    loadRepoRuntimeFileSearch: async () => [],
-  };
-  const connection = createSettingsConnection();
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryProvider connection={connection}>
-      <RuntimeDefinitionsContext value={definitions}>
-        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
-      </RuntimeDefinitionsContext>
-    </QueryProvider>
-  );
-  const harness = createHookHarness(
-    () =>
-      useWorkspaceSessionModelPicker("/repo", undefined, {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-      }),
-    undefined,
-    { wrapper },
-  );
-  try {
-    await harness.mount();
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5", 2000);
-
-    expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "low",
-    });
-  } finally {
-    await harness.unmount();
-  }
-});
-
 test("refreshes a stale session catalog when the model picker opens", async () => {
   const catalog: AgentModelCatalog = {
     models: [
@@ -450,6 +313,7 @@ test("refreshes a stale session catalog when the model picker opens", async () =
     },
     runtimeKind: "opencode" as const,
     runtimeRef,
+    updateDraft: () => {},
     selection: {
       runtimeKind: "opencode" as const,
       providerId: "openai",
@@ -486,50 +350,5 @@ test("refreshes a stale session catalog when the model picker opens", async () =
   } finally {
     await harness.unmount();
     client.clear();
-  }
-});
-
-test("does not prefill the creation picker when the Default Model runtime is unavailable", async () => {
-  const definitions: RuntimeDefinitionsContextValue = {
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
-    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-    isLoadingRuntimeSettings: false,
-    runtimeSettingsError: null,
-    hasRuntimeSettingsSnapshot: true,
-    refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => {
-      throw new Error("Catalog load must not run for an unavailable runtime.");
-    },
-    loadRepoRuntimeFileSearch: async () => [],
-  };
-  const connection = createSettingsConnection();
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryProvider connection={connection}>
-      <RuntimeDefinitionsContext value={definitions}>
-        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
-      </RuntimeDefinitionsContext>
-    </QueryProvider>
-  );
-  const harness = createHookHarness(
-    () =>
-      useWorkspaceSessionModelPicker("/repo", undefined, {
-        runtimeKind: "claude",
-        providerId: "openai",
-        modelId: "gpt-5",
-      }),
-    undefined,
-    { wrapper },
-  );
-  try {
-    await harness.mount();
-    await harness.waitFor((state) => state.isLoading === false, 2000);
-
-    expect(harness.getLatest().selection).toBeNull();
-  } finally {
-    await harness.unmount();
   }
 });

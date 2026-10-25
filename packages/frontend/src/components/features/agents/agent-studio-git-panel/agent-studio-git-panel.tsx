@@ -2,7 +2,7 @@ import type { GitChangeGroup } from "@openducktor/contracts";
 import { memo, type ReactElement, useCallback, useId, useMemo, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { applyPendingChanges } from "@/features/agent-studio-git";
+import { applyPendingChanges } from "@openducktor/frontend-core/git/model/pending-local-changes";
 import { GitConflictStrip } from "@/features/git-conflict-resolution";
 import { CommitComposer } from "./commit-composer";
 import type { GitPanelTab } from "./constants";

@@ -1,6 +1,6 @@
 import type { AgentStreamPart } from "@openducktor/core";
-import { z } from "zod";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
+import { messageTimestampMs } from "./message-timestamp-ordering";
 
 export type AssistantTurnTimingState = {
   activityStartedAtMs?: number;
@@ -15,9 +15,8 @@ export type AssistantTurnDurationWindow = {
   completedAtMs: number;
 };
 
-const finiteTimestampSchema = z.number().finite();
-const isFiniteTimestamp = (value: number | undefined): value is number =>
-  finiteTimestampSchema.safeParse(value).success;
+// Turn timing runs for each message of a history read, so it checks numbers without a schema.
+const isFiniteTimestamp = (value: number | undefined): value is number => Number.isFinite(value);
 
 export const mergeTurnActivityTimestamp = (
   currentTimestampMs: number | undefined,
@@ -127,10 +126,8 @@ export const readAssistantActivityStartedAtMsFromParts = (
     : undefined;
 };
 
-const readChatMessageTimestampMs = (message: AgentChatMessage): number | undefined => {
-  const parsed = Date.parse(message.timestamp);
-  return Number.isNaN(parsed) ? undefined : parsed;
-};
+const readChatMessageTimestampMs = (message: AgentChatMessage): number | undefined =>
+  messageTimestampMs(message) ?? undefined;
 
 const readChatMessageActivityStartedAtMs = (message: AgentChatMessage): number | undefined => {
   if (message.role === "assistant") {

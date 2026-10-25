@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:
 import { act, fireEvent, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { AgentsPageRightPanelRuntime } from "../shell/agents-page-right-panel-runtime";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
-import { SessionViewContext } from "@/features/session-navigation/session-view-context";
+import type { GitDiffRefresh } from "@openducktor/frontend-core/git/contracts";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { ToolTabKind } from "@/features/session-panels";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";

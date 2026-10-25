@@ -3,11 +3,11 @@ import { createContext, useContext } from "react";
 import {
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import type {
   SessionNavigationEntry,
   SessionNavigationModel,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 
 export type SessionSelection = {
   visibleKey: string | null;

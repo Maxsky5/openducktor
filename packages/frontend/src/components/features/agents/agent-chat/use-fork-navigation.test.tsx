@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
-import { SessionViewContext } from "@/features/session-navigation/session-view-context";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { useForkNavigation } from "./use-fork-navigation";
 
 const child = { kind: "workspace_session" as const, workspaceId: "workspace", sessionId: "child" };

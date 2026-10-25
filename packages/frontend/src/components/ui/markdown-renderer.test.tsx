@@ -6,7 +6,7 @@ import { createElement, type ReactNode, useLayoutEffect, useState } from "react"
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as externalUrl from "@/lib/open-external-url";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";

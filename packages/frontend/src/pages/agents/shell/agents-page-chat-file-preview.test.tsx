@@ -3,11 +3,11 @@ import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-con
 import { act, fireEvent, screen } from "@testing-library/react";
 import { useMemo, useState } from "react";
 import { createDialogPreviewHarness } from "@/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness";
+import { buildSessionTranscript } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import {
   buildMessage,
   buildSession,
-  buildSessionTranscript,
-} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
@@ -112,8 +112,8 @@ for (const departure of [false, true]) {
         focus.mockRestore();
       }
     } finally {
-      h.dispose();
       modalSpy.mockRestore();
+      h.dispose();
     }
   });
 }
@@ -138,7 +138,7 @@ test("main chat remembers the invoking link when focus moves during worktree loo
     fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
     expect(document.activeElement === link).toBe(true);
   } finally {
-    h.dispose();
     modalSpy.mockRestore();
+    h.dispose();
   }
 });

@@ -9,14 +9,14 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import * as settingsModal from "@/components/features/settings/settings-modal";
 import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
-import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   ActiveWorkspaceContext,
-  ChecksStateContext,
   TaskControlContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksStateContext } from "@/state/app-state-contexts";
 import {
   createChecksStateFixture,
   createGitProviderContextFixture,

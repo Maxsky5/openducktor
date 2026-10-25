@@ -6,10 +6,8 @@ import { TaskComposerStepper } from "@/components/features/task-composer/task-co
 import { TaskDetailsForm } from "@/components/features/task-composer/task-details-form";
 import { TaskEditSectionSwitcher } from "@/components/features/task-composer/task-edit-section-switcher";
 import { TaskCreateDiscardDialog } from "@/components/features/task-create/task-create-discard-dialog";
-import {
-  type TaskCreateDestination,
-  useTaskCreateModalController,
-} from "@/components/features/task-create/use-task-create-modal-controller";
+import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
+import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { EditTaskSection } from "@/types/task-composer";
+import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 const TaskDocumentEditor = lazy(async () => {
   const module = await import("@/components/features/task-composer/task-document-editor");
@@ -265,7 +263,7 @@ function TaskCreateModalSectionContent({
       mode={controller.mode}
       disabled={controller.isSaveOrRecoveryLocked}
       state={controller.state}
-      priorityOptions={controller.priorityComboboxOptions}
+      priorityOptions={controller.priorityOptions}
       knownLabels={controller.knownLabels}
       onStateChange={controller.updateState}
       onRequestTypeChange={() => controller.setStep("type")}

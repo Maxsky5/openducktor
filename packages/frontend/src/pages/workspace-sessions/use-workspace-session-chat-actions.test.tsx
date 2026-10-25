@@ -19,9 +19,9 @@ import type {
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
-import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
+import { useAgentChatSendForTarget } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
+import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import {
   createAgentSessionFixture,
@@ -30,7 +30,7 @@ import {
 import { createSessionMessagesFixture } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import * as sessionChat from "./workspace-session-chat";
 import { WorkspaceSessionChatPane } from "./workspace-session-chat-pane";
-import { SessionViewContext } from "@/features/session-navigation/session-view-context";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { requestWorkspaceGitConflictAssistance } from "./workspace-git-conflict-assistance";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";

@@ -9,13 +9,11 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
-import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
+import { resolveBuildContinuationLaunchAction } from "@openducktor/frontend-core/lib/session-launch-actions";
 import { QueryProvider } from "@/test-utils/query-provider";
-import {
-  ChecksOperationsContext,
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { HostClient } from "@openducktor/host-client";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
@@ -121,7 +119,10 @@ const createHookHarness = (initialProps: HookArgs) => {
   // The connection opens at mount, so it gets the host commands that the test set up to then.
   let connection: ClientConnection | null = null;
   const connectHost = (): ClientConnection =>
-    (connection ??= createTestClientConnection({ client: hostClientFakes }));
+    (connection ??= createTestClientConnection({
+      client: hostClientFakes,
+      feedback: sonnerFeedback,
+    }));
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,

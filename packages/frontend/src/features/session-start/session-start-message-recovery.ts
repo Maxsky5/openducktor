@@ -1,11 +1,17 @@
 import { toast } from "sonner";
-import type { SessionStartWorkflowResult } from "./session-start-workflow";
+import {
+  type SessionStartMessageRetry,
+  sessionStartMessageRetry,
+} from "@openducktor/frontend-core/sessions/start/session-start-message-retry";
+import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 
-export const showSessionStartMessageRecovery = (result: SessionStartWorkflowResult): void => {
-  const retry = result.retryPostStartMessage;
-  if (!retry || !result.postStartActionError) return;
-  toast.error("Session started, but the first message failed.", {
-    description: result.postStartActionError.message,
+const showRetryToast = (recovery: SessionStartMessageRetry): void => {
+  if (recovery.kind === "unknown") {
+    toast.warning(recovery.title, { description: recovery.description, duration: Infinity });
+    return;
+  }
+  toast.error(recovery.title, {
+    description: recovery.description,
     duration: Infinity,
     classNames: {
       toast: "!flex-col !items-stretch",
@@ -13,15 +19,17 @@ export const showSessionStartMessageRecovery = (result: SessionStartWorkflowResu
       actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
     },
     action: {
-      label: "Retry message",
+      label: recovery.actionLabel,
       onClick: () => {
-        void retry().catch((cause) =>
-          showSessionStartMessageRecovery({
-            ...result,
-            postStartActionError: cause instanceof Error ? cause : new Error(String(cause)),
-          }),
-        );
+        void recovery.retry().then((next) => {
+          if (next) showRetryToast(next);
+        });
       },
     },
   });
+};
+
+export const showSessionStartMessageRecovery = (result: SessionStartWorkflowResult): void => {
+  const recovery = sessionStartMessageRetry(result);
+  if (recovery) showRetryToast(recovery);
 };

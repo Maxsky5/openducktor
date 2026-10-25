@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import {
   type AgentChatTurnRowProps,
   type AgentChatTurnGroupProps,

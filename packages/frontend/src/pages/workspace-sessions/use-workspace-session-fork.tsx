@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AgentChatForkActions } from "@/components/features/agents/agent-chat/agent-chat-fork-context";
 import { useForkNavigation } from "@/components/features/agents/agent-chat/use-fork-navigation";
 import { useDialogPresence } from "@/components/ui/dialog";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import {
   sessionForkRequestKey,
   useSessionForkRequests,

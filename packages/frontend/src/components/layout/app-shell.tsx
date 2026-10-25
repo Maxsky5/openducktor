@@ -16,7 +16,7 @@ import {
   OpenRepositoryModal,
   type OpenRepositoryModalView,
 } from "@/components/features/repository/open-repository-modal";
-import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
+import { AgentChatTranscriptCacheProvider } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-cache-provider";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { WorkspaceSidebar } from "@/components/layout/sidebar";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
@@ -29,8 +29,9 @@ import { LinkOpenMenu } from "@/components/features/link-open-menu";
 import { BrowserLayer, BrowserRuntimeProvider, BrowserTabCoordinator } from "@/features/browser";
 import type { CommandPaletteShell } from "@/features/command-palette/command-palette-types";
 import { RecentItemsRecorder } from "@/features/command-palette/recent-items-recorder";
-import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
-import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
+import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
 import {
   useActiveWorkspace,
@@ -141,7 +142,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
     <VisibleSessionTargetProvider>
       <ActiveRepoConfigQuery />
       <OpenRepositoryModalWhenEmpty onEmpty={openDefaultRepositoryModal} />
-      <SessionReadStateProvider>
+      <SessionReadStateProvider visibility={documentVisibility}>
         <WorkspaceDialogsProvider>
           <SessionMenuProvider>
             <CommandPaletteProvider shell={paletteShell}>

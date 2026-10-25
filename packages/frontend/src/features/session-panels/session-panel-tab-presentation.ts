@@ -1,5 +1,6 @@
 import { LayoutGrid, type LucideIcon } from "lucide-react";
-import { terminalTabLabel, terminalTabLifecycleText } from "@/features/terminals";
+import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { terminalTabLifecycleText } from "@openducktor/frontend-core/terminals/terminal-tab-presentation";
 import { PANEL_TAB_KIND_RULES } from "./panel-tab-kinds";
 import { browserTabPresentation } from "./session-panel-browser-tab-presentation";
 import type { ResolvedPanelTab } from "./session-panel-layout";

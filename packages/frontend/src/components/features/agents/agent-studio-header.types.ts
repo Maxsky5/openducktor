@@ -2,8 +2,9 @@ import type { PullRequest } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
 import type { ComboboxGroup } from "@/components/ui/combobox";
-import type { SessionLaunchActionId, SessionStartPostAction } from "@/features/session-start";
-import type { AgentWorkflowStepState } from "@/types/agent-workflow";
+import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
+import type { SessionStartPostAction } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
+import type { AgentWorkflowStepState } from "@openducktor/frontend-core/types/agent-workflow";
 
 export type AgentRoleOption = {
   role: AgentRole;

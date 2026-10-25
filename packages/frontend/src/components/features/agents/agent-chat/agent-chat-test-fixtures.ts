@@ -7,28 +7,16 @@ import type {
 import { createRef } from "react";
 import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
-import {
-  type AgentSessionFixtureOverrides,
-  createAgentSessionFixture,
-  TEST_EXTERNAL_SESSION_IDS,
-} from "@/test-utils/shared-test-fixtures";
-import { AGENT_ROLE_LABELS } from "@/types";
-import type {
-  AgentApprovalRequest,
-  AgentChatMessage,
-  AgentQuestionRequest,
-  AgentSessionState,
-} from "@openducktor/frontend-core/types/agent-orchestrator";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type { AgentRoleOption } from "../agent-studio-header.types";
+import type { AgentChatThreadModel } from "./agent-chat.types";
 import type {
-  AgentChatThreadModel,
-  AgentChatToolCallPresentation,
   AgentChatTranscriptPresentation,
   AgentChatTranscriptSession,
-} from "./agent-chat.types";
+} from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
+import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
+import { baseSelection } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -57,46 +45,6 @@ const baseTask: TaskCard = {
   updatedAt: "2026-02-20T10:00:00.000Z",
 };
 
-const baseSelection: AgentModelSelection = {
-  runtimeKind: "opencode",
-  providerId: "openai",
-  modelId: "gpt-5.3-codex",
-  variant: "high",
-  profileId: "Hephaestus (Deep Agent)",
-};
-
-const baseMessage: AgentChatMessage = {
-  id: "msg-1",
-  role: "assistant",
-  content: "Initial response",
-  timestamp: "2026-02-20T10:01:00.000Z",
-  meta: {
-    kind: "assistant",
-    agentRole: "spec",
-    isFinal: true,
-    providerId: "openai",
-    modelId: "gpt-5.3-codex",
-    profileId: "Hephaestus (Deep Agent)",
-    durationMs: 1_200,
-  },
-};
-
-const baseSession: AgentSessionState = {
-  externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-  runtimeKind: "opencode",
-  status: "running",
-  runtimeStatusMessage: null,
-  startedAt: "2026-02-20T10:00:30.000Z",
-  workingDirectory: "/repo",
-  livePresence: "unobserved",
-  historyLoadState: "not_requested",
-  messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.chatDefault, [baseMessage]),
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: baseSelection,
-};
-
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [
   { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: AGENT_ROLE_ICONS.spec },
   { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: AGENT_ROLE_ICONS.planner },
@@ -108,14 +56,6 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...baseTask,
   ...overrides,
 });
-
-type AgentChatTranscriptSessionOverrides = AgentSessionFixtureOverrides;
-
-export const buildSession = (
-  overrides: AgentChatTranscriptSessionOverrides = {},
-): AgentChatTranscriptSession => {
-  return toAgentChatTranscriptSession(createAgentSessionFixture(baseSession, overrides));
-};
 
 export const presentRegularToolCall = (
   toolName: string,
@@ -213,17 +153,6 @@ export const completeThreadModel = (model: AgentChatThreadModelInput): AgentChat
   };
 };
 
-export const buildMessage = (
-  role: AgentChatMessage["role"],
-  content: string,
-  overrides: Partial<AgentChatMessage> = {},
-): AgentChatMessage => ({
-  ...baseMessage,
-  role,
-  content,
-  ...overrides,
-});
-
 export const buildModelSelection = (
   overrides: Partial<AgentModelSelection> = {},
 ): AgentModelSelection => ({
@@ -243,39 +172,6 @@ export const buildFileSearchResult = (
   path: "src/main.ts",
   name: "main.ts",
   kind: "code",
-  ...overrides,
-});
-
-export const buildQuestionRequest = (
-  overrides: Partial<AgentQuestionRequest> = {},
-): AgentQuestionRequest => ({
-  requestId: "request-1",
-  questions: [
-    {
-      header: "Next Topic",
-      question: "What should I focus on?",
-      options: [
-        { label: "Frontend", description: "UI and browser work" },
-        { label: "Backend", description: "Server and APIs" },
-      ],
-      multiple: false,
-      custom: true,
-    },
-  ],
-  ...overrides,
-});
-
-export const buildApprovalRequest = (
-  overrides: Partial<AgentApprovalRequest> = {},
-): AgentApprovalRequest => ({
-  requestId: "permission-1",
-  requestType: "permission_grant" as const,
-  title: `Approve permission: ${"shell"}`,
-  summary: `Approval request for ${"shell"}.`,
-  affectedPaths: ["*"],
-  action: { name: "shell" },
-  mutation: "read_only" as const,
-  supportedReplyOutcomes: ["approve_once" as const, "approve_session" as const, "reject" as const],
   ...overrides,
 });
 

@@ -1,4 +1,4 @@
-import { buildContentEntries } from "./agent-chat-content-keys";
+import { buildContentEntries } from "@openducktor/frontend-core/sessions/transcript/agent-chat-content-keys";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { CircleSlash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -6,7 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { AgentApprovalRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
-import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
+import {
+  approvalCapabilityWarning,
+  approvalOutcomeEmphasis,
+  approvalOutcomeLabel,
+  approvalRequestDescription,
+  approvalToolInputText,
+  hasApprovalRequestContent,
+  resolveApprovalReplyOutcomes,
+} from "@openducktor/frontend-core/sessions/pending-input/agent-session-approval-card-model";
+import { PENDING_INPUT_LABELS } from "@openducktor/frontend-core/sessions/pending-input/pending-input-labels";
 import { RequestCardHeader } from "./request-card-header";
 import { useRequestCardCollapse } from "./use-request-card-collapse";
 
@@ -31,16 +40,7 @@ export function AgentSessionApprovalCard({
 }: AgentSessionApprovalCardProps): ReactElement | null {
   const { isExpanded, onExpandedChange, contentRef, triggerRef } =
     useRequestCardCollapse(collapseResetKey);
-  const hasDisplayContent = Boolean(
-    request.title ||
-    request.summary ||
-    request.details ||
-    request.command ||
-    request.action ||
-    request.tool ||
-    request.affectedPaths?.length,
-  );
-  if (!hasDisplayContent) {
+  if (!hasApprovalRequestContent(request)) {
     return null;
   }
 
@@ -48,11 +48,11 @@ export function AgentSessionApprovalCard({
     requestSupportedReplyOutcomes: request.supportedReplyOutcomes,
     runtimeSupportedReplyOutcomes,
   });
-  const canReply = supportedOutcomes.length > 0;
-  const missingCapabilityMessage = runtimeSupportedReplyOutcomes
-    ? "This runtime does not support any declared approval outcomes for this request."
-    : "Runtime approval capabilities are unavailable for this request. Refresh runtime checks or open the session again, then try again.";
-  const description = getDescription(request);
+  const capabilityWarning = approvalCapabilityWarning({
+    supportedOutcomes,
+    runtimeSupportedReplyOutcomes,
+  });
+  const description = approvalRequestDescription(request);
 
   return (
     <Collapsible open={isExpanded} onOpenChange={onExpandedChange} asChild>
@@ -66,7 +66,7 @@ export function AgentSessionApprovalCard({
           kind="permission"
           description={description}
           isSubagent={request.source?.kind === "subagent"}
-          status="Action required"
+          status={PENDING_INPUT_LABELS.permissionStatus}
           isExpanded={isExpanded}
           triggerRef={triggerRef}
         />
@@ -92,16 +92,14 @@ export function AgentSessionApprovalCard({
                   void onReply(request.requestId, outcome);
                 }}
               >
-                {outcome === "approve_always" && request.persistentGrant?.scope === "project"
-                  ? "Allow for project"
-                  : (OUTCOME_LABELS[outcome] ?? outcome)}
+                {approvalOutcomeLabel(outcome, request)}
               </Button>
             ))}
           </div>
         </CollapsibleContent>
 
         <ApprovalFeedback
-          capabilityWarning={canReply ? null : missingCapabilityMessage}
+          capabilityWarning={capabilityWarning}
           errorMessage={errorMessage}
           isSubmitting={isSubmitting}
         />
@@ -110,39 +108,25 @@ export function AgentSessionApprovalCard({
   );
 }
 
-const OUTCOME_LABELS = {
-  approve_once: "Approve once",
-  approve_turn: "Approve for turn",
-  approve_session: "Approve for session",
-  approve_always: "Always allow",
-  reject: "Reject",
-} satisfies Partial<Record<RuntimeApprovalReplyOutcome, string>>;
+const OUTCOME_BUTTON_VARIANTS = {
+  primary: "default",
+  secondary: "outline",
+  destructive: "destructive",
+} as const;
 
 const getOutcomeVariant = (
   outcome: RuntimeApprovalReplyOutcome,
-): "default" | "outline" | "destructive" => {
-  if (outcome === "reject") {
-    return "destructive";
-  }
-  if (outcome === "approve_once") {
-    return "default";
-  }
-  return "outline";
-};
+): "default" | "outline" | "destructive" =>
+  OUTCOME_BUTTON_VARIANTS[approvalOutcomeEmphasis(outcome)];
 
 const PATH_CLASS_NAME =
   "rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
-
-const formatToolInput = (
-  input: NonNullable<NonNullable<AgentApprovalRequest["tool"]>["input"]>,
-): string => JSON.stringify(input, null, 2);
 
 function ApprovalDetails({ request }: { request: AgentApprovalRequest }): ReactElement {
   const grantEntries = buildContentEntries(request.persistentGrant?.rules ?? [], (rule) =>
     JSON.stringify([rule.action, rule.resource]),
   );
-  const toolInputText =
-    request.tool?.input && !request.command ? formatToolInput(request.tool.input) : null;
+  const toolInputText = approvalToolInputText(request);
 
   return (
     <div className="space-y-1">
@@ -232,21 +216,9 @@ function ApprovalFeedback({
       {isSubmitting ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <CircleSlash2 className="size-3" />
-          Submitting approval choice…
+          {PENDING_INPUT_LABELS.submittingApproval}
         </p>
       ) : null}
     </div>
   ) : null;
-}
-
-function getDescription(request: AgentApprovalRequest): string | undefined {
-  return [
-    request.title,
-    request.summary,
-    request.command?.command,
-    request.action?.name,
-    request.tool?.name,
-    request.details,
-    request.affectedPaths?.[0],
-  ].find((value) => value?.trim());
 }

@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 import {
   WORKSPACE_TILE_PALETTE,
   normalizeHexInput,
-  tileColorFaceStyle,
   tileShadeRamp,
-} from "@/lib/workspace-tile-appearance";
+} from "@openducktor/frontend-core/workspaces/workspace-tile-appearance";
+import { tileColorFaceStyle } from "@/lib/workspace-tile-styles";
 
 const HEX_ERROR_MESSAGE = "Enter a 6-digit RGB hex value, such as f08c00.";
 

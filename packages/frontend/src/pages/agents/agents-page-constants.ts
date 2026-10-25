@@ -10,7 +10,7 @@ export {
   kickoffPromptForTemplate,
   LAUNCH_ACTION_LABELS,
   LAUNCH_ACTIONS_BY_ROLE,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/sessions/start/session-start-prompts";
 
 export const AGENT_ROLE_ORDER: AgentRole[] = ROLE_OPTIONS.map((option) => option.role);
 

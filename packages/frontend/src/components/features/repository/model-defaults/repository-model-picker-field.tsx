@@ -1,14 +1,14 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
+import { ModelPicker } from "@/components/features/agents/model-picker";
 import {
-  ModelPicker,
   type ModelPickerFavoriteState,
   modelPickerResourceFromCatalogQuery,
   type ModelPickerRuntime,
   type ModelPickerValue,
   selectableModelPickerCatalog,
-} from "@/components/features/agents/model-picker";
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { Label } from "@/components/ui/label";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 

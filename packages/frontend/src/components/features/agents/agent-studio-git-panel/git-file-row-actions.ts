@@ -1,6 +1,7 @@
 import type { GitFileDiff, GitChangeGroup } from "@openducktor/contracts";
 import { type LucideIcon, Minus, Plus } from "lucide-react";
-import { type GitChangeIntent, gitChangeIntentKey } from "@/features/agent-studio-git";
+import type { GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 
 /** Write actions of one local group. Branch changes and conflicts have none. */
 export type GitFileRowActions = {

@@ -9,6 +9,7 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
+import type { DeviceFileReference } from "../platform/device-file";
 import {
   type AgentChatComposerAttachment,
   createComposerAttachment,
@@ -152,6 +153,31 @@ export const buildComposerAttachmentFromPath = (
     kind,
     path,
   };
+  if (mime) {
+    attachment.mime = mime;
+  }
+  return createComposerAttachment(attachment);
+};
+
+/**
+ * Builds a composer attachment from a file that the user picked on this device. Returns null for
+ * a file that is not an image, audio file, video, or PDF. A file without a name gets a name for
+ * its kind. `rename` gives the file under that name, for a platform that sends the file name with
+ * the bytes. Without it, the attachment keeps the picked file and carries the name itself.
+ */
+export const buildComposerAttachmentFromDeviceFile = <Picked extends DeviceFileReference>(
+  file: Picked,
+  rename?: (file: Picked, name: string) => Picked,
+): AgentChatComposerAttachment | null => {
+  const kind = classifyAttachment({ name: file.name, mime: file.type });
+  if (!kind) {
+    return null;
+  }
+  const name = readAttachmentFileName({ name: file.name, mime: file.type, kind });
+  const picked = name === file.name || !rename ? file : rename(file, name);
+  const mime = inferAttachmentMime(name, picked.type);
+
+  const attachment: Parameters<typeof createComposerAttachment>[0] = { name, kind, file: picked };
   if (mime) {
     attachment.mime = mime;
   }

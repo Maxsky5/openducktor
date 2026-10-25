@@ -1,35 +1,21 @@
-import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
+import type { GitTargetBranch, WorkspaceSessionRefInput } from "@openducktor/contracts";
+import type { ReactNode } from "react";
+import { useMemo } from "react";
+import type { ResolveGitConflict } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
+import { collectUnmergedFilePaths } from "@openducktor/frontend-core/git/model/unmerged-file-paths";
 import {
-  useSessionComparison,
-  useSessionComparisonControl,
-} from "@/features/agent-studio-git/use-session-comparison";
-import { useComparisonView } from "@/features/agent-studio-git/session-comparison-view";
-import {
-  type GitPanelReads,
-  useGitPanelReads,
-} from "@/features/agent-studio-git/reads/use-git-panel-reads";
-import { withFileQueries } from "@/features/agent-studio-git/refresh/git-file-refresh";
-import type { GitRefreshComparison } from "@/features/agent-studio-git/refresh/git-refresh-coordinator";
-import { useGitRefresh } from "@/features/agent-studio-git/refresh/use-git-refresh";
-import type {
-  GitCurrentBranch,
-  GitTargetBranch,
-  WorkspaceSessionRefInput,
-} from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useMemo } from "react";
-import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
-import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
-import { canonicalTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
-import { checkoutReadIdentity } from "@openducktor/frontend-core/queries/git";
+  useWorkspaceSessionGitPanel,
+  type WorkspaceSessionGitSource,
+} from "@openducktor/frontend-core/git/workspace-session/use-workspace-session-git-panel";
+import { useSessionComparisonControl } from "@/features/agent-studio-git/use-session-comparison-control";
+import { windowReturnVisibility } from "@/lib/window-return-visibility";
+import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
-import { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { WorkspaceSessionGitTools } from "./workspace-session-git-tools";
-import { useGitCommentDraftValidation } from "./agent-studio-git-panel/use-git-comment-draft-validation";
 
 const missingWorkingDirectoryReason = "The selected working directory is unavailable.";
 
@@ -40,22 +26,10 @@ type WorkspaceSessionToolsProps = {
   conflictAssistanceIsStarting?: boolean;
   repoPath: string;
   workspaceSession: WorkspaceSessionRefInput;
-  workingDirectory: string | null;
   contextMode: "repository" | "worktree";
-  branchKey: string;
-  currentBranch: GitCurrentBranch | null;
-  branchReady: boolean;
-  branchError?: string | null;
-  target: GitTargetBranch | null;
-  /**
-   * The saved target of this session, or null when it follows the repository default. Each saved
-   * target has its own Refresh, so loading the default settings keeps the running Refresh.
-   */
-  savedTarget: GitTargetBranch | null;
-  targetError: string | null;
+  /** The session directory, branch, and target from `useWorkspaceSessionGit`. */
+  git: WorkspaceSessionGitSource;
   applyTarget: (target: GitTargetBranch) => Promise<void>;
-  retryTarget: () => Promise<void>;
-  readBranch: () => Promise<string>;
   /** True while the Files tab is selected in the shown right panel. */
   isFilesActive: boolean;
   selectedFile: TaskExecutionSelectedFile | null;
@@ -72,41 +46,36 @@ export function useWorkspaceSessionTools({
   conflictAssistanceIsStarting,
   repoPath,
   workspaceSession,
-  workingDirectory,
   contextMode,
-  branchKey,
-  currentBranch,
-  branchReady,
-  branchError,
+  git,
   applyTarget,
-  target,
-  savedTarget,
-  targetError,
-  retryTarget,
-  readBranch,
   isFilesActive,
   selectedFile,
   onSelectFile,
   repositoryBranchControl,
 }: WorkspaceSessionToolsProps) {
   const { workspaceId, sessionId } = workspaceSession;
-  const sessionKey = JSON.stringify([workspaceId, sessionId]);
-  const commentOwner = useMemo<Extract<InlineCommentOwner, { kind: "workspace_session" }>>(
-    () => ({ kind: "workspace_session", workspaceId, sessionId }),
-    [workspaceId, sessionId],
-  );
-  const checkoutIdentity = checkoutReadIdentity(currentBranch);
-  const comparison = useSessionComparison({
-    enabled: isVisible,
-    viewKey: sessionKey,
+  const { workingDirectory, target } = git;
+  const { branchKey, branchReady } = git.branch;
+  const {
+    sessionKey,
+    commentOwner,
+    comparison,
+    readsRepoPath,
+    diffData,
+    unavailableReason,
+    resolvedTarget: markerTarget,
+    applyLocalChanges,
+    refresh,
+    manualRefresh,
+    refreshTools,
+  } = useWorkspaceSessionGitPanel({
+    isVisible,
     repoPath,
-    workingDirectory,
-    target,
-    targetError,
-    branchKey,
-    checkoutIdentity,
-    branchReady,
-    branchError: branchError ?? null,
+    workspaceId,
+    sessionId,
+    git,
+    visibility: windowReturnVisibility,
   });
   const control = useSessionComparisonControl({
     repoPath,
@@ -115,44 +84,6 @@ export function useWorkspaceSessionTools({
     allowUpstream: contextMode === "repository",
     applyTarget,
     helpText: "This choice applies only to this chat. The chat saves it.",
-  });
-  const readsRepoPath = workingDirectory ? repoPath : null;
-  const reads = useGitPanelReads({
-    repoPath: readsRepoPath,
-    workingDir: workingDirectory,
-    comparisonReference: comparison.resolvedTarget,
-    cacheKey: comparison.cacheKey,
-    checkoutIdentity,
-    enabled: isVisible && workingDirectory !== null && branchReady,
-  });
-  const diffData = useComparisonView(reads, comparison, {
-    repoPath: readsRepoPath,
-    worktreePath: workingDirectory,
-    label: target ? canonicalTargetBranch(target) : "Default target pending",
-    checkout: currentBranch,
-  });
-  const unavailableReason = diffData.comparisonUnavailableReason ?? null;
-  const markerTarget = diffData.comparisonReference ?? null;
-  // An in-flight diff can finish after the tools view closes.
-  useGitCommentDraftValidation({
-    commentOwner,
-    targetBranch: comparison.resolvedTarget,
-    comparisonUnavailableReason: unavailableReason,
-    scopeStatesByScope: diffData.scopeStatesByScope,
-    loadedScopesByScope: diffData.loadedScopesByScope,
-  });
-  const gitRefresh = useWorkspaceGitRefresh({
-    sessionKey,
-    repoPath,
-    workingDirectory,
-    savedTarget,
-    branchKey,
-    visible: isVisible,
-    ready: branchReady,
-    prepare: targetError ? retryTarget : null,
-    readBranch,
-    comparison: comparison.refreshStep,
-    reads,
   });
   const conflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
@@ -174,8 +105,8 @@ export function useWorkspaceSessionTools({
     detectedConflict: diffData.gitConflict ?? null,
     detectedConflictedFiles: conflictedFiles,
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
-    refreshDiffData: gitRefresh.refresh,
-    applyLocalChanges: reads.applyLocalChanges,
+    refreshDiffData: refresh,
+    applyLocalChanges,
   });
   const fileModel = {
     ...workspaceFileModel({
@@ -202,77 +133,12 @@ export function useWorkspaceSessionTools({
       control={control}
       unavailableReason={unavailableReason}
       workingDirectory={workingDirectory}
-      manualRefresh={gitRefresh.manual}
+      manualRefresh={manualRefresh}
       onSelectFile={onSelectFile}
     />
   );
   const filesContent = <TaskExecutionFileExplorerPanel model={fileModel} />;
-  return { diffsContent, filesContent, refresh: isVisible ? gitRefresh.refreshTools : null };
-}
-
-/**
- * Connects the session panel to its refresh coordinator. A Refresh, its pending state, and its
- * failure belong to the session, directory, target choice, and checkout.
- */
-function useWorkspaceGitRefresh({
-  sessionKey,
-  repoPath,
-  workingDirectory,
-  savedTarget,
-  branchKey,
-  visible,
-  ready,
-  prepare,
-  readBranch,
-  comparison,
-  reads,
-}: {
-  sessionKey: string;
-  repoPath: string;
-  workingDirectory: string | null;
-  savedTarget: GitTargetBranch | null;
-  branchKey: string;
-  visible: boolean;
-  ready: boolean;
-  prepare: (() => Promise<void>) | null;
-  readBranch: () => Promise<string>;
-  comparison: GitRefreshComparison | null;
-  reads: GitPanelReads;
-}) {
-  const queryClient = useQueryClient();
-  const scopeKey = JSON.stringify([sessionKey, repoPath, workingDirectory, savedTarget ?? null]);
-  const withFiles = useMemo(
-    () =>
-      withFileQueries(
-        queryClient,
-        workingDirectory ? [workingDirectory] : [],
-        JSON.stringify([scopeKey, branchKey]),
-      ),
-    [branchKey, queryClient, scopeKey, workingDirectory],
-  );
-  const shown = visible && workingDirectory !== null;
-  const gitRefresh = useGitRefresh({
-    view: {
-      scopeKey,
-      branchKey,
-      visible: shown,
-      ready,
-      prepare,
-      steps: {
-        readBranch,
-        comparison,
-        readLocal: reads.readLocal,
-        readComparison: reads.readComparison,
-        readInBackground: reads.readInBackground,
-        markStale: reads.markStale,
-      },
-      withFiles,
-    },
-    refreshOnFocus: shown,
-  });
-  const { refresh } = gitRefresh;
-  const refreshTools = useCallback(() => refresh("soft"), [refresh]);
-  return { ...gitRefresh, refreshTools };
+  return { diffsContent, filesContent, refresh: isVisible ? refreshTools : null };
 }
 
 function workspaceFileModel({

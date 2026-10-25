@@ -9,8 +9,10 @@ import {
 import {
   useSessionUnread,
   useSetSessionUnread,
-} from "@/features/session-navigation/session-read-state";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { sessionEntryLocation } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { SESSION_MENU_LABELS } from "@openducktor/frontend-core/workspace-sessions/workspace-session-menu";
 import { useSessionMenu } from "./session-menu-provider";
 
 export function SessionEntryMenu({
@@ -54,10 +56,7 @@ function SessionMenuItems({
   const setUnread = useSetSessionUnread();
   const { requestDialog, copyToClipboard } = useSessionMenu();
   const workspaceSession = entry.context.kind === "workspace" ? entry.context.session : null;
-  const identity = entry.target.kind === "task_session" ? entry.target.identity : null;
-  const externalSessionId = workspaceSession?.externalSessionId ?? identity?.externalSessionId;
-  const workingDirectory =
-    workspaceSession?.executionTarget.workingDirectory ?? identity?.workingDirectory;
+  const { externalSessionId, workingDirectory } = sessionEntryLocation(entry);
   const ReadIcon = unread ? MailOpen : Mail;
   const openDialog = (action: "rename" | "archive") => {
     if (!workspaceSession) return;
@@ -74,12 +73,12 @@ function SessionMenuItems({
       <ContextMenuGroup>
         <ContextMenuItem className="cursor-pointer" onSelect={() => setUnread(entry, !unread)}>
           <ReadIcon aria-hidden="true" />
-          {unread ? "Mark as read" : "Mark as unread"}
+          {unread ? SESSION_MENU_LABELS.markRead : SESSION_MENU_LABELS.markUnread}
         </ContextMenuItem>
         {workspaceSession && (
           <ContextMenuItem className="cursor-pointer" onSelect={() => openDialog("rename")}>
             <Pencil aria-hidden="true" />
-            Rename session
+            {SESSION_MENU_LABELS.rename}
           </ContextMenuItem>
         )}
       </ContextMenuGroup>
@@ -93,7 +92,7 @@ function SessionMenuItems({
           }}
         >
           <Folder aria-hidden="true" />
-          Copy working directory
+          {SESSION_MENU_LABELS.copyWorkingDirectory}
         </ContextMenuItem>
         <ContextMenuItem
           className="cursor-pointer"
@@ -103,7 +102,7 @@ function SessionMenuItems({
           }}
         >
           <Copy aria-hidden="true" />
-          Copy external session ID
+          {SESSION_MENU_LABELS.copyExternalSessionId}
         </ContextMenuItem>
       </ContextMenuGroup>
       {workspaceSession && (
@@ -112,7 +111,7 @@ function SessionMenuItems({
           <ContextMenuGroup>
             <ContextMenuItem className="cursor-pointer" onSelect={() => openDialog("archive")}>
               <Archive aria-hidden="true" />
-              Archive session
+              {SESSION_MENU_LABELS.archive}
             </ContextMenuItem>
           </ContextMenuGroup>
         </>

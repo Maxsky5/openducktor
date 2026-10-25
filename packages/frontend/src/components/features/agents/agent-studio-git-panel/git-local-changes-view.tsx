@@ -10,20 +10,28 @@ import {
   useState,
 } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
+import { commentMatchesDiff } from "@/components/features/agents/pierre-diff-viewer-model";
 import { Button } from "@/components/ui/button";
-import { type GitChangeIntent, gitChangeIntentKey } from "@/features/agent-studio-git";
+import type { GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import { cn } from "@/lib/utils";
 import { type InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import {
+  type LocalCommentGroup,
+  placeLocalComments,
+} from "@openducktor/frontend-core/drafts/inline-comment-placement";
 import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
 import { FileDiffList } from "./file-diff-list";
 import { FileListHeader } from "./file-list-header";
 import { type FileSearchMatch, searchFiles } from "./file-list-search";
 import type { FileListViewMode } from "./file-list-view-preference";
 import { GROUP_TOGGLE, type GitFileRowActions, listFileKey } from "./git-file-row-actions";
-import { type LocalCommentGroup, placeLocalComments } from "./git-local-comment-placement";
 import type { FileListSearch, FileListState } from "./use-file-list-state";
 
 const EMPTY_DRAFTS: InlineCommentDraft[] = [];
+
+const diffHoldsComment = (diff: GitFileDiff, draft: InlineCommentDraft): boolean =>
+  commentMatchesDiff(diff.diff, diff.file, draft);
 const NO_FILES: ReadonlySet<string> = new Set();
 
 type GroupSection = {
@@ -94,7 +102,10 @@ export const GitLocalChangesView = memo(function GitLocalChangesView({
   const drafts = useInlineCommentDraftStore((store) =>
     ownerKey === null ? EMPTY_DRAFTS : (store.draftsByOwner[ownerKey] ?? EMPTY_DRAFTS),
   );
-  const commentsByGroup = useMemo(() => placeLocalComments(drafts, sections), [drafts, sections]);
+  const commentsByGroup = useMemo(
+    () => placeLocalComments(drafts, sections, diffHoldsComment),
+    [drafts, sections],
+  );
   const conflictedFiles = useMemo(
     () => new Set(localChanges.conflicted.fileStatuses.map((status) => status.path)),
     [localChanges.conflicted.fileStatuses],

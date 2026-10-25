@@ -7,7 +7,7 @@ import {
   settlePendingItems,
 } from "@openducktor/frontend-core/drafts/pending-send-batch";
 import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
-import { perConnection } from "@/lib/per-connection";
+import { perConnection } from "@openducktor/frontend-core/lib/per-connection";
 import type { BrowserAnnotationOwner, BrowserAnnotationStatus } from "./browser-annotation-types";
 
 /** A pending annotation. It stays in memory until a send, a removal, or an app reload. */

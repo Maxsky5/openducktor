@@ -6,7 +6,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-cleanup-impact-model";
+} from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
 import { TaskDeleteConfirmDialog } from "./task-delete-confirm-dialog";
 
 const renderDialog = (
@@ -21,7 +21,7 @@ const renderDialog = (
       onOpenChange={() => {}}
       onCancel={() => {}}
       onConfirm={() => {}}
-      taskId="task-1"
+      task={{ id: "task-1", title: "Fix login" }}
       subtasksCount={0}
       impact={{
         isLoading: false,
@@ -33,11 +33,19 @@ const renderDialog = (
         activeSessionCountError,
         error: null,
       }}
-      operation={{ isPending: false, error: null }}
+      operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}
     />,
   );
 
 describe("TaskDeleteConfirmDialog", () => {
+  test("names the task by its title and its ID", () => {
+    renderDialog(0);
+
+    expect(
+      screen.getByText("Delete “Fix login” (task-1)? This cannot be undone.").textContent,
+    ).toBe("Delete “Fix login” (task-1)? This cannot be undone.");
+  });
+
   test("uses standard spacing and hides terminal copy when no terminals will stop", () => {
     const rendered = renderDialog(0);
 

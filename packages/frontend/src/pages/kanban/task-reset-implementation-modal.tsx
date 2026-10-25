@@ -10,21 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
-import type { TaskResetImplementationModalModel } from "./kanban-page-model-types";
+import { TaskConfirmCopyLines } from "@/components/features/task-details/task-confirm-copy-lines";
+import {
+  buildTaskResetImplementationConfirmCopy,
+  taskResetImplementationConfirmState,
+} from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
+import type { TaskResetImplementationModalModel } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
 
 type ResetImplementationModalModel = TaskResetImplementationModalModel;
-
-const formatManagedCleanupMessage = (): string =>
-  "The canonical task worktree and branch are retained. Tracked content is reset to the latest locally available base, ordinary untracked files are removed, and ignored files are preserved.";
-
-const formatLegacyCleanupMessage = (legacyWorktreeCount: number): string => {
-  if (legacyWorktreeCount === 1) {
-    return "1 legacy implementation worktree and its related local branch will be deleted. Any uncommitted changes in that worktree will be lost.";
-  }
-
-  return `${legacyWorktreeCount} legacy implementation worktrees and their related local branches will be deleted. Any uncommitted changes in those worktrees will be lost.`;
-};
 
 export function TaskResetImplementationModal({
   model,
@@ -35,13 +28,12 @@ export function TaskResetImplementationModal({
     return null;
   }
 
-  const isBusy = model.isSubmitting || model.isLoadingImpact;
-  const isConfirmBlocked = isBusy || model.activeSessionCountError !== null;
-  const confirmLabel = model.isSubmitting
-    ? "Resetting implementation…"
-    : model.isLoadingImpact
-      ? "Checking impact…"
-      : "Reset implementation";
+  const copy = buildTaskResetImplementationConfirmCopy(model);
+  const {
+    isBusy,
+    disabled: isConfirmBlocked,
+    label: confirmLabel,
+  } = taskResetImplementationConfirmState(model, copy);
 
   return (
     <Dialog
@@ -54,48 +46,23 @@ export function TaskResetImplementationModal({
     >
       <DialogContent className="max-w-xl overflow-hidden p-0">
         <DialogHeader>
-          <DialogTitle className="px-6 pt-6 text-xl">Reset Implementation</DialogTitle>
+          <DialogTitle className="px-6 pt-6 text-xl">{copy.title}</DialogTitle>
           <DialogDescription className="px-6 text-base leading-relaxed text-muted-foreground">
-            Reset the current implementation for{" "}
-            <span className="font-medium text-foreground">{model.taskTitle}</span>. Builder and QA
-            progress for this task will be discarded and the task will move back to{" "}
-            <span className="font-medium text-foreground">{model.targetStatusLabel}</span>.
+            {copy.descriptionSegments.map((segment) =>
+              segment.emphasis ? (
+                <span key={segment.text} className="font-medium text-foreground">
+                  {segment.text}
+                </span>
+              ) : (
+                segment.text
+              ),
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="min-h-0 overflow-y-auto px-6 pb-6">
           <div className="mt-5 space-y-3 rounded-xl border border-destructive-border bg-destructive-surface p-4 text-sm leading-6 text-destructive-surface-foreground">
-            <p className="font-medium">
-              This action removes Builder and QA session history for this task.
-            </p>
-            <TaskStopImpactNotice
-              count={model.activeSessionCount}
-              error={model.activeSessionCountError}
-              operation="reset"
-            />
-            {model.hasCanonicalWorktree ? <p>{formatManagedCleanupMessage()}</p> : null}
-            {model.legacyWorktreeCount > 0 ? (
-              <p>{formatLegacyCleanupMessage(model.legacyWorktreeCount)}</p>
-            ) : null}
-            <p>
-              {model.hasCanonicalWorktree
-                ? "Other related local task branches will be deleted if present."
-                : "Related local task branches will be deleted if present."}
-            </p>
-            {model.terminalCount > 0 ? (
-              <p>
-                {model.terminalCount} associated terminal{model.terminalCount === 1 ? "" : "s"} will
-                be terminated before the implementation resets.
-              </p>
-            ) : null}
-            <p>
-              QA report artifacts and linked pull request metadata will be cleared. Specification,
-              Implementation Plan, and free artifacts are kept.
-            </p>
-            <p>
-              Specs and implementation plans are kept. The task status will move back to{" "}
-              {model.targetStatusLabel}.
-            </p>
+            <TaskConfirmCopyLines lines={copy.lines} />
             {model.impactError ? (
               <p className="text-destructive-muted">{model.impactError}</p>
             ) : null}

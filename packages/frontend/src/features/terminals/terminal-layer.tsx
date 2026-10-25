@@ -13,8 +13,12 @@ import { Button } from "@/components/ui/button";
 import { tabLinkIds } from "@/components/ui/tab-link-ids";
 import { TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import type { TerminalExitNotice } from "./terminal-viewport-policy";
-import type { TerminalSessionsModel, TerminalTab } from "./use-terminals";
+import { canRetryTerminalCreation } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import type { TerminalExitNotice } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
+import type {
+  TerminalSessionsModel,
+  TerminalTab,
+} from "@openducktor/frontend-core/terminals/use-terminals";
 
 /** A terminal viewport that a panel keeps mounted. */
 export type MountedTerminal = {
@@ -204,7 +208,7 @@ const TerminalViewport = memo(function TerminalViewport({
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="max-w-[70ch] text-sm text-destructive">{tab.error}</p>
-        {tab.requestState === "lost" || !active ? null : (
+        {!canRetryTerminalCreation(tab) || !active ? null : (
           <Button
             type="button"
             variant="outline"

@@ -4,20 +4,21 @@ import { Copy, History, PanelRightOpen, Pencil, RotateCcw, Trash2 } from "lucide
 import {
   type KanbanTaskSession,
   toKanbanTaskActivityState,
-} from "@/components/features/kanban/kanban-task-activity";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
   getTaskFooter,
   type WorkflowPendingState,
-} from "@/components/features/kanban/kanban-task-footer";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import {
   SESSION_VIEW_ACTIONS,
   type TaskWorkflowAction,
-} from "@/components/features/kanban/kanban-task-workflow";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
 import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
-} from "@/components/features/kanban/session-target-resolution";
-import { TASK_ACTION_ICON, taskActionLabel } from "@/components/features/kanban/task-action-ui";
+} from "@openducktor/frontend-core/tasks/board/session-target-resolution";
+import { taskActionLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
+import { TASK_ACTION_ICON } from "@/components/features/kanban/task-action-ui";
 import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
@@ -25,8 +26,8 @@ import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-ses
 import {
   type SessionNavigationRead,
   sessionLiveFactsOf,
-} from "@/state/read-models/session-navigation-read-model";
-import { AGENT_ROLE_LABELS } from "@/types";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { PaletteRowAction } from "./command-palette-types";
 

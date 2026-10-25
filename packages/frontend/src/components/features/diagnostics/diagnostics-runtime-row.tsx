@@ -5,7 +5,7 @@ import { RuntimeRestartControl } from "@/components/features/runtimes/runtime-re
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { cn } from "@/lib/utils";
 import { DiagnosticsCallout, DiagnosticsDetail, DiagnosticsIconTile } from "./diagnostics-card";
-import type { DiagnosticsRuntimeEntryModel } from "./diagnostics-panel-model";
+import type { DiagnosticsRuntimeEntryModel } from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import { DiagnosticsStatusPill } from "./diagnostics-status";
 
 function RuntimeAction({ entry }: { entry: DiagnosticsRuntimeEntryModel }): ReactNode {

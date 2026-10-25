@@ -2,13 +2,13 @@ import type { SessionPanelsModel } from "@/features/session-panels";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat";
 import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
 import {
@@ -17,9 +17,11 @@ import {
   toAgentSessionSummary,
 } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
-  ChecksStateContext,
   RuntimeDefinitionsContext,
   TasksStateContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
+  ChecksStateContext,
   WorkspaceBranchStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
@@ -31,18 +33,18 @@ import {
   NotificationContext,
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
+import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
 import type {
   AgentOperationsContextValue,
   ChecksStateContextValue,
-  TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   createObservedCheckFixture,
   createTaskWorkflowActionsFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
+import { agentStudioChatDraftScopeKey } from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -53,7 +55,7 @@ import {
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 import { BrowserRuntimeProvider } from "@/features/browser";
-import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import {
   createGitActionsFixture,
   createBuildToolsFixture,

@@ -8,16 +8,22 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useDiagnosticsAutoOpenOwner } from "@/state/providers/diagnostics-auto-open-provider";
-import { buildDiagnosticsPanelModel, type DiagnosticsPanelModel } from "./diagnostics-panel-model";
+import {
+  buildDiagnosticsPanelModel,
+  type DiagnosticsPanelModel,
+} from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
+import { DIAGNOSTICS_SUMMARY_ICON_CLASSES } from "./diagnostics-summary-styles";
 
 type DiagnosticsPanelContextValue = {
   model: DiagnosticsPanelModel;
@@ -32,6 +38,18 @@ export function useDiagnosticsPanel(): DiagnosticsPanelContextValue {
   return value;
 }
 
+const noSubscription = (): (() => void) => () => {};
+
+/** A remote host connection is live only while it is connected. A local host is always live. */
+function useHostConnectionLive(): boolean {
+  const connection = getShellBridge().remoteConnection;
+  return useSyncExternalStore(
+    connection?.subscribeState ?? noSubscription,
+    () => connection === undefined || connection.readState().status === "connected",
+    () => true,
+  );
+}
+
 /** Owns the one diagnostics sheet and its automatic opening. Triggers and commands open it. */
 export function DiagnosticsPanelProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
@@ -42,12 +60,14 @@ export function DiagnosticsPanelProvider({ children }: PropsWithChildren): React
   } = useRuntimeAvailabilityContext();
   const runtimeStatus = useHostRuntimeStatusContext();
   const checks = useChecksState();
+  const connectionLive = useHostConnectionLive();
   const autoOpenOwner = useDiagnosticsAutoOpenOwner();
   const [isOpen, setOpen] = useState(false);
 
   const model = useMemo(
     () =>
       buildDiagnosticsPanelModel({
+        connectionLive,
         runtimeDefinitions,
         isLoadingRuntimeDefinitions,
         runtimeDefinitionsError,
@@ -61,6 +81,7 @@ export function DiagnosticsPanelProvider({ children }: PropsWithChildren): React
     [
       activeWorkspace,
       checks,
+      connectionLive,
       isLoadingRuntimeDefinitions,
       runtimeDefinitions,
       runtimeDefinitionsError,
@@ -94,7 +115,7 @@ export function DiagnosticsPanelProvider({ children }: PropsWithChildren): React
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={checks.isRefreshingChecks}
+                disabled={checks.isRefreshingChecks || !connectionLive}
                 onClick={() => void checks.refreshChecks()}
               >
                 <RefreshCcw
@@ -117,6 +138,7 @@ export function DiagnosticsPanelProvider({ children }: PropsWithChildren): React
 export function DiagnosticsTrigger({ className }: { className?: string }): ReactElement {
   const { model, openDiagnostics } = useDiagnosticsPanel();
   const label = `Open diagnostics: ${model.summaryState.label}`;
+  const iconClass = DIAGNOSTICS_SUMMARY_ICON_CLASSES[model.summaryState.tone];
   return (
     <Button
       type="button"
@@ -128,9 +150,9 @@ export function DiagnosticsTrigger({ className }: { className?: string }): React
       title={label}
     >
       {model.isSummaryChecking ? (
-        <RefreshCcw className={cn("size-4 animate-spin", model.summaryState.iconClass)} />
+        <RefreshCcw className={cn("size-4 animate-spin", iconClass)} />
       ) : (
-        <ShieldCheck className={cn("size-4", model.summaryState.iconClass)} />
+        <ShieldCheck className={cn("size-4", iconClass)} />
       )}
     </Button>
   );

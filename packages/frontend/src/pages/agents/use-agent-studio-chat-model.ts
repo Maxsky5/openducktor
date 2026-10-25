@@ -1,24 +1,23 @@
-import { sessionForkDisabledReason } from "@/components/features/agents/agent-chat/session-fork-availability";
+import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import { useTaskSessionFork } from "./use-task-session-fork";
-import type { AgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import type { AgentChatSend } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import type {
-  AgentChatInterruptedTurnResumeModel,
-  AgentChatModel,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentChatDraftScope } from "@/components/features/agents/agent-chat/agent-chat-draft-scope";
-import { useFailedTranscriptAction } from "@/components/features/agents/agent-chat/use-failed-transcript-action";
-import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
-import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
-import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
-import { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
+import type { AgentChatInterruptedTurnResumeModel } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatDraftScope } from "@openducktor/frontend-core/sessions/send/agent-chat-draft-scope";
+import { useFailedTranscriptAction } from "@openducktor/frontend-core/sessions/transcript/use-failed-transcript-action";
+import { deriveAgentChatReadiness } from "@openducktor/frontend-core/sessions/send/agent-chat-readiness";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
+import { resolveAgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-presentation";
+import { useAgentChatPresentation } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-presentation";
+import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
+import type { AgentStudioContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
@@ -28,7 +27,7 @@ import {
   type AgentStudioChatDraftScope,
   agentStudioChatDraftScopeKey,
   createAgentStudioChatDraftPersistence,
-} from "./agent-studio-chat-draft";
+} from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import {
   deriveAgentStudioChatSurfaceState,
   resolveAgentStudioChatAuxiliaryError,
@@ -39,6 +38,7 @@ import {
 } from "./agent-studio-transcript";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 
 export type AgentStudioChatSessionActionsContext = {
   isStarting: boolean;
@@ -161,7 +161,6 @@ export function useAgentStudioChatModel({
   const pendingQuestionRequests = selectedSession.pendingInput.pendingQuestionRequests;
   const {
     transcriptSession,
-    sessionAccentColor,
     runtimeBlockedAction,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
@@ -171,8 +170,10 @@ export function useAgentStudioChatModel({
     pendingApprovals: pendingApprovalRequests,
     pendingQuestions: pendingQuestionRequests,
     skills: modelSelection.skills,
-    runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
     runtimeReadiness: selectedSessionState.runtimeReadiness,
+  });
+  const sessionAccentColor = resolveAgentSessionAccentColor({
+    runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
   });
   const chatContextUsage = useMemo(
     () => toChatContextUsage(modelSelection.selectedSessionContextUsage),
@@ -307,6 +308,7 @@ export function useAgentStudioChatModel({
       : null,
     workingDirectory: selectedSessionIdentity?.workingDirectory ?? null,
     onSend: sessionActions.messageDelivery.onSend,
+    visibility: documentVisibility,
   });
   const { messageDelivery } = sessionActions;
   const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(

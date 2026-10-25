@@ -1,6 +1,6 @@
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { ComponentProps } from "react";
-import type { GitPanelTabCounts } from "./constants";
+import { gitPanelTabCounts } from "@openducktor/frontend-core/git/model/git-panel-header";
 import type { GitInfoHeader } from "./git-info-header";
 import type { AgentStudioGitPanelModel, GitPanelView } from "./types";
 
@@ -12,7 +12,7 @@ export function getGitInfoHeaderProps(
   onRefresh: () => void,
 ): ComponentProps<typeof GitInfoHeader> {
   const local = model.scopeStatesByScope.uncommitted;
-  const counts = tabCounts(model);
+  const counts = gitPanelTabCounts(model);
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
     comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
@@ -65,20 +65,4 @@ export function getGitInfoHeaderProps(
     props.repositoryBranchControl = model.repositoryBranchControl;
   }
   return props;
-}
-
-/** The counts stay numbers, so the memoized header compares them by value. */
-function tabCounts(model: AgentStudioGitPanelModel): GitPanelTabCounts {
-  const local = model.scopeStatesByScope.uncommitted;
-  const target = model.scopeStatesByScope.target;
-  return {
-    uncommitted:
-      model.loadedScopesByScope.uncommitted && local.uncommittedFileCount > 0
-        ? local.uncommittedFileCount
-        : null,
-    target:
-      model.comparisonReference && model.loadedScopesByScope.target && target.fileDiffs.length > 0
-        ? target.fileDiffs.length
-        : null,
-  };
 }

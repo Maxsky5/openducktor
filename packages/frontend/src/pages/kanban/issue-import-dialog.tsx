@@ -16,16 +16,23 @@ import {
 } from "@/components/ui/dialog";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import { issueItemsQueryKeys } from "@openducktor/frontend-core/queries/issue-items";
+import {
+  ISSUE_IMPORT_LABELS,
+  type IssueImportStep,
+  issueImportCreatedMessage,
+  issueImportListQueryOptions,
+  issueImportStepDescription,
+  issueImportTitle,
+  issueImportUnavailableReason,
+  selectedItemsWithCurrentLinks,
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
 import {
   useIssueImportSearch,
   useIssueImportSubmission,
   useIssueSelectionState,
-} from "./issue-import-dialog-state";
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 import { IssueReviewStep } from "./issue-import-review-step";
 import { IssueSelectionStep } from "./issue-import-selection-step";
-import { issueImportSourceLabel } from "./issue-import-provider";
-import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 type IssueImportDialogProps = {
   open: boolean;
@@ -46,7 +53,7 @@ function IssueImportDialogSession({
   onCloseAutoFocus,
 }: Omit<IssueImportDialogProps, "open">): ReactElement {
   const { openSettings } = useSettingsModal();
-  const [step, setStep] = useState<"select" | "review">("select");
+  const [step, setStep] = useState<IssueImportStep>("select");
   const {
     searchText,
     setSearchText,
@@ -62,17 +69,8 @@ function IssueImportDialogSession({
   const unavailableReason = issueImportUnavailableReason(provider);
   const unavailable = unavailableReason !== null;
   const query = useQuery({
-    queryKey: [
-      ...issueItemsQueryKeys.repo(repoPath),
-      provider.config.id,
-      provider.config.repository,
-      provider.config.settings?.areaPath,
-      search,
-      cursors[pageIndex],
-    ],
+    ...issueImportListQueryOptions({ repoPath, provider, search, cursor: cursors[pageIndex] }),
     enabled: !unavailable && !searchPending,
-    queryFn: ({ client }) =>
-      connectionHost(client).issueItemsList({ repoPath, search, cursor: cursors[pageIndex] }),
   });
   const items = query.data?.items ?? [];
   const selectedItems = selectedItemsWithCurrentLinks(selected, items);
@@ -93,7 +91,7 @@ function IssueImportDialogSession({
     providerScope: provider.config,
     onComplete: (createdCount) => {
       onOpenChange(false);
-      toast.success(`${createdCount} ${createdCount === 1 ? "Task" : "Tasks"} created`);
+      toast.success(issueImportCreatedMessage(createdCount));
     },
     onRefreshed: replaceItem,
   });
@@ -115,7 +113,7 @@ function IssueImportDialogSession({
 
   const openSource = (item: SourceIssue): void => {
     void openExternalUrl(item.url).catch((cause) =>
-      toast.error("Failed to open source item", { description: errorMessage(cause) }),
+      toast.error(ISSUE_IMPORT_LABELS.openSourceFailed, { description: errorMessage(cause) }),
     );
   };
 
@@ -184,25 +182,6 @@ function IssueImportDialogSession({
   );
 }
 
-function issueImportUnavailableReason(
-  provider: NonNullable<RepositoryGitProviderContext>,
-): string | null {
-  if (provider.config.id === "azure_devops" && !provider.config.settings?.areaPath) {
-    return "Choose an Azure DevOps area path in repository settings before importing work items.";
-  }
-  const issueConnectionReady =
-    provider.config.enabled &&
-    provider.config.repository &&
-    provider.health.authenticated &&
-    provider.health.repositoryMappingValid === false;
-  if (!provider.health.available && !issueConnectionReady) {
-    return (
-      provider.health.reason ?? "Connect the Git provider in repository settings before importing."
-    );
-  }
-  return null;
-}
-
 function IssueImportBodyContent({
   unavailableReason,
   onOpenSettings,
@@ -212,7 +191,7 @@ function IssueImportBodyContent({
 }: {
   unavailableReason: string | null;
   onOpenSettings: () => void;
-  step: "select" | "review";
+  step: IssueImportStep;
   selection: ReactElement;
   review: ReactElement;
 }): ReactElement {
@@ -221,7 +200,7 @@ function IssueImportBodyContent({
       <div className="flex flex-col gap-3 rounded-md border border-warning-border bg-warning-surface p-4 text-sm text-warning-surface-foreground">
         <p>{unavailableReason}</p>
         <Button type="button" variant="outline" onClick={onOpenSettings}>
-          Open repository settings
+          {ISSUE_IMPORT_LABELS.openRepositorySettings}
         </Button>
       </div>
     );
@@ -229,35 +208,17 @@ function IssueImportBodyContent({
   return step === "select" ? selection : review;
 }
 
-function selectedItemsWithCurrentLinks(
-  selected: Map<string, SourceIssue>,
-  items: SourceIssue[],
-): SourceIssue[] {
-  const linkedOnPage = new Map<string, string>();
-  for (const item of items) {
-    if (item.linkedTaskId) linkedOnPage.set(item.sourceId, item.linkedTaskId);
-  }
-  return [...selected.values()].map((item) => {
-    const linkedTaskId = linkedOnPage.get(item.sourceId);
-    return linkedTaskId ? { ...item, linkedTaskId } : item;
-  });
-}
-
 function IssueImportHeader({
   providerId,
   step,
 }: {
   providerId: string;
-  step: "select" | "review";
+  step: IssueImportStep;
 }): ReactElement {
   return (
     <DialogHeader className="border-b border-border px-6 py-4 pr-14">
-      <DialogTitle>Import from {issueImportSourceLabel(providerId)}</DialogTitle>
-      <DialogDescription>
-        {step === "select"
-          ? "Choose open source items. Your selections stay when you search or change pages."
-          : "Review each Task before import."}
-      </DialogDescription>
+      <DialogTitle>{issueImportTitle(providerId)}</DialogTitle>
+      <DialogDescription>{issueImportStepDescription(step)}</DialogDescription>
     </DialogHeader>
   );
 }
@@ -272,7 +233,7 @@ function IssueImportFooter({
   importItems,
 }: {
   unavailable: boolean;
-  step: "select" | "review";
+  step: IssueImportStep;
   pendingCount: number;
   busy: "import" | "refresh" | null;
   onBack: () => void;
@@ -285,12 +246,12 @@ function IssueImportFooter({
       {step === "review" ? (
         <Button type="button" variant="outline" disabled={busy !== null} onClick={onBack}>
           <ArrowLeft className="size-4" />
-          Back
+          {ISSUE_IMPORT_LABELS.back}
         </Button>
       ) : null}
       {step === "select" ? (
         <Button type="button" className="ml-auto" disabled={pendingCount === 0} onClick={onReview}>
-          Review Tasks
+          {ISSUE_IMPORT_LABELS.reviewTasks}
         </Button>
       ) : (
         <Button
@@ -300,7 +261,7 @@ function IssueImportFooter({
           onClick={() => void importItems()}
         >
           {busy === "import" ? <Loader2 className="size-4 animate-spin" /> : null}
-          {busy === "import" ? "Importing..." : "Import selected"}
+          {busy === "import" ? ISSUE_IMPORT_LABELS.importing : ISSUE_IMPORT_LABELS.importSelected}
         </Button>
       )}
     </DialogFooter>

@@ -21,11 +21,6 @@ import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
-import {
-  hasForegroundTurn,
-  draftSteerBlockedReason,
-  steersRunningTurn,
-} from "./agent-chat-steering";
 import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   createComposerAutofocusState,
@@ -34,7 +29,6 @@ import {
 import {
   type AgentChatComposerDraft,
   appendAttachmentsToDraft,
-  createEmptyComposerDraft,
   removeAttachmentFromDraft,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
@@ -56,9 +50,13 @@ import {
   AgentChatComposerSendControl,
 } from "./agent-chat-composer-pending-items";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
-import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
+import { useAgentChatComposerDraftState } from "@openducktor/frontend-core/sessions/composer/use-agent-chat-composer-draft-state";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
-import { useComposerPolicy } from "./agent-chat-composer-policy";
+import { useComposerPolicy } from "@openducktor/frontend-core/sessions/composer/agent-chat-composer-policy";
+import { useAgentChatComposerSubmit } from "@openducktor/frontend-core/sessions/composer/use-agent-chat-composer-submit";
+import type { ComposerFailure } from "@openducktor/frontend-core/sessions/composer/composer-failure";
+import { steerShortcutLabel } from "@/lib/steer-shortcut";
 
 const MemoizedAgentChatComposerEditor = memo(AgentChatComposerEditor);
 
@@ -98,12 +96,9 @@ export function AgentChatComposer({
     restoreSubmittedDraft,
   } = useAgentChatComposerDraftState({
     scope: draftScope,
+    visibility: documentVisibility,
   });
   const draftRef = useRef<AgentChatComposerDraft>(draft);
-  const defaultSendDisabledRef = useRef(false);
-  const sendInputBlockedRef = useRef(false);
-  const modelRef = useRef(model);
-  const settingsReadyRef = useRef(settingsReady);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const {
     isSubmitting,
@@ -116,7 +111,13 @@ export function AgentChatComposer({
     sendDisabled,
     sendBlockedReason,
     pendingSendBlockedReason,
-  } = useComposerPolicy({ model, draft, primaryMode, settingsReady });
+  } = useComposerPolicy({
+    model,
+    draft,
+    primaryMode,
+    settingsReady,
+    steerShortcutLabel: steerShortcutLabel(),
+  });
   const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
 
   const handleDraftChange = useCallback(
@@ -170,11 +171,7 @@ export function AgentChatComposer({
 
   useLayoutEffect(() => {
     draftRef.current = draft;
-    defaultSendDisabledRef.current = defaultSendDisabled;
-    sendInputBlockedRef.current = sendInputBlocked;
-    modelRef.current = model;
-    settingsReadyRef.current = settingsReady;
-  }, [draft, model, defaultSendDisabled, sendInputBlocked, settingsReady]);
+  }, [draft]);
 
   const modelPickerDisabled =
     isSendOrModelPending ||
@@ -189,65 +186,25 @@ export function AgentChatComposer({
     isSubmitting,
   });
 
-  const handleSubmit = useCallback(
-    async (mode: AgentMessageSubmitMode): Promise<void> => {
-      if (!settingsReadyRef.current) return;
-      const steersTurn = steersRunningTurn(mode, hasForegroundTurn(modelRef.current));
-      if (steersTurn ? sendInputBlockedRef.current : defaultSendDisabledRef.current) {
-        return;
-      }
-      const submitDraft = modelRef.current.onSend;
-      const submittedDraft = draftRef.current;
-      const steerBlockedReason = steersTurn
-        ? draftSteerBlockedReason(submittedDraft, modelRef.current)
-        : null;
-      if (steerBlockedReason) {
-        toast.error("Cannot steer this message", { description: steerBlockedReason });
-        return;
-      }
-      const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
-      clearSubmittedDraft(submittedSnapshot);
-      setDisplayedDraft(createEmptyComposerDraft());
-      onComposerEditorInput();
-      scheduleComposerFocus();
-      try {
-        const result = await submitDraft(submittedDraft, mode);
-        if (result !== true && result !== false) {
-          restoreSubmittedDraft(submittedSnapshot, result);
-          if (!result.inAppFeedbackHandled)
-            toast.error("Unable to send message", { description: result.error.message });
-          return;
-        }
-        if (!result) {
-          restoreSubmittedDraft(submittedSnapshot);
-          if (modelRef.current.draftScope.key === submittedSnapshot.key) {
-            onComposerEditorInput();
-            scheduleComposerFocus();
-          }
-          return;
-        }
-        if (modelRef.current.draftScope.key === submittedSnapshot.key) scheduleComposerFocus();
-      } catch (error) {
-        const description = error instanceof Error ? error.message : String(error);
-        toast.error("Unable to send message", {
-          description,
-        });
-        restoreSubmittedDraft(submittedSnapshot);
-        if (modelRef.current.draftScope.key === submittedSnapshot.key) {
-          onComposerEditorInput();
-          scheduleComposerFocus();
-        }
-      }
-    },
-    [
-      clearSubmittedDraft,
+  const reportSendError = useCallback((failure: ComposerFailure): void => {
+    toast.error(failure.title, { description: failure.message });
+  }, []);
+  const handleSubmit = useAgentChatComposerSubmit({
+    model,
+    draftState: {
       createSubmittedDraftSnapshot,
-      onComposerEditorInput,
+      clearSubmittedDraft,
       restoreSubmittedDraft,
-      scheduleComposerFocus,
       setDisplayedDraft,
-    ],
-  );
+    },
+    draftRef,
+    settingsReady,
+    sendInputBlocked,
+    defaultSendDisabled,
+    reportError: reportSendError,
+    onDraftReplaced: onComposerEditorInput,
+    onSettledInScope: scheduleComposerFocus,
+  });
   const submitComposerAction = useCallback((): void => {
     void handleSubmit(primaryMode);
   }, [handleSubmit, primaryMode]);

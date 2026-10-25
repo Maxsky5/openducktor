@@ -159,6 +159,50 @@ export type WorkspaceSessionLiveState =
 
 export const UNKNOWN_WORKSPACE_SESSION_LIVE_STATE: WorkspaceSessionLiveState = { kind: "unknown" };
 
+const sameEntries = <Value>(
+  left: ReadonlyMap<string, Value>,
+  right: ReadonlyMap<string, Value>,
+  same: (left: Value, right: Value) => boolean,
+): boolean => {
+  if (left === right) return true;
+  if (left.size !== right.size) return false;
+  for (const [key, value] of left) {
+    const other = right.get(key);
+    if (other === undefined || !same(value, other)) return false;
+  }
+  return true;
+};
+
+const sameLiveFacts = (
+  left: WorkspaceSessionLiveFacts,
+  right: WorkspaceSessionLiveFacts,
+): boolean =>
+  left.activityState === right.activityState &&
+  left.pendingQuestion === right.pendingQuestion &&
+  left.pendingPermission === right.pendingPermission &&
+  left.fault === right.fault &&
+  left.statusUnavailableReason === right.statusUnavailableReason &&
+  left.pendingInputs.size === right.pendingInputs.size &&
+  [...left.pendingInputs].every((input) => right.pendingInputs.has(input));
+
+const sameFault = (left: WorkspaceSessionFault, right: WorkspaceSessionFault): boolean =>
+  left.message === right.message && left.statusUnavailable === right.statusUnavailable;
+
+/** True when two live states of a workspace report the same facts. */
+export const sameWorkspaceSessionLiveState = (
+  left: WorkspaceSessionLiveState,
+  right: WorkspaceSessionLiveState,
+): boolean => {
+  if (left.kind === "unknown" || right.kind === "unknown") return left.kind === right.kind;
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "unavailable" && right.kind === "unavailable" && left.reason !== right.reason)
+    return false;
+  return (
+    sameEntries(left.sessions, right.sessions, sameLiveFacts) &&
+    sameEntries(left.faults, right.faults, sameFault)
+  );
+};
+
 type MutableLiveFacts = {
   status: WorkspaceActivitySession["status"];
   statusUnavailableReason: string | null;

@@ -1,13 +1,13 @@
-import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   createObservedCheckFixture,
   createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
 } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
 import type {
   ChecksStateContextValue,
-  TasksStateContextValue,
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";

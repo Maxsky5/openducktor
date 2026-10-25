@@ -14,7 +14,10 @@ import {
   type RepoAgentDefaultsInput,
   type RepoDefaultRole,
 } from "@/components/features/repository/model-defaults/model-defaults-model";
-import type { RepoAgentDefaultDraft, ModelDefaultDraft } from "@/lib/repo-agent-defaults";
+import type {
+  RepoAgentDefaultDraft,
+  ModelDefaultDraft,
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
 
 export {

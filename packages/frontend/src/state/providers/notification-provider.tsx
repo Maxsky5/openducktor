@@ -29,7 +29,7 @@ import {
 import type {
   SessionStartNotificationInput,
   SessionStartNotificationPublisher,
-} from "@/features/session-start/session-start-orchestration";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import {

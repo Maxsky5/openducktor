@@ -2,7 +2,10 @@ import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { DiagnosticsHealth, DiagnosticsStatus } from "./diagnostics-panel-model";
+import type {
+  DiagnosticsHealth,
+  DiagnosticsStatus,
+} from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 
 const HEALTH_BADGE_VARIANTS = {
   ok: "success",

@@ -4,19 +4,8 @@ import {
   createObservedCheckFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type {
-  ChecksStateContextValue,
-  DelegationStateContextValue,
-  SpecStateContextValue,
-  TasksStateContextValue,
-} from "@/types/state-slices";
-import {
-  buildChecksStateValue,
-  buildDelegationStateValue,
-  buildSpecStateValue,
-  buildTasksStateValue,
-  buildWorkspaceStateValue,
-} from "./app-state-context-values";
+import type { ChecksStateContextValue } from "@/types/state-slices";
+import { buildChecksStateValue, buildWorkspaceStateValue } from "./app-state-context-values";
 
 const workspace = (path: string, isActive = false): WorkspaceRecord => ({
   workspaceId: path.split("/").filter(Boolean).at(-1) ?? "repo",
@@ -91,7 +80,7 @@ describe("app-state-context-values", () => {
     expect(value.activeWorkspace).toEqual(activeWorkspace);
   });
 
-  test("returns identity for other context builders", () => {
+  test("returns identity for the checks context builder", () => {
     const checksValue: ChecksStateContextValue = {
       pathCheck: createObservedCheckFixture(),
       gitCheck: createObservedCheckFixture(),
@@ -100,47 +89,6 @@ describe("app-state-context-values", () => {
       isRefreshingChecks: false,
       refreshChecks: async () => {},
     };
-    const tasksValue: TasksStateContextValue = {
-      tasksAreCurrent: true,
-      isForegroundLoadingTasks: false,
-      isRefreshingTasksInBackground: false,
-      isLoadingTasks: false,
-      detectingPullRequestTaskIds: new Set<string>(),
-      linkingMergedPullRequestTaskId: null,
-      unlinkingPullRequestTaskIds: new Set<string>(),
-      pendingMergedPullRequest: null,
-      tasks: [],
-      refreshTasks: async () => {},
-      syncPullRequests: async (_taskId: string) => {},
-      linkMergedPullRequest: async () => {},
-      cancelLinkMergedPullRequest: () => {},
-      unlinkPullRequest: async (_taskId: string) => {},
-      createTask: async () => {},
-      updateTask: async () => {},
-      setTaskTargetBranch: async () => {},
-      deleteTask: async () => {},
-      closeTask: async () => {},
-      resetTaskImplementation: async () => {},
-      resetTask: async () => {},
-      transitionTask: async () => {},
-      humanApproveTask: async () => {},
-      humanRequestChangesTask: async () => {},
-    };
-    const delegationValue: DelegationStateContextValue = {
-      delegateTask: async () => {},
-    };
-    const specValue: SpecStateContextValue = {
-      loadSpec: async () => "",
-      loadSpecDocument: async () => ({ markdown: "", updatedAt: null }),
-      loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
-      loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
-      saveSpec: async () => ({ updatedAt: "" }),
-      saveSpecArtifact: async () => ({ updatedAt: "" }),
-      savePlanArtifact: async () => ({ updatedAt: "" }),
-    };
     expect(buildChecksStateValue(checksValue)).toBe(checksValue);
-    expect(buildTasksStateValue(tasksValue)).toBe(tasksValue);
-    expect(buildDelegationStateValue(delegationValue)).toBe(delegationValue);
-    expect(buildSpecStateValue(specValue)).toBe(specValue);
   });
 });

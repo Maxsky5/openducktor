@@ -11,7 +11,7 @@ import { MediaPreviewDialog } from "@/components/ui/media-preview-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   generatedImageMetadataQueryOptions,
@@ -24,6 +24,15 @@ import {
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
 import { AgentChatGeneratedImageActions } from "./agent-chat-generated-image-actions";
 import { useAgentGeneratedImagePreview } from "./use-agent-generated-image-preview";
+import {
+  generatedImageAlt,
+  IMAGE_GENERATION_INTERRUPTED_TEXT,
+  IMAGE_GENERATION_MISSING_SESSION_TEXT,
+  imageGenerationFailureText,
+  imageGenerationIncompleteText,
+  imageGenerationStatusLabel,
+  resolveGeneratedImagePreviewPlan,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-image-generation-model";
 
 type AgentChatImageGenerationProps = { part: AgentImageGenerationPart };
 
@@ -43,29 +52,24 @@ export function AgentChatImageGeneration({ part }: AgentChatImageGenerationProps
       )}
     >
       {part.status !== "completed" || !sessionRef ? (
-        <ImageGenerationHeader label={statusLabel(part)} running={part.status === "running"} />
+        <ImageGenerationHeader
+          label={imageGenerationStatusLabel(part)}
+          running={part.status === "running"}
+        />
       ) : null}
       {part.status === "running" ? <GeneratingImage /> : null}
       {part.status === "completed" && sessionRef ? (
         <CompletedImage part={part} sessionRef={sessionRef} />
       ) : null}
       {part.status === "completed" && !sessionRef ? (
-        <p className="text-sm text-muted-foreground">
-          Preview unavailable: the session reference is missing. Reopen the session.
-        </p>
+        <p className="text-sm text-muted-foreground">{IMAGE_GENERATION_MISSING_SESSION_TEXT}</p>
       ) : null}
       {part.status === "failed" ? <ImageFailure failure={part.failure} /> : null}
       {part.status === "interrupted" ? (
-        <p className="text-sm text-muted-foreground">
-          The turn stopped before the runtime confirmed an image result.
-        </p>
+        <p className="text-sm text-muted-foreground">{IMAGE_GENERATION_INTERRUPTED_TEXT}</p>
       ) : null}
       {part.status === "incomplete" ? (
-        <p className="text-sm text-muted-foreground">
-          {part.incompleteReason === "runtime_failure"
-            ? "The turn failed before the runtime confirmed an image result."
-            : "The runtime did not confirm an image result. Check the session in the runtime."}
-        </p>
+        <p className="text-sm text-muted-foreground">{imageGenerationIncompleteText(part)}</p>
       ) : null}
       <ImageDetails key={JSON.stringify([sessionRef, part.turnId, part.itemId])} part={part} />
     </div>
@@ -239,53 +243,39 @@ function CompletedImage({
   const supported =
     runtimeDefinitions.find((runtime) => runtime.kind === sessionRef.runtimeKind)?.capabilities
       .optionalSurfaces.supportsImageGeneration === true;
-  if (!supported)
+  const plan = resolveGeneratedImagePreviewPlan(part, sessionRef, supported);
+  const alt = generatedImageAlt(part);
+  if (plan.kind === "unsupported" || plan.kind === "unavailable")
     return (
       <>
         <ImageGenerationHeader label="Image generated" />
-        <p className="text-sm text-muted-foreground">
-          This runtime does not support image previews.
-        </p>
+        <p className="text-sm text-muted-foreground">{plan.message}</p>
       </>
     );
-  if (!part.output && part.savedPath !== undefined && !part.previewUnavailableReason) {
-    const input: GeneratedImageMetadataInput = { ref: sessionRef, itemId: part.itemId };
-    if (part.turnId !== undefined) input.turnId = part.turnId;
-    return (
-      <GeneratedImagePreview
-        key={JSON.stringify(input)}
-        input={input}
-        alt={part.revisedPrompt || "Generated image"}
-      />
-    );
+  if (plan.kind === "metadata") {
+    const input: GeneratedImageMetadataInput = { ref: plan.ref, itemId: plan.itemId };
+    if (plan.turnId !== undefined) input.turnId = plan.turnId;
+    return <GeneratedImagePreview key={JSON.stringify(input)} input={input} alt={alt} />;
   }
-  if (!part.output)
-    return (
-      <>
-        <ImageGenerationHeader label="Image generated" />
-        <p className="text-sm text-muted-foreground">
-          {part.previewUnavailableReason ??
-            "Preview unavailable: the runtime did not report image output. Check the session in the runtime."}
-        </p>
-      </>
-    );
   const input: AgentGeneratedImageQueryInput = {
-    ref: sessionRef,
-    itemId: part.itemId,
-    revision: part.output.revision,
+    ref: plan.ref,
+    itemId: plan.itemId,
+    revision: plan.revision,
   };
-  if (part.turnId !== undefined) input.turnId = part.turnId;
+  if (plan.turnId !== undefined) input.turnId = plan.turnId;
   return (
     <GeneratedImagePreview
       key={JSON.stringify(agentGeneratedImageQueryKeys.image(input))}
       input={input}
-      alt={part.revisedPrompt || "Generated image"}
+      alt={alt}
     />
   );
 }
 
 function ImageFailure({ failure }: { failure: AgentImageGenerationPart["failure"] }): ReactElement {
-  const resetSeconds = failure?.resetsAtEpochSeconds;
+  const { message, nextSteps } = imageGenerationFailureText(failure, (seconds) =>
+    new Date(seconds * 1000).toLocaleString(),
+  );
   return (
     <div
       role="alert"
@@ -293,26 +283,12 @@ function ImageFailure({ failure }: { failure: AgentImageGenerationPart["failure"
     >
       <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />
       <div className="flex min-w-0 flex-col gap-2">
-        <p className="whitespace-pre-wrap break-words text-sm">
-          {failure?.message ||
-            "The runtime could not generate this image. It did not provide a failure reason."}
-        </p>
-        {failure?.kind !== "usage_limit" ? (
-          <p className="text-sm text-muted-foreground">
-            Ask the agent to explain this failure before trying again.
+        <p className="whitespace-pre-wrap break-words text-sm">{message}</p>
+        {nextSteps.map((step) => (
+          <p key={step} className="text-sm text-muted-foreground">
+            {step}
           </p>
-        ) : null}
-        {resetSeconds !== undefined ? (
-          <p className="text-sm text-muted-foreground">
-            Wait until {new Date(resetSeconds * 1000).toLocaleString()} before requesting another
-            image.
-          </p>
-        ) : null}
-        {failure?.kind === "usage_limit" && resetSeconds === undefined ? (
-          <p className="text-sm text-muted-foreground">
-            Check image-generation usage limits in the runtime before requesting another image.
-          </p>
-        ) : null}
+        ))}
       </div>
     </div>
   );
@@ -477,20 +453,3 @@ function LoadedImagePreview({
     </GeneratedImageFrame>
   );
 }
-
-const statusLabel = (part: AgentImageGenerationPart): string => {
-  switch (part.status) {
-    case "running":
-      return "Generating image…";
-    case "completed":
-      return "Image generated";
-    case "failed":
-      return part.failure?.kind === "usage_limit"
-        ? "Image generation limit reached"
-        : "Image generation failed";
-    case "interrupted":
-      return "Image generation interrupted";
-    case "incomplete":
-      return "Image generation outcome unknown";
-  }
-};

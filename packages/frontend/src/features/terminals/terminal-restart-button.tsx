@@ -9,8 +9,12 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { terminalActivityOwnerKey } from "./terminal-activity-store";
-import type { TerminalTransportController } from "./terminal-transport-controller";
+import { terminalActivityOwnerKey } from "@openducktor/frontend-core/terminals/terminal-activity-store";
+import {
+  findTerminalActivity,
+  restartTerminalCommand,
+} from "@openducktor/frontend-core/terminals/terminal-command-restart";
+import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 
 export function TerminalRestartButton({
   summary,
@@ -26,10 +30,7 @@ export function TerminalRestartButton({
   const ownerKey = terminalActivityOwnerKey(summary.context);
   const read = useCallback(() => controller.readActivity(ownerKey), [controller, ownerKey]);
   const state = useSyncExternalStore(controller.subscribeActivity, read, read);
-  const activity =
-    state.status === "ready"
-      ? state.commands.find((item) => item.summary.terminalId === summary.terminalId)
-      : undefined;
+  const activity = findTerminalActivity(state, summary.terminalId);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastCommand, setLastCommand] = useState(activity?.command);
@@ -44,14 +45,9 @@ export function TerminalRestartButton({
     setPending(true);
     setError(null);
     try {
-      await onRestart({ terminalId: summary.terminalId, expectedCommand: activity.command });
+      await restartTerminalCommand(activity, read, onRestart);
     } catch (cause) {
-      const latest = read();
-      const command =
-        latest.status === "ready"
-          ? latest.commands.find((item) => item.summary.terminalId === summary.terminalId)
-          : undefined;
-      if (!command || command.command === activity.command) setError(errorMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setPending(false);
     }

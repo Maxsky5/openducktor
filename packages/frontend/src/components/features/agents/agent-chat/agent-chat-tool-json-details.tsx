@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { formatRawJsonLikeText } from "./agent-chat-message-card-model";
+import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 
 type ToolJsonDetailsProps = {
   label: "Input" | "Output" | "Error";

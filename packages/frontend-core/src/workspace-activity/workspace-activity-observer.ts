@@ -9,6 +9,7 @@ import {
   foldWorkspaceActivityBadges,
   foldWorkspaceSessionLiveFacts,
   sameWorkspaceActivityState,
+  sameWorkspaceSessionLiveState,
   UNKNOWN_WORKSPACE_ACTIVITY,
   UNKNOWN_WORKSPACE_SESSION_LIVE_STATE,
   type WorkspaceActivityState,
@@ -246,19 +247,26 @@ export const createWorkspaceActivityObserver = ({
       cache.set(workspaceId, { version, state });
       return state;
     },
+    // A session upsert changes the projection for each streamed message. The snapshot stays the
+    // same object while the live facts stay equal, so the session lists do not build again.
     getSessionLiveSnapshot(): WorkspaceSessionLiveSnapshot {
       if (liveSnapshot?.version === version) {
         return liveSnapshot.value;
       }
-      const value = {
-        statesByWorkspaceId: new Map(
-          [...observations.keys()].map((workspaceId) => [
-            workspaceId,
-            computeWorkspaceSessionLive(workspaceId),
-          ]),
-        ),
-        sessionRecordsError,
-      };
+      const previous = liveSnapshot?.value;
+      let changed =
+        previous === undefined ||
+        previous.sessionRecordsError !== sessionRecordsError ||
+        previous.statesByWorkspaceId.size !== observations.size;
+      const statesByWorkspaceId = new Map<string, WorkspaceSessionLiveState>();
+      for (const workspaceId of observations.keys()) {
+        const known = previous?.statesByWorkspaceId.get(workspaceId);
+        const computed = computeWorkspaceSessionLive(workspaceId);
+        const state = known && sameWorkspaceSessionLiveState(known, computed) ? known : computed;
+        changed ||= state !== known;
+        statesByWorkspaceId.set(workspaceId, state);
+      }
+      const value = !changed && previous ? previous : { statesByWorkspaceId, sessionRecordsError };
       liveSnapshot = { version, value };
       return value;
     },

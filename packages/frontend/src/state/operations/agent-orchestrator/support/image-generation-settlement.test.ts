@@ -2,7 +2,7 @@ import { buildSession } from "@openducktor/frontend-core/sessions/agent-orchestr
 import { applyLoadedSessionHistory } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
 import { expect, test } from "bun:test";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
-import { mergeReadonlyRuntimeHistory } from "@/components/features/agents/agent-chat/readonly-transcript/readonly-transcript-session";
+import { mergeReadonlyRuntimeHistory } from "@openducktor/frontend-core/sessions/readonly-transcript/readonly-transcript-session";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createImageGenerationMessage,

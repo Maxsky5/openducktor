@@ -1,12 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
-  persistTaskExecutionCiCommentFilters,
-  readTaskExecutionCiCommentFilters,
-} from "./task-execution-ci-comment-filters";
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 
 const comment = (id: string, author = "reviewer"): PullRequestReviewActivity => ({
@@ -27,37 +30,32 @@ const comment = (id: string, author = "reviewer"): PullRequestReviewActivity => 
   source: "review_thread",
 });
 
-const createMemoryStorage = (): Storage => {
-  const values = new Map<string, string>();
-  return {
-    clear: () => values.clear(),
-    getItem: (key) => values.get(key) ?? null,
-    key: (index) => Array.from(values.keys())[index] ?? null,
-    get length() {
-      return values.size;
-    },
-    removeItem: (key) => values.delete(key),
-    setItem: (key, value) => values.set(key, value),
-  };
-};
-
-const withLocalStorage = async (storage: Storage, run: () => Promise<void>): Promise<void> => {
-  const originalStorage = globalThis.localStorage;
-  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
-  try {
-    await run();
-  } finally {
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: originalStorage,
-    });
+// Each test starts with empty device storage. One connection serves each storage, so a rerender
+// keeps the same connection.
+let testStorage: ClientStorage = createMemoryClientStorage();
+const connections = new WeakMap<ClientStorage, ClientConnection>();
+const connectionFor = (storage: ClientStorage): ClientConnection => {
+  let connection = connections.get(storage);
+  if (!connection) {
+    connection = createTestClientConnection({ storage });
+    connections.set(storage, connection);
   }
+  return connection;
 };
 
-const commentsList = (comments: PullRequestReviewActivity[]) => (
-  <TooltipProvider>
-    <TaskExecutionCiCommentsList comments={comments} />
-  </TooltipProvider>
+beforeEach(() => {
+  testStorage = createMemoryClientStorage();
+});
+
+const commentsList = (
+  comments: PullRequestReviewActivity[],
+  storage: ClientStorage = testStorage,
+) => (
+  <ClientConnectionProvider connection={connectionFor(storage)}>
+    <TooltipProvider>
+      <TaskExecutionCiCommentsList comments={comments} />
+    </TooltipProvider>
+  </ClientConnectionProvider>
 );
 
 describe("TaskExecutionCiCommentsList", () => {
@@ -269,88 +267,43 @@ describe("TaskExecutionCiCommentsList", () => {
   });
 
   test("hides resolved comments and restores the persisted filter", async () => {
-    const storage = createMemoryStorage();
-    await withLocalStorage(storage, async () => {
-      await withAnimationFrameTestDriver(async (frameDriver) => {
-        const comments = [
-          comment("unresolved", "unresolved-author"),
-          { ...comment("resolved", "resolved-author"), isResolved: true },
-        ];
-        const view = render(commentsList(comments));
-        await frameDriver.flushFrames();
+    const storage = createMemoryClientStorage();
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const comments = [
+        comment("unresolved", "unresolved-author"),
+        { ...comment("resolved", "resolved-author"), isResolved: true },
+      ];
+      const view = render(commentsList(comments, storage));
+      await frameDriver.flushFrames();
 
-        expect(screen.getByText("resolved-author")).toBeTruthy();
-        const filterButton = screen.getByRole("button", { name: "Filter comments" });
-        expect(filterButton.textContent).toBe("");
-        expect(filterButton.classList.contains("bg-accent/60")).toBe(false);
-        fireEvent.click(filterButton);
-        const hideResolvedSwitch = screen.getByRole("switch", { name: "Hide resolved" });
-        expect(hideResolvedSwitch.getAttribute("aria-checked")).toBe("false");
+      expect(screen.getByText("resolved-author")).toBeTruthy();
+      const filterButton = screen.getByRole("button", { name: "Filter comments" });
+      expect(filterButton.textContent).toBe("");
+      expect(filterButton.classList.contains("bg-accent/60")).toBe(false);
+      fireEvent.click(filterButton);
+      const hideResolvedSwitch = screen.getByRole("switch", { name: "Hide resolved" });
+      expect(hideResolvedSwitch.getAttribute("aria-checked")).toBe("false");
 
-        fireEvent.click(hideResolvedSwitch);
-        await frameDriver.flushMicrotasks();
-        await frameDriver.flushFrames();
+      fireEvent.click(hideResolvedSwitch);
+      await frameDriver.flushMicrotasks();
+      await frameDriver.flushFrames();
 
-        expect(filterButton.classList.contains("bg-accent/60")).toBe(false);
-        expect(screen.queryByText("resolved-author")).toBeNull();
-        expect(screen.getByText("unresolved-author")).toBeTruthy();
-        view.unmount();
+      expect(filterButton.classList.contains("bg-accent/60")).toBe(false);
+      expect(screen.queryByText("resolved-author")).toBeNull();
+      expect(screen.getByText("unresolved-author")).toBeTruthy();
+      view.unmount();
 
-        const restoredView = render(commentsList(comments));
-        fireEvent.click(screen.getByRole("button", { name: "Filter comments" }));
-        expect(
-          screen.getByRole("switch", { name: "Hide resolved" }).getAttribute("aria-checked"),
-        ).toBe("true");
-        await frameDriver.flushFrames();
-        expect(screen.queryByText("resolved-author")).toBeNull();
-        expect(screen.getByText("unresolved-author")).toBeTruthy();
+      const restoredView = render(commentsList(comments, storage));
+      fireEvent.click(screen.getByRole("button", { name: "Filter comments" }));
+      expect(
+        screen.getByRole("switch", { name: "Hide resolved" }).getAttribute("aria-checked"),
+      ).toBe("true");
+      await frameDriver.flushFrames();
+      expect(screen.queryByText("resolved-author")).toBeNull();
+      expect(screen.getByText("unresolved-author")).toBeTruthy();
 
-        restoredView.unmount();
-        await frameDriver.flushMicrotasks();
-      });
-    });
-  });
-
-  test("reads current persisted filters and rejects malformed storage", async () => {
-    const storage = createMemoryStorage();
-    await withLocalStorage(storage, async () => {
-      persistTaskExecutionCiCommentFilters({ hideResolved: true });
-      expect(readTaskExecutionCiCommentFilters()).toEqual({ hideResolved: true });
-
-      storage.clear();
-      expect(readTaskExecutionCiCommentFilters()).toEqual({ hideResolved: false });
-
-      persistTaskExecutionCiCommentFilters({ hideResolved: true });
-      const storageKey = storage.key(0);
-      expect(storageKey).not.toBeNull();
-      if (storageKey) {
-        storage.setItem(storageKey, "not-json");
-      }
-
-      expect(() => readTaskExecutionCiCommentFilters()).toThrow(
-        "Failed to read persisted CI comment filters",
-      );
-    });
-  });
-
-  test("propagates filter storage access failures", async () => {
-    const readFailure = new Error("storage read failed");
-    const writeFailure = new Error("storage write failed");
-    const storage = createMemoryStorage();
-    storage.getItem = () => {
-      throw readFailure;
-    };
-    storage.setItem = () => {
-      throw writeFailure;
-    };
-
-    await withLocalStorage(storage, async () => {
-      expect(() => readTaskExecutionCiCommentFilters()).toThrow(
-        "Failed to read persisted CI comment filters",
-      );
-      expect(() => persistTaskExecutionCiCommentFilters({ hideResolved: true })).toThrow(
-        "Failed to persist CI comment filters",
-      );
+      restoredView.unmount();
+      await frameDriver.flushMicrotasks();
     });
   });
 });

@@ -19,19 +19,19 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CommandPaletteTrigger } from "@/features/command-palette/command-palette-trigger";
 import {
-  buildSessionNavigationHref,
   sessionNavigationTargetKey,
   type SessionNavigationTarget,
-} from "@/features/session-navigation/session-navigation-target";
-import { useSessionNavigationModel } from "@/features/session-navigation/use-session-navigation-model";
-import { useVisibleSessionControls } from "@/features/session-navigation/visible-session-target";
-import { useWatchSessionBlockers } from "@/features/session-navigation/session-read-state";
-import { useMinuteClock } from "@/lib/relative-time";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
+import { useSessionGrouping } from "@openducktor/frontend-core/sessions/navigation/use-session-grouping";
+import { useSessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-model";
+import { useVisibleSessionControls } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import { useWatchSessionBlockers } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { useSidebarSessionGrouping } from "@/state/mutations/use-sidebar-session-grouping";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { AppBrand } from "./app-brand";
 import { SessionCreateSplitAction } from "./session-create-split-action";
 import { SessionNavigationList } from "./session-navigation-list";
@@ -157,7 +157,7 @@ export function WorkspaceSidebar({
     if (scope === "all") return workspaces;
     return activeWorkspace ? [activeWorkspace] : [];
   }, [activeWorkspace, scope, workspaces]);
-  const { grouping, disabled: groupingDisabled, changeGrouping } = useSidebarSessionGrouping();
+  const { grouping, disabled: groupingDisabled, changeGrouping } = useSessionGrouping();
   const { model, retrySource } = useSessionNavigationModel(scopedWorkspaces, grouping);
   useWatchSessionBlockers(model);
   const { readVisible } = useVisibleSessionControls();

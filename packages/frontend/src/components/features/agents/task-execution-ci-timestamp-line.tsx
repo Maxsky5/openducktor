@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { humanDate } from "@/lib/task-display";
+import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
 
 export function TaskExecutionCiTimestampLine({
   label,

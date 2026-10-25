@@ -13,7 +13,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   NotificationContext,

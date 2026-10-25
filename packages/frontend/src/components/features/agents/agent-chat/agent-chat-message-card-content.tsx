@@ -1,44 +1,51 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
+import {
+  isSubagentWaitingForInput,
+  readSubagentDurationMs,
+  readSubagentError,
+  readSubagentSummary,
+  SUBAGENT_WAITING_FOR_INPUT_LABEL,
+  subagentDisplayName,
+  subagentStatusLabel,
+} from "@openducktor/frontend-core/sessions/session-view/subagent-activity";
 import { AgentChatAssistantMessage } from "./agent-chat-assistant-message";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
-import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { Brain, Cpu, FileX, Hammer, LoaderCircle } from "lucide-react";
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
 import { BrowserAnnotationMessageChips } from "@/features/browser-annotations/browser-annotation-message-chips";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { AgentChatToolCallPresentation } from "./agent-chat.types";
+import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import { BrowserToolMessage } from "./agent-chat-browser-tool";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
-import { roleLabel, SYSTEM_PROMPT_PREFIX } from "./agent-chat-message-card-model";
-import type { SubagentMeta, ToolMeta } from "./agent-chat-message-card-model.types";
+import { roleLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import { resolveInstructionsMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
+import type {
+  SubagentMeta,
+  ToolMeta,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { AgentChatTaskTool } from "./agent-chat-task-tool";
+import { renderUserMessageReferenceChip } from "./agent-chat-user-message-reference-chip";
 import {
-  isUserMessageReferencePart,
-  renderUserMessageReferenceChip,
-  type UserMessageReferenceKind,
-} from "./agent-chat-user-message-reference-chip";
-import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
-import {
-  isUserAttachmentPart,
-  readRenderableUserMessageText,
-  readUserMessageParts,
-  readVisibleUserMessageText,
+  buildUserMessageContent,
+  readUserMessageText,
   type UserAttachmentPart,
-} from "./agent-chat-user-message-text";
+  type UserMessageContentNode,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-user-message-content";
+import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 import { ArtifactToolMessage } from "./agent-chat-artifact-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
-import { formatAgentDuration } from "./format-agent-duration";
-import type { ParentSessionRuntimeContext } from "./subagent-session-key";
+import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
+import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
-import { buildToolSummary } from "./tool-summary";
+import { buildToolSummary } from "@openducktor/frontend-core/sessions/messages/tool-summary";
 
 type MessageHeaderProps = {
   message: AgentChatMessage;
@@ -114,201 +121,29 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
   );
 };
 
-type UserMessageDisplayReferencePart = Extract<
-  AgentUserMessageDisplayPart,
-  { kind: UserMessageReferenceKind }
->;
-
-type UserMessageInlineReferenceRange = {
-  part: UserMessageDisplayReferencePart;
-  start: number;
-  end: number;
-};
-
-const userMessageTextContainsReferenceMarker = (
-  text: string,
-  part: UserMessageDisplayReferencePart,
-): boolean => {
-  if (part.kind === "skill_mention") {
-    return text.includes(`$${part.skill.name}`);
-  }
-  if (part.kind === "subagent_reference") {
-    return text.includes(`@${part.subagent.name}`);
-  }
-  return text.includes(`@${part.file.path}`) || text.includes(`@${part.file.name}`);
-};
-
-const canRenderOrderedUserMessageParts = (parts: AgentUserMessageDisplayPart[]): boolean => {
-  const visibleText = readVisibleUserMessageText(parts);
-  if (visibleText.length === 0) {
-    return false;
-  }
-
-  let hasReference = false;
-  for (const part of parts) {
-    if (!isUserMessageReferencePart(part)) {
-      continue;
-    }
-    hasReference = true;
-    if (part.sourceText || userMessageTextContainsReferenceMarker(visibleText, part)) {
-      return false;
-    }
-  }
-  return hasReference;
-};
-
-const renderUserMessagePartSequence = (
-  parts: AgentUserMessageDisplayPart[],
-): ReactElement | null => {
-  if (!canRenderOrderedUserMessageParts(parts)) {
-    return null;
-  }
-
-  const nodes: ReactNode[] = [];
-  const keyOccurrences = new Map<string, number>();
-  const nextSequenceKey = (base: string): string => {
-    const occurrence = (keyOccurrences.get(base) ?? 0) + 1;
-    keyOccurrences.set(base, occurrence);
-    return `${base}-${occurrence}`;
-  };
-
-  for (const part of parts) {
-    if (part.kind === "text" && !part.synthetic) {
-      pushUserMessageTextNode(nodes, part.text, nextSequenceKey("text"));
-      continue;
-    }
-
-    if (isUserMessageReferencePart(part)) {
-      nodes.push(renderUserMessageReferenceChip(part, nextSequenceKey(`reference-${part.kind}`)));
-    }
-  }
-
-  if (nodes.length === 0) {
-    return null;
-  }
-
-  return <AgentChatTranscriptProse className="leading-6">{nodes}</AgentChatTranscriptProse>;
-};
-
-const readInlineUserReferenceRanges = (
-  rawText: string,
-  parts: AgentUserMessageDisplayPart[],
-): UserMessageInlineReferenceRange[] => {
-  const ranges: UserMessageInlineReferenceRange[] = [];
-  for (const part of parts) {
-    if (!isUserMessageReferencePart(part)) {
-      continue;
-    }
-    const sourceText = part.sourceText;
-    if (!sourceText) {
-      if (part.kind === "skill_mention") {
-        const marker = `$${part.skill.name}`;
-        const start = rawText.indexOf(marker);
-        if (start >= 0) {
-          ranges.push({ part, start, end: start + marker.length });
-        }
-      }
-      if (part.kind === "subagent_reference") {
-        const marker = `@${part.subagent.name}`;
-        const start = rawText.indexOf(marker);
-        if (start >= 0) {
-          ranges.push({ part, start, end: start + marker.length });
-        }
-      }
-      continue;
-    }
-    const start = sourceText.start;
-    const end = sourceText.end;
-    const range = { part, start, end } satisfies UserMessageInlineReferenceRange;
-    if (range.start >= 0 && range.end >= range.start && range.end <= rawText.length) {
-      ranges.push(range);
-    }
-  }
-  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
-  return [...ranges].sort((left, right) => left.start - right.start);
-};
-
-const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string): void => {
-  if (text.length === 0) {
-    return;
-  }
-
-  nodes.push(<Fragment key={key}>{text}</Fragment>);
-};
-
 const renderUserMessageInlineContent = (
-  rawText: string,
-  parts: AgentUserMessageDisplayPart[],
+  nodes: UserMessageContentNode[] | null,
 ): ReactElement | null => {
-  const orderedParts = renderUserMessagePartSequence(parts);
-  if (orderedParts) {
-    return orderedParts;
-  }
-
-  const nodes: ReactNode[] = [];
-  const inlineRanges = readInlineUserReferenceRanges(rawText, parts);
-  const renderedInlineReferences = new Set<AgentUserMessageDisplayPart>();
-
-  if (inlineRanges.length === 0) {
-    pushUserMessageTextNode(nodes, rawText, "text");
-  } else {
-    let cursor = 0;
-
-    for (const range of inlineRanges) {
-      if (range.start < cursor || range.start > rawText.length || range.end > rawText.length) {
-        continue;
-      }
-
-      pushUserMessageTextNode(nodes, rawText.slice(cursor, range.start), `text-${cursor}`);
-      nodes.push(renderUserMessageReferenceChip(range.part, `reference-${range.start}`));
-      renderedInlineReferences.add(range.part);
-      cursor = range.end;
-    }
-
-    pushUserMessageTextNode(nodes, rawText.slice(cursor), `text-${cursor}`);
-  }
-
-  for (const part of parts) {
-    if (
-      !isUserMessageReferencePart(part) ||
-      renderedInlineReferences.has(part) ||
-      ((part.kind === "skill_mention" || part.kind === "subagent_reference") &&
-        !part.sourceText &&
-        userMessageTextContainsReferenceMarker(rawText, part))
-    ) {
-      continue;
-    }
-
-    nodes.push(renderUserMessageReferenceChip(part, `reference-${nodes.length}`));
-  }
-
-  if (nodes.length === 0) {
+  if (!nodes) {
     return null;
   }
 
-  return <AgentChatTranscriptProse className="leading-6">{nodes}</AgentChatTranscriptProse>;
+  return (
+    <AgentChatTranscriptProse className="leading-6">
+      {nodes.map((node) =>
+        node.kind === "text" ? (
+          <Fragment key={node.key}>{node.text}</Fragment>
+        ) : (
+          renderUserMessageReferenceChip(node.part, node.key)
+        ),
+      )}
+    </AgentChatTranscriptProse>
+  );
 };
 
 type SessionNoticeMessageProps = {
   message: AgentChatMessage;
   timeLabel: string;
-};
-
-const subagentStatusLabel = (status: SubagentMeta["status"]): string => {
-  if (status === "running") {
-    return "Running";
-  }
-  if (status === "completed") {
-    return "Completed";
-  }
-  if (status === "cancelled") {
-    return "Cancelled";
-  }
-  if (status === "error") {
-    return "Failed";
-  }
-
-  return "Queued";
 };
 
 const subagentStatusClassName = (status: SubagentMeta["status"]): string => {
@@ -330,32 +165,6 @@ const subagentStatusClassName = (status: SubagentMeta["status"]): string => {
 
 const SUBAGENT_WAITING_APPROVAL_CLASS_NAME =
   "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300";
-
-const readSubagentSummary = (meta: SubagentMeta): string | null => {
-  return meta.description?.trim() || meta.prompt?.trim() || null;
-};
-
-const readSubagentError = (meta: SubagentMeta): string | undefined => {
-  return meta.status === "error" ? meta.error?.trim() : undefined;
-};
-
-const isSubagentWaitingForInput = (meta: SubagentMeta, pendingRequestCount: number): boolean => {
-  return Boolean(
-    meta.externalSessionId &&
-    (meta.status === "pending" || meta.status === "running") &&
-    pendingRequestCount > 0,
-  );
-};
-
-const readSubagentDurationMs = (meta: SubagentMeta): number | null => {
-  if (meta.status === "pending" || meta.status === "running") {
-    return null;
-  }
-  if (meta.startedAtMs === undefined || meta.endedAtMs === undefined) {
-    return null;
-  }
-  return Math.max(0, meta.endedAtMs - meta.startedAtMs);
-};
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
@@ -390,7 +199,7 @@ const SubagentMessage = ({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-start gap-2">
             <p className="truncate text-sm font-semibold text-foreground">
-              {meta.agent?.trim() || "Subagent"}
+              {subagentDisplayName(meta)}
             </p>
             <span
               className={cn(
@@ -400,7 +209,9 @@ const SubagentMessage = ({
                   : subagentStatusClassName(meta.status),
               )}
             >
-              {isWaitingForInput ? "Waiting for input" : subagentStatusLabel(meta.status)}
+              {isWaitingForInput
+                ? SUBAGENT_WAITING_FOR_INPUT_LABEL
+                : subagentStatusLabel(meta.status)}
             </span>
             {meta.executionMode ? (
               <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -453,21 +264,6 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
   );
 };
 
-/** The parts with their visible text cut at `end`. Text that starts at `end` or later goes. */
-const withVisibleTextEndingAt = (
-  parts: AgentUserMessageDisplayPart[],
-  end: number,
-): AgentUserMessageDisplayPart[] => {
-  let offset = 0;
-  return parts.flatMap((part) => {
-    if (part.kind !== "text" || part.synthetic) return [part];
-    const start = offset;
-    offset += part.text.length;
-    if (start >= end) return [];
-    return [{ ...part, text: part.text.slice(0, end - start).trimEnd() }];
-  });
-};
-
 // What a user message bubble shows: its text with reference chips inline, its sent browser
 // annotations, and its attachments.
 type UserMessageDisplay = {
@@ -477,24 +273,12 @@ type UserMessageDisplay = {
 };
 
 const readUserMessageDisplay = (message: AgentChatMessage): UserMessageDisplay => {
-  const userParts = readUserMessageParts(message);
-  const userText = readRenderableUserMessageText(userParts, message.content);
-  const attachments = userParts.filter(isUserAttachmentPart);
   // Pending browser annotations go after the user text. The chat shows them as chips.
-  const sent = readSentBrowserAnnotations(userText);
-  if (!sent) {
-    return {
-      inline: renderUserMessageInlineContent(userText, userParts),
-      annotations: null,
-      attachments,
-    };
-  }
+  const sent = readSentBrowserAnnotations(readUserMessageText(message));
+  const { nodes, attachments } = buildUserMessageContent(message, sent?.textEnd ?? null);
   return {
-    inline: renderUserMessageInlineContent(
-      userText.slice(0, sent.textEnd).trimEnd(),
-      withVisibleTextEndingAt(userParts, sent.textEnd),
-    ),
-    annotations: <BrowserAnnotationMessageChips annotations={sent.annotations} />,
+    inline: renderUserMessageInlineContent(nodes),
+    annotations: sent ? <BrowserAnnotationMessageChips annotations={sent.annotations} /> : null,
     attachments,
   };
 };
@@ -724,21 +508,15 @@ const renderSystemMessage = (
   systemPromptBody: string,
   sessionRuntimeKind: RuntimeKind | null,
 ): ReactElement | null => {
-  if (message.role !== "system") return null;
-  const isInstructionUpdate = message.content.startsWith(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX);
-  if (isInstructionUpdate || message.content.startsWith(SYSTEM_PROMPT_PREFIX)) {
-    const instructions = isInstructionUpdate
-      ? message.content.slice(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX.length)
-      : systemPromptBody;
+  const instructions = resolveInstructionsMessage(message, systemPromptBody);
+  if (instructions) {
     return (
-      <SystemMessageDisclosure
-        label={isInstructionUpdate ? "Show instruction update" : "Show system prompt"}
-      >
-        <AgentChatMarkdownRenderer markdown={instructions} variant="compact" />
+      <SystemMessageDisclosure label={instructions.toggleLabel}>
+        <AgentChatMarkdownRenderer markdown={instructions.markdown} variant="compact" />
       </SystemMessageDisclosure>
     );
   }
-  if (sessionRuntimeKind !== "opencode") return null;
+  if (message.role !== "system" || sessionRuntimeKind !== "opencode") return null;
   return (
     <SystemMessageDisclosure label="Show system message">
       <AgentChatTranscriptProse className="leading-6 text-foreground">

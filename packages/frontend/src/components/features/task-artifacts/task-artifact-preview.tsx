@@ -1,5 +1,9 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import type { TaskArtifact, TaskAssetRenderContext } from "@openducktor/contracts";
+import {
+  artifactPreviewKind,
+  decodeArtifactText,
+} from "@openducktor/frontend-core/tasks/artifacts/artifact-presentation";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { hasLabeledCodeFence } from "@/lib/markdown-utils";
 import { cn } from "@/lib/utils";
@@ -9,14 +13,6 @@ export type TaskArtifactPreviewProps = {
   artifact: Pick<TaskArtifact, "taskId" | "artifactId" | "name" | "mediaType">;
   markdownAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 } & ({ bytes: Uint8Array; markdown?: never } | { markdown: string; bytes?: never });
-
-const imageFormats = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "image/svg+xml",
-]);
 
 export const TaskArtifactPreview = memo(function TaskArtifactPreview(
   props: TaskArtifactPreviewProps,
@@ -47,35 +43,29 @@ function PreviewContent({
   markdownAssetContext,
 }: TaskArtifactPreviewProps) {
   const mediaType = artifact.mediaType.toLowerCase();
-  const isText = ["text/plain", "text/markdown", "text/html"].includes(mediaType);
+  const kind = artifactPreviewKind(mediaType);
+  const isText = kind === "markdown" || kind === "text" || kind === "html";
   const text = useMemo(() => {
     if (markdown !== undefined) return { value: markdown };
     if (!isText || !bytes) return null;
-    try {
-      return { value: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) };
-    } catch {
-      return {
-        error: "The stored bytes are not valid UTF-8. Download the original file to inspect it.",
-      };
-    }
+    const value = decodeArtifactText(bytes);
+    return value === null
+      ? { error: "The stored bytes are not valid UTF-8. Download the original file to inspect it." }
+      : { value };
   }, [bytes, markdown, isText]);
   if (text && "error" in text) {
     return (
       <p
         role="alert"
-        className={cn(
-          "text-sm text-destructive",
-          mediaType === "text/html" && "min-h-0 overflow-auto p-4",
-        )}
+        className={cn("text-sm text-destructive", kind === "html" && "min-h-0 overflow-auto p-4")}
       >
         Cannot preview {artifact.name}: {text.error}
       </p>
     );
   }
   if (text && "value" in text) {
-    if (mediaType === "text/html")
-      return <TaskArtifactHtmlPreview html={text.value} name={artifact.name} />;
-    if (mediaType === "text/markdown")
+    if (kind === "html") return <TaskArtifactHtmlPreview html={text.value} name={artifact.name} />;
+    if (kind === "markdown")
       return (
         <MarkdownRenderer
           markdown={text.value}
@@ -86,7 +76,7 @@ function PreviewContent({
       );
     return <pre className="whitespace-pre-wrap break-words font-mono text-sm">{text.value}</pre>;
   }
-  if (imageFormats.has(mediaType) && bytes)
+  if (kind === "image" && bytes)
     return <ImagePreview bytes={bytes} mediaType={mediaType} name={artifact.name} />;
   return (
     <p className="text-sm text-muted-foreground">

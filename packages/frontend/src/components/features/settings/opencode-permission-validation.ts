@@ -3,7 +3,7 @@ import {
   openCodeRuntimeConfigSchema,
   type OpenCodeRuntimeConfig,
 } from "@openducktor/contracts";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 
 export const validateOpenCodePermissions = (
   config: OpenCodeRuntimeConfig | undefined,

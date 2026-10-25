@@ -1,20 +1,10 @@
-import {
-  SessionStartKickoffField,
-  useSessionStartKickoffDraft,
-} from "./session-start-kickoff-field";
-import { selectableModelPickerCatalog } from "./model-picker/model-picker-model";
-import { SpeedSelect, type SpeedControlModel } from "./speed-select";
-import type { RuntimeKind } from "@openducktor/contracts";
+import { SessionStartKickoffField } from "./session-start-kickoff-field";
+import { SpeedSelect } from "./speed-select";
+import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
-import { type FormEvent, type ReactElement, useEffect, useState } from "react";
-import { toast } from "sonner";
-import {
-  ModelPicker,
-  type ModelPickerFavoriteState,
-  type ModelPickerRuntime,
-  type ModelPickerValue,
-} from "@/components/features/agents/model-picker";
+import type { FormEvent, ReactElement } from "react";
+import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -28,80 +18,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
-import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
-import { sessionStartModeButtonLabel } from "@/features/session-start/session-start-display";
 import {
-  findCatalogModel,
-  STANDARD_SPEED,
-  withSpeed,
-} from "@openducktor/frontend-core/lib/model-catalog-selection";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-
-type SessionStartModalConfirmInput =
-  | boolean
-  | {
-      runInBackground: boolean;
-      startMode: AgentSessionStartMode;
-      sourceSessionOptionValue: string | null;
-      targetBranch?: string;
-      kickoffPrompt?: string | undefined;
-      speed?: string;
-    };
-type SessionStartModalConfirmPayload = Exclude<SessionStartModalConfirmInput, boolean>;
-type SessionStartModalConfirmDraft = Omit<SessionStartModalConfirmPayload, "runInBackground">;
-
-type ExistingSessionOption = ComboboxOption & {
-  sourceSession: AgentSessionIdentity;
-  selectedModel?: AgentModelSelection | null;
-};
-
-export type SessionStartModalModel = {
-  open: boolean;
-  requestId?: string | undefined;
-  kickoffPrompt?: string | undefined;
-  isKickoffPromptLoading?: boolean;
-  kickoffPromptError?: string | null;
-  onRetryKickoffPrompt?: () => void;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  backgroundConfirmLabel?: string;
-  cancelLabel?: string;
-  selectedModelSelection: AgentModelSelection | null;
-  selectedRuntimeKind: RuntimeKind | null;
-  modelPickerRuntimes: ModelPickerRuntime[];
-  favoriteState: ModelPickerFavoriteState;
-  supportsProfiles: boolean;
-  supportsVariants: boolean;
-  selectionCatalogError: string | null;
-  isSelectionCatalogLoading: boolean;
-  runtimeDefinitionsError: string | null;
-  isRuntimeDefinitionsLoading: boolean;
-  onRetryRuntimeDefinitions: () => void;
-  runtimeSettingsError: string | null;
-  isRuntimeSettingsLoading: boolean;
-  hasRuntimeSettingsSnapshot: boolean;
-  onRetryRuntimeSettings: () => void;
-  runtimeProfileOptions: ComboboxOption[];
-  variantOptions: ComboboxOption[];
-  availableStartModes: AgentSessionStartMode[];
-  selectedStartMode: AgentSessionStartMode;
-  existingSessionOptions: ExistingSessionOption[];
-  selectedSourceSessionValue: string;
-  showTargetBranchSelector?: boolean;
-  targetBranchOptions?: ComboboxOption[];
-  selectedTargetBranch?: string;
-  onSelectStartMode: (startMode: AgentSessionStartMode) => void;
-  onSelectSourceSessionValue: (sourceSessionValue: string) => void;
-  onSelectTargetBranch?: (branch: string) => void;
-  onSelectRuntimeProfile: (profileId: string) => void;
-  onSelectModelPair: (value: ModelPickerValue) => void;
-  onSelectVariant: (variant: string) => void;
-  allowRunInBackground?: boolean;
-  isStarting: boolean;
-  onOpenChange: (nextOpen: boolean) => void;
-  onConfirm: (input?: SessionStartModalConfirmInput) => void;
-};
+  isSessionStartModeUnavailable,
+  sessionStartModeButtonLabel,
+  sessionStartModelPlaceholder,
+  sessionStartModelReadOnlyReason,
+  sessionStartRuntimeProfileHelperText,
+  sessionStartTargetBranchPlaceholder,
+  sessionStartVariantPlaceholder,
+} from "@openducktor/frontend-core/sessions/start/session-start-display";
+import {
+  buildSessionStartConfirmDraft,
+  resolveSessionStartAvailability,
+  type SessionStartModalConfirmDraft,
+  type SessionStartModalConfirmInput,
+  type SessionStartModalModel,
+  type SessionStartSourceOption,
+} from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
+import { useSessionStartKickoffDraft } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
+import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 
 type StartModeFieldProps = {
   availableStartModes: AgentSessionStartMode[];
@@ -120,9 +55,8 @@ function StartModeField({
     return null;
   }
 
-  const isStartModeDisabled = (startMode: AgentSessionStartMode): boolean => {
-    return (startMode === "reuse" || startMode === "fork") && !hasExistingSessionOptions;
-  };
+  const isStartModeDisabled = (startMode: AgentSessionStartMode): boolean =>
+    isSessionStartModeUnavailable(startMode, hasExistingSessionOptions);
 
   return (
     <div className="grid gap-1.5">
@@ -149,7 +83,7 @@ function StartModeField({
 
 type ExistingSessionFieldProps = {
   disabled: boolean;
-  existingSessionOptions: ExistingSessionOption[];
+  existingSessionOptions: SessionStartSourceOption[];
   selectedSourceSessionValue: string;
   onSelectSourceSessionValue: (sourceSessionValue: string) => void;
 };
@@ -180,6 +114,8 @@ function ExistingSessionField({
 
 type TargetBranchFieldProps = {
   disabled: boolean;
+  /** Why the start cannot use the configured target branch, or null. */
+  error: string | null;
   selectedTargetBranch: string;
   targetBranchOptions: ComboboxOption[];
   onSelectTargetBranch: ((branch: string) => void) | undefined;
@@ -187,6 +123,7 @@ type TargetBranchFieldProps = {
 
 function TargetBranchField({
   disabled,
+  error,
   selectedTargetBranch,
   targetBranchOptions,
   onSelectTargetBranch,
@@ -199,11 +136,16 @@ function TargetBranchField({
       <BranchSelector
         value={selectedTargetBranch}
         options={targetBranchOptions}
-        placeholder={targetBranchOptions.length > 0 ? "Select branch..." : "Branches unavailable"}
+        placeholder={sessionStartTargetBranchPlaceholder(targetBranchOptions.length)}
         disabled={disabled}
         className="sm:min-w-[28rem]"
         onValueChange={(branch) => onSelectTargetBranch?.(branch)}
       />
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -255,30 +197,6 @@ type ModelVariantFieldsProps = {
   onSelectVariant: (variant: string) => void;
 };
 
-const modelVariantPlaceholder = ({
-  isSelectionCatalogLoading,
-  selectedModelSelection,
-  supportsVariants,
-  variantOptions,
-}: Pick<
-  ModelVariantFieldsProps,
-  "isSelectionCatalogLoading" | "selectedModelSelection" | "supportsVariants" | "variantOptions"
->): string => {
-  if (isSelectionCatalogLoading) {
-    return "Checking compatibility...";
-  }
-  if (!selectedModelSelection) {
-    return "Select model first";
-  }
-  if (!supportsVariants) {
-    return "Effort handled by runtime";
-  }
-  if (variantOptions.length === 0) {
-    return "This model has no effort options";
-  }
-  return "Select effort";
-};
-
 function ModelVariantFields({
   speed,
   isSelectionCatalogLoading,
@@ -299,11 +217,11 @@ function ModelVariantFields({
           triggerAriaLabelledBy="session-start-variant-label"
           value={selectedVariant}
           options={variantOptions}
-          placeholder={modelVariantPlaceholder({
+          placeholder={sessionStartVariantPlaceholder({
             isSelectionCatalogLoading,
-            selectedModelSelection,
+            hasSelectedModel: selectedModelSelection !== null,
             supportsVariants,
-            variantOptions,
+            variantCount: variantOptions.length,
           })}
           disabled={variantDisabled}
           className="w-full"
@@ -313,47 +231,6 @@ function ModelVariantFields({
       <SpeedSelect key={speed?.key} model={speed} label="Speed" />
     </div>
   );
-}
-
-/**
- * A reused session keeps its speed. A fresh or forked session starts at standard speed.
- * The start sends a speed only when the user changes it.
- */
-function useSessionStartSpeed(model: SessionStartModalModel) {
-  const { selectedStartMode, selectedSourceSessionValue, selectedModelSelection } = model;
-  const key = `${model.requestId ?? model.open}|${selectedStartMode}|${selectedSourceSessionValue}`;
-  const source =
-    selectedStartMode === "reuse"
-      ? model.existingSessionOptions.find((option) => option.value === selectedSourceSessionValue)
-      : undefined;
-  const initial = source?.selectedModel?.speed ?? STANDARD_SPEED;
-  const [draft, setDraft] = useState({ key, choice: initial });
-  const choice = draft.key === key ? draft.choice : initial;
-  const catalog = selectableModelPickerCatalog(
-    model.modelPickerRuntimes.find(
-      (runtime) => runtime.descriptor.kind === model.selectedRuntimeKind,
-    )?.resource,
-  );
-  const catalogModel =
-    catalog && selectedModelSelection ? findCatalogModel(catalog, selectedModelSelection) : null;
-  const unsupported =
-    choice !== STANDARD_SPEED &&
-    catalogModel !== null &&
-    !catalogModel.speedLevels?.some((level) => level.id === choice);
-  useEffect(() => {
-    if (!unsupported) return;
-    setDraft({ key, choice: STANDARD_SPEED });
-    toast.info("Speed was set to Standard because this model does not support the previous level.");
-  }, [key, unsupported]);
-  const control = useSpeedControl({
-    key,
-    runtimeKind: model.selectedRuntimeKind,
-    catalog,
-    selection: selectedModelSelection && withSpeed(selectedModelSelection, choice),
-    disabled: model.isStarting,
-    onSelect: (next) => setDraft({ key, choice: next }),
-  });
-  return { control, change: choice === initial ? undefined : choice };
 }
 
 type SessionStartModalFooterProps = {
@@ -411,27 +288,6 @@ function SessionStartModalFooter({
   );
 }
 
-const runtimeProfileHelperTextFor = ({
-  runtimeProfileOptions,
-  isReuseMode,
-  isSelectionCatalogLoading,
-}: {
-  runtimeProfileOptions: ComboboxOption[];
-  isReuseMode: boolean;
-  isSelectionCatalogLoading: boolean;
-}): string | null => {
-  if (isReuseMode) {
-    return "Reuse mode keeps the previous session runtime profile, model, and effort.";
-  }
-  if (isSelectionCatalogLoading) {
-    return "Loading profiles for the selected runtime.";
-  }
-  if (runtimeProfileOptions.length === 0) {
-    return "No profiles are available for this runtime.";
-  }
-  return null;
-};
-
 function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): ReactElement {
   const {
     selectedModelSelection,
@@ -458,9 +314,7 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
           modelId: selectedModelSelection.modelId,
         }
       : null;
-  const modelReadOnlyReason = isStarting
-    ? "Session start is in progress."
-    : "Reuse mode keeps the source session runtime and model.";
+  const modelReadOnlyReason = sessionStartModelReadOnlyReason(isStarting);
   if (runtimeDefinitionsError) {
     return (
       <div
@@ -520,80 +374,12 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
             }
           : { kind: "editable" }
       }
-      placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select a model"}
+      placeholder={sessionStartModelPlaceholder(isSelectionCatalogLoading)}
       triggerClassName="w-full justify-between"
       onValueChange={onSelectModelPair}
     />
   );
 }
-
-const sessionStartAvailability = (model: SessionStartModalModel) => {
-  const {
-    existingSessionOptions,
-    selectedStartMode,
-    selectedSourceSessionValue,
-    isStarting,
-    isRuntimeDefinitionsLoading,
-    runtimeDefinitionsError,
-    hasRuntimeSettingsSnapshot,
-    isRuntimeSettingsLoading,
-    runtimeSettingsError,
-    selectionCatalogError,
-    isSelectionCatalogLoading,
-    selectedRuntimeKind,
-    selectedModelSelection,
-    runtimeProfileOptions,
-    supportsVariants,
-    variantOptions,
-  } = model;
-  const hasExistingSessionOptions = existingSessionOptions.length > 0;
-  const isReuseMode = selectedStartMode === "reuse";
-  const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
-  const selectedSourceSessionOption = existingSessionOptions.find(
-    (option) => option.value === selectedSourceSessionValue,
-  );
-  const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
-  const confirmDisabled =
-    model.isKickoffPromptLoading ||
-    Boolean(model.kickoffPromptError) ||
-    isStarting ||
-    isRuntimeDefinitionsLoading ||
-    runtimeDefinitionsError !== null ||
-    (!hasRuntimeSettingsSnapshot && (isRuntimeSettingsLoading || runtimeSettingsError !== null)) ||
-    (!isReuseMode && selectionCatalogError !== null) ||
-    (!isReuseMode &&
-      (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
-    (requiresExistingSession && !hasExistingSessionSelection);
-  const runtimeProfileDisabled =
-    isStarting ||
-    isReuseMode ||
-    isSelectionCatalogLoading ||
-    !selectedModelSelection ||
-    runtimeProfileOptions.length === 0;
-  const variantDisabled =
-    isStarting ||
-    isReuseMode ||
-    isSelectionCatalogLoading ||
-    !selectedModelSelection ||
-    !supportsVariants ||
-    variantOptions.length === 0;
-
-  return {
-    hasExistingSessionOptions,
-    isReuseMode,
-    requiresExistingSession,
-    confirmDisabled,
-    runtimeProfileDisabled,
-    variantDisabled,
-  } satisfies {
-    hasExistingSessionOptions: boolean;
-    isReuseMode: boolean;
-    requiresExistingSession: boolean;
-    confirmDisabled: boolean;
-    runtimeProfileDisabled: boolean;
-    variantDisabled: boolean;
-  };
-};
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
   const {
@@ -636,7 +422,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const { control: speed, change: speedChange } = useSessionStartSpeed(model);
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
-  const availability = sessionStartAvailability(model);
+  const availability = resolveSessionStartAvailability(model, {
+    kickoffInvalid: kickoffDraft.invalid,
+  });
   const {
     hasExistingSessionOptions,
     isReuseMode,
@@ -644,16 +432,13 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     runtimeProfileDisabled,
     variantDisabled,
   } = availability;
-  const confirmDisabled = kickoffDraft.invalid || availability.confirmDisabled;
-  const confirmInput: SessionStartModalConfirmDraft = {
-    startMode: selectedStartMode,
-    sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
-  };
-  if (speedChange !== undefined) confirmInput.speed = speedChange;
-  if (kickoffDraft.value !== undefined) confirmInput.kickoffPrompt = kickoffDraft.value;
-  if (showTargetBranchSelector) {
-    confirmInput.targetBranch = selectedTargetBranch;
-  }
+  const { confirmDisabled } = availability;
+  const confirmInput = buildSessionStartConfirmDraft({
+    model,
+    requiresExistingSession,
+    speedChange,
+    kickoffPrompt: kickoffDraft.value,
+  });
   const handleConfirm = (): void => {
     if (confirmDisabled) {
       return;
@@ -666,8 +451,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     handleConfirm();
   };
 
-  const runtimeProfileHelperText = runtimeProfileHelperTextFor({
-    runtimeProfileOptions,
+  const runtimeProfileHelperText = sessionStartRuntimeProfileHelperText({
+    runtimeProfileCount: runtimeProfileOptions.length,
     isReuseMode,
     isSelectionCatalogLoading,
   });
@@ -710,6 +495,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               {showTargetBranchSelector ? (
                 <TargetBranchField
                   disabled={isStarting || targetBranchOptions.length === 0}
+                  error={model.targetBranchError ?? null}
                   selectedTargetBranch={selectedTargetBranch}
                   targetBranchOptions={targetBranchOptions}
                   onSelectTargetBranch={onSelectTargetBranch}

@@ -14,7 +14,7 @@ import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import {
   commentLocationLabel,
   REVIEW_OUTCOME_PRESENTATION,
-} from "./task-execution-ci-presentation";
+} from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
 const openReviewUrl = (url: string, failureMessage: string): void => {

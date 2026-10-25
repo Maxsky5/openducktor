@@ -1,4 +1,4 @@
-import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
+import type { SessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { AlertTriangle, RefreshCcw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";

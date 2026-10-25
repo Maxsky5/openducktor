@@ -1,7 +1,7 @@
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RefObject } from "react";
-import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createFileReferenceSegment,

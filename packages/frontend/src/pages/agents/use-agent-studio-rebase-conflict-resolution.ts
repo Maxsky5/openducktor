@@ -1,19 +1,18 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { useCallback, useLayoutEffect, useRef } from "react";
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import {
   type StartGitConflictResolutionSessionInput,
+  toConflictResolutionStartRequest,
   useGitConflictResolution,
-} from "@/features/git-conflict-resolution";
+} from "@openducktor/frontend-core/git/conflicts/use-git-conflict-resolution";
 import {
   GitConflictRequestCancelled,
   type ResolveGitConflict,
-} from "@/features/git-conflict-resolution/conflict-assistance";
-import type {
-  SessionStartExistingSessionOption,
-  SessionStartLaunchRequest,
-  SessionStartWorkflowResult,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
+import type { SessionStartExistingSessionOption } from "@openducktor/frontend-core/sessions/start/session-start-types";
+import type { SessionStartLaunchRequest } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import {
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
@@ -68,26 +67,8 @@ export function useAgentStudioRebaseConflictResolution({
   loadPromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
   const startConflictResolutionSession = useCallback(
-    async (request: StartGitConflictResolutionSessionInput) => {
-      const input: Parameters<typeof startSessionRequest>[0] = {
-        taskId: request.taskId,
-        role: request.role,
-        launchActionId: "build_rebase_conflict_resolution" as const,
-        postStartAction: "send_message",
-        message: request.message,
-        initialStartMode: request.initialStartMode,
-        targetWorkingDirectory: request.targetWorkingDirectory,
-      };
-      if (request.existingSessionOptions.length > 0) {
-        input.existingSessionOptions = request.existingSessionOptions;
-      }
-      if (request.initialSourceSession !== undefined) {
-        input.initialSourceSession = request.initialSourceSession;
-      }
-      if (request.assertCanSubmit) input.assertCanSubmit = request.assertCanSubmit;
-      if (request.assertBeforeLaunch) input.assertBeforeLaunch = request.assertBeforeLaunch;
-      return startSessionRequest(input);
-    },
+    (request: StartGitConflictResolutionSessionInput) =>
+      startSessionRequest(toConflictResolutionStartRequest(request)),
     [startSessionRequest],
   );
 

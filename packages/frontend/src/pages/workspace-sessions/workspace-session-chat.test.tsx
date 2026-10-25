@@ -17,8 +17,8 @@ import { act, type ReactElement, type ReactNode, useState } from "react";
 import { fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { useIsFetching } from "@tanstack/react-query";
 import * as messageContent from "@/components/features/agents/agent-chat/agent-chat-message-card-content";
-import { buildMessage } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import * as modelPickerModel from "@/components/features/agents/model-picker/model-picker-model";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import * as modelPickerModel from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { HostClient } from "@openducktor/host-client";
 import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
@@ -39,7 +39,7 @@ import { createSessionHistoryReadGeneration } from "@openducktor/frontend-core/s
 import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   AgentMessageQueuesContext,
   AgentOperationsContext,
@@ -62,18 +62,18 @@ import type {
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionChatPane } from "./workspace-session-chat-pane";
-import { SessionViewContext } from "@/features/session-navigation/session-view-context";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import {
   buildApprovalRequest,
   buildQuestionRequest,
-} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
 import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { typeIntoComposer } from "@/components/features/agents/agent-chat/agent-chat-composer-test-helpers";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
-import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
-import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
+import { useAgentMessageSendPolicy } from "@openducktor/frontend-core/sessions/send/use-agent-message-send-policy";
+import { useAgentChatSendForTarget } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { createComposerAttachment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 
@@ -1518,6 +1518,12 @@ test("workspace checks a new blocking question before submitting a staged attach
       const actions = useWorkspaceSessionChatActions(h.workspace, h.entry, () => true);
       const _picker = useWorkspaceSessionModelPicker(h.workspace.repoPath, {
         identity: h.session,
+        runtimeRef: {
+          repoPath: h.workspace.repoPath,
+          runtimeKind: h.session.runtimeKind,
+          workingDirectory: h.session.workingDirectory,
+        },
+        updateDraft: actions.updateDraftModel,
         selection: h.session.selectedModel,
         catalog,
         isLoading: false,

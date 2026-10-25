@@ -18,9 +18,9 @@ import {
   KanbanFilterMenu,
   type KanbanFilterOption,
 } from "@/components/features/kanban/kanban-filter-menu";
+import { PRIORITY_LEVELS } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
 import {
   ISSUE_TYPE_STYLES,
-  PRIORITY_LEVELS,
   PRIORITY_STYLES,
 } from "@/components/features/kanban/kanban-task-badge-model";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import { ToolbarSearchField } from "@/components/ui/search-field";
 import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
 import { readDevicePlatform } from "@/lib/device-platform";
-import type { KanbanBoardFilterModel } from "./kanban-page-model-types";
+import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
 
 type KanbanBoardFilterBarProps = {
   filter: KanbanBoardFilterModel;

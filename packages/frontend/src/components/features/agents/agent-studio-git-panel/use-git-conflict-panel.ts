@@ -1,4 +1,4 @@
-import { createGitConflictActionsModel } from "@/features/git-conflict-resolution";
+import { createGitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioGitPanelModel } from "./types";
 

@@ -1,0 +1,284 @@
+import "../../test-support/dom-environment";
+import { describe, expect, mock, test } from "bun:test";
+import { DEFAULT_CHAT_SETTINGS, type SettingsSnapshot } from "@openducktor/contracts";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
+import { workspaceQueryKeys } from "../../queries/workspace";
+import { enableReactActEnvironment } from "../../test-support/react-act-environment";
+import { createRuntimeHookHarness as createSharedHookHarness } from "../../test-support/runtime-hook-harness";
+import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
+
+const hostMock = {
+  workspaceGetSettingsSnapshot: mock(async (): Promise<SettingsSnapshot> =>
+    createSettingsSnapshotFixture(),
+  ),
+};
+
+const createHostConnection = () => createTestClientConnection({ client: hostMock });
+
+enableReactActEnvironment();
+
+type HookArgs = {
+  workspaceRepoPath?: string | null;
+};
+
+const useChatSettingsHarness = (props: HookArgs) =>
+  useAgentStudioChatSettings({
+    workspaceRepoPath: props.workspaceRepoPath ?? null,
+  });
+
+const createSettingsSnapshot = ({
+  showThinkingMessages = false,
+  expandFileDiffsByDefault = true,
+  chatOverrides = {},
+}: {
+  showThinkingMessages?: boolean;
+  expandFileDiffsByDefault?: boolean;
+  chatOverrides?: Partial<SettingsSnapshot["chat"]>;
+} = {}): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    reusablePrompts: [
+      {
+        id: "prompt-1",
+        name: "review",
+        description: "Review context",
+        content: "Review this.",
+      },
+    ],
+    chat: {
+      showThinkingMessages,
+      expandFileDiffsByDefault,
+      ...chatOverrides,
+    },
+  });
+
+const createHookHarness = (initialProps: HookArgs) =>
+  createSharedHookHarness(useChatSettingsHarness, initialProps, {
+    connection: createHostConnection(),
+    seedSettingsSnapshot: false,
+  });
+
+describe("useAgentStudioChatSettings", () => {
+  test("retains saved steering after a failed read and a workspace change", async () => {
+    const connection = createHostConnection();
+    const client = connection.queryClient;
+    const saved = createSettingsSnapshot({ chatOverrides: { steerMessagesByDefault: true } });
+    client.setQueryData(workspaceQueryKeys.settingsSnapshot(), saved);
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async () => {
+      throw new Error("settings read failed");
+    });
+    const harness = createSharedHookHarness(
+      useChatSettingsHarness,
+      { workspaceRepoPath: "/repo" },
+      { connection, seedSettingsSnapshot: false },
+    );
+    try {
+      await harness.mount();
+      await harness.run((state) => state.retryChatSettingsLoad());
+      await harness.waitFor((state) => state.chatSettingsLoadError !== null);
+      expect(harness.getLatest().chatSettings?.steerMessagesByDefault).toBe(true);
+      expect(harness.getLatest().chatSettingsLoadError?.message).toContain("settings read failed");
+      await harness.update({ workspaceRepoPath: "/repo-b" });
+      expect(harness.getLatest().chatSettings?.steerMessagesByDefault).toBe(true);
+    } finally {
+      await harness.unmount();
+      client.clear();
+    }
+  });
+  test("loads chat settings when a repository is active", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ showThinkingMessages: true }),
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.chatSettings?.showThinkingMessages === true);
+
+    expect(hostMock.workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+    expect(harness.getLatest().chatSettings?.showThinkingMessages).toBe(true);
+    expect(harness.getLatest().chatSettings?.expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings?.diffStyle).toBe("split");
+    expect(harness.getLatest().chatSettings?.diffIndicators).toBe("bars");
+    expect(harness.getLatest().chatSettings?.diffHeight).toBe("full");
+    expect(harness.getLatest().chatSettings?.lineOverflow).toBe("wrap");
+    expect(harness.getLatest().chatSettings?.hunkSeparators).toBe("line-info");
+    expect(harness.getLatest().reusablePrompts).toEqual([
+      {
+        id: "prompt-1",
+        name: "review",
+        description: "Review context",
+        content: "Review this.",
+      },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("defaults file diff expansion for older chat snapshots", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => {
+        const snapshot = createSettingsSnapshot();
+        // @ts-expect-error This compatibility test models a persisted snapshot from before this field existed.
+        delete snapshot.chat.expandFileDiffsByDefault;
+        return snapshot;
+      },
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.reusablePrompts.length === 1);
+
+    expect(harness.getLatest().chatSettings?.showThinkingMessages).toBe(false);
+    expect(harness.getLatest().chatSettings?.expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings?.diffStyle).toBe("split");
+    expect(harness.getLatest().chatSettings?.diffIndicators).toBe("bars");
+    expect(harness.getLatest().chatSettings?.diffHeight).toBe("full");
+    expect(harness.getLatest().chatSettings?.lineOverflow).toBe("wrap");
+    expect(harness.getLatest().chatSettings?.hunkSeparators).toBe("line-info");
+
+    await harness.unmount();
+  });
+
+  test("loads explicit collapsed file diff setting", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ expandFileDiffsByDefault: false }),
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.reusablePrompts.length === 1);
+
+    expect(harness.getLatest().chatSettings?.expandFileDiffsByDefault).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("loads explicit transcript diff display settings", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({
+        chatOverrides: {
+          diffStyle: "unified",
+          diffIndicators: "none",
+          diffHeight: "scroll",
+          lineOverflow: "scroll",
+          hunkSeparators: "simple",
+        },
+      }),
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.reusablePrompts.length === 1);
+
+    expect(harness.getLatest().chatSettings).toMatchObject({
+      diffStyle: "unified",
+      diffIndicators: "none",
+      diffHeight: "scroll",
+      lineOverflow: "scroll",
+      hunkSeparators: "simple",
+    });
+
+    await harness.unmount();
+  });
+
+  test("surfaces malformed snapshots that omit chat settings", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => {
+        const snapshot = createSettingsSnapshot();
+        // @ts-expect-error This negative test models a malformed host response without required chat settings.
+        delete snapshot.chat;
+        return snapshot;
+      },
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+
+    await harness.waitFor((state) => state.chatSettingsLoadError !== null);
+    expect(harness.getLatest().chatSettings).toBeNull();
+    expect(harness.getLatest().chatSettingsLoadError?.message).toMatch(
+      /snapshot\.chat\.showThinkingMessages|undefined/,
+    );
+
+    await harness.unmount();
+  });
+
+  test("surfaces settings load failures and retries through the canonical query", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    let loadCount = 0;
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => {
+        loadCount += 1;
+        if (loadCount === 1) {
+          throw new Error("settings read failed");
+        }
+
+        return createSettingsSnapshot({ showThinkingMessages: true });
+      },
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.chatSettingsLoadError !== null);
+    expect(harness.getLatest().chatSettings).toBeNull();
+    expect(harness.getLatest().chatSettingsLoadError?.message).toContain("settings read failed");
+
+    await harness.run((state) => {
+      state.retryChatSettingsLoad();
+    });
+
+    await harness.waitFor((state) => state.chatSettings?.showThinkingMessages === true);
+    expect(hostMock.workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
+    expect(harness.getLatest().chatSettingsLoadError).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("withholds chat settings when the active repo becomes unavailable", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ showThinkingMessages: true }),
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.chatSettings?.showThinkingMessages === true);
+    expect(harness.getLatest().chatSettings).toEqual({
+      ...DEFAULT_CHAT_SETTINGS,
+      showThinkingMessages: true,
+    });
+
+    await harness.update({ workspaceRepoPath: null });
+
+    expect(harness.getLatest().chatSettings).toBeNull();
+    expect(harness.getLatest().reusablePrompts).toEqual([]);
+
+    await harness.unmount();
+  });
+});

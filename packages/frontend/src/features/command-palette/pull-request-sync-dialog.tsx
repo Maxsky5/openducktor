@@ -12,7 +12,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
+import {
+  gitProviderReadError,
+  pullRequestHealthError,
+} from "@openducktor/frontend-core/review/git-provider-health";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";

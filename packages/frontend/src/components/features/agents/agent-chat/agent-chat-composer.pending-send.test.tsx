@@ -2,13 +2,14 @@ import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import type { AgentChatComposerModel, AgentChatPendingSendGroup } from "./agent-chat.types";
+import type { AgentChatPendingSendGroup } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatComposerModel } from "./agent-chat.types";
 import {
   createSlashCommandSegment,
   type AgentChatComposerDraft,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { AgentChatComposer, buildModel } from "./agent-chat-composer-test-helpers";
-import { readPendingSendBlockedReason } from "./agent-chat-pending-send";
+import { readPendingSendBlockedReason } from "@openducktor/frontend-core/sessions/composer/agent-chat-pending-send";
 
 const REVIEW_COMMENTS: AgentChatPendingSendGroup = {
   key: "review_comments",

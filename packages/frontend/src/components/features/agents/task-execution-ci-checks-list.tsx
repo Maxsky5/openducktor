@@ -7,7 +7,7 @@ import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
-import { aggregateLabel } from "./task-execution-ci-presentation";
+import { aggregateLabel } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 const AGGREGATE_STATUS_PRESENTATION = {
   failure: {
@@ -79,6 +79,8 @@ export function TaskExecutionCiChecksList({
         ) : (
           checks.map((check, index) => (
             <TaskExecutionCiCheckCard
+              // The index separates only checks that have no URL and no start time.
+              // react-doctor-disable-next-line react-doctor/no-array-index-as-key
               key={`${check.workflow ?? ""}:${check.name}:${check.url ?? check.startedAt ?? index}`}
               check={check}
             />

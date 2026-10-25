@@ -3,9 +3,9 @@ import type { AgentRole } from "@openducktor/core";
 import type { AgentRoleOption, AgentStudioHeaderModel } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentWorkflowStepState } from "@/types/agent-workflow";
-import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import type { AgentWorkflowStepState } from "@openducktor/frontend-core/types/agent-workflow";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {

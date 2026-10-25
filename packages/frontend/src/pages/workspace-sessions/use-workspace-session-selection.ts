@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type SessionNavigationRecovery,
   useSessionNavigationRecovery,
-} from "@/features/session-navigation/use-session-navigation-recovery";
+} from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 
 export function useWorkspaceSessionSelection({
   workspaceId,

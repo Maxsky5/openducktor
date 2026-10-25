@@ -8,8 +8,12 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { ModelPicker, type ModelPickerFavoriteState } from "./model-picker";
-import type { ModelPickerCatalogResource, ModelPickerRuntime } from "./model-picker-model";
+import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
+import { ModelPicker } from "./model-picker";
+import type {
+  ModelPickerCatalogResource,
+  ModelPickerRuntime,
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 
 enableReactActEnvironment();
 

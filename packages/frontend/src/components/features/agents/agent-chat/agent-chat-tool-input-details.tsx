@@ -1,11 +1,7 @@
 import { type ReactElement, useMemo, useState } from "react";
 import type { AgentToolData } from "@openducktor/contracts";
 import { cn } from "@/lib/utils";
-import { relativizeDisplayPathsInValue } from "./tool-path-utils";
-
-const formatToolInput = (input: AgentToolData, workingDirectory?: string | null): string => {
-  return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
-};
+import { formatToolInput } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 
 type ToolInputDetailsProps = {
   input: AgentToolData;

@@ -6,12 +6,12 @@ import type {
 import { useCallback, useState, type ReactElement } from "react";
 import { AgentSessionApprovalCard } from "@/components/features/agents/agent-chat/agent-session-approval-card";
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-chat/agent-session-question-card";
-import { useRuntimeTranscriptInteractions } from "@/components/features/agents/agent-chat/readonly-transcript/use-runtime-transcript-interactions";
+import { useRuntimeTranscriptInteractions } from "@openducktor/frontend-core/sessions/readonly-transcript/use-runtime-transcript-interactions";
 import type { SessionPreviewPendingInput } from "@/features/session-navigation/session-preview-model";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
-import { useRequiredContext } from "@/state/app-state-contexts";
-import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 

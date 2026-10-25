@@ -12,19 +12,22 @@ import {
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
   type TerminalExitNotice,
-} from "./terminal-viewport-policy";
+} from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import {
   containsTransferredImage,
   createTerminalImagePasteHandler,
   extractTransferredImageFiles,
   pasteDroppedTerminalImages,
 } from "./terminal-image-transfer-policy";
-import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
-import type { TerminalTransportController } from "./terminal-transport-controller";
+import {
+  createTerminalKeyEventHandler,
+  encodeTerminalTextInput,
+} from "@openducktor/frontend-core/terminals/terminal-keyboard-policy";
+import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { createTerminalOptions } from "./terminal-xterm-options";
-import { restoreTerminalPrecedingJoinState } from "./terminal-rep-state";
+import { restoreTerminalPrecedingJoinState } from "@openducktor/frontend-core/terminals/terminal-rep-state";
 import { createTerminalBinding } from "./shared-terminal-binding";
-import { createTerminalOutputSequencer } from "./terminal-output-sequencer";
+import { createTerminalOutputSequencer } from "@openducktor/frontend-core/terminals/terminal-output-sequencer";
 
 export type TerminalViewportMount = {
   activate(focus: boolean): void;
@@ -105,7 +108,12 @@ export const mountTerminalViewport = ({
     refresh: (start, end) => terminal.refresh(start, end),
     readRows: () => terminal.rows,
   });
-  const fitScheduler = createLiveTerminalFitScheduler({ fit: fitViewport, isActive });
+  const fitScheduler = createLiveTerminalFitScheduler({
+    fit: fitViewport,
+    isActive,
+    requestFrame: (callback) => requestAnimationFrame(callback),
+    cancelFrame: (frameId) => cancelAnimationFrame(frameId),
+  });
   const outputSequencer = createTerminalOutputSequencer({
     write: (payload, parsed) => terminal.write(payload, parsed),
     onConsumed: (sequenceEnd) => {

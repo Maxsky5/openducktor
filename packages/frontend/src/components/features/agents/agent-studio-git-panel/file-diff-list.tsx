@@ -11,7 +11,7 @@ import {
 } from "react";
 import { List, type RowComponentProps } from "react-window";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import type { DiffScope } from "@/features/agent-studio-git";
+import type { DiffScope } from "@openducktor/frontend-core/git/contracts";
 import { type InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
 import { DiffPreloadQueue } from "./diff-preload-queue";

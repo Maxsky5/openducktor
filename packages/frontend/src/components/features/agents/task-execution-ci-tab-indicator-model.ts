@@ -2,7 +2,7 @@ import type { PullRequestReviewContext } from "@openducktor/contracts";
 import {
   type CiChecksIndicatorStatus,
   ciChecksIndicatorStatus,
-} from "./task-execution-ci-presentation";
+} from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 type LoadedPullRequestReviewContext = Extract<PullRequestReviewContext, { status: "loaded" }>;
 

@@ -13,11 +13,11 @@ import {
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
 import type {
-  ReferenceMenuItem,
   ReferenceMenuState,
   SkillMenuState,
   SlashMenuState,
 } from "./use-agent-chat-composer-editor-autocomplete";
+import type { ReferenceMenuItem } from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 import type {
   ActiveTextSelection,
   ActiveTextSelectionRange,

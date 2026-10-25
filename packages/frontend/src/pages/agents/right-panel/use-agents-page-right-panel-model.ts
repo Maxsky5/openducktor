@@ -12,15 +12,19 @@ import type {
   TaskExecutionSelectedFile,
   TaskExecutionToolsModel,
 } from "@/components/features/agents";
-import { useGitCommentDraftValidation } from "@/components/features/agents/agent-studio-git-panel/use-git-comment-draft-validation";
-import { useSessionComparisonControl } from "@/features/agent-studio-git/use-session-comparison";
+import { useGitCommentDraftValidation } from "@openducktor/frontend-core/git/use-git-comment-draft-validation";
+import {
+  resolveTaskExecutionFileExplorerRoot,
+  resolveTaskExecutionFileExplorerTargetBranch,
+} from "@openducktor/frontend-core/git/task/task-worktree-paths";
+import { useSessionComparisonControl } from "@/features/agent-studio-git/use-session-comparison-control";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
-import { withFileQueries } from "@/features/agent-studio-git/refresh/git-file-refresh";
+import type { GitDiffRefresh } from "@openducktor/frontend-core/git/contracts";
+import { withFileQueries } from "@openducktor/frontend-core/git/refresh/git-file-refresh";
 import type { SessionPanelModel } from "@/features/session-panels";
-import { pullRequestHealthError } from "@/lib/git-provider-health";
-import { canDetectTaskPullRequest } from "@/lib/task-display";
+import { pullRequestHealthError } from "@openducktor/frontend-core/review/git-provider-health";
+import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import type { useTasksState } from "@/state";
 import {
   type PullRequestReviewContextQueryInput,
@@ -30,7 +34,7 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentsPageBuildTools } from "../shell/use-agents-page-build-tools";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -72,11 +76,6 @@ type BuildAgentsPageDiffOptionalModel = {
   isDetectingPullRequest?: true;
   onDetectPullRequest?: () => void;
   detectPullRequestDisabledReason?: string;
-};
-
-type FileExplorerRoot = {
-  rootPath: string | null;
-  unavailableReason: string | null;
 };
 
 /** Identifies the task and session that the git panel shows. */
@@ -149,69 +148,6 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
     ...optionalModel,
   };
 }
-
-export const resolveTaskExecutionFileExplorerRoot = ({
-  workspaceRepoPath,
-  contextMode,
-  worktreePath,
-  isWorktreeResolving,
-  worktreeError,
-}: {
-  workspaceRepoPath: string | null;
-  contextMode: AgentStudioBuildToolsWorktreeSnapshot["gitPanelContextMode"];
-  worktreePath: string | null;
-  isWorktreeResolving: boolean;
-  worktreeError: string | null;
-}): FileExplorerRoot => {
-  if (contextMode === "worktree") {
-    if (worktreePath) {
-      return { rootPath: worktreePath, unavailableReason: null };
-    }
-    if (isWorktreeResolving) {
-      return { rootPath: null, unavailableReason: "Resolving task worktree..." };
-    }
-    return {
-      rootPath: null,
-      unavailableReason: worktreeError ?? "Task worktree is unavailable.",
-    };
-  }
-
-  if (workspaceRepoPath) {
-    return {
-      rootPath: workspaceRepoPath,
-      unavailableReason: null,
-    };
-  }
-
-  return {
-    rootPath: null,
-    unavailableReason: "No repository is selected.",
-  };
-};
-
-export const resolveTaskExecutionFileExplorerTargetBranch = ({
-  contextMode,
-  targetBranch,
-  upstreamStatus,
-  hasLoadedRepositoryStatus,
-  targetBranchValidationError,
-}: {
-  contextMode: AgentStudioBuildToolsWorktreeSnapshot["gitPanelContextMode"];
-  targetBranch: string | null;
-  upstreamStatus: AgentStudioBuildToolsWorktreeSnapshot["diffData"]["upstreamStatus"];
-  hasLoadedRepositoryStatus: boolean;
-  targetBranchValidationError: string | null;
-}): string | null => {
-  if (contextMode === "worktree" && targetBranchValidationError) {
-    return null;
-  }
-  if (contextMode === "repository") {
-    if (!hasLoadedRepositoryStatus || upstreamStatus !== "tracking") {
-      return null;
-    }
-  }
-  return targetBranch;
-};
 
 export function useAgentsPageRightPanelModel({
   activeWorkspace,

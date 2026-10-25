@@ -31,13 +31,13 @@ import {
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { workspaceFilePreviewQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import {
-  isMarkdownFile,
   type TaskExecutionSelectedFile,
   taskExecutionSelectedFileKey,
 } from "./task-execution-file-explorer-model";
 import { useWorkerPool } from "./task-execution-file-preview-pierre";
 import { FilePreviewBody, type FilePreviewSnapshot } from "./task-execution-file-preview-body";
 import { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
+import { isMarkdownFile } from "@openducktor/frontend-core/lib/markdown-file";
 
 export type TaskExecutionSelectedFilePreviewModel = {
   selectedFile: TaskExecutionSelectedFile | null;

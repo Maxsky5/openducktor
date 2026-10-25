@@ -1,17 +1,15 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useCallback, useLayoutEffect, useRef } from "react";
-import { getAgentMessageSendBlockedReason } from "@/lib/agent-message-send-policy";
+import { getAgentMessageSendBlockedReason } from "@openducktor/frontend-core/sessions/send/agent-message-send-policy";
 import type { RuntimeReadinessSnapshot } from "@openducktor/frontend-core/lib/runtime-readiness";
-import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useAgentMessageSendPolicy } from "@openducktor/frontend-core/sessions/send/use-agent-message-send-policy";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
-import {
-  workspaceConflictChatKey,
-  workspaceConflictRecipientBlockedReason,
-} from "./workspace-git-conflict-assistance";
+import { workspaceConflictChatKey } from "./workspace-git-conflict-assistance";
+import { workspaceConflictRecipientBlockedReason } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 
 export type WorkspaceConflictChatActions = {
   workspace: ActiveWorkspace;

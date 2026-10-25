@@ -1,8 +1,8 @@
 import { type ReactElement, useEffect, useMemo, useRef } from "react";
 import { SessionPreviewInput } from "@/components/layout/sidebar/session-preview-content";
 import { buildSessionPreviewModel } from "@/features/session-navigation/session-preview-model";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
-import { useWorkspaceActivityProjection } from "@/state/workspace-activity/workspace-activity-context";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { useWorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { CommandPaletteFooter } from "./command-palette-footer";
 import { RowChip } from "./command-palette-input";
 import type { PaletteRowEntry } from "./use-command-palette-navigation";

@@ -12,7 +12,7 @@ import { DocumentCopyButton } from "@/components/ui/document-copy-button";
 import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { useTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import type { ArtifactAction } from "./artifact-action-dialog";
 import { TaskArtifactPreviewDialog } from "./task-artifact-preview-dialog";
 

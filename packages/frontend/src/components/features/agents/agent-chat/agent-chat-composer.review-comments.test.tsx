@@ -4,12 +4,13 @@ import { QueryProvider } from "@/test-utils/query-provider";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
-import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
-import { createAgentStudioChatDraftPersistence } from "@/pages/agents/agent-studio-chat-draft";
-import { createWorkspaceSessionChatDraftPersistence } from "@/pages/workspace-sessions/workspace-session-chat-draft";
+import { useReviewCommentComposer } from "@openducktor/frontend-core/sessions/composer/use-review-comment-composer";
+import { createAgentStudioChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
+import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
 import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import type { AgentChatComposerModel } from "./agent-chat.types";
+import { VISIBLE_APP } from "@openducktor/frontend-core/test-support/app-visibility-fake";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import {
   type AgentChatComposerDraft,
@@ -101,7 +102,12 @@ describe("AgentChatComposer review comments", () => {
       const acceptance = Promise.withResolvers<boolean>();
       const send = mock((_draft: AgentChatComposerDraft) => acceptance.promise);
       function CommentComposer({ selectedOwner }: { selectedOwner: InlineCommentOwner }) {
-        const review = useReviewCommentComposer({ owner: selectedOwner, onSend: send });
+        const review = useReviewCommentComposer({
+          owner: selectedOwner,
+          onSend: send,
+          // The test page never hides.
+          visibility: VISIBLE_APP,
+        });
         const selectedPersistence =
           selectedOwner === owner
             ? persistence

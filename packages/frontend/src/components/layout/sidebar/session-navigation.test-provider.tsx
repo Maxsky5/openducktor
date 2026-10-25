@@ -5,13 +5,14 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { useState, type ReactNode } from "react";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
-import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import {
   createHostRuntimeStatusContextValue,
   createWorkspaceActivityObserverStub,
 } from "@/test-utils/shared-test-fixtures";
-import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
-import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
+import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import { SessionMenuProvider } from "./session-menu-provider";
 import { type SessionSelection, SessionSelectionContext } from "./session-navigation-selection";
 
@@ -46,7 +47,7 @@ export function SessionNavigationTestProvider({
       <HostRuntimeStatusContext value={runtimeStatus}>
         <WorkspaceActivityContext value={observer}>
           <VisibleSessionTargetProvider>
-            <SessionReadStateProvider>
+            <SessionReadStateProvider visibility={documentVisibility}>
               <SessionMenuProvider>
                 <SessionSelectionContext value={selection}>{children}</SessionSelectionContext>
               </SessionMenuProvider>

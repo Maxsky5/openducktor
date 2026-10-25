@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import { perConnection } from "@/lib/per-connection";
+import { perConnection } from "@openducktor/frontend-core/lib/per-connection";
 import { RECENT_ITEMS_STORAGE_KEY, RECENT_ITEMS_STORED_LIMIT } from "./constants";
 import { paletteChatKey, paletteTaskKey } from "./command-palette-row-keys";
 

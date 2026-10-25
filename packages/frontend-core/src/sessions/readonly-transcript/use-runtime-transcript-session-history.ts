@@ -1,0 +1,421 @@
+import {
+  type AgentSessionHistoryMessage,
+  type AgentSessionScope,
+  describeAgentSessionScope,
+  type PolicyBoundSessionRef,
+  resolveAgentSessionAssociationTransition,
+  type RuntimeKind,
+  type RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { matchesAgentSessionIdentity } from "../../lib/agent-session-identity";
+import type { RuntimeReadinessState } from "../../lib/runtime-readiness";
+import { useStableAgentSessionScope } from "../../lib/use-stable-agent-session-scope";
+import { useRuntimeDefinitionsContext } from "../../app-state/app-state-contexts";
+import { useAgentOperationsContext } from "../session-contexts";
+import { useSelectedSessionHistoryLoad } from "../agent-orchestrator/history/use-selected-session-history-load";
+import { toRuntimeWorkingDirectoryRef } from "../agent-orchestrator/support/session-runtime-ref";
+import { resolveSessionRuntimeScope } from "../agent-orchestrator/support/session-runtime-scope";
+import {
+  type AgentSessionTranscriptEmptyReason,
+  type AgentSessionTranscriptState,
+  deriveRuntimeBoundTranscriptLoadingState,
+  deriveLoadedAgentSessionTranscriptState,
+} from "../agent-orchestrator/transcript/session-transcript-state";
+import {
+  runtimeSessionHistoryRefQueryOptions,
+  SESSION_HISTORY_STALE_TIME_MS,
+  sessionHistoryQueryOptions,
+} from "../../queries/agent-session-history";
+import { resolveRuntimeCatalogSurface, retryRuntimeCatalog } from "../../queries/runtime-catalog";
+import { useRuntimeCatalogQuery } from "../../queries/use-runtime-catalog-query";
+import { skippedQueryOptions } from "../../queries/skipped-query";
+import { settingsSnapshotQueryOptions } from "../../queries/workspace";
+import type { AgentSessionState } from "../../types/agent-orchestrator";
+import type { AgentOperationsContextValue } from "../../types/session-slices";
+import type { AgentChatTranscriptSession } from "../transcript/agent-chat-transcript.types";
+import { toAgentChatTranscriptSession } from "../transcript/agent-chat-transcript-session";
+import type { AgentSessionTranscriptTarget } from "../transcript/agent-session-transcript-target";
+import { withClaudeSkillMentions } from "../transcript/claude-skill-mentions";
+import {
+  createReadonlyTranscriptSession,
+  mergeReadonlyRuntimeHistory,
+} from "./readonly-transcript-session";
+import { errorMessageFromUnknown } from "./runtime-transcript-error";
+
+type UseRuntimeTranscriptSessionHistoryArgs = {
+  isOpen: boolean;
+  repoPath: string | null;
+  target: AgentSessionTranscriptTarget | null;
+  runtimeReadinessState: RuntimeReadinessState;
+  liveSession: AgentSessionState | null;
+};
+
+type RuntimeTranscriptSessionHistory = {
+  session: AgentChatTranscriptSession | null;
+  interactionSession: AgentSessionState | null;
+  transcriptState: AgentSessionTranscriptState;
+  retryHistory: (() => void) | null;
+  isRetryingHistory: boolean;
+  skillSurfaceError: string | null;
+  retrySkills: (() => void) | null;
+  isRetryingSkills: boolean;
+  replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
+  answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
+};
+
+export function useRuntimeTranscriptSessionHistory({
+  isOpen,
+  repoPath,
+  target,
+  runtimeReadinessState,
+  liveSession,
+}: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
+  const { readSessionHistory, loadAgentSessionHistory, replyAgentApproval, answerAgentQuestion } =
+    useAgentOperationsContext();
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const queryClient = useQueryClient();
+  const { stableTarget, emptyReason, matchingSession, targetRuntimeKind } =
+    useTranscriptTargetResolution({
+      isOpen,
+      repoPath,
+      target,
+      liveSession,
+    });
+  const targetScope = stableTarget?.sessionScope ?? null;
+  const scopeResult = useMemo(
+    () =>
+      getTranscriptScope({
+        session: matchingSession,
+        targetScope,
+      }),
+    [matchingSession, targetScope],
+  );
+  const sessionScope = scopeResult.kind === "resolved" ? scopeResult.sessionScope : null;
+  const storedSession = scopeResult.storedSession;
+  useSelectedSessionHistoryLoad({ session: storedSession, runtimeReadinessState });
+  const runtimeSessionRefInput = useMemo(() => {
+    if (repoPath === null || stableTarget === null || scopeResult.kind === "conflict") {
+      return null;
+    }
+    return {
+      ...stableTarget,
+      repoPath,
+      sessionScope,
+    };
+  }, [repoPath, scopeResult.kind, sessionScope, stableTarget]);
+  const loadSettingsSnapshot = useCallback(
+    () => queryClient.ensureQueryData(settingsSnapshotQueryOptions()),
+    [queryClient],
+  );
+  const runtimeSessionRefQuery = useQuery(
+    runtimeSessionRefInput !== null && emptyReason === null
+      ? runtimeSessionHistoryRefQueryOptions(runtimeSessionRefInput, loadSettingsSnapshot)
+      : skippedRuntimeSessionRefQueryOptions,
+  );
+  const runtimeSessionRef = runtimeSessionRefQuery.data ?? null;
+  const runtimeRef = useMemo<RuntimeWorkingDirectoryRef | null>(
+    () =>
+      runtimeSessionRef === null
+        ? null
+        : toRuntimeWorkingDirectoryRef({
+            repoPath: runtimeSessionRef.repoPath,
+            runtimeKind: runtimeSessionRef.runtimeKind,
+            workingDirectory: runtimeSessionRef.workingDirectory,
+            action: "read the transcript runtime catalog",
+          }),
+    [runtimeSessionRef],
+  );
+  const runtimePolicyError = runtimeSessionRefQuery.error
+    ? errorMessageFromUnknown(runtimeSessionRefQuery.error, "Failed to resolve runtime policy.")
+    : null;
+  const shouldLoadHistory =
+    emptyReason === null && runtimeSessionRef !== null && storedSession === null;
+  const historyQuery = useQuery(
+    getTranscriptHistoryQueryOptions({
+      shouldLoadHistory,
+      runtimeReadinessState,
+      runtimeSessionRef,
+      readSessionHistory,
+      queryClient,
+    }),
+  );
+  const { refetch: refetchHistory } = historyQuery;
+  const skillsQuery = useRuntimeCatalogQuery({
+    runtimeRef: skillsRuntimeRef({
+      emptyReason,
+      runtimeReadinessState,
+      targetRuntimeKind,
+      runtimeRef,
+    }),
+    loadRuntimeCatalog: loadRepoRuntimeCatalog,
+  });
+  const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
+  const session = useMemo(() => {
+    let transcriptSession: AgentChatTranscriptSession | null = null;
+    if (matchingSession !== null) {
+      transcriptSession = toAgentChatTranscriptSession(
+        storedSession === null && historyQuery.data
+          ? mergeReadonlyRuntimeHistory(matchingSession, historyQuery.data)
+          : matchingSession,
+      );
+    } else if (shouldLoadHistory && historyQuery.data && stableTarget !== null) {
+      transcriptSession = createReadonlyTranscriptSession({
+        ...stableTarget,
+        history: historyQuery.data,
+      });
+    }
+    return transcriptSession
+      ? {
+          ...withClaudeSkillMentions(transcriptSession, skillSurface.catalog?.skills ?? []),
+          skillReferences: skillSurface.catalog?.skills ?? [],
+        }
+      : null;
+  }, [
+    historyQuery.data,
+    matchingSession,
+    storedSession,
+    shouldLoadHistory,
+    skillSurface.catalog,
+    stableTarget,
+  ]);
+  const transcriptState = useMemo(
+    () =>
+      getTranscriptState({
+        scopeResult,
+        storedSession,
+        session,
+        emptyReason,
+        runtimePolicyError,
+        historyError: historyQuery.error,
+        runtimeReadinessState,
+      }),
+    [
+      emptyReason,
+      historyQuery.error,
+      runtimeReadinessState,
+      runtimePolicyError,
+      session,
+      scopeResult,
+      storedSession,
+    ],
+  );
+  const retryHistory = useCallback(() => {
+    if (storedSession !== null) {
+      void loadAgentSessionHistory(storedSession);
+    } else {
+      void refetchHistory();
+    }
+  }, [loadAgentSessionHistory, refetchHistory, storedSession]);
+  const [isRetryingSkills, setIsRetryingSkills] = useState(false);
+  const retrySkills = useCallback(() => {
+    if (runtimeRef === null) {
+      return;
+    }
+    setIsRetryingSkills(true);
+    void retryRuntimeCatalog({
+      queryClient,
+      runtimeRef,
+      loadRuntimeCatalog: loadRepoRuntimeCatalog,
+    }).finally(() => setIsRetryingSkills(false));
+  }, [loadRepoRuntimeCatalog, queryClient, runtimeRef]);
+
+  return {
+    session,
+    interactionSession: matchingSession,
+    transcriptState,
+    retryHistory:
+      historyQuery.error !== null || storedSession?.historyLoadFailure ? retryHistory : null,
+    isRetryingHistory:
+      historyQuery.isFetching ||
+      storedSession?.historyLoadState === "loading" ||
+      storedSession?.historyLoadState === "refreshing",
+    skillSurfaceError: skillSurface.error,
+    retrySkills: skillSurface.error !== null ? retrySkills : null,
+    isRetryingSkills,
+    replyAgentApproval,
+    answerAgentQuestion,
+  };
+}
+
+const useTranscriptTargetResolution = ({
+  isOpen,
+  repoPath,
+  target,
+  liveSession,
+}: {
+  isOpen: boolean;
+  repoPath: string | null;
+  target: AgentSessionTranscriptTarget | null;
+  liveSession: AgentSessionState | null;
+}) => {
+  const targetExternalSessionId = target?.externalSessionId ?? null;
+  const targetRuntimeKind = target?.runtimeKind ?? null;
+  const targetWorkingDirectory = target?.workingDirectory ?? null;
+  const targetSessionScope = useStableAgentSessionScope(target?.sessionScope);
+  const stableTarget = useMemo<AgentSessionTranscriptTarget | null>(() => {
+    if (
+      targetExternalSessionId === null ||
+      targetRuntimeKind === null ||
+      targetWorkingDirectory === null
+    ) {
+      return null;
+    }
+    const stableTarget: AgentSessionTranscriptTarget = {
+      externalSessionId: targetExternalSessionId,
+      runtimeKind: targetRuntimeKind,
+      workingDirectory: targetWorkingDirectory,
+    };
+    if (targetSessionScope) {
+      stableTarget.sessionScope = targetSessionScope;
+    }
+    return stableTarget;
+  }, [targetExternalSessionId, targetRuntimeKind, targetSessionScope, targetWorkingDirectory]);
+  let emptyReason: AgentSessionTranscriptEmptyReason | null = null;
+  if (!isOpen) {
+    emptyReason = "inactive";
+  } else if (repoPath === null || stableTarget === null) {
+    emptyReason = "unavailable";
+  }
+  const matchingSession =
+    emptyReason === null &&
+    stableTarget !== null &&
+    liveSession !== null &&
+    matchesAgentSessionIdentity(liveSession, stableTarget)
+      ? liveSession
+      : null;
+  return { stableTarget, emptyReason, matchingSession, targetRuntimeKind };
+};
+
+/**
+ * Only an active Claude transcript reads runtime skills, to restore its skill mentions. A runtime
+ * that is not ready gets no ref, so the view shows no earlier read error and no retry.
+ */
+const skillsRuntimeRef = ({
+  emptyReason,
+  runtimeReadinessState,
+  targetRuntimeKind,
+  runtimeRef,
+}: {
+  emptyReason: AgentSessionTranscriptEmptyReason | null;
+  runtimeReadinessState: RuntimeReadinessState;
+  targetRuntimeKind: RuntimeKind | null;
+  runtimeRef: RuntimeWorkingDirectoryRef | null;
+}): RuntimeWorkingDirectoryRef | null =>
+  emptyReason === null && runtimeReadinessState === "ready" && targetRuntimeKind === "claude"
+    ? runtimeRef
+    : null;
+
+type TranscriptScopeResult =
+  | {
+      kind: "resolved";
+      sessionScope: AgentSessionScope | null;
+      storedSession: AgentSessionState | null;
+    }
+  | { kind: "conflict"; message: string; storedSession: null };
+
+const getTranscriptHistoryQueryOptions = ({
+  shouldLoadHistory,
+  runtimeReadinessState,
+  runtimeSessionRef,
+  readSessionHistory,
+  queryClient,
+}: {
+  shouldLoadHistory: boolean;
+  runtimeReadinessState: RuntimeReadinessState;
+  runtimeSessionRef: PolicyBoundSessionRef | null;
+  readSessionHistory: AgentOperationsContextValue["readSessionHistory"];
+  queryClient: QueryClient;
+}): ReturnType<typeof sessionHistoryQueryOptions> | typeof skippedTranscriptHistoryQueryOptions =>
+  shouldLoadHistory && runtimeReadinessState === "ready" && runtimeSessionRef !== null
+    ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory, queryClient)
+    : skippedTranscriptHistoryQueryOptions;
+
+const getTranscriptState = ({
+  scopeResult,
+  storedSession,
+  session,
+  emptyReason,
+  runtimePolicyError,
+  historyError,
+  runtimeReadinessState,
+}: {
+  scopeResult: TranscriptScopeResult;
+  storedSession: AgentSessionState | null;
+  session: AgentChatTranscriptSession | null;
+  emptyReason: AgentSessionTranscriptEmptyReason | null;
+  runtimePolicyError: string | null;
+  historyError: Error | null;
+  runtimeReadinessState: RuntimeReadinessState;
+}): AgentSessionTranscriptState => {
+  if (scopeResult.kind === "conflict") {
+    return { kind: "failed", message: scopeResult.message };
+  }
+  if (storedSession !== null) {
+    return deriveLoadedAgentSessionTranscriptState({
+      session: storedSession,
+      runtimeReadinessState,
+    });
+  }
+  if (session !== null) {
+    return { kind: "visible" };
+  }
+  if (emptyReason !== null) {
+    return { kind: "empty", reason: emptyReason };
+  }
+  if (runtimePolicyError !== null && runtimeReadinessState === "ready") {
+    return { kind: "failed", message: runtimePolicyError };
+  }
+  if (historyError && runtimeReadinessState === "ready") {
+    return {
+      kind: "failed",
+      message: errorMessageFromUnknown(historyError, "Failed to load transcript history."),
+    };
+  }
+  return deriveRuntimeBoundTranscriptLoadingState({
+    reason: "history",
+    runtimeReadinessState,
+  });
+};
+
+const getTranscriptScope = ({
+  session,
+  targetScope,
+}: {
+  session: AgentSessionState | null;
+  targetScope: AgentSessionScope | null;
+}): TranscriptScopeResult => {
+  if (session === null) {
+    return { kind: "resolved", sessionScope: targetScope, storedSession: null };
+  }
+  let association = session.sessionAssociation;
+  if (targetScope !== null) {
+    const transition = resolveAgentSessionAssociationTransition(association, targetScope);
+    if (transition.kind === "conflict") {
+      return {
+        kind: "conflict",
+        message: `Cannot load transcript history for session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
+        storedSession: null,
+      };
+    }
+    association = transition.association;
+  }
+  return {
+    kind: "resolved",
+    sessionScope: resolveSessionRuntimeScope(association),
+    storedSession: session.sessionAssociation.kind === "unbound" ? null : session,
+  };
+};
+
+const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
+  queryKey: ["runtime-transcript-session-history", "skipped"] as const,
+  staleTime: SESSION_HISTORY_STALE_TIME_MS,
+  refetchOnWindowFocus: false,
+});
+
+const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSessionRef>({
+  queryKey: ["runtime-session-history-ref", "skipped"] as const,
+  staleTime: Number.POSITIVE_INFINITY,
+  refetchOnWindowFocus: false,
+});

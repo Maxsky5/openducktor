@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { buildMessage } from "../agent-chat-test-fixtures";
-import type { AgentChatUserMessageAnchor } from "../agent-chat-transcript-model";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import {
   EMPTY_MINIMAP_MARKERS,
   readMinimapMarkers,

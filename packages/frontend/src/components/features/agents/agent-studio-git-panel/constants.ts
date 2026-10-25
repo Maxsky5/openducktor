@@ -1,5 +1,5 @@
 import { FilePlus, FileText, FileX, FolderGit2 } from "lucide-react";
-import type { DiffScope } from "@/features/agent-studio-git";
+import type { DiffScope } from "@openducktor/frontend-core/git/contracts";
 import type { FileListViewMode } from "./file-list-view-preference";
 
 export const FILE_STATUS_ICON = new Map<string, typeof FileText>([
@@ -18,12 +18,6 @@ export const FILE_STATUS_COLOR = new Map<string, string>([
 
 /** The internal views of the Git panel, in display order. */
 export type GitPanelTab = DiffScope | "history";
-
-/** The file count of each list tab, or null when its tab shows no count. */
-export type GitPanelTabCounts = {
-  uncommitted: number | null;
-  target: number | null;
-};
 
 export const GIT_PANEL_TABS: Array<{ tab: GitPanelTab; label: string; testId: string }> = [
   {

@@ -1,20 +1,14 @@
-import { type JSX, useState } from "react";
+import type { JSX } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-
-type KickoffDraft = {
-  hasPrompt: boolean;
-  enabled: boolean;
-  text: string;
-  invalid: boolean;
-  value: string | undefined;
-  setEnabled: (enabled: boolean) => void;
-  setText: (text: string) => void;
-};
+import {
+  BLANK_KICKOFF_PROMPT_ERROR,
+  type SessionStartKickoffDraft,
+} from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 
 type SessionStartKickoffFieldProps = {
-  draft: KickoffDraft;
+  draft: SessionStartKickoffDraft;
   disabled: boolean;
   loading: boolean | undefined;
   error: string | null | undefined;
@@ -72,7 +66,7 @@ export function SessionStartKickoffField({
               />
               {draft.invalid ? (
                 <p id="kickoff-prompt-error" role="alert" className="text-sm text-destructive">
-                  Kickoff prompt must not be blank.
+                  {BLANK_KICKOFF_PROMPT_ERROR}
                 </p>
               ) : null}
             </div>
@@ -81,37 +75,4 @@ export function SessionStartKickoffField({
       ) : null}
     </>
   );
-}
-
-export function useSessionStartKickoffDraft({
-  requestId,
-  open,
-  prompt,
-}: {
-  requestId: string | undefined;
-  open: boolean;
-  prompt: string | undefined;
-}): KickoffDraft {
-  const [draft, setDraft] = useState<{
-    requestId: string | undefined;
-    open: boolean;
-    enabled: boolean;
-    text: string | null;
-  }>({ requestId, open, enabled: false, text: null });
-  if (draft.requestId !== requestId || draft.open !== open) {
-    setDraft({ requestId, open, enabled: false, text: null });
-  }
-  const hasPrompt = Boolean(prompt?.trim());
-  let value: string | undefined;
-  if (hasPrompt) value = draft.enabled ? (draft.text ?? "") : prompt;
-  return {
-    hasPrompt,
-    enabled: draft.enabled,
-    text: draft.text ?? "",
-    invalid: hasPrompt && draft.enabled && !draft.text?.trim(),
-    value,
-    setEnabled: (enabled: boolean) =>
-      setDraft((current) => ({ ...current, enabled, text: current.text ?? prompt ?? "" })),
-    setText: (text: string) => setDraft((current) => ({ ...current, text })),
-  };
 }

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { localHostLabel, parseHostEndpoint, type HostSelection } from "@/lib/host-location";
+import { localHostLabel, type HostSelection } from "@/lib/host-location";
+import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 import { cn } from "@/lib/utils";
 import { useRemoteAccess } from "@/state/remote-access-provider";
 import { HostSharing } from "./host-sharing";
@@ -45,7 +46,9 @@ export function HostPicker({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void run("connect", async () => {
-      const address = parseHostEndpoint(endpoint, window.location.protocol);
+      const address = parseRemoteHostEndpoint(endpoint, {
+        requireHttps: window.location.protocol === "https:",
+      });
       if (target.kind === "remote" && address === target.endpoint) {
         throw new Error("This host is already selected. Enter a different address.");
       }

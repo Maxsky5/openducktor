@@ -4,7 +4,8 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 if (globalThis.document === undefined) GlobalRegistrator.register();
 
 const { Terminal } = await import("@xterm/xterm");
-const { restoreTerminalPrecedingJoinState } = await import("./terminal-rep-state");
+const { restoreTerminalPrecedingJoinState } =
+  await import("@openducktor/frontend-core/terminals/terminal-rep-state");
 const write = (terminal: InstanceType<typeof Terminal>, data: string): Promise<void> =>
   new Promise((resolve) => terminal.write(data, resolve));
 

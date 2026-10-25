@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gitChangeIntentKey } from "@/features/agent-studio-git";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import { discardUnavailableReason, runningFileAction } from "./git-file-row-actions";
 
 const fileKey = (

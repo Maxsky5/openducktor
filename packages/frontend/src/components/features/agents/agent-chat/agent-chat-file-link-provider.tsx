@@ -6,7 +6,10 @@ import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/bui
 import { resolvedPathQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import { ChatFileLinkContext, type ChatFileLinkOwner } from "./agent-chat-file-link-context";
 import { canonicalPathQueryOptions } from "@openducktor/frontend-core/queries/git";
-import { parseChatFileLink, resolveChatFileLink } from "./agent-chat-file-link";
+import {
+  parseChatFileLink,
+  resolveChatFileLink,
+} from "@openducktor/frontend-core/sessions/messages/chat-file-link";
 
 export function ChatFileLinkProvider({
   owner,

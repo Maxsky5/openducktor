@@ -1,4 +1,7 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
+import { showSessionStartMessageRecovery } from "./session-start-message-recovery";
+import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
@@ -7,7 +10,7 @@ import {
 import { toast } from "sonner";
 import { createNotificationPolicy } from "@openducktor/frontend-core/notifications/notification-policy";
 import { navigateToNotificationTarget } from "@/features/notifications/notification-navigation-logic";
-import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
+import { startKanbanSessionFlow } from "@openducktor/frontend-core/tasks/workflow/kanban-session-start-actions";
 import { buildSessionStartErrorOccurrence } from "@openducktor/core";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
@@ -15,7 +18,7 @@ import {
   type SessionStartNotificationPublisher,
   SessionStartWorkflowError,
   createSessionStartWorkflowRunner as createRunner,
-} from "./session-start-orchestration";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 
 const selection = {
   runtimeKind: "opencode" as const,
@@ -108,9 +111,10 @@ describe("session-start notifications", () => {
           tasks: [baseInput.task],
           workspaceId: "workspace-1",
           startInBackground: true,
-          roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
+          feedback: sonnerFeedback,
+          onPostStartMessageFailure: showSessionStartMessageRecovery,
           runSessionStartWorkflow,
-          openSessionInAgentStudio: () => {},
+          openStartedSession: () => {},
         });
         expect(started).toMatchObject(session);
         expect(showError).toHaveBeenCalledTimes(1);
@@ -329,7 +333,9 @@ describe("session-start notifications", () => {
       },
       notifications,
     });
-    const callback = mock((_result: { retryPostStartMessage?: () => Promise<void> }) => {});
+    const callback = mock(
+      (_result: Pick<SessionStartWorkflowResult, "retryPostStartMessage">) => {},
+    );
     const result = await runner({
       ...baseInput,
       request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },

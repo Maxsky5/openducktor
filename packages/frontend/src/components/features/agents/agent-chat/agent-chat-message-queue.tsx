@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
+import type { AgentChatComposerModel } from "./agent-chat.types";
+import type { AgentChatMessageQueueModel } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
@@ -15,7 +16,11 @@ import {
   type QueuedMessageEditorCatalog,
 } from "./agent-chat-queued-message-editor";
 import { QueuedMessageStack } from "./agent-chat-queued-message-stack";
-import type { QueuedMessageSteerContext } from "./agent-chat-steering";
+import type { QueuedMessageSteerContext } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
+import {
+  type QueuedMessageActionRun,
+  useQueuedMessageActionRuns,
+} from "@openducktor/frontend-core/sessions/send/use-queued-message-action-runs";
 
 /** The composer state that the queue reads, and the catalogs that an entry editor reuses. */
 export type AgentChatMessageQueueComposerModel = Pick<
@@ -24,11 +29,6 @@ export type AgentChatMessageQueueComposerModel = Pick<
 > &
   QueuedMessageSteerContext &
   QueuedMessageEditorCatalog;
-
-type PendingAction = {
-  submissionId: string;
-  kind: AgentMessageQueueAction["kind"];
-} | null;
 
 /**
  * Messages that wait for the running turn to end. They stack on the top edge of the composer,
@@ -41,7 +41,7 @@ export function AgentChatMessageQueue({
   model: AgentChatMessageQueueModel;
   composer: AgentChatMessageQueueComposerModel;
 }): ReactElement {
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const { running, track } = useQueuedMessageActionRuns();
   const { queue, onAction, onSaveEdit } = model;
 
   const run = (
@@ -50,13 +50,12 @@ export function AgentChatMessageQueue({
     operation: () => Promise<void>,
     onSuccess?: () => void,
   ): void => {
-    setPendingAction({ submissionId, kind });
-    void operation()
-      .then(onSuccess)
-      .catch((error: Error) => {
-        toast.error("Queued message action failed", { description: errorMessage(error) });
-      })
-      .finally(() => setPendingAction(null));
+    void track(submissionId, kind, async () => {
+      await operation();
+      onSuccess?.();
+    }).catch((error: Error) => {
+      toast.error("Queued message action failed", { description: errorMessage(error) });
+    });
   };
 
   const editDrafts = useClientConnection().drafts.queuedMessageEdits;
@@ -77,7 +76,7 @@ export function AgentChatMessageQueue({
           entries={stacked}
           isPaused={Boolean(queue?.pause)}
           steerContext={composer}
-          pendingSubmissionId={pendingAction?.submissionId ?? null}
+          runningActions={running}
           onAction={(action) => run(action.submissionId, action.kind, () => onAction(action))}
         />
         <CssPresenceList>
@@ -92,7 +91,7 @@ export function AgentChatMessageQueue({
                     target={queue.target}
                     entry={entry}
                     composer={composer}
-                    pendingAction={pendingAction}
+                    runningAction={running.get(submissionId)}
                     onSave={(draft) =>
                       run(
                         submissionId,
@@ -136,7 +135,7 @@ function QueuedMessageEditCard({
   target,
   entry,
   composer,
-  pendingAction,
+  runningAction,
   onSave,
   onCancel,
   onRemove,
@@ -144,7 +143,8 @@ function QueuedMessageEditCard({
   target: AgentMessageTarget;
   entry: EditingQueuedMessage;
   composer: AgentChatMessageQueueComposerModel;
-  pendingAction: PendingAction;
+  /** The action of this message that runs now, if any. */
+  runningAction: QueuedMessageActionRun | undefined;
   onSave: (draft: AgentChatComposerDraft) => void;
   onCancel: () => void;
   onRemove: () => void;
@@ -152,8 +152,7 @@ function QueuedMessageEditCard({
   const { presenceProps, isPresent, animateEntry } = useCssPresence();
   const [isOpen, setOpen] = useState(!animateEntry);
   // The card shows once the host has started the edit, so the Edit action no longer blocks it.
-  const isPending =
-    pendingAction?.submissionId === entry.submissionId && pendingAction.kind !== "begin_edit";
+  const isPending = runningAction !== undefined && runningAction.kind !== "begin_edit";
   return (
     <div
       {...presenceProps}
@@ -171,7 +170,7 @@ function QueuedMessageEditCard({
           entry={entry}
           composer={composer}
           isPending={isPending}
-          isSaving={isPending && pendingAction?.kind === "save_edit"}
+          isSaving={runningAction?.kind === "save_edit"}
           onSave={onSave}
           onCancel={onCancel}
           onRemove={onRemove}

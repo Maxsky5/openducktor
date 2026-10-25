@@ -21,6 +21,13 @@ import {
   resolveTextSelectionTarget,
   type TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
+import {
+  buildReferenceMenuItems,
+  filterSkills,
+  filterSlashCommands,
+  filterSubagents,
+  type ReferenceMenuItem,
+} from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 
 export type SlashMenuState = {
   textSegmentId: string;
@@ -45,18 +52,6 @@ export type SkillMenuState = {
   rangeStart: number;
   rangeEnd: number;
 };
-
-export type ReferenceMenuItem =
-  | {
-      kind: "subagent";
-      id: string;
-      subagent: AgentSubagentReference;
-    }
-  | {
-      kind: "file";
-      id: string;
-      result: AgentFileSearchResult;
-    };
 
 type AutocompleteAvailabilityContext = {
   disabled: boolean;
@@ -109,34 +104,6 @@ const isSameTextMenuRequest = (
   );
 };
 
-const filterSlashCommands = (commands: AgentSlashCommand[], query: string): AgentSlashCommand[] => {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery.length === 0) {
-    return commands;
-  }
-
-  return commands.filter((command) => command.trigger.toLowerCase().includes(normalizedQuery));
-};
-
-const filterSkills = (skills: AgentSkillReference[], query: string): AgentSkillReference[] => {
-  const normalizedQuery = query.trim().toLowerCase();
-  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
-  const sortedSkills = [...skills].sort((left, right) => {
-    const leftLabel = left.displayName ?? left.title ?? left.name;
-    const rightLabel = right.displayName ?? right.title ?? right.name;
-    return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
-  });
-  if (normalizedQuery.length === 0) {
-    return sortedSkills;
-  }
-
-  return sortedSkills.filter((skill) =>
-    [skill.name, skill.title, skill.displayName]
-      .filter((value): value is string => Boolean(value))
-      .some((value) => value.toLowerCase().includes(normalizedQuery)),
-  );
-};
-
 const moveActiveIndex = (
   itemCount: number,
   direction: 1 | -1,
@@ -155,44 +122,6 @@ const moveActiveIndex = (
   });
   return true;
 };
-
-const filterSubagents = (
-  subagents: AgentSubagentReference[],
-  query: string,
-): AgentSubagentReference[] => {
-  const normalizedQuery = query.trim().toLowerCase();
-  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
-  const sortedSubagents = [...subagents].sort((left, right) => {
-    const leftLabel = left.label ?? left.name;
-    const rightLabel = right.label ?? right.name;
-    return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
-  });
-  if (normalizedQuery.length === 0) {
-    return sortedSubagents;
-  }
-
-  return sortedSubagents.filter((subagent) =>
-    [subagent.name, subagent.label, subagent.description]
-      .filter((value): value is string => Boolean(value))
-      .some((value) => value.toLowerCase().includes(normalizedQuery)),
-  );
-};
-
-const buildReferenceMenuItems = (
-  subagents: AgentSubagentReference[],
-  fileResults: AgentFileSearchResult[],
-): ReferenceMenuItem[] => [
-  ...subagents.map((subagent) => ({
-    kind: "subagent" as const,
-    id: `subagent:${subagent.id}`,
-    subagent,
-  })),
-  ...fileResults.map((result) => ({
-    kind: "file" as const,
-    id: `file:${result.id}`,
-    result,
-  })),
-];
 
 type UseAgentChatComposerEditorAutocompleteArgs = {
   disabled: boolean;
@@ -336,7 +265,12 @@ export const useAgentChatComposerEditorAutocomplete = ({
   }, [effectiveReferenceMenuState, subagents, supportsSubagentReferences]);
 
   const referenceMenuItems = useMemo(
-    () => buildReferenceMenuItems(filteredSubagents, effectiveReferenceMenuState?.results ?? []),
+    () =>
+      buildReferenceMenuItems(
+        filteredSubagents,
+        effectiveReferenceMenuState?.results ?? [],
+        effectiveReferenceMenuState?.query ?? "",
+      ),
     [effectiveReferenceMenuState, filteredSubagents],
   );
 

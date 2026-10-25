@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import type { TaskResetImplementationModalModel } from "./kanban-page-model-types";
+import type { TaskResetImplementationModalModel } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
 import { TaskResetImplementationModal } from "./task-reset-implementation-modal";
 
 const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalModel => ({
@@ -19,6 +19,7 @@ const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalMod
   terminalCount: 0,
   impactError: null,
   errorMessage: null,
+  errorOutcomeUnknown: false,
   onOpenChange: () => {},
   onCancel: () => {},
   onConfirm: () => {},

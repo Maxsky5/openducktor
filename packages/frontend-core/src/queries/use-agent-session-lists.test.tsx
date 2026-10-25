@@ -177,6 +177,35 @@ describe("useAgentSessionLists", () => {
     }
   });
 
+  test("keeps the same result when a refresh reads equal lists", async () => {
+    const batchList = mock(async (_repoPath: string, taskIds: string[]): Promise<BatchResult> =>
+      taskIds.map((taskId) => ({ taskId, agentSessions: [sessionFixture] })),
+    );
+    const harness = createHarness({
+      repoPath: "/repo",
+      taskIds: ["task-1"],
+      enabled: true,
+      readPort: { agentSessionsListForTasks: batchList },
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isPending);
+      const before = harness.getLatest();
+
+      await harness.run(async () => {
+        await refreshAgentSessionListQuery(harness.getQueryClient(), "/repo", "task-1", {
+          agentSessionsListForTasks: batchList,
+        });
+      });
+
+      expect(batchList).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest()).toBe(before);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reads a task again when it is refreshed during the initial read", async () => {
     const refreshedSession = { ...sessionFixture, externalSessionId: "external-2" };
     const initialRead = deferred<BatchResult>();

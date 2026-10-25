@@ -3,8 +3,8 @@ import type { TerminalContext } from "@openducktor/contracts";
 import {
   EMPTY_TERMINAL_ACTIVITY,
   terminalActivityOwnerKey,
-} from "@/features/terminals/terminal-activity-store";
-import { useTerminalTransport } from "@/features/terminals/use-terminal-transport";
+} from "@openducktor/frontend-core/terminals/terminal-activity-store";
+import { useTerminalTransport } from "@openducktor/frontend-core/terminals/use-terminal-transport";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { TerminalActivityContext } from "../terminal-activity-context";
 

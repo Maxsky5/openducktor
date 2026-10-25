@@ -1,8 +1,11 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import type { ModelPickerValue } from "@/components/features/agents/model-picker";
-import { resolveModelSelectionForPair } from "@/features/model-selection/model-selection-state";
-import type { ModelDefaultDraft } from "@/lib/repo-agent-defaults";
+import {
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  resolveModelSelectionForPair,
+} from "@openducktor/core";
+import type { ModelPickerValue } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
+import type { ModelDefaultDraft } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { ensureDraftAgentDefault } from "./model-defaults-model";
 
 export const resolveRepoAgentDefaultModelPickerSelection = ({

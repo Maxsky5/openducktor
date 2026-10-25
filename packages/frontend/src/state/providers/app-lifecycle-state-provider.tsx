@@ -1,57 +1,18 @@
-import { type PropsWithChildren, type ReactElement, useMemo } from "react";
+import type { PropsWithChildren, ReactElement } from "react";
 import { useRuntimeCatalogBootstrap } from "@/state/lifecycle/use-runtime-catalog-bootstrap";
-import { createAgentSessionViewSync } from "@openducktor/frontend-core/queries/agent-session-view-sync";
-import { getProductionTaskViewSync } from "@openducktor/frontend-core/queries/task-view-sync";
-import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
-import type { AgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { useHostTaskStreamControllerFactory } from "@openducktor/frontend-core/tasks/use-host-task-stream";
 import {
-  useChecksOperationsContext,
   useRequiredContext,
   useRuntimeAvailabilityContext,
   useTaskControlContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
+  useChecksOperationsContext,
   useWorkspaceOperationsContext,
   WorkspaceStateContext,
 } from "../app-state-contexts";
-import {
-  useAgentSessionsContext,
-  useHostRuntimeStatusContext,
-} from "@openducktor/frontend-core/sessions/session-contexts";
-import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
-import { type TaskStreamControllerFactory, useAppLifecycle } from "../lifecycle/use-app-lifecycle";
-
-const createProductionTaskStreamController =
-  (
-    host: HostConnection,
-    sessionStore: Pick<AgentSessionsStore, "listSessionTaskIds" | "removeTaskSessions">,
-  ): TaskStreamControllerFactory =>
-  ({
-    queryClient,
-    getOpenRepoPaths,
-    getActiveRepoPath,
-    onDegraded,
-    onSnapshotFinished,
-    onSnapshotStarted,
-    onWorkspaceFailures,
-  }) =>
-    createTaskStreamController({
-      transport: host,
-      taskViewSync: getProductionTaskViewSync(queryClient),
-      agentSessionViewSync: createAgentSessionViewSync({
-        queryClient,
-        readPort: host.client,
-        listSessionTaskIds: sessionStore.listSessionTaskIds,
-        removeTaskSessions: sessionStore.removeTaskSessions,
-        refreshLiveSessions: (repoPath) => host.client.agentSessionLiveRefresh({ repoPath }),
-        isWorkspaceOpen: (repoPath) => getOpenRepoPaths().includes(repoPath),
-        isWorkspaceActive: (repoPath) => getActiveRepoPath() === repoPath,
-      }),
-      getOpenRepoPaths,
-      onDegraded,
-      onSnapshotFinished,
-      onSnapshotStarted,
-      onWorkspaceFailures,
-    });
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { useAppLifecycle } from "../lifecycle/use-app-lifecycle";
 
 export function AppLifecycleStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace, workspaces } = useRequiredContext(
@@ -63,12 +24,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
   const runtimeStatus = useHostRuntimeStatusContext();
   const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { loadWorkspaceTasks } = useTaskControlContext();
-  const { listSessionTaskIds, removeTaskSessions } = useAgentSessionsContext();
-  const host = useHostConnection();
-  const taskStreamControllerFactory = useMemo(
-    () => createProductionTaskStreamController(host, { listSessionTaskIds, removeTaskSessions }),
-    [host, listSessionTaskIds, removeTaskSessions],
-  );
+  const taskStreamControllerFactory = useHostTaskStreamControllerFactory();
 
   useRuntimeCatalogBootstrap({
     activeWorkspace,

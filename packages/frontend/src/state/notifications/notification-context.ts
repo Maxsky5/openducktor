@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { createContext, useContext } from "react";
 import type { NotificationDispatchFailure } from "@openducktor/frontend-core/notifications/notification-policy";
-import type { SessionStartNotificationPublisher } from "@/features/session-start/session-start-orchestration";
+import type { SessionStartNotificationPublisher } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 
 export type NotificationNavigator = (target: NotificationNavigationTarget) => Promise<void>;
 

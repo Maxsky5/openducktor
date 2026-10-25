@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import type { SessionNavigationModel } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import {
   navigationModel,
   taskSessionEntry,

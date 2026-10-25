@@ -1,7 +1,10 @@
 import type { CommitsAheadBehind } from "@openducktor/contracts";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import type { AgentStudioPendingPullRebase, GitConflict } from "@/features/agent-studio-git";
+import type {
+  AgentStudioPendingPullRebase,
+  GitConflict,
+} from "@openducktor/frontend-core/git/contracts";
 import {
   type GitActionKind,
   type RefreshGitDiffData,

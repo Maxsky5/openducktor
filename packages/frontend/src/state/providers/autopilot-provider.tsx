@@ -11,16 +11,14 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { createAutopilotOutcomePresenter } from "@/features/autopilot/autopilot-outcome-presenter";
-import { toAgentUserMessageParts } from "@/features/session-start/session-start-workflow";
+import { toAgentUserMessageParts } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import { CONNECTION_RECONNECTED_EVENT_KIND } from "@openducktor/frontend-core/recovery/connection-control-events";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
-import {
-  autopilotQueryKeys,
-  autopilotStateQueryOptions,
-} from "@openducktor/frontend-core/queries/autopilot";
+import { readAutopilotHeldOutcomes } from "@openducktor/frontend-core/autopilot/autopilot-held-outcomes";
+import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
 import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
 import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
 import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -74,11 +72,10 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     () =>
       createAutopilotOutcomePresenter({
         claimRecovery: (input) => host.client.autopilotRecoveryClaim(input),
-        sendMessage: async (session, instruction) => {
-          await sendAgentMessageRef.current(session, toAgentUserMessageParts(instruction), {
+        sendMessage: (session, instruction) =>
+          sendAgentMessageRef.current(session, toAgentUserMessageParts(instruction), {
             preserveTextWhitespace: true,
-          });
-        },
+          }),
         markInAppFeedbackHandled: (errorId) =>
           notificationsRef.current.markInAppFeedbackHandled(errorId),
         isWorkspaceSelected: (workspaceId) => activeWorkspaceIdRef.current === workspaceId,
@@ -94,32 +91,24 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   // of a workspace that left the workspace list during the read do not show. Each failed read
   // shows its own error, and the result lists the errors.
   const readHeldOutcomes = useCallback(
-    async (
+    (
       workspaceIds: readonly string[],
       { workspaceSelected }: { workspaceSelected: boolean },
-    ): Promise<unknown[]> => {
-      const reads = await Promise.allSettled(
-        workspaceIds.map((workspaceId) =>
-          queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then(
-            (state) => {
-              if (listedWorkspacesRef.current.has(workspaceId)) {
-                for (const outcome of state.outcomes)
-                  presenter.present(outcome, { workspaceSelected });
-              }
-              // The failure covers all workspaces of the host, so it does not depend on the
-              // workspace list.
-              presenter.presentFailure(state.failure);
-            },
-            (cause: unknown) => {
-              const workspace = listedWorkspacesRef.current.get(workspaceId);
-              if (workspace) reportHeldOutcomeFailure(workspace, cause);
-              throw cause;
-            },
-          ),
-        ),
-      );
-      return reads.flatMap((read) => (read.status === "rejected" ? [read.reason] : []));
-    },
+    ): Promise<unknown[]> =>
+      readAutopilotHeldOutcomes(queryClient, workspaceIds, {
+        onRead: (workspaceId, state) => {
+          if (listedWorkspacesRef.current.has(workspaceId)) {
+            for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
+          }
+          // The failure covers all workspaces of the host, so it does not depend on the
+          // workspace list.
+          presenter.presentFailure(state.failure);
+        },
+        onReadFailure: (workspaceId, cause) => {
+          const workspace = listedWorkspacesRef.current.get(workspaceId);
+          if (workspace) reportHeldOutcomeFailure(workspace, cause);
+        },
+      }),
     [presenter, queryClient],
   );
 

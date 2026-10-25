@@ -1,0 +1,381 @@
+import { describe, expect, test } from "bun:test";
+import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
+import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
+import {
+  failedAgentSessionReadModelLoadState,
+  loadingAgentSessionReadModelLoadState,
+  readyAgentSessionReadModelLoadState,
+} from "../../types/agent-session-read-model";
+import type { RepoSettingsInput } from "../../types/session-slices";
+import type { TaskCard } from "@openducktor/contracts";
+import { toAgentSessionSummary } from "../agent-sessions-store";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture as createSharedAgentSessionFixture,
+  createTaskCardFixture as createSharedTaskCardFixture,
+} from "../../test-support/shared-test-fixtures";
+import {
+  deriveSelectedSessionRuntimeTarget,
+  deriveSelectedSessionViewProjection,
+} from "./selected-session-view-projection";
+
+const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
+  createSharedTaskCardFixture(
+    {
+      title: "Task 1",
+      updatedAt: "2026-02-22T12:00:00.000Z",
+      createdAt: "2026-02-22T12:00:00.000Z",
+    },
+    overrides,
+  );
+const createAgentSessionFixture = (overrides: AgentSessionFixtureOverrides = {}) =>
+  createSharedAgentSessionFixture(
+    { startedAt: "2026-02-22T10:00:00.000Z", workingDirectory: "/repo" },
+    overrides,
+  );
+const createAgentSessionSummaryFixture = (overrides: AgentSessionFixtureOverrides = {}) =>
+  toAgentSessionSummary(createAgentSessionFixture(overrides));
+
+const repoPath = "/repo";
+const readModelLoadState = readyAgentSessionReadModelLoadState(repoPath);
+const repoSettings = {
+  worktreeBasePath: "",
+  branchPrefix: "",
+  defaultModel: null,
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  postCompleteHooks: [],
+  actions: { items: [], defaultActionId: null },
+  worktreeCopyPaths: [],
+  agentDefaults: {
+    spec: null,
+    planner: null,
+    build: {
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "",
+      profileId: "",
+    },
+    qa: null,
+  },
+} satisfies RepoSettingsInput;
+
+type ProjectionInput = Parameters<typeof deriveSelectedSessionViewProjection>[0];
+
+type ProjectOverrides = Partial<ProjectionInput>;
+
+const project = (overrides: ProjectOverrides = {}) => {
+  const projectionOverrides = overrides;
+  const selectedSessionIdentity = projectionOverrides.selectedSessionIdentity ?? null;
+  const selectedTask = projectionOverrides.selectedTask ?? null;
+
+  return deriveSelectedSessionViewProjection({
+    session: null,
+    sessionSummary: null,
+    sessionFault: null,
+    readModelLoadState,
+    runtimeReadinessState: "ready",
+    ...projectionOverrides,
+    selectedSessionIdentity,
+    selectedTask,
+  });
+};
+
+describe("selected-session-view-projection", () => {
+  test("uses the loaded session as the selected-session projection when available", () => {
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      status: "running",
+      pendingQuestions: [],
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude",
+        variant: "",
+        profileId: "builder",
+      },
+    });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(session),
+      session,
+      sessionSummary: createAgentSessionSummaryFixture({ externalSessionId: "session-1" }),
+      selectedTask: createTaskCardFixture(),
+    });
+
+    expect(projection.activityState).toBe("running");
+    expect(projection.selectedModel).toBe(session.selectedModel);
+    expect(projection.transcriptState).toEqual({ kind: "visible" });
+  });
+
+  test("keeps a loaded transcript visible while exposing its exact fault as an auxiliary error", () => {
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-loaded-fault",
+      historyLoadState: "loaded",
+    });
+
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(session),
+      session,
+      sessionFault: { message: "This session stopped streaming." },
+    });
+
+    expect(projection.transcriptState).toEqual({ kind: "visible" });
+    expect(projection.sessionAuxiliaryError).toBe("This session stopped streaming.");
+  });
+
+  test.each(["snapshot", "fault"] as const)(
+    "shows %s status uncertainty without claiming Running",
+    (source) => {
+      const message = "Claude status is unavailable. Reconnect the runtime.";
+      const session = createAgentSessionFixture({
+        status: "running",
+        historyLoadState: "loaded",
+        statusUnavailableReason: source === "snapshot" ? message : null,
+      });
+      const projection = project({
+        selectedSessionIdentity: toAgentSessionIdentity(session),
+        session,
+        sessionFault: source === "fault" ? { message, statusUnavailable: true } : null,
+      });
+      expect(projection.activityState).toBeNull();
+      expect(projection.transcriptState).toEqual({ kind: "visible" });
+      expect(projection.sessionAuxiliaryError).toBe(message);
+    },
+  );
+
+  test("ignores a loaded session that does not match the selected identity", () => {
+    const selectedSummary = createAgentSessionSummaryFixture({
+      externalSessionId: "selected-planner-session",
+      runtimeKind: "claude",
+      status: "running",
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "sonnet",
+        variant: "high",
+        profileId: "planner",
+      },
+    });
+    const staleLoadedSession = createAgentSessionFixture({
+      externalSessionId: "stale-spec-session",
+      runtimeKind: "claude",
+      status: "idle",
+      messages: createSessionMessagesState("stale-spec-session", [
+        {
+          id: "stale-ok",
+          role: "assistant",
+          content: "OK",
+          timestamp: "2026-06-28T19:55:51.000Z",
+          meta: { kind: "assistant", isFinal: true },
+        },
+      ]),
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "sonnet",
+        variant: "high",
+        profileId: "spec",
+      },
+    });
+
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(selectedSummary),
+      session: staleLoadedSession,
+      sessionSummary: selectedSummary,
+      selectedTask: createTaskCardFixture(),
+    });
+
+    expect(projection.activityState).toBe("running");
+    expect(projection.selectedModel).toBe(selectedSummary.selectedModel);
+    expect(projection.transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
+  test("uses the selected-session summary while the full session is not loaded", () => {
+    const summary = createAgentSessionSummaryFixture({
+      externalSessionId: "session-2",
+      runtimeKind: "codex",
+      status: "running",
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [],
+        },
+      ],
+      selectedModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "planner",
+      },
+    });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(summary),
+      session: null,
+      sessionSummary: summary,
+      selectedTask: createTaskCardFixture(),
+    });
+
+    expect(projection.activityState).toBe("waiting_input");
+    expect(projection.selectedModel).toBe(summary.selectedModel);
+    expect(projection.transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
+  test("uses repository settings as the runtime target for sessionless selected tasks", () => {
+    const selectedTask = createTaskCardFixture();
+    const runtimeTarget = deriveSelectedSessionRuntimeTarget({
+      selectedSessionIdentity: null,
+      selectedTask,
+      role: "build",
+      repoSettings,
+      isLoadingRepoSettings: false,
+    });
+    const selectedTaskProjection = project({
+      selectedTask,
+    });
+
+    expect(runtimeTarget).toEqual({
+      kind: "runtime",
+      runtimeKind: "codex",
+    });
+    expect(selectedTaskProjection.activityState).toBeNull();
+    expect(selectedTaskProjection.selectedModel).toBeNull();
+  });
+
+  test("uses selected session runtime as the runtime target", () => {
+    const summary = createAgentSessionSummaryFixture({
+      externalSessionId: "session-4",
+      runtimeKind: "opencode",
+    });
+
+    expect(
+      deriveSelectedSessionRuntimeTarget({
+        selectedSessionIdentity: toAgentSessionIdentity(summary),
+        selectedTask: createTaskCardFixture(),
+        role: "build",
+        repoSettings,
+        isLoadingRepoSettings: false,
+      }),
+    ).toEqual({
+      kind: "runtime",
+      runtimeKind: "opencode",
+    });
+  });
+
+  test("keeps sessionless selected tasks resolving while repository settings load", () => {
+    expect(
+      deriveSelectedSessionRuntimeTarget({
+        selectedSessionIdentity: null,
+        selectedTask: createTaskCardFixture(),
+        role: "build",
+        repoSettings: null,
+        isLoadingRepoSettings: true,
+      }),
+    ).toEqual({ kind: "resolving" });
+  });
+
+  test("distinguishes sessionless selected tasks from inactive selections", () => {
+    const selectedTaskProjection = project({
+      selectedTask: createTaskCardFixture(),
+    });
+    const waitingSelectedTaskProjection = project({
+      selectedTask: createTaskCardFixture(),
+      runtimeReadinessState: "checking",
+    });
+    const inactiveProjection = project({ runtimeReadinessState: "checking" });
+
+    expect(selectedTaskProjection.transcriptState).toEqual({
+      kind: "empty",
+      reason: "sessionless",
+    });
+    expect(waitingSelectedTaskProjection.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(inactiveProjection.transcriptState).toEqual({ kind: "empty", reason: "inactive" });
+  });
+
+  test("waits for runtime readiness before resolving selected task read-model loading", () => {
+    const projection = project({
+      selectedTask: createTaskCardFixture(),
+      readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
+      runtimeReadinessState: "checking",
+    });
+    const readyProjection = project({
+      selectedTask: createTaskCardFixture(),
+      readModelLoadState: loadingAgentSessionReadModelLoadState(repoPath),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(projection.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(readyProjection.transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "preparing",
+    });
+  });
+
+  test("surfaces selected session read-model failures", () => {
+    const summary = createAgentSessionSummaryFixture({
+      externalSessionId: "session-3",
+      runtimeKind: "codex",
+    });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(summary),
+      session: null,
+      sessionSummary: summary,
+      selectedTask: createTaskCardFixture(),
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        repoPath,
+        "Session history failed",
+        "live-stream",
+      ),
+    });
+
+    expect(projection.transcriptState).toEqual({
+      kind: "failed",
+      message: "Session history failed",
+    });
+    expect(projection.sessionAuxiliaryError).toBe("Session history failed");
+  });
+
+  test("projects an exact transient fault only for an unloaded selected session", () => {
+    const summary = createAgentSessionSummaryFixture({ externalSessionId: "session-fault" });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(summary),
+      sessionSummary: summary,
+      sessionFault: { message: "This exact session failed." },
+      selectedTask: createTaskCardFixture(),
+    });
+    const sessionlessProjection = project({
+      selectedTask: createTaskCardFixture(),
+      sessionFault: { message: "This exact session failed." },
+    });
+
+    expect(projection.transcriptState).toEqual({
+      kind: "failed",
+      message: "This exact session failed.",
+    });
+    expect(projection.sessionAuxiliaryError).toBe("This exact session failed.");
+    expect(sessionlessProjection.transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
+  });
+
+  test("keeps an exact session fault as the transcript failure and exposes both failures", () => {
+    const summary = createAgentSessionSummaryFixture({ externalSessionId: "session-both-faults" });
+    const projection = project({
+      selectedSessionIdentity: toAgentSessionIdentity(summary),
+      sessionSummary: summary,
+      sessionFault: { message: "This exact session failed." },
+      selectedTask: createTaskCardFixture(),
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        repoPath,
+        "Session history failed.",
+        "live-stream",
+      ),
+    });
+
+    expect(projection.transcriptState).toEqual({
+      kind: "failed",
+      message: "This exact session failed.",
+    });
+    expect(projection.sessionAuxiliaryError).toBe(
+      "This exact session failed. Session history failed.",
+    );
+  });
+});

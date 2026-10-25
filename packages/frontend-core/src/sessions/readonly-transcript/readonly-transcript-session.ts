@@ -1,0 +1,111 @@
+import { settleImageGenerationMessages } from "../agent-orchestrator/support/image-generation-settlement";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
+import { mergeHistoryMessages } from "../agent-orchestrator/support/history-message-merge";
+import { haveSameMessageTimestamp } from "../agent-orchestrator/support/message-timestamp";
+import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
+import { historyToChatMessages } from "../agent-orchestrator/support/session-history-chat-messages";
+import { projectBackgroundQuestions } from "../agent-orchestrator/support/background-questions";
+import type { AgentChatMessage, AgentSessionState } from "../../types/agent-orchestrator";
+import type { AgentChatTranscriptSession } from "../transcript/agent-chat-transcript.types";
+import type { AgentSessionTranscriptTarget } from "../transcript/agent-session-transcript-target";
+
+type ReadonlyTranscriptSessionInput = AgentSessionTranscriptTarget & {
+  history: AgentSessionHistoryMessage[];
+};
+
+const updateHash = (hash: number, value: string): number => {
+  let nextHash = hash;
+  for (let index = 0; index < value.length; index += 1) {
+    nextHash = (nextHash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return nextHash;
+};
+
+const transcriptHistoryVersion = (history: AgentSessionHistoryMessage[]): number => {
+  let hash = history.length;
+  for (const message of history) {
+    hash = updateHash(hash, message.messageId);
+    hash = updateHash(hash, message.role);
+    hash = updateHash(hash, message.timestamp);
+    hash = updateHash(hash, message.timestampIsApproximate ? "approximate" : "exact");
+    hash = updateHash(hash, message.text);
+    hash = updateHash(hash, JSON.stringify(message.parts));
+    hash = updateHash(
+      hash,
+      JSON.stringify(message.role === "system" ? (message.notice ?? null) : null),
+    );
+  }
+  return hash;
+};
+
+export const createReadonlyTranscriptSession = ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+  history,
+}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => {
+  return {
+    ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
+    activityState: null,
+    runtimeStatusMessage: null,
+    pendingQuestions: projectBackgroundQuestions(history),
+    messages: createSessionMessagesState(
+      externalSessionId,
+      historyToChatMessages(history, {
+        role: null,
+      }),
+      transcriptHistoryVersion(history),
+    ),
+  };
+};
+
+const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage): boolean =>
+  left.id === right.id &&
+  left.role === right.role &&
+  left.content === right.content &&
+  haveSameMessageTimestamp(left, right) &&
+  left.meta === right.meta;
+
+const areMessageListsEquivalent = (
+  left: readonly AgentChatMessage[],
+  right: readonly AgentChatMessage[],
+): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((message, index) => {
+    const nextMessage = right[index];
+    return nextMessage !== undefined && areMessagesEquivalent(message, nextMessage);
+  });
+};
+
+export const mergeReadonlyRuntimeHistory = (
+  session: AgentSessionState,
+  history: AgentSessionHistoryMessage[],
+): AgentSessionState => {
+  const historyMessages = historyToChatMessages(history, { role: null });
+  const mergedMessageState = settleImageGenerationMessages({
+    ...session,
+    messages: mergeHistoryMessages(
+      session.externalSessionId,
+      createSessionMessagesState(session.externalSessionId, historyMessages),
+      session.messages,
+    ),
+  });
+  const mergedMessages = mergedMessageState.items;
+
+  if (
+    session.historyLoadState === "loaded" &&
+    areMessageListsEquivalent(session.messages.items, mergedMessages)
+  ) {
+    return session;
+  }
+
+  return {
+    ...session,
+    startedAt: history[0]?.timestamp ?? session.startedAt,
+    historyLoadState: "loaded",
+    messages: mergedMessageState,
+  };
+};

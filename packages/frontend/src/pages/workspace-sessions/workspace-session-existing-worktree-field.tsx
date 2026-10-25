@@ -1,45 +1,16 @@
-import type {
-  WorkspaceSessionLocation,
-  WorkspaceSessionWorktreesListResult,
-} from "@openducktor/contracts";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { type ReactElement, useState } from "react";
+import type { WorkspaceSessionWorktreesListResult } from "@openducktor/contracts";
+import type { UseQueryResult } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { workspaceSessionWorktreesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
+import type { ExistingWorktreeChoice } from "@openducktor/frontend-core/workspace-sessions/create/use-existing-worktree-choice";
 
 type Worktrees = UseQueryResult<WorkspaceSessionWorktreesListResult>;
 
-/** Holds the selected worktree and reads the worktrees only while the selector shows. */
-export function useExistingWorktreeChoice(
-  workspaceId: string,
-  open: boolean,
-  location: WorkspaceSessionLocation,
-) {
-  const worktrees = useQuery({
-    ...workspaceSessionWorktreesQueryOptions(workspaceId),
-    enabled: open && location === "existing_worktree",
-  });
-  const [selected, setSelected] = useState<string | null>(null);
-  const isSelectedListed =
-    worktrees.data?.worktrees.some((entry) => entry.workingDirectory === selected) ?? false;
-  // A pending or failed read cannot confirm that the selected worktree still exists.
-  const isReadDone = worktrees.isSuccess && !worktrees.isFetching;
-  return {
-    selected,
-    select: setSelected,
-    worktrees,
-    isSelectedListed,
-    /** The selected worktree once the latest finished read lists it, else null. */
-    listedWorktree: isReadDone && isSelectedListed ? selected : null,
-    isSelectedUnavailable: selected !== null && isReadDone && !isSelectedListed,
-  };
-}
-
 type Props = {
-  choice: ReturnType<typeof useExistingWorktreeChoice>;
+  choice: ExistingWorktreeChoice;
   onChange: (workingDirectory: string) => void;
   disabled: boolean;
 };
@@ -124,11 +95,7 @@ function ExistingWorktreeStatus({
   );
 }
 
-function existingWorktreeView({
-  worktrees,
-  selected,
-  isSelectedListed,
-}: ReturnType<typeof useExistingWorktreeChoice>) {
+function existingWorktreeView({ worktrees, selected, isSelectedListed }: ExistingWorktreeChoice) {
   const entries = worktrees.data?.worktrees ?? [];
   const isEmpty = worktrees.isSuccess && entries.length === 0;
   const options: ComboboxOption[] = entries.map((entry) => ({

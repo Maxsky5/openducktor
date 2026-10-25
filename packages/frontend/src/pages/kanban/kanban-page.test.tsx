@@ -18,15 +18,18 @@ import { MemoryRouter, useLocation } from "react-router";
 import type { HostClient } from "@openducktor/host-client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  ChecksStateContext,
   DelegationStateContext,
   RuntimeDefinitionsContext,
   SpecStateContext,
   TasksStateContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
+  ChecksStateContext,
   WorkspaceBranchStateContext,
   WorkspacePresenceContext,
   WorkspaceStateContext,
@@ -55,11 +58,13 @@ import type {
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import type {
-  ChecksStateContextValue,
   DelegationStateContextValue,
-  RepoSettingsInput,
   SpecStateContextValue,
   TasksStateContextValue,
+} from "@openducktor/frontend-core/types/state-slices";
+import type {
+  ChecksStateContextValue,
+  RepoSettingsInput,
   WorkspaceBranchStateContextValue,
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
@@ -74,13 +79,16 @@ import type { TaskWorkflowActionsController } from "@/features/task-workflow/use
 import {
   TaskWorkflowActionsContext,
   useRequiredTaskWorkflowActions,
-} from "@/features/task-workflow/task-workflow-actions-context";
-import { EMPTY_KANBAN_BOARD_FILTER } from "./kanban-board-filter";
-import { useKanbanBoardFilterStore } from "./use-kanban-board-filter-model";
-import type { KanbanBoardFilterModel, KanbanPageModels } from "./kanban-page-model-types";
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import { EMPTY_KANBAN_BOARD_FILTER } from "@openducktor/frontend-core/tasks/board/kanban-board-filter";
+import {
+  type KanbanBoardFilterModel,
+  useKanbanBoardFilterStore,
+} from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
+import type { KanbanPageModels } from "./kanban-page-model-types";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
 enableReactActEnvironment();
@@ -565,7 +573,10 @@ const renderPage = async (
     await import("@/features/task-workflow/use-task-workflow-actions-controller");
   const sessionStore = createAgentSessionsStore("/repo");
   sessionStore.setSessionCollection(() => createAgentSessionCollection(renderState.sessions));
-  const connection = createTestClientConnection({ client: hostClientFakes });
+  const connection = createTestClientConnection({
+    client: hostClientFakes,
+    feedback: sonnerFeedback,
+  });
   const queryClient = connection.queryClient;
   const checksStateValue = createChecksStateValue();
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);

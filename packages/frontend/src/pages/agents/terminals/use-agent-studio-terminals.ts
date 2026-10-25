@@ -1,19 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
+import { useTaskTerminalScope } from "@openducktor/frontend-core/terminals/terminal-scopes";
+import {
+  type TerminalHostClient,
+  type TerminalSessionsModel,
+  useTerminals,
+} from "@openducktor/frontend-core/terminals/use-terminals";
 import { sessionPanelOwnerKey } from "@/features/session-panels";
-import type {
-  TerminalDependencies,
-  TerminalScope,
-  TerminalSessionsModel,
-} from "@/features/terminals";
-import { useTerminals } from "@/features/terminals";
 import { getShellBridge } from "@/lib/shell-bridge";
-import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
-import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type AgentStudioTerminalDependencies = {
-  hostClient: TerminalDependencies["hostClient"];
-  terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
+  hostClient: TerminalHostClient;
+  terminalBridge: TerminalBridge;
 };
 
 /** The panel layout owner key, so the panels can place the terminals of each task. */
@@ -34,40 +31,14 @@ export const useAgentStudioTerminals = (
   },
   suppliedDependencies?: AgentStudioTerminalDependencies,
 ): TerminalSessionsModel => {
-  const hostClient = useHostClient();
-  const dependencies = suppliedDependencies ?? {
-    hostClient,
-    terminalBridge: getShellBridge().terminals,
-  };
-  const enabled = workspaceId !== null && repoPath !== null && taskId !== null;
-  const worktreeOptions = enabled
-    ? taskWorktreeQueryOptions({
-        repoPath,
-        taskId,
-        taskVersion,
-      })
-    : taskWorktreeQueryOptions({
-        repoPath: "disabled",
-        taskId: "disabled",
-      });
-  const worktreeQuery = useQuery({
-    ...worktreeOptions,
-    enabled,
+  const taskScope = useTaskTerminalScope({
+    key: workspaceId !== null && taskId !== null ? terminalScopeKey(workspaceId, taskId) : null,
+    repoPath,
+    taskId,
+    taskVersion,
   });
-
-  const scope = useMemo((): TerminalScope | null => {
-    if (!workspaceId || !repoPath || !taskId) return null;
-    return {
-      key: terminalScopeKey(workspaceId, taskId),
-      context: { repoPath, taskId },
-      workingDirectory: worktreeQuery.data?.workingDirectory ?? null,
-      workingDirectoryError: `Task ${taskId} has no available worktree.`,
-    };
-  }, [repoPath, taskId, workspaceId, worktreeQuery.data?.workingDirectory]);
-  const terminalModel = useTerminals(
-    { scope, isScopeLoading: worktreeQuery.isLoading },
-    dependencies,
+  return useTerminals(
+    taskScope,
+    suppliedDependencies ?? { terminalBridge: getShellBridge().terminals },
   );
-
-  return terminalModel;
 };

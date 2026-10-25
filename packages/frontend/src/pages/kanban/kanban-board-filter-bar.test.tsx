@@ -7,7 +7,7 @@ import {
   EMPTY_KANBAN_BOARD_FILTER,
   isKanbanBoardFilterActive,
   type KanbanBoardFilter,
-} from "./kanban-board-filter";
+} from "@openducktor/frontend-core/tasks/board/kanban-board-filter";
 import { KanbanBoardFilterBar } from "./kanban-board-filter-bar";
 
 enableReactActEnvironment();
@@ -167,13 +167,13 @@ describe("KanbanBoardFilterBar menus", () => {
       "P1 High",
       "P2 Normal",
       "P3 Low",
-      "P4 Lowest",
+      "P4 Very low",
     ]);
     await act(async () => {
-      fireEvent.click(option("P4 Lowest"));
+      fireEvent.click(option("P4 Very low"));
     });
     expect(latest.filter.priorities).toEqual([4]);
-    expect(screen.getByRole("button", { name: "Priority: P4 Lowest" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Priority: P4 Very low" })).toBeTruthy();
   });
 
   test("narrows the labels with their text field", async () => {

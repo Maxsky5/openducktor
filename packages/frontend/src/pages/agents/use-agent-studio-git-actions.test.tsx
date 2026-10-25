@@ -2,12 +2,12 @@ import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-s
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitChangeSelectionRequest, GitLocalChanges } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import {
-  type AgentStudioPendingDiscard,
-  type GitChangeIntent,
-  type GitConflict,
-  gitChangeIntentKey,
-} from "@/features/agent-studio-git";
+import type {
+  AgentStudioPendingDiscard,
+  GitChangeIntent,
+  GitConflict,
+} from "@openducktor/frontend-core/git/contracts";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {

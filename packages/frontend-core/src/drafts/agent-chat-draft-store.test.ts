@@ -16,6 +16,7 @@ import type { AttachmentStager } from "../platform/device-file";
 import {
   type AgentChatDraftStore,
   type AgentChatDraftStoreOptions,
+  ChatDraftTooLargeError,
   createAgentChatDraftStore,
 } from "./agent-chat-draft-store";
 
@@ -450,10 +451,14 @@ describe("agent chat draft store", () => {
     await store.flush(identity);
 
     expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
-    expect(errors.map((error) => error.message)).toEqual([
-      expect.stringContaining("Chat draft is too large to persist"),
-      expect.stringContaining("Chat draft is too large to persist"),
-    ]);
+    expect(errors).toHaveLength(2);
+    for (const error of errors) {
+      expect(error).toBeInstanceOf(ChatDraftTooLargeError);
+      expect(error.message).toContain("This chat draft is too long to keep on this device");
+    }
+    expect(store.hydrate(identity, "task-1")).toEqual(
+      buildDraft("x".repeat(AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES)),
+    );
   });
 
   test("keeps memory when throwing storage cleanup fails", () => {

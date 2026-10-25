@@ -1,5 +1,10 @@
-import { resolveModelPickerPresentation } from "./model-picker-presentation";
-import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
+import {
+  MODEL_PICKER_CAPABILITIES,
+  modelPickerFavoriteDisabledReason,
+  modelPickerMetadataDescription,
+  resolveModelPickerActiveView,
+  resolveModelPickerPresentation,
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-presentation";
 import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import {
   ChevronsUpDown,
@@ -28,36 +33,18 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatTokenCompact } from "../format-token-count";
+import { formatTokenCompact } from "@openducktor/frontend-core/lib/format-token-count";
 import {
   buildModelPickerItems,
   isSameModelPickerValue,
+  type ModelPickerFavoriteState,
   type ModelPickerItem,
   type ModelPickerRuntime,
+  type ModelPickerSelectionPolicy,
   type ModelPickerValue,
   type ModelPickerView,
   modelPickerValueKey,
-} from "./model-picker-model";
-
-export type ModelPickerFavoriteState = {
-  favorites: AgentModelFavorite[] | null;
-  isLoading: boolean;
-  readError: string | null;
-  isMutationPending: boolean;
-  mutationError: string | null;
-  canMutate: boolean;
-  toggleFavorite: (
-    favorite: AgentModelFavorite,
-    savedFavorites?: readonly AgentModelFavorite[],
-  ) => void;
-  retryRead: () => void;
-  retryMutation: () => void;
-};
-
-export type ModelPickerSelectionPolicy =
-  | { kind: "editable" }
-  | { kind: "runtime_locked"; runtimeKind: RuntimeKind; reason: string }
-  | { kind: "read_only"; reason: string };
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 
 type ModelPickerProps = {
   runtimes: readonly ModelPickerRuntime[];
@@ -71,35 +58,6 @@ type ModelPickerProps = {
   onOpenChange?: (open: boolean) => void;
   popoverSide?: "top" | "bottom";
   popoverAvoidCollisions?: boolean;
-};
-
-const activeViewFor = (
-  runtimes: readonly ModelPickerRuntime[],
-  favorites: readonly AgentModelFavorite[] | null,
-  selectionPolicy: ModelPickerSelectionPolicy,
-): ModelPickerView => {
-  const availableFavorites = favorites?.filter((favorite) =>
-    runtimes.some(
-      (runtime) =>
-        runtime.isEnabledForFavorites && runtime.descriptor.kind === favorite.runtimeKind,
-    ),
-  );
-  if (selectionPolicy.kind === "runtime_locked") {
-    if (
-      availableFavorites?.some((favorite) => favorite.runtimeKind === selectionPolicy.runtimeKind)
-    ) {
-      return "favorites";
-    }
-    return selectionPolicy.runtimeKind;
-  }
-  if (availableFavorites?.length) {
-    return "favorites";
-  }
-  return (
-    runtimes.find((runtime) => runtime.isEnabledForFavorites)?.descriptor.kind ??
-    runtimes[0]?.descriptor.kind ??
-    "favorites"
-  );
 };
 
 /** One loader covers every runtime whose catalog has not loaded yet. */
@@ -222,32 +180,12 @@ const RuntimeRailButton = ({
   );
 };
 
-const MODEL_CAPABILITY_ICONS = [
-  {
-    key: "image",
-    icon: ImageIcon,
-    label: "Supports images",
-    description: "Accepts image attachments like screenshots and diagrams",
-  },
-  {
-    key: "video",
-    icon: Film,
-    label: "Supports videos",
-    description: "Accepts video attachments",
-  },
-  {
-    key: "audio",
-    icon: FileAudio2,
-    label: "Supports audio",
-    description: "Accepts audio attachments",
-  },
-  {
-    key: "pdf",
-    icon: FileText,
-    label: "Supports PDF files",
-    description: "Accepts PDF documents as attachments",
-  },
-] as const;
+const MODEL_CAPABILITY_ICONS = {
+  image: ImageIcon,
+  video: Film,
+  audio: FileAudio2,
+  pdf: FileText,
+} as const;
 
 const VIRTUALIZATION_MIN_MODEL_COUNT = 30;
 const MODEL_ROW_HEIGHT_PX = 52;
@@ -261,39 +199,27 @@ const ModelCapabilityIcons = ({
   if (!support) {
     return null;
   }
-  const capabilities = MODEL_CAPABILITY_ICONS.filter((capability) => support[capability.key]);
+  const capabilities = MODEL_PICKER_CAPABILITIES.filter((capability) => support[capability.key]);
   if (capabilities.length === 0) {
     return null;
   }
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {capabilities.map(({ icon: Icon, label, description }) => (
-        <Tooltip key={label} disableHoverableContent>
-          <TooltipTrigger asChild>
-            <span role="img" aria-label={label}>
-              <Icon className="size-3.5" aria-hidden="true" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">{description}</TooltipContent>
-        </Tooltip>
-      ))}
+      {capabilities.map(({ key, label, description }) => {
+        const Icon = MODEL_CAPABILITY_ICONS[key];
+        return (
+          <Tooltip key={label} disableHoverableContent>
+            <TooltipTrigger asChild>
+              <span role="img" aria-label={label}>
+                <Icon className="size-3.5" aria-hidden="true" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">{description}</TooltipContent>
+          </Tooltip>
+        );
+      })}
     </span>
   );
-};
-
-const modelMetadataDescription = (item: ModelPickerItem): string | null => {
-  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
-  const supportedCapabilities = MODEL_CAPABILITY_ICONS.filter(
-    (capability) => item.model.attachmentSupport?.[capability.key],
-  ).map((capability) => capability.label.replace("Supports ", "").toLowerCase());
-  const parts: string[] = [];
-  if (contextWindowLabel) {
-    parts.push(`${contextWindowLabel} token context window`);
-  }
-  if (supportedCapabilities.length > 0) {
-    parts.push(`Supports ${supportedCapabilities.join(", ")}`);
-  }
-  return parts.length > 0 ? parts.join(". ") : null;
 };
 
 type ModelRowProps = {
@@ -322,7 +248,7 @@ const ModelSelectionButton = ({
   "item" | "selected" | "disabledReason" | "buttonRef" | "onNavigate" | "onSelect"
 >): ReactElement => {
   const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
-  const metadataDescription = modelMetadataDescription(item);
+  const metadataDescription = modelPickerMetadataDescription(item);
   const selectionDescription = [metadataDescription, disabledReason].filter(Boolean).join(". ");
   return (
     <Button
@@ -381,28 +307,12 @@ const ModelSelectionButton = ({
   );
 };
 
-const favoriteDisabledReasonFor = (state: ModelPickerFavoriteState): string | null => {
-  if (state.canMutate) {
-    return null;
-  }
-  if (state.readError) {
-    return `Favorites unavailable: ${state.readError}`;
-  }
-  if (state.isLoading) {
-    return "Favorites are loading.";
-  }
-  if (state.isMutationPending) {
-    return "Saving favorite changes.";
-  }
-  return state.mutationError ?? "Favorites are unavailable.";
-};
-
 const ModelFavoriteButton = ({
   item,
   favoriteState,
 }: Pick<ModelRowProps, "item" | "favoriteState">): ReactElement => {
   const favoriteDisabledReasonId = useId();
-  const favoriteDisabledReason = favoriteDisabledReasonFor(favoriteState);
+  const favoriteDisabledReason = modelPickerFavoriteDisabledReason(favoriteState);
   const favoriteLabel = item.isFavorite
     ? `Remove ${item.model.modelName} from favorites`
     : `Add ${item.model.modelName} to favorites`;
@@ -757,7 +667,7 @@ export function ModelPicker({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<ModelPickerView>(() =>
-    activeViewFor(runtimes, favoriteState.favorites, selectionPolicy),
+    resolveModelPickerActiveView(runtimes, favoriteState.favorites, selectionPolicy),
   );
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const readOnlyReasonId = useId();
@@ -889,7 +799,9 @@ export function ModelPicker({
       return;
     }
     if (nextOpen) {
-      setActiveView(activeViewFor(runtimes, favoriteState.favorites, selectionPolicy));
+      setActiveView(
+        resolveModelPickerActiveView(runtimes, favoriteState.favorites, selectionPolicy),
+      );
       const activeElement = document.activeElement;
       setPortalContainer(
         activeElement instanceof HTMLElement

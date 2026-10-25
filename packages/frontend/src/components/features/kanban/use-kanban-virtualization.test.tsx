@@ -4,7 +4,7 @@ import { render } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { useKanbanVirtualization } from "./use-kanban-virtualization";
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {

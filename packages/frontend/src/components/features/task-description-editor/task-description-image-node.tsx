@@ -3,7 +3,7 @@ import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useState } from "react";
 import { z } from "zod";
 import { GithubIssueImage } from "@/components/features/issue-source/github-issue-image";
-import { isGithubIssueAttachmentUrl } from "@/components/features/issue-source/issue-image-url";
+import { isGithubIssueAttachmentUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";

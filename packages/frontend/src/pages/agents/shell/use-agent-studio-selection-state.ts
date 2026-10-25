@@ -1,7 +1,7 @@
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { prefetchTaskArtifacts } from "@openducktor/frontend-core/queries/artifacts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";

@@ -9,7 +9,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 
 const SKILL_TOOL_NAMES = new Set(["skill", "Skill"]);
 

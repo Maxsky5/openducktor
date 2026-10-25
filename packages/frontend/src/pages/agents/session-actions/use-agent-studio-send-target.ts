@@ -7,20 +7,20 @@ import {
 import type { TaskCard } from "@openducktor/contracts";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { useEffect, useMemo, useRef } from "react";
-import type { AgentChatSendTarget } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import {
   isSessionStartFailureFeedbackHandled,
   SessionStartWorkflowError,
   type RunSessionStartWorkflow,
-  type SessionStartWorkflowResult,
-  type SessionLaunchActionId,
-} from "@/features/session-start";
-import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
+import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
+import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
+import { useAsyncActivityTracker } from "@openducktor/frontend-core/lib/use-async-activity-tracker";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
-import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
+import { agentStudioChatDraftScopeKey } from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import {
   buildAgentStudioSelectionQueryUpdate,
   type AgentStudioQueryUpdate as QueryUpdate,

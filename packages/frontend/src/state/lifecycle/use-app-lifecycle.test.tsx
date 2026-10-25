@@ -21,7 +21,7 @@ import {
   createTaskCardFixture,
   createTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { TaskStreamControllerFactory } from "./use-app-lifecycle";
+import type { TaskStreamControllerFactory } from "@openducktor/frontend-core/tasks/use-host-task-stream";
 import { useAppLifecycle } from "./use-app-lifecycle";
 
 interface FactoryStateContract {

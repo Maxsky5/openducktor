@@ -19,7 +19,10 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { ActiveWorkspaceContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import {
+  ActiveWorkspaceContext,
+  RuntimeDefinitionsContext,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
@@ -32,17 +35,18 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import {
   createAgentSessionFixture,
   createHostRuntimeStatusFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import * as pierre from "../task-execution-file-preview-pierre";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { useAgentSessionTranscriptDialog } from "./agent-session-transcript-dialog-context";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
 
 enableReactActEnvironment();
@@ -218,6 +222,13 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     </Providers>
   );
   const view = render(content("/repo"));
+  // The next test starts after this body calls dispose(), also when the test times out.
+  const endBody = restoreAfterTestBody(() => {
+    view.unmount();
+    for (const spy of spies) spy.mockRestore();
+    client.clear();
+    frames.restore();
+  });
   return {
     client,
     read,
@@ -252,11 +263,9 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
       fireEvent.change(screen.getByLabelText("Code editor"), { target: { value: contents } });
       await screen.findByRole("status", { name: "Unsaved changes" });
     },
+    /** Ends the test body. Call it at the end of the finally block of the test. */
     dispose() {
-      view.unmount();
-      for (const spy of spies) spy.mockRestore();
-      client.clear();
-      frames.restore();
+      endBody();
     },
   };
 }

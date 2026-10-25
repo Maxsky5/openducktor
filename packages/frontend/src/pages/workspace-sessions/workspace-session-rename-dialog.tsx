@@ -2,7 +2,6 @@ import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,9 +17,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { updateWorkspaceSessionQueries } from "@openducktor/frontend-core/queries/workspace-sessions";
-import { useMountedRef } from "./use-mounted-ref";
-import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  canSaveWorkspaceSessionRename,
+  RENAME_CHAT_TEXT,
+  useRenameWorkspaceSession,
+  workspaceSessionRenameInitialTitle,
+} from "@openducktor/frontend-core/workspace-sessions/workspace-session-rename";
+import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 
 type Props = {
   open: boolean;
@@ -37,20 +40,21 @@ export function WorkspaceSessionRenameDialog({
   onClose,
   onCloseAutoFocus,
 }: Props): ReactElement {
-  const host = useHostClient();
-  const queryClient = useQueryClient();
   const mounted = useMountedRef();
-  const initialTitle = record.manualTitle ?? record.generatedTitle ?? "";
+  const initialTitle = workspaceSessionRenameInitialTitle(record);
   const [draft, setDraft] = useState(initialTitle);
-  const rename = useMutation({
-    mutationFn: (manualTitle: string) =>
-      host.workspaceSessionRename({ workspaceId, sessionId: record.id, manualTitle }),
-    onSuccess: (session) => {
-      updateWorkspaceSessionQueries(queryClient, workspaceId, session);
+  const rename = useRenameWorkspaceSession({
+    workspaceId,
+    sessionId: record.id,
+    onRenamed: () => {
       if (mounted.current) onClose();
     },
   });
-  const canSave = draft.trim() !== initialTitle && !rename.isPending;
+  const canSave = canSaveWorkspaceSessionRename({
+    initialTitle,
+    draft,
+    isPending: rename.isPending,
+  });
   return (
     <Dialog
       open={open}
@@ -71,15 +75,15 @@ export function WorkspaceSessionRenameDialog({
           }}
         >
           <DialogHeader className="border-b border-border px-5 py-4 pr-12">
-            <DialogTitle>Rename chat</DialogTitle>
-            <DialogDescription>Leave the name blank to use the generated title.</DialogDescription>
+            <DialogTitle>{RENAME_CHAT_TEXT.title}</DialogTitle>
+            <DialogDescription>{RENAME_CHAT_TEXT.description}</DialogDescription>
           </DialogHeader>
           <fieldset
             disabled={rename.isPending}
             className="flex min-h-0 flex-1 flex-col border-0 p-0"
           >
             <DialogBody className="flex flex-col gap-1.5 px-5 py-4">
-              <Label htmlFor="workspace-session-rename">Name</Label>
+              <Label htmlFor="workspace-session-rename">{RENAME_CHAT_TEXT.nameLabel}</Label>
               <Input
                 id="workspace-session-rename"
                 value={draft}
@@ -99,7 +103,7 @@ export function WorkspaceSessionRenameDialog({
               </Button>
               <Button type="submit" disabled={!canSave}>
                 {rename.isPending && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-                {rename.isPending ? "Saving…" : "Save"}
+                {rename.isPending ? RENAME_CHAT_TEXT.saving : RENAME_CHAT_TEXT.save}
               </Button>
             </DialogFooter>
           </fieldset>

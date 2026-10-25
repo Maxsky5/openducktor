@@ -16,7 +16,7 @@ import {
   claudeToolCatalogQueryOptions,
   skippedClaudeToolCatalogQueryOptions,
 } from "@openducktor/frontend-core/queries/claude-tool-catalog";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { CLAUDE_POLICY_ROLES } from "./settings-claude-policy-fields";
 import { ClaudeToolList } from "./settings-claude-tool-list";
 import {

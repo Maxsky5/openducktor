@@ -23,10 +23,8 @@ import {
   normalizeComposerDraft,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
-import {
-  type ReferenceMenuItem,
-  useAgentChatComposerEditorAutocomplete,
-} from "./use-agent-chat-composer-editor-autocomplete";
+import { useAgentChatComposerEditorAutocomplete } from "./use-agent-chat-composer-editor-autocomplete";
+import { type ReferenceMenuItem } from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import {
   resolveTextSelectionTarget,

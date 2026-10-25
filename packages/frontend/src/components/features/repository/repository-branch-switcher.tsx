@@ -6,7 +6,7 @@ import {
   BRANCH_CHIP_CLASS_NAME,
 } from "@/components/features/repository/branch-chip-classnames";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
-import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { toBranchSelectorOptions } from "@openducktor/frontend-core/lib/branch-selector-model";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";

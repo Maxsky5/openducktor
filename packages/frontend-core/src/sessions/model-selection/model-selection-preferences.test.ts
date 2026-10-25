@@ -1,0 +1,449 @@
+import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type AgentModelCatalog, resolvePreferredModelSelection } from "@openducktor/core";
+import {
+  resolveChatComposerModelSelections,
+  resolveChatComposerSelectedRuntimeKind,
+} from "./model-selection-preferences";
+
+const CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["default", "high"],
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+    },
+    {
+      id: "anthropic/claude-sonnet",
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelId: "claude-sonnet",
+      modelName: "Claude Sonnet",
+      variants: [],
+      contextWindow: 100_000,
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  profiles: [
+    {
+      name: "spec-agent",
+      mode: "primary",
+      hidden: false,
+      color: "#f59e0b",
+    },
+    {
+      name: "hidden-subagent",
+      mode: "subagent",
+      hidden: true,
+    },
+  ],
+};
+
+const LIVE_UPDATE_CATALOG: AgentModelCatalog = {
+  ...CATALOG,
+  models: CATALOG.models.map((model) =>
+    model.modelId === "gpt-5"
+      ? {
+          ...model,
+          variants: ["default", "high", "max"],
+          liveSessionUpdates: { variants: ["default", "high"] },
+        }
+      : model,
+  ),
+};
+
+describe("model-selection-preferences", () => {
+  test("resolves chat composer runtime kind from selected session, draft, caller default, then runtime default", () => {
+    const defaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        draftSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultSelection,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("codex");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: null,
+        defaultSelection,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("opencode");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: null,
+        defaultSelection: null,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBeNull();
+  });
+
+  test("ignores unavailable new-session runtimes but preserves the loaded-session runtime", () => {
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        draftSelection: null,
+        defaultSelection: null,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("codex");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBe("opencode");
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: null,
+        defaultSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveChatComposerSelectedRuntimeKind({
+        selectedSessionModel: null,
+        draftSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+        defaultSelection: null,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      }),
+    ).toBeNull();
+  });
+
+  test("resolves draft selection by normalizing existing selection then falling back", () => {
+    expect(
+      resolvePreferredModelSelection({
+        catalog: CATALOG,
+        preferredSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "missing-variant",
+          profileId: "hidden-subagent",
+        },
+        fallbackSelection: null,
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+    });
+
+    expect(
+      resolvePreferredModelSelection({
+        catalog: CATALOG,
+        preferredSelection: null,
+        fallbackSelection: {
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        },
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    });
+
+    expect(
+      resolvePreferredModelSelection({
+        catalog: CATALOG,
+        preferredSelection: null,
+        fallbackSelection: null,
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec-agent",
+    });
+  });
+
+  test("resolves preferred active-session model using selected model before defaults", () => {
+    expect(
+      resolvePreferredModelSelection({
+        catalog: CATALOG,
+        preferredSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "spec-agent",
+        },
+        fallbackSelection: {
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        },
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+
+    expect(
+      resolvePreferredModelSelection({
+        catalog: CATALOG,
+        preferredSelection: {
+          runtimeKind: "opencode",
+          providerId: "missing",
+          modelId: "model",
+        },
+        fallbackSelection: null,
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec-agent",
+    });
+  });
+
+  test("keeps accepted session settings when the current catalog no longer lists them", () => {
+    const defaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+    const unknownSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "missing",
+      modelId: "missing-model",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          modelCatalog: CATALOG,
+          selectedSessionModel: unknownSessionModel,
+        },
+        defaultSelection,
+      }),
+    ).toMatchObject({
+      selectionCatalog: CATALOG,
+      selectedModelSelection: unknownSessionModel,
+      selectionForNewSession: unknownSessionModel,
+    });
+  });
+
+  test("preserves the current loaded-session variant even when it cannot be selected live", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "max",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          modelCatalog: LIVE_UPDATE_CATALOG,
+          selectedSessionModel,
+        },
+        defaultSelection: null,
+      }),
+    ).toEqual({
+      selectionCatalog: LIVE_UPDATE_CATALOG,
+      selectedModelSelection: selectedSessionModel,
+      selectionForNewSession: selectedSessionModel,
+    });
+  });
+
+  test("does not invent a loaded-session model when the persisted session has none", () => {
+    const defaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          modelCatalog: CATALOG,
+          selectedSessionModel: null,
+        },
+        defaultSelection,
+      }),
+    ).toEqual({
+      selectionCatalog: CATALOG,
+      selectedModelSelection: null,
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      },
+    });
+  });
+
+  test("uses the loaded-session model as the next new-session seed", () => {
+    const selectedSessionModel = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+    const defaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "session",
+          modelCatalog: CATALOG,
+          selectedSessionModel,
+        },
+        defaultSelection,
+      }).selectionForNewSession,
+    ).toEqual(selectedSessionModel);
+  });
+
+  test("resolves chat composer selections for a new session from draft, defaults, then catalog", () => {
+    const defaultSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: CATALOG,
+          draftSelection: null,
+        },
+        defaultSelection,
+      }),
+    ).toEqual({
+      selectionCatalog: CATALOG,
+      selectedModelSelection: defaultSelection,
+      selectionForNewSession: defaultSelection,
+    });
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: null,
+          draftSelection: null,
+        },
+        defaultSelection,
+      }),
+    ).toEqual({
+      selectionCatalog: null,
+      selectedModelSelection: defaultSelection,
+      selectionForNewSession: defaultSelection,
+    });
+  });
+
+  test("keeps no selection when the initial default is unavailable", () => {
+    expect(
+      resolveChatComposerModelSelections({
+        source: { kind: "new_session", composerCatalog: CATALOG, draftSelection: null },
+        defaultSelection: { runtimeKind: "codex", providerId: "missing", modelId: "missing" },
+      }).selectionForNewSession,
+    ).toBeNull();
+  });
+
+  test("keeps explicit unavailable choices for direct-start validation", () => {
+    const selection = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "deleted",
+      variant: "deleted",
+      profileId: "deleted",
+    };
+    expect(
+      resolveChatComposerModelSelections({
+        source: { kind: "new_session", composerCatalog: CATALOG, draftSelection: selection },
+        defaultSelection: null,
+      }).selectionForNewSession,
+    ).toEqual(selection);
+  });
+
+  test("preserves an unvalidated new-session draft until its catalog loads", () => {
+    const draftSelection = {
+      runtimeKind: "opencode" as const,
+      providerId: "missing",
+      modelId: "missing",
+      variant: "stale",
+      profileId: "stale-profile",
+    };
+
+    expect(
+      resolveChatComposerModelSelections({
+        source: {
+          kind: "new_session",
+          composerCatalog: null,
+          draftSelection,
+        },
+        defaultSelection: null,
+      }).selectionForNewSession,
+    ).toEqual(draftSelection);
+  });
+});

@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult, AgentSubagentReference } from "@openducktor/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentChatComposerReferenceMenu } from "./agent-chat-composer-reference-menu";
-import type { ReferenceMenuItem } from "./use-agent-chat-composer-editor-autocomplete";
+import type { ReferenceMenuItem } from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 
 const RESULTS: AgentFileSearchResult[] = [
   {

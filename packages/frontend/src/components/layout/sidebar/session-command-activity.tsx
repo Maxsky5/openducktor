@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSessionCommands } from "@/features/session-navigation/use-session-commands";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 
 export function SessionCommandIcon({ count }: { count: number }): ReactElement | null {
   if (count === 0) return null;

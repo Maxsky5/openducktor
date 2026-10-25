@@ -16,7 +16,7 @@ import {
   AGENT_WORKFLOW_TONE_TEXT_CLASSES,
 } from "@/lib/agent-workflow-styles";
 import { cn } from "@/lib/utils";
-import type { AgentWorkflowStepState } from "@/types/agent-workflow";
+import type { AgentWorkflowStepState } from "@openducktor/frontend-core/types/agent-workflow";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
 
 type WorkflowRailProps = {

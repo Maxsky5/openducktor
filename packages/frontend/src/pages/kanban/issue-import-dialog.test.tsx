@@ -29,7 +29,7 @@ import {
 } from "@openducktor/frontend-core/queries/issue-items";
 import { enableReactActEnvironment } from "../agents/agent-studio-test-utils";
 import { IssueImportDialog } from "./issue-import-dialog";
-import { useIssueSelectionState } from "./issue-import-dialog-state";
+import { useIssueSelectionState } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 
 enableReactActEnvironment();
 

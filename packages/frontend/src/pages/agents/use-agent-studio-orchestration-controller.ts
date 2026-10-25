@@ -1,22 +1,22 @@
 import type {
   ChatSettings,
   GitBranch,
-  PullRequest,
   RepositoryGitProviderContext,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { useAgentSessionReadModelStateContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { deriveSessionlessTaskTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
+import { resolvePullRequestReviewAvailability } from "@openducktor/frontend-core/review/pull-request-review-availability";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import type {
-  SessionStartModalModel,
   TaskExecutionSelectedFile,
   TaskExecutionSelectedFilePreviewModel,
 } from "@/components/features/agents";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { RunSessionStartWorkflow } from "@/features/session-start";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
+import type { RunSessionStartWorkflow } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import { useWorkspaceStateContext } from "@/state/app-state-contexts";
-import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
@@ -25,7 +25,7 @@ import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-s
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
-import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
+import { useAgentStudioChatSettings } from "@openducktor/frontend-core/sessions/composer/use-agent-studio-chat-settings";
 import { useAgentStudioArtifacts } from "./use-agent-studio-artifacts";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
@@ -66,37 +66,6 @@ type UseAgentStudioOrchestrationControllerArgs = {
   taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
   composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
-};
-
-export const resolvePullRequestReviewAvailability = ({
-  gitProviderContext,
-  gitProviderReadError,
-  linkedPullRequest,
-}: {
-  gitProviderContext: RepositoryGitProviderContext | undefined;
-  gitProviderReadError?: string | null;
-  linkedPullRequest: PullRequest | undefined;
-}) => {
-  const supportsPullRequestReview =
-    gitProviderContext?.descriptor.capabilities.supportsPullRequestReview === true;
-  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
-  const canShowPullRequestReview = supportsPullRequestReview || readFailedWithoutContext;
-  const hasLinkedPullRequest =
-    linkedPullRequest !== undefined &&
-    (readFailedWithoutContext || linkedPullRequest.providerId === gitProviderContext?.config.id);
-  let unavailableReason: string | null = null;
-  if (canShowPullRequestReview && gitProviderReadError) {
-    unavailableReason = gitProviderReadError;
-  } else if (
-    supportsPullRequestReview &&
-    gitProviderContext &&
-    gitProviderContext.health.available === false
-  ) {
-    unavailableReason =
-      gitProviderContext.health.reason ??
-      `${gitProviderContext.descriptor.label} is not available for Pull Request review.`;
-  }
-  return { canShowPullRequestReview, hasLinkedPullRequest, unavailableReason };
 };
 
 type UseAgentStudioOrchestrationControllerResult = {

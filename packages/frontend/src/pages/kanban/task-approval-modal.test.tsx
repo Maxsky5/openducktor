@@ -7,7 +7,7 @@ import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
   TaskApprovalMissingBuilderWorktreeModalModel,
-} from "./kanban-page-model-types";
+} from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
@@ -29,6 +29,7 @@ const createCompletionModel = (
   publishTarget: { remote: "origin", branch: "beta" },
   isSubmitting: false,
   errorMessage: null,
+  errorOutcomeUnknown: false,
   onOpenChange: noop,
   onSkipDirectMergeCompletion: noop,
   onCompleteDirectMerge: noop,
@@ -59,6 +60,7 @@ const createApprovalModel = (
   targetBranch: { remote: "origin", branch: "beta" },
   isSubmitting: false,
   errorMessage: null,
+  errorOutcomeUnknown: false,
   onOpenChange: noop,
   onModeChange: noop,
   onMergeMethodChange: noop,
@@ -78,6 +80,7 @@ const createMissingBuilderWorktreeModel = (
   taskId: "TASK-1",
   isSubmitting: false,
   errorMessage: null,
+  errorOutcomeUnknown: false,
   onOpenChange: noop,
   onCompleteMissingBuilderWorktree: noop,
   onResetMissingBuilderWorktree: noop,

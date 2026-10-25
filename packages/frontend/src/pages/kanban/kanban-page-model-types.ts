@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  GitTargetBranch,
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
 } from "@openducktor/contracts";
@@ -11,88 +10,14 @@ import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
   KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
-import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
-import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
-import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
-import type { SessionStartFlowRequest } from "@/features/session-start";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
+import type { WorkflowPendingState } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
+import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
+import type { SessionStartFlowRequest } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { KanbanBoardFilter } from "./kanban-board-filter";
+import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
 
 export type KanbanSessionStartIntent = SessionStartFlowRequest;
-
-export type TaskApprovalMode = "direct_merge" | "pull_request";
-export type PullRequestDraftMode = "manual" | "generate_ai";
-export type TaskApprovalOpenOptions = {
-  mode?: TaskApprovalMode;
-  pullRequestDraftMode?: PullRequestDraftMode;
-  errorMessage?: string | null;
-};
-
-type TaskApprovalModalBase = {
-  open: boolean;
-  taskId: string;
-  isSubmitting: boolean;
-  errorMessage: string | null;
-  onOpenChange: (open: boolean) => void;
-};
-
-export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
-  stage: "approval";
-  isLoading: boolean;
-  mode: TaskApprovalMode;
-  mergeMethod: "merge_commit" | "squash" | "rebase";
-  pullRequestDraftMode: PullRequestDraftMode;
-  pullRequestSupported: boolean;
-  pullRequestAvailable: boolean;
-  pullRequestUnavailableReason: string | null;
-  hasUncommittedChanges: boolean;
-  uncommittedFileCount: number;
-  pullRequestUrl: string | null;
-  title: string;
-  body: string;
-  squashCommitMessage: string;
-  squashCommitMessageTouched: boolean;
-  hasSuggestedSquashCommitMessage: boolean;
-  targetBranch: GitTargetBranch | null;
-  onModeChange: (mode: TaskApprovalMode) => void;
-  onMergeMethodChange: (mergeMethod: "merge_commit" | "squash" | "rebase") => void;
-  onPullRequestDraftModeChange: (mode: PullRequestDraftMode) => void;
-  onTitleChange: (value: string) => void;
-  onBodyChange: (value: string) => void;
-  onSquashCommitMessageChange: (value: string) => void;
-  onConfirm: () => void;
-};
-
-export type TaskApprovalMissingBuilderWorktreeModalModel = TaskApprovalModalBase & {
-  stage: "missing_builder_worktree";
-  onCompleteMissingBuilderWorktree: () => void;
-  onResetMissingBuilderWorktree: () => void;
-};
-
-export type TaskApprovalCompletionModalModel = TaskApprovalModalBase & {
-  stage: "complete_direct_merge";
-  targetBranch: GitTargetBranch | null;
-  publishTarget: GitTargetBranch | null;
-  publicationPreview: import("@openducktor/contracts").GitPublicationPreview | null;
-  onSkipDirectMergeCompletion: () => void;
-  onCompleteDirectMerge: () => void;
-};
-
-export type TaskApprovalModalModel =
-  | TaskApprovalApprovalModalModel
-  | TaskApprovalMissingBuilderWorktreeModalModel
-  | TaskApprovalCompletionModalModel;
-
-export type KanbanBoardFilterModel = {
-  value: KanbanBoardFilter;
-  /** The labels of the loaded tasks and the selected labels, in alphabetical order. */
-  labelOptions: readonly string[];
-  isActive: boolean;
-  isDisabled: boolean;
-  onChange: (patch: Partial<KanbanBoardFilter>) => void;
-  onClear: () => void;
-};
 
 export type KanbanPageHeaderModel = {
   isLoadingTasks: boolean;
@@ -127,37 +52,6 @@ export type KanbanPageContentModel = {
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string) => void;
-};
-
-export type TaskResetImplementationModalModel = {
-  open: boolean;
-  taskId: string;
-  taskTitle: string;
-  targetStatusLabel: string;
-  isSubmitting: boolean;
-  activeSessionCount: number | null;
-  activeSessionCountError: string | null;
-  isLoadingImpact: boolean;
-  hasCanonicalWorktree: boolean;
-  hasManagedSessionCleanup: boolean;
-  managedWorktreeCount: number;
-  legacyWorktreeCount: number;
-  terminalCount: number;
-  impactError: string | null;
-  errorMessage: string | null;
-  onOpenChange: (open: boolean) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-export type TaskGitConflictDialogModel = {
-  open: boolean;
-  conflict: GitConflict | null;
-  isHandlingConflict: boolean;
-  conflictAction: GitConflictAction;
-  onOpenChange: (open: boolean) => void;
-  onAbort: () => void;
-  onAskBuilder: () => void;
 };
 
 export type KanbanPageModels = {

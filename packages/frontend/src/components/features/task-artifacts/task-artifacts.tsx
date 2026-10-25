@@ -37,11 +37,16 @@ import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsib
 import { useDialogPresence } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { formatElapsedAgo, useMinuteClock } from "@/lib/relative-time";
-import { humanDate } from "@/lib/task-display";
+import { formatElapsedAgo, useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
+import {
+  artifactFormatLabel,
+  formatFileSize,
+  groupTaskArtifacts,
+  WORKFLOW_ARTIFACT_NAMES,
+} from "@openducktor/frontend-core/tasks/artifacts/artifact-presentation";
+import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { cn } from "@/lib/utils";
 import { ArtifactActionDialog, type ArtifactAction } from "./artifact-action-dialog";
-import { formatFileSize } from "./artifact-file-info";
 import { TaskArtifactPreview } from "./task-artifact-preview";
 import { FreeArtifactControls, WorkflowArtifactControls } from "./artifact-controls";
 
@@ -420,13 +425,12 @@ function UnavailableSelection({ selection }: { selection: ArtifactSelection }): 
   return (
     <p role="status" className="py-3 text-sm text-muted-foreground">
       {selection.kind === "workflow"
-        ? `${workflowNames[selection.workflowKind]} has not been created yet.`
+        ? `${WORKFLOW_ARTIFACT_NAMES[selection.workflowKind]} has not been created yet.`
         : "This artifact is no longer available. Return to All artifacts to select another item."}
     </p>
   );
 }
 
-const workflowOrder = { spec: 0, plan: 1, qaReport: 2 };
 const listDensityClasses = {
   default: { list: "gap-5", heading: "pb-1", row: "py-2.5", text: "gap-1" },
   compact: { list: "gap-2", heading: "", row: "py-1.5", text: "gap-0.5" },
@@ -443,19 +447,10 @@ function ArtifactList({
   onSelect: (id: string) => void;
 }): ReactElement {
   const classes = listDensityClasses[density];
-  const groups = [
-    {
-      name: "Workflow",
-      items: artifacts
-        .filter((item) => item.classification === "workflow")
-        .toSorted((a, b) => workflowOrder[a.workflowKind] - workflowOrder[b.workflowKind]),
-    },
-    {
-      name: "Files",
-      items: artifacts
-        .filter((item) => item.classification === "free")
-        .toSorted((a, b) => a.name.localeCompare(b.name)),
-    },
+  const { workflow, files } = groupTaskArtifacts(artifacts);
+  const groups: { name: string; items: TaskArtifact[] }[] = [
+    { name: "Workflow", items: workflow },
+    { name: "Files", items: files },
   ];
   return (
     <div className={cn("flex flex-col", classes.list)}>
@@ -599,7 +594,7 @@ function WorkflowArtifactContent({
     if (isAbsent) {
       preview = (
         <p role="status" className="p-4 text-sm text-muted-foreground">
-          {workflowNames[workflowKind]} has not been created yet.
+          {WORKFLOW_ARTIFACT_NAMES[workflowKind]} has not been created yet.
         </p>
       );
     } else {
@@ -719,8 +714,6 @@ function ArtifactContentFooter({
   );
 }
 
-const workflowNames = { spec: "Specification", plan: "Implementation Plan", qaReport: "QA Report" };
-
 function resolveSelection(
   artifacts: TaskArtifact[] | undefined,
   selection: ArtifactSelection,
@@ -763,7 +756,7 @@ function selectionTitle(selection: ArtifactSelection): string {
     case "artifact":
       return "Artifact unavailable";
     case "workflow":
-      return workflowNames[selection.workflowKind];
+      return WORKFLOW_ARTIFACT_NAMES[selection.workflowKind];
   }
 }
 
@@ -781,17 +774,6 @@ function BackButton({ onClick }: { onClick: () => void }): ReactElement {
   );
 }
 
-const formats = new Map([
-  ["text/markdown", "Markdown"],
-  ["text/plain", "Text"],
-  ["text/html", "HTML"],
-  ["image/png", "PNG"],
-  ["image/jpeg", "JPEG"],
-  ["image/webp", "WebP"],
-  ["image/gif", "GIF"],
-  ["image/svg+xml", "SVG"],
-  ["application/pdf", "PDF"],
-]);
 const verdictVariants = {
   approved: "success",
   rejected: "danger",
@@ -802,9 +784,7 @@ function ArtifactMetadata({ artifact }: { artifact: TaskArtifact }): ReactElemen
   const now = useMinuteClock();
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-muted-foreground">
-      <span title={artifact.mediaType}>
-        {formats.get(artifact.mediaType.toLowerCase()) ?? "File"}
-      </span>
+      <span title={artifact.mediaType}>{artifactFormatLabel(artifact.mediaType)}</span>
       {artifact.classification === "free" ? <span>{formatFileSize(artifact.byteSize)}</span> : null}
       {artifact.updatedAt ? (
         <time dateTime={artifact.updatedAt} title={humanDate(artifact.updatedAt)}>

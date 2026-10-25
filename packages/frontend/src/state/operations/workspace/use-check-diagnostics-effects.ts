@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { DiagnosticsToastIssue } from "./check-diagnostics";
+import type { DiagnosticsToastIssue } from "@openducktor/frontend-core/diagnostics/check-diagnostics";
 
 export type DiagnosticsToastApi = {
   error: (

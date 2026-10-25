@@ -21,13 +21,13 @@ import { HostConnectionPage } from "./components/layout/host-connection-page";
 import { HostPicker } from "./components/layout/host-picker";
 import {
   hostLocation,
-  parseHostEndpoint,
   readHostTarget,
   sameHostTarget,
   saveHostTarget,
   type HostSelection,
   type HostTarget,
 } from "./lib/host-location";
+import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 
 const SETTINGS_PRELOAD_ERROR_MESSAGE = "Failed to preload settings snapshot before app bootstrap.";
 const DEFAULT_ROUTER_MODE = "browser";
@@ -101,7 +101,12 @@ export async function bootstrapOpenDucktorShell(
       await move(
         endpoint === null
           ? { kind: "local" }
-          : { kind: "remote", endpoint: parseHostEndpoint(endpoint, location.protocol) },
+          : {
+              kind: "remote",
+              endpoint: parseRemoteHostEndpoint(endpoint, {
+                requireHttps: location.protocol === "https:",
+              }),
+            },
       );
     },
     disconnect: () => move({ kind: "picker" }),

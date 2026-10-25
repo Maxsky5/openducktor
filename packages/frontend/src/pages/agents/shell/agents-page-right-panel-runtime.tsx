@@ -4,8 +4,8 @@ import { useOptionalAgentSessionTranscriptDialog } from "@/components/features/a
 import { useTaskExecutionToolTabs } from "@/components/features/agents/use-task-execution-tool-tabs";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import type { GitDiffRefresh } from "@openducktor/frontend-core/git/contracts";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { SessionPanel } from "@/features/session-panels";
 import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import {

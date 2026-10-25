@@ -8,6 +8,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
+import {
+  ISSUE_IMPORT_INCOMPLETE_RESULTS_TEXT,
+  ISSUE_IMPORT_LABELS,
+  issueImportEmptyText,
+  issueImportHasPages,
+  issueImportLinkedText,
+  issueImportLoadingText,
+  issueImportPageSummary,
+  issueImportUpdatedText,
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
 
 type IssueImportResultsProps = {
   query: UseQueryResult<IssueItemsListResult, Error>;
@@ -37,7 +47,7 @@ export function IssueImportResults({
         className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground"
       >
         <LoaderCircle className="size-5 motion-safe:animate-spin" />
-        <p>{searchText ? "Searching open items…" : "Loading open items…"}</p>
+        <p>{issueImportLoadingText(searchText)}</p>
       </div>
     );
   }
@@ -47,7 +57,7 @@ export function IssueImportResults({
       <div role="alert" className="flex flex-col gap-2 p-4 text-sm text-destructive">
         <p>{errorMessage(query.error)}</p>
         <Button type="button" variant="outline" onClick={() => void query.refetch()}>
-          Retry
+          {ISSUE_IMPORT_LABELS.retry}
         </Button>
       </div>
     );
@@ -80,7 +90,7 @@ function IssueResultPage({
   result: IssueItemsListResult;
 }): ReactElement {
   const { items, nextCursor, incompleteResults } = result;
-  const hasPages = pageIndex > 0 || Boolean(nextCursor);
+  const hasPages = issueImportHasPages(pageIndex, nextCursor);
 
   return (
     <>
@@ -89,7 +99,7 @@ function IssueResultPage({
           role="status"
           className="flex min-h-32 items-center justify-center p-8 text-center text-sm text-muted-foreground"
         >
-          {searchText ? "No open items match your search." : "No open items found."}
+          {issueImportEmptyText(searchText)}
         </p>
       ) : (
         <ul
@@ -109,8 +119,7 @@ function IssueResultPage({
       )}
       {incompleteResults ? (
         <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-          The provider returned incomplete results or reached its search limit. Narrow the search to
-          find more items.
+          {ISSUE_IMPORT_INCOMPLETE_RESULTS_TEXT}
         </p>
       ) : null}
       {items.length > 0 || hasPages ? (
@@ -136,7 +145,7 @@ function IssueResultPagination({
   nextCursor: string | undefined;
   onPageChange: (page: number, nextCursor?: string) => void;
 }): ReactElement {
-  const hasPages = pageIndex > 0 || Boolean(nextCursor);
+  const hasPages = issueImportHasPages(pageIndex, nextCursor);
   return (
     <div className="flex shrink-0 items-center justify-between border-t border-border p-3">
       {hasPages ? (
@@ -147,12 +156,11 @@ function IssueResultPagination({
           disabled={pageIndex === 0}
           onClick={() => onPageChange(pageIndex - 1)}
         >
-          Previous
+          {ISSUE_IMPORT_LABELS.previousPage}
         </Button>
       ) : null}
       <span className="text-xs text-muted-foreground">
-        {hasPages ? `Page ${pageIndex + 1} · ` : ""}
-        {itemCount} {itemCount === 1 ? "item" : "items"}
+        {issueImportPageSummary(pageIndex, itemCount, hasPages)}
       </span>
       {hasPages ? (
         <Button
@@ -164,7 +172,7 @@ function IssueResultPagination({
             if (nextCursor) onPageChange(pageIndex + 1, nextCursor);
           }}
         >
-          Next
+          {ISSUE_IMPORT_LABELS.nextPage}
         </Button>
       ) : null}
     </div>
@@ -229,20 +237,18 @@ function IssueResultRow({
               id={`${checkboxId}-linked`}
               variant="secondary"
               className="ml-1.5 gap-1 px-2 py-0 align-middle text-[11px] font-medium"
-              title={`Linked to Task ${linkedTaskId}`}
-              aria-label={`Linked to Task ${linkedTaskId}`}
+              title={issueImportLinkedText(linkedTaskId)}
+              aria-label={issueImportLinkedText(linkedTaskId)}
             >
               <Link2 aria-hidden="true" className="size-3" />
-              Linked
+              {ISSUE_IMPORT_LABELS.linked}
             </Badge>
           ) : null}
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-muted-foreground">
           <span>{item.creator}</span>
           <span aria-hidden="true">·</span>
-          <time dateTime={item.updatedAt}>
-            Updated {new Date(item.updatedAt).toLocaleDateString()}
-          </time>
+          <time dateTime={item.updatedAt}>{issueImportUpdatedText(item.updatedAt)}</time>
           {item.tags.map((tag) => (
             <Badge key={tag} variant="outline" className="px-1.5 py-0 text-[11px] font-normal">
               {tag}

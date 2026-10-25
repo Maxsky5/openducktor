@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TaskDetailsSheetContent } from "@/components/features/task-details/task-details-sheet";
 import { TaskDetailsSheetPlaceholder } from "@/components/features/task-details/task-details-sheet-placeholder";
-import { useTaskSnapshotContext } from "@/state/app-state-contexts";
+import { useTaskSnapshotContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 

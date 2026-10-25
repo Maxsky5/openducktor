@@ -42,6 +42,7 @@ import type { AgentSessionTranscriptEventConsumer } from "../events/session-tran
 import { confirmsSessionActivity } from "../session-read-model/agent-session-live-activity";
 import {
   markSessionHistoriesStale,
+  markSessionHistoriesUnverified,
   markSessionHistoryStale,
 } from "../history/session-history-freshness";
 import {
@@ -221,6 +222,9 @@ export const useRepoSessionReadModel = ({
   // Marks a loading window created when a healthy snapshot clears a public
   // live failure before the current task-record scope finishes hydrating.
   const recoveredLiveFailureRef = useRef(false);
+  // Marks a loading window where the initial snapshot arrived before the
+  // current task-record scope hydrated, so that hydration ends it.
+  const snapshotAwaitsRecordsRef = useRef(false);
   const initialLiveSnapshotReceivedRef = useRef(false);
   const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
@@ -505,8 +509,10 @@ export const useRepoSessionReadModel = ({
     const liveMessage = liveStreamFailureRef.current;
     const staleFailureWasDemoted = demotedStaleFailureRef.current;
     const liveFailureWasRecovered = recoveredLiveFailureRef.current;
+    const snapshotAwaitedRecords = snapshotAwaitsRecordsRef.current;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
+    snapshotAwaitsRecordsRef.current = false;
     const recoveredLoadState = (): AgentSessionReadModelLoadState => {
       if (liveMessage) {
         return failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage, "live-stream");
@@ -528,7 +534,7 @@ export const useRepoSessionReadModel = ({
       if (
         currentLoadState.kind === "loading" &&
         currentLoadState.workspaceRepoPath === workspaceRepoPath &&
-        (staleFailureWasDemoted || liveFailureWasRecovered)
+        (staleFailureWasDemoted || liveFailureWasRecovered || snapshotAwaitedRecords)
       ) {
         // The failure this window replaced resolved; an unresolved live-stream
         // failure still surfaces here.
@@ -702,18 +708,21 @@ export const useRepoSessionReadModel = ({
     };
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
-        markHistoryStale();
+        markHistories(markSessionHistoriesStale);
         liveStreamFailureRef.current = message;
         setSessionReadModelLoadState(
           failedAgentSessionReadModelLoadState(repoPath, message, "live-stream"),
         );
       }
     };
-    const markHistoryStale = (): void => {
+    // Stops the history reads of the workspace, so each transcript that read needs a new read.
+    const markHistories = (
+      mark: (collection: AgentSessionCollection) => AgentSessionCollection,
+    ): void => {
       const filters = { queryKey: agentSessionHistoryQueryKeys.workspace(repoPath) };
       const cancelledReads = queryClient.cancelQueries(filters);
       commitSessionCollection((current) => ({
-        collection: markSessionHistoriesStale(current),
+        collection: mark(current),
         result: undefined,
       }));
       runOrchestratorSideEffect(
@@ -745,12 +754,14 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
+      // After a coverage gap, the snapshot settles each loaded transcript: it stays loaded, or it
+      // is stale when its session can have new messages.
       if (
         envelope.isConnectionSnapshot &&
         (envelope.historyReplayGap ||
           !getSessionHistoryFreshnessTracker(queryClient).isWorkspaceObserved(repoPath))
       )
-        markHistoryStale();
+        markHistories(markSessionHistoriesUnverified);
       commitProjected((current) => {
         const registered = applyWorkspaceRecords(applyLoadedRecords(current, current), current);
         const projected = buildAgentSessionLiveCollection({
@@ -795,6 +806,7 @@ export const useRepoSessionReadModel = ({
         );
       }
       // Hydration owns the public state until its own read resolves.
+      snapshotAwaitsRecordsRef.current = true;
     };
     const shownCompletionIds = shownCompletionIdsOf(queryClient);
     const projectCompletion = (
@@ -995,6 +1007,7 @@ export const useRepoSessionReadModel = ({
     observedRepoPathRef.current = repoPath;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
+    snapshotAwaitsRecordsRef.current = false;
     initialLiveSnapshotReceivedRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
@@ -1030,6 +1043,7 @@ export const useRepoSessionReadModel = ({
       liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
       recoveredLiveFailureRef.current = false;
+      snapshotAwaitsRecordsRef.current = false;
       initialLiveSnapshotReceivedRef.current = false;
       unsubscribe?.();
     };

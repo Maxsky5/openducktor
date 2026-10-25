@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { WorkspaceFileTree, WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
@@ -8,12 +8,12 @@ import { workspaceFileTreeQueryOptions } from "@openducktor/frontend-core/querie
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
 import { SessionPanel } from "@/features/session-panels";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 
 enableReactActEnvironment();
 
 const actualThemeProvider = await import("@/components/layout/theme-provider");
-let themeSpy: { mockRestore(): void } | null = null;
 
 const ROOT_PATH = "/repo";
 
@@ -36,19 +36,25 @@ const TREE: WorkspaceFileTree = {
   ],
 };
 
-beforeEach(() => {
-  themeSpy = spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
-    theme: "light",
-    themePreference: "light",
-    setThemePreference: () => {},
-  }));
-});
-
-afterEach(() => {
-  cleanup();
-  themeSpy?.mockRestore();
-  themeSpy = null;
-});
+/** Runs a test body with the light theme. The next test starts after this body ends. */
+const panelTest = (name: string, body: () => Promise<void>): void => {
+  test(name, async () => {
+    const themeSpy = spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
+      theme: "light",
+      themePreference: "light",
+      setThemePreference: () => {},
+    }));
+    const endBody = restoreAfterTestBody(() => {
+      cleanup();
+      themeSpy.mockRestore();
+    });
+    try {
+      await body();
+    } finally {
+      endBody();
+    }
+  });
+};
 
 const renderPanel = () => {
   const connection = createTestClientConnection();
@@ -114,7 +120,7 @@ const clickRow = async (path: string): Promise<void> => {
 };
 
 describe("TaskExecutionFileExplorerPanel", () => {
-  test("keeps open folders when switching to Git and back", async () => {
+  panelTest("keeps open folders when switching to Git and back", async () => {
     renderPanel();
     await flushTree();
     await clickRow("src/");
@@ -127,7 +133,7 @@ describe("TaskExecutionFileExplorerPanel", () => {
     expect(treeRowPaths()).toContain("src/lib/util.ts");
   });
 
-  test("keeps open folders while a full refresh replaces the cached tree", async () => {
+  panelTest("keeps open folders while a full refresh replaces the cached tree", async () => {
     const { client } = renderPanel();
     await flushTree();
     await clickRow("src/");
@@ -145,7 +151,7 @@ describe("TaskExecutionFileExplorerPanel", () => {
     expect(treeRowPaths()).toContain("src/lib/util.ts");
   });
 
-  test("keeps open folders open through file additions, renames, and removals", async () => {
+  panelTest("keeps open folders open through file additions, renames, and removals", async () => {
     const { client } = renderPanel();
     await flushTree();
     await clickRow("src/");
@@ -194,7 +200,7 @@ describe("TaskExecutionFileExplorerPanel", () => {
     expect(treeRowPaths()).toEqual(["src/", "src/app.ts", "README.md"]);
   });
 
-  test("keeps a closed parent closed and remembers its open child", async () => {
+  panelTest("keeps a closed parent closed and remembers its open child", async () => {
     const { client } = renderPanel();
     await flushTree();
     await clickRow("src/");
@@ -215,7 +221,7 @@ describe("TaskExecutionFileExplorerPanel", () => {
     expect(treeRowPaths()).toContain("src/lib/added.ts");
   });
 
-  test("restores the user's open folders after paths change during a search", async () => {
+  panelTest("restores the user's open folders after paths change during a search", async () => {
     const { client } = renderPanel();
     await flushTree();
     await clickRow("src/");
@@ -238,7 +244,7 @@ describe("TaskExecutionFileExplorerPanel", () => {
     expect(treeRowPaths()).toContain("src/lib/added.ts");
   });
 
-  test("starts closed with no search when switching to another workspace", async () => {
+  panelTest("starts closed with no search when switching to another workspace", async () => {
     const { client, setRootPath } = renderPanel();
     await flushTree();
     await clickRow("src/");
@@ -258,9 +264,8 @@ describe("TaskExecutionFileExplorerPanel", () => {
     expect(treeRowPaths()).toEqual(["src/", "README.md"]);
   });
 
-  test.each(["util", "added"])(
-    "updates an open search for %s after file paths change",
-    async (query) => {
+  for (const query of ["util", "added"]) {
+    panelTest(`updates an open search for ${query} after file paths change`, async () => {
       const { client } = renderPanel();
       await flushTree();
       fireEvent.change(searchField(), { target: { value: query } });
@@ -279,23 +284,26 @@ describe("TaskExecutionFileExplorerPanel", () => {
 
       expect(searchField()).toHaveProperty("value", query);
       expect(treeRowPaths()).toEqual(["src/", "src/lib/", `src/lib/${query}-next.ts`]);
+    });
+  }
+
+  panelTest(
+    "filters the tree with the shared search field instead of the Pierre Trees input",
+    async () => {
+      renderPanel();
+      await flushTree();
+      const shadowRoot = screen.getByLabelText("Workspace file explorer").shadowRoot;
+      expect(shadowRoot?.querySelector("[data-file-tree-search-input]")).toBeNull();
+      expect(treeRowPaths()).toEqual(["src/", "README.md"]);
+
+      fireEvent.change(searchField(), { target: { value: "util" } });
+      await flushTree();
+
+      expect(treeRowPaths()).toEqual(["src/", "src/lib/", "src/lib/util.ts"]);
     },
   );
 
-  test("filters the tree with the shared search field instead of the Pierre Trees input", async () => {
-    renderPanel();
-    await flushTree();
-    const shadowRoot = screen.getByLabelText("Workspace file explorer").shadowRoot;
-    expect(shadowRoot?.querySelector("[data-file-tree-search-input]")).toBeNull();
-    expect(treeRowPaths()).toEqual(["src/", "README.md"]);
-
-    fireEvent.change(searchField(), { target: { value: "util" } });
-    await flushTree();
-
-    expect(treeRowPaths()).toEqual(["src/", "src/lib/", "src/lib/util.ts"]);
-  });
-
-  test("shows the whole tree again after the clear button or Escape", async () => {
+  panelTest("shows the whole tree again after the clear button or Escape", async () => {
     renderPanel();
     await flushTree();
 

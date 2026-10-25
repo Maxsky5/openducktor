@@ -2,7 +2,7 @@ export {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
-} from "@/features/session-start";
+} from "@openducktor/core";
 
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
@@ -12,8 +12,8 @@ import {
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { compareAgentSessionRecency } from "@/lib/agent-session-options";
-import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
+import { compareAgentSessionRecency } from "@openducktor/frontend-core/lib/agent-session-options";
+import { buildRoleWorkflowMapForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
 import {
   type AgentSessionSummary,
   toAgentSessionSummary,

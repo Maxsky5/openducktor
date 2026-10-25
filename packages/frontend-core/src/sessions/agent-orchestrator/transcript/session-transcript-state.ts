@@ -70,8 +70,13 @@ export const deriveLoadedAgentSessionTranscriptState = ({
       : { kind: "failed", message };
   }
 
-  if (hasLoadedSessionHistory(session)) {
-    const historyFailure = session.historyLoadFailure;
+  const historyFailure = session.historyLoadFailure;
+  // A stale transcript misses messages. Its old messages do not show while it reads them again.
+  // After a failed read, the old messages show with the failure.
+  const missesMessages =
+    (session.historyLoadState === "stale" || session.historyLoadState === "refreshing") &&
+    !historyFailure;
+  if (hasLoadedSessionHistory(session) && !missesMessages) {
     return historyFailure ? { kind: "visible", historyFailure } : { kind: "visible" };
   }
 
