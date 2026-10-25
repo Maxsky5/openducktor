@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useState } from "react";
+import { Activity, type ReactElement, type ReactNode, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./collapsible";
 
 type CollapsibleCardProps = {
@@ -17,6 +17,7 @@ type CollapsibleCardProps = {
 /**
  * A card section with a header that expands and collapses it.
  * The trigger covers the full header. Header actions stay above it.
+ * A closed card keeps its content state in a hidden `Activity`, which pauses its effects.
  */
 export function CollapsibleCard({
   title,
@@ -64,7 +65,7 @@ export function CollapsibleCard({
       </div>
 
       <CollapsibleContent forceMount className="px-3 pb-3 data-[state=closed]:hidden">
-        {resolvedChildren}
+        <Activity mode={isExpanded ? "visible" : "hidden"}>{resolvedChildren}</Activity>
       </CollapsibleContent>
     </Collapsible>
   );

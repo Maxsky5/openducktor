@@ -4,6 +4,8 @@ import { memo, type ReactElement } from "react";
 
 import { CollapsibleCard } from "@/components/ui/collapsible-card";
 
+const METADATA_ICON = <Layers3 className="size-3.5" />;
+
 type TaskDetailsMetadataProps = {
   task: TaskCard;
   defaultExpanded?: boolean;
@@ -15,11 +17,7 @@ export const TaskDetailsMetadata = memo(
     defaultExpanded = false,
   }: TaskDetailsMetadataProps): ReactElement {
     return (
-      <CollapsibleCard
-        title="Metadata"
-        icon={<Layers3 className="size-3.5" />}
-        defaultExpanded={defaultExpanded}
-      >
+      <CollapsibleCard title="Metadata" icon={METADATA_ICON} defaultExpanded={defaultExpanded}>
         {task.parentId ? (
           <div className="grid gap-1 rounded-lg border border-border p-3">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

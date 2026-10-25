@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { CircleHelp } from "lucide-react";
 import type { ReactElement } from "react";
-import { TaskArtifacts } from "@/components/features/task-artifacts/task-artifacts";
+import { TaskArtifactsSection } from "@/components/features/task-artifacts/task-artifacts";
 import { TaskDetailsDocumentSection } from "./task-details-document-section";
 import { TaskDetailsMetadata } from "./task-details-metadata";
 import { TaskDetailsSubtasks } from "./task-details-subtasks";
@@ -55,8 +55,7 @@ export function TaskDetailsSheetBody({
           : {})}
       />
       {repoPath ? (
-        <TaskArtifacts
-          layout="section"
+        <TaskArtifactsSection
           repoPath={repoPath}
           taskId={task.id}
           {...(workspaceId ? { workspaceId } : {})}

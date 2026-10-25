@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard } from "@/components/ui/collapsible-card";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 
+const SUBTASKS_ICON = <GitBranch className="size-3.5" />;
+
 type TaskDetailsSubtasksProps = {
   subtasks: TaskCard[];
 };
@@ -16,7 +18,7 @@ export const TaskDetailsSubtasks = memo(
     return (
       <CollapsibleCard
         title="Subtasks"
-        icon={<GitBranch className="size-3.5" />}
+        icon={SUBTASKS_ICON}
         summary={subtasks.length > 0 ? String(subtasks.length) : null}
         defaultExpanded
       >

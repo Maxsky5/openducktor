@@ -19,7 +19,12 @@ import {
 } from "@openducktor/frontend-core/queries/documents";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement } from "react";
-import { type ArtifactSelection, TaskArtifacts, TaskArtifactsView } from "./task-artifacts";
+import {
+  type ArtifactSelection,
+  TaskArtifacts,
+  TaskArtifactsSection,
+  TaskArtifactsView,
+} from "./task-artifacts";
 
 const freeArtifact = (artifactId = "file-1", name = "Notes"): FreeTaskArtifact => ({
   artifactId,
@@ -87,7 +92,10 @@ const setup = (
             selection,
             onSelectionChange,
           })
-        : createElement(TaskArtifacts, { repoPath: "/repo", taskId: "task-1", layout }),
+        : createElement(layout === "section" ? TaskArtifactsSection : TaskArtifacts, {
+            repoPath: "/repo",
+            taskId: "task-1",
+          }),
     ),
   );
   const select = (next: ArtifactSelection) =>

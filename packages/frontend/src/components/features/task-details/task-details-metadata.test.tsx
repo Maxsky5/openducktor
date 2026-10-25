@@ -14,6 +14,7 @@ describe("TaskDetailsMetadata", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsMetadata, {
         task,
+        defaultExpanded: true,
       }),
     );
 
