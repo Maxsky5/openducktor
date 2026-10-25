@@ -589,11 +589,13 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         correlationKey: "codex-subagent:parent-thread:child-thread",
         externalSessionId: "child-thread",
+        description: "reviewer",
         status: "running",
       }),
       expect.objectContaining({
         correlationKey: "codex-subagent:parent-thread:child-thread",
         externalSessionId: "child-thread",
+        description: "reviewer",
         status: "completed",
       }),
     ]);

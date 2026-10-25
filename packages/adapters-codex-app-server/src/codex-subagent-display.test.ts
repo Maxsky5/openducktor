@@ -3,11 +3,13 @@ import { codexAppServerRuntimeNotificationSchema } from "@openducktor/contracts"
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { createCodexEventMappers } from "./event-mappers";
 import { codexCollabAgentToolCallFixture } from "./test-fixtures/codex-protocol";
 
 describe("Codex subagent display details", () => {
   test.each(["live", "thread_read"] as const)(
-    "shows the native V2 agent path in %s without inventing a description",
+    "shows the V2 task label as a description, not an agent name, in %s",
     (source) => {
       const pipeline = createCodexEventMapperPipeline();
       const notification = codexAppServerRuntimeNotificationSchema.parse({
@@ -20,7 +22,7 @@ describe("Codex subagent display details", () => {
             type: "subAgentActivity",
             id: "spawn-reviewer",
             agentThreadId: "child-thread",
-            agentPath: "/root/reviewer/security",
+            agentPath: "/root/reviewer/random_poem",
             kind: "started",
           },
         },
@@ -44,18 +46,19 @@ describe("Codex subagent display details", () => {
       expect(parts).toEqual([
         expect.objectContaining({
           kind: "subagent",
-          agent: "/root/reviewer/security",
+          description: "random_poem",
           externalSessionId: "child-thread",
           status: "running",
         }),
       ]);
-      expect(parts[0]).not.toHaveProperty("description");
+      expect(parts[0]).not.toHaveProperty("agent");
       expect(parts[0]).not.toHaveProperty("prompt");
     },
   );
 
   test("keeps creation details when V2 activity completes a linked child", () => {
-    const pipeline = createCodexEventMapperPipeline();
+    const subagents = new CodexSubagentLinkState();
+    const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
     const ctx = { source: "live" as const, threadId: "parent-thread" };
     pipeline.runLive(
       {
@@ -72,6 +75,18 @@ describe("Codex subagent display details", () => {
       },
       ctx,
     );
+    subagents.recordThread({
+      id: "child-thread",
+      cwd: "/repo",
+      startedAt: "2026-07-10T12:00:00.000Z",
+      updatedAtMs: null,
+      title: "Review the adapter",
+      parentThreadId: "parent-thread",
+      status: { classification: "running" },
+      agentNickname: "Scout",
+      agentRole: "explorer",
+      subAgentSource: null,
+    });
 
     const events = projectCodexCanonicalEvents(
       pipeline.runLive(
@@ -96,7 +111,7 @@ describe("Codex subagent display details", () => {
           kind: "subagent",
           correlationKey: "codex-subagent:parent-thread:spawn-reviewer",
           externalSessionId: "child-thread",
-          agent: "/root/reviewer",
+          agent: "Scout",
           description: "Review the adapter",
           prompt: "Review the adapter",
           status: "completed",

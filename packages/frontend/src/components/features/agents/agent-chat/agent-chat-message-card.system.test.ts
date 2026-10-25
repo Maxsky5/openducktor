@@ -7,6 +7,7 @@ import {
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 import { buildMessage } from "./agent-chat-test-fixtures";
+import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 
 describe("AgentChatMessageCard system messages", () => {
   test("renders a Claude permission mismatch as a warning card", () => {
@@ -215,23 +216,29 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-foreground");
   });
 
-  test("renders subagent cards without the shared System header", () => {
+  test.each([
+    { agent: "build", description: "review changes [commit|branch|pr], defaults to uncommitted" },
+    { agent: undefined, description: "random_poem" },
+  ])("renders the subagent description below its name: %j", ({ agent, description }) => {
+    const meta: SubagentMeta = {
+      kind: "subagent",
+      partId: "part-subagent-1",
+      correlationKey: "part:assistant-task-tool-running:subtask-a",
+      status: "completed",
+      description,
+      externalSessionId: "session-child-1",
+      startedAtMs: 1_000,
+      endedAtMs: 120_000,
+    };
+    if (agent !== undefined) {
+      meta.agent = agent;
+    }
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: buildMessage("system", "Subagent (build): review changes", {
           id: "subagent-1",
           timestamp: "2026-02-22T10:49:37.000Z",
-          meta: {
-            kind: "subagent",
-            partId: "part-subagent-1",
-            correlationKey: "part:assistant-task-tool-running:subtask-a",
-            status: "completed",
-            agent: "build",
-            description: "review changes [commit|branch|pr], defaults to uncommitted",
-            externalSessionId: "session-child-1",
-            startedAtMs: 1_000,
-            endedAtMs: 120_000,
-          },
+          meta,
         }),
       }),
     );
@@ -239,7 +246,10 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).not.toContain(">System<");
     expect(html).not.toContain("RUNNING");
     expect(html).toContain("Completed");
-    expect(html).toContain("review changes [commit|branch|pr], defaults to uncommitted");
+    const title = `>${agent ?? "Subagent"}</p>`;
+    expect(html).toContain(title);
+    expect(html).toContain(description);
+    expect(html.indexOf(title)).toBeLessThan(html.indexOf(description));
   });
 
   test("wraps long unbroken subagent summary prose", () => {

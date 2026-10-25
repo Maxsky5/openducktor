@@ -688,8 +688,14 @@ export class CodexSubagentLinkState {
     if (link.prompt) {
       part.prompt = link.prompt;
     }
-    if (link.description) {
-      part.description = link.description;
+    const activity = link.metadata?.codexSubagent;
+    const agentPath =
+      activity?.source === "subAgentActivity"
+        ? activity.agentPath
+        : link.metadata?.codexThread?.subAgentSource?.agentPath;
+    const description = link.description ?? agentPath?.split("/").at(-1);
+    if (description) {
+      part.description = description;
     }
     if (link.error) {
       part.error = link.error;

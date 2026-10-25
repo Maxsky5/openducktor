@@ -240,7 +240,6 @@ const subagentActivityParts = (
     childThreadId: item.agentThreadId,
     itemId: item.id,
     status: item.kind === "completed" ? "completed" : "running",
-    agent: item.agentPath,
     metadata: activityMetadata(item, sourceThreadId),
   };
   if (item.kind === "completed" && item.completedAtMs !== undefined) {
