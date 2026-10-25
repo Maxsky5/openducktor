@@ -47,7 +47,7 @@ export function CollapsibleCard({
               {icon}
               <span className="truncate">{title}</span>
               {summary ? (
-                <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium normal-case tracking-normal">
+                <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium normal-case tracking-normal text-foreground">
                   {summary}
                 </span>
               ) : null}
@@ -59,7 +59,7 @@ export function CollapsibleCard({
         ) : null}
         <ChevronDown
           aria-hidden="true"
-          className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/card:rotate-180"
+          className="pointer-events-none size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/card:rotate-180"
         />
       </div>
 
