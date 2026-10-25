@@ -9,6 +9,30 @@ export default {
       project: ["src/**/*.{ts,astro}", "config/**/*.ts", "scripts/**/*.ts"],
     },
     "apps/electron": electronKnipConfig,
+    "apps/mobile": {
+      entry: [
+        "src/app/**/*.tsx",
+        "src/**/*.test.{ts,tsx}",
+        "plugins/*.js",
+        "modules/*/index.ts",
+        "scripts/*.ts",
+        "src/rich-content/isolated-page/page-src/*.ts",
+      ],
+      project: [
+        "src/**/*.{ts,tsx}",
+        "modules/*/{index.ts,src/**/*.ts}",
+        "scripts/**/*.ts",
+        "plugins/*.js",
+      ],
+      // Knip does not read the configurations that `bun check -p` receives.
+      typescript: { config: ["tsconfig.json", "tsconfig.test.json"] },
+      // `app.config.ts` embeds the font files by path, and the isolated page styles `@import` KaTeX.
+      ignoreDependencies: [
+        "@expo-google-fonts/ibm-plex-mono",
+        "@expo-google-fonts/space-grotesk",
+        "katex",
+      ],
+    },
     "packages/frontend-core": {
       entry: ["src/**/*.{ts,tsx}", "expo-compat/*.ts"],
       project: ["src/**/*.{ts,tsx}", "expo-compat/*.ts"],

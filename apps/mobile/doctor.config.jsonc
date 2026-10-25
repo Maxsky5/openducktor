@@ -1,0 +1,16 @@
+// The React Doctor settings of the mobile app. A scan of apps/mobile reads this file instead of
+// the doctor.config.json at the repository root.
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "ignore": {
+    "overrides": [
+      // Isolated pages run in a WebView, not in React Native, so the React Native window size
+      // rule does not apply. The rule takes the declared DOM globals `window` and `document` of
+      // page-runtime.ts for React Native `Dimensions`.
+      {
+        "files": ["src/rich-content/isolated-page/page-src/**"],
+        "rules": ["react-doctor/rn-no-dimensions-get"],
+      },
+    ],
+  },
+}
