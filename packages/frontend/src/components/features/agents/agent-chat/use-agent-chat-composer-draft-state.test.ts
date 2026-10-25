@@ -131,25 +131,52 @@ describe("useAgentChatComposerDraftState", () => {
   });
 
   test("keeps an opaque non-task draft identity in memory without persistence", async () => {
-    const harness = await mountHarness({
+    const scope = {
       key: "repository-chat:conversation/42",
       persistence: null,
-    });
+    };
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("Keep my unsent draft. ", "text-1"),
+        {
+          id: "file-reference-1",
+          kind: "file_reference",
+          file: { id: "file-1", path: "src/app.ts", name: "app.ts", kind: "code" },
+        },
+        createTextSegment(" Check this file.", "text-2"),
+      ],
+      attachments: [
+        {
+          id: "attachment-1",
+          name: "screen.png",
+          kind: "image",
+          mime: "image/png",
+          path: "/tmp/screen.png",
+          previewUrl: "blob:screen",
+        },
+      ],
+    };
+    const persistence = createFakePersistence(buildDraft("existing session draft"));
+    const existingScope = { key: "existing-session", persistence: persistence.adapter };
+    const harness = await mountHarness(scope);
 
     await harness.run((value) => {
-      value.commitDraft(buildDraft("local only"));
+      value.commitDraft(draft);
     });
-    expect(harness.getLatest().draft.segments[0]).toEqual(
-      expect.objectContaining({ text: "local only" }),
-    );
+    await harness.update({ scope: existingScope });
+    expect(harness.getLatest().draft).toEqual(buildDraft("existing session draft"));
+    await harness.update({ scope });
+    expect(harness.getLatest().draft).toEqual(draft);
 
-    await harness.update({
-      scope: {
-        key: "repository-chat:conversation/43",
-        persistence: null,
-      },
-    });
+    const otherScope = { key: "repository-chat:conversation/43", persistence: null };
+    await harness.update({ scope: otherScope });
     expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+    await harness.run((value) => value.commitDraft(buildDraft("other local draft")));
+    await harness.update({ scope });
+    expect(harness.getLatest().draft).toEqual(draft);
+    await harness.update({ scope: otherScope });
+    expect(harness.getLatest().draft).toEqual(buildDraft("other local draft"));
+    expect(persistence.readDraft()).toEqual(buildDraft("existing session draft"));
     await harness.unmount();
   });
 
@@ -513,11 +540,18 @@ test.each(["current", "pending"] as const)(
   },
 );
 
-test.each(["edit", "clear", "resubmit"] as const)(
-  "does not restore an old recovery after %s and navigation",
-  async (action) => {
-    const persistence = createFakePersistence();
-    const scope = { key: "created", persistence: persistence.adapter };
+test.each([
+  { action: "edit", persisted: true },
+  { action: "clear", persisted: true },
+  { action: "resubmit", persisted: true },
+  { action: "edit", persisted: false },
+  { action: "clear", persisted: false },
+  { action: "resubmit", persisted: false },
+] as const)(
+  "does not restore an old recovery after $action and navigation with persisted=$persisted",
+  async ({ action, persisted }) => {
+    const persistence = persisted ? createFakePersistence().adapter : null;
+    const scope = { key: "created", persistence };
     const harness = await mountHarness({ key: "new", persistence: null });
     const draft = buildDraft("old recovery");
     const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);

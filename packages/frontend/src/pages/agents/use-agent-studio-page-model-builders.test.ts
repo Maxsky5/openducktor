@@ -23,7 +23,7 @@ const selectedIdentityFromSession = (session: AgentSessionSummary | null = null)
   session ? toAgentSessionIdentity(session) : null;
 
 describe("use-agent-studio-page-model-builders", () => {
-  test("buildWorkflowModelContext derives role availability and fallback session selector", () => {
+  test("buildWorkflowModelContext keeps history unselected for a draft", () => {
     const plannerSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "planner-session",
@@ -50,7 +50,7 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(context.selectedRoleAvailable).toBe(false);
     expect(context.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
     const plannerSessionValue = agentSessionIdentityKey(plannerSession);
-    expect(context.sessionSelectorValue).toBe(plannerSessionValue);
+    expect(context.sessionSelectorValue).toBe("");
     expect(context.sessionSelectorAutofocusByValue[plannerSessionValue]).toBe(false);
     expect(context.createSessionDisabled).toBe(false);
   });
@@ -123,6 +123,7 @@ describe("use-agent-studio-page-model-builders", () => {
       gitProviderContext: createGitProviderContextFixture(),
     });
 
+    expect(context.sessionSelectorValue).toBe(agentSessionIdentityKey(activeSession));
     const optionIds = context.sessionCreateOptions.map((option) => option.id);
     expect(optionIds).toContain("build:build_after_human_request_changes:message_first");
     expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);

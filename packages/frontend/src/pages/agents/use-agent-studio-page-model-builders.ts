@@ -92,12 +92,9 @@ export const buildWorkflowModelContext = ({
       roleWorkflowsByTask[session.role].available && session.activityState !== "waiting_input",
     ]),
   );
-  const fallbackSessionForSelectedRole = workflowSessionByRole[role];
   const sessionSelectorValue = selectedSessionIdentity
     ? agentSessionIdentityKey(selectedSessionIdentity)
-    : fallbackSessionForSelectedRole
-      ? agentSessionIdentityKey(fallbackSessionForSelectedRole)
-      : "";
+    : "";
   const createSessionDisabled = Boolean(selectedSessionIdentity && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
     roleEnabledByTask,

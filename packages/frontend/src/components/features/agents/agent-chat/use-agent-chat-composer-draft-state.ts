@@ -34,13 +34,13 @@ type UseAgentChatComposerDraftStateResult = {
   ) => void;
 };
 
-/** Keeps failed sends for their own draft scope without replacing newer edits. */
+/** Keeps unsent drafts and failed sends in their own scope without replacing newer edits. */
 export function useAgentChatComposerDraftState({
   scope,
 }: UseAgentChatComposerDraftStateArgs): UseAgentChatComposerDraftStateResult {
   const [state, setState] = useState<ComposerDraftState>(() => createInitialDraftState(scope));
   const latestStateRef = useRef(state);
-  const pendingRecoveryRef = useRef(new Map<string, AgentChatComposerDraft>());
+  const pendingDraftsRef = useRef(new Map<string, AgentChatComposerDraft>());
   // Count edits across scopes so a late failure cannot restore text the user has since cleared.
   const editSequenceRef = useRef(0);
   const scopeEditsRef = useRef(new Map<string, number>());
@@ -79,7 +79,7 @@ export function useAgentChatComposerDraftState({
         : (nextPersistence?.hydrate() ?? current.draft);
       if (hasCurrentDraft && nextPersistence) {
         nextPersistence.set(current.draft);
-        pendingRecoveryRef.current.delete(nextKey);
+        pendingDraftsRef.current.delete(nextKey);
       }
       setState({
         key: current.key,
@@ -89,16 +89,20 @@ export function useAgentChatComposerDraftState({
       return;
     }
 
+    if (current.persistence === null && draftHasMeaningfulContent(current.draft)) {
+      pendingDraftsRef.current.set(current.key, current.draft);
+    }
+
     const nextState = createInitialDraftState({ key: nextKey, persistence: nextPersistence });
-    const recovered = pendingRecoveryRef.current.get(nextKey);
+    const recovered = pendingDraftsRef.current.get(nextKey);
     if (recovered) {
       if (draftHasMeaningfulContent(nextState.draft)) {
-        pendingRecoveryRef.current.delete(nextKey);
+        pendingDraftsRef.current.delete(nextKey);
       } else {
         nextState.draft = recovered;
         if (nextPersistence) {
           nextPersistence.set(recovered);
-          pendingRecoveryRef.current.delete(nextKey);
+          pendingDraftsRef.current.delete(nextKey);
         }
       }
     }
@@ -137,7 +141,7 @@ export function useAgentChatComposerDraftState({
     const current = latestStateRef.current;
     editSequenceRef.current += 1;
     scopeEditsRef.current.set(current.key, editSequenceRef.current);
-    pendingRecoveryRef.current.delete(current.key);
+    pendingDraftsRef.current.delete(current.key);
     current.persistence?.set(nextDraft);
     setState({
       key: current.key,
@@ -170,7 +174,7 @@ export function useAgentChatComposerDraftState({
   );
 
   const clearSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
-    pendingRecoveryRef.current.delete(snapshot.key);
+    pendingDraftsRef.current.delete(snapshot.key);
     if (snapshot.persistence?.clear({ onlyIfVersion: snapshot.version })) {
       snapshot.version = snapshot.persistence.readVersion();
     }
@@ -184,11 +188,11 @@ export function useAgentChatComposerDraftState({
         if (current.key === recovery.recoveryKey && draftHasMeaningfulContent(current.draft)) {
           return;
         }
-        pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+        pendingDraftsRef.current.set(recovery.recoveryKey, snapshot.draft);
         if (current.key === recovery.recoveryKey) {
           if (current.persistence) {
             current.persistence.set(snapshot.draft);
-            pendingRecoveryRef.current.delete(current.key);
+            pendingDraftsRef.current.delete(current.key);
           }
           const restored = { ...current, draft: snapshot.draft };
           latestStateRef.current = restored;
@@ -203,7 +207,7 @@ export function useAgentChatComposerDraftState({
         snapshot.persistence.set(snapshot.draft);
         if (current.key !== snapshot.key) void snapshot.persistence.flush();
       } else if (current.key !== snapshot.key) {
-        pendingRecoveryRef.current.set(snapshot.key, snapshot.draft);
+        pendingDraftsRef.current.set(snapshot.key, snapshot.draft);
       } else {
         current.persistence?.set(snapshot.draft);
       }
