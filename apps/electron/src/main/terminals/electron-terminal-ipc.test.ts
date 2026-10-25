@@ -303,13 +303,15 @@ describe("Electron terminal IPC", () => {
       return reference;
     })();
 
-    // Collect on a fresh event-loop stack, after the sender's creation turn.
-    const senderCollected = await new Promise<boolean>((resolve) => {
-      setTimeout(() => {
-        Bun.gc(true);
-        resolve(senderRef.deref() === undefined);
-      }, 0);
-    });
+    // Collect on fresh event-loop stacks, after the sender's creation turn. The collector scans
+    // the stack conservatively, so a stale stack slot can keep the sender for a few more turns
+    // on a loaded machine. A sender that the IPC still holds is never collected.
+    let senderCollected = false;
+    for (let turn = 0; turn < 10 && !senderCollected; turn += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      Bun.gc(true);
+      senderCollected = senderRef.deref() === undefined;
+    }
     expect(senderCollected).toBe(true);
     expect(await failureReported).toMatchObject({
       senderId: 7,
