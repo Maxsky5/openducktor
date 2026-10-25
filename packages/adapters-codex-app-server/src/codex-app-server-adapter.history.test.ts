@@ -488,7 +488,7 @@ describe("CodexAppServerAdapter history loading", () => {
   test("keeps inherited and child-owned subagent activity with their fork owners", async () => {
     const thread = {
       id: "child-thread",
-      cwd: "/repo",
+      cwd: "/fork-worktree",
       createdAt: 10,
       status: { type: "idle" },
       forkedFromId: "root-thread",
@@ -523,6 +523,21 @@ describe("CodexAppServerAdapter history loading", () => {
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
+          const childThreadId = requestThreadId(request.params);
+          if (childThreadId === "sibling-thread" || childThreadId === "grandchild-thread") {
+            return {
+              thread: codexThreadFixture({
+                id: childThreadId,
+                status: { type: "idle" },
+                parentThreadId: childThreadId === "sibling-thread" ? "root-thread" : "child-thread",
+                cwd: childThreadId === "sibling-thread" ? "/repo" : "/fork-worktree",
+                preview:
+                  childThreadId === "sibling-thread"
+                    ? "Inspect root changes"
+                    : "Review child changes",
+              }),
+            };
+          }
           return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
@@ -540,7 +555,7 @@ describe("CodexAppServerAdapter history loading", () => {
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
       runtimeKind: "codex",
-      workingDirectory: "/repo",
+      workingDirectory: "/fork-worktree",
       externalSessionId: "child-thread",
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
@@ -552,10 +567,12 @@ describe("CodexAppServerAdapter history loading", () => {
       expect.objectContaining({
         correlationKey: "codex-subagent:root-thread:sibling-thread",
         externalSessionId: "sibling-thread",
+        description: "Inspect root changes",
       }),
       expect.objectContaining({
         correlationKey: "codex-subagent:child-thread:grandchild-thread",
         externalSessionId: "grandchild-thread",
+        description: "Review child changes",
       }),
     ]);
     expect(subagentParts).not.toContainEqual(
@@ -596,6 +613,16 @@ describe("CodexAppServerAdapter history loading", () => {
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
+          if (requestThreadId(request.params) === "grandchild-thread") {
+            return {
+              thread: codexThreadFixture({
+                id: "grandchild-thread",
+                status: { type: "idle" },
+                parentThreadId: "child-thread",
+                preview: "Review child changes",
+              }),
+            };
+          }
           return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {

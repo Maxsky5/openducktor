@@ -57,6 +57,7 @@ export type CodexThreadSnapshot = {
   startedAt: string;
   updatedAtMs: number | null;
   title: string;
+  description?: string;
   status: CodexThreadStatusSnapshot;
   parentThreadId: string | null;
   agentNickname: string | null;
@@ -122,10 +123,10 @@ export const codexThreadStatusSnapshot = (
   return { classification: "running" };
 };
 
-const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot => {
+export const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot => {
   const subAgentSource = codexSubAgentSourceMetadata(thread.source);
   const title = thread.name?.trim() || thread.preview.trim() || `Codex ${thread.id}`;
-  return {
+  const snapshot: CodexThreadSnapshot = {
     id: thread.id,
     cwd: thread.cwd,
     startedAt: codexTimestampFromSeconds(thread.createdAt),
@@ -137,6 +138,27 @@ const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot 
     agentRole: thread.agentRole,
     subAgentSource,
   };
+  const description = thread.preview.trim() || thread.name?.trim();
+  if (description) {
+    snapshot.description = description;
+  }
+  return snapshot;
+};
+
+export type CodexSubagentDisplayDetails = { agent?: string; description?: string };
+
+export const codexSubagentDisplayDetails = (
+  thread: CodexThreadSnapshot,
+): CodexSubagentDisplayDetails => {
+  const details: CodexSubagentDisplayDetails = {};
+  const agent =
+    thread.agentNickname ??
+    thread.agentRole ??
+    thread.subAgentSource?.agentNickname ??
+    thread.subAgentSource?.agentRole;
+  if (agent) details.agent = agent;
+  if (thread.description) details.description = thread.description;
+  return details;
 };
 
 export const codexSubAgentSourceMetadata = (

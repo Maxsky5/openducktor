@@ -1,6 +1,7 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
+  AgentRuntimeQueryError,
   type AgentSessionHistoryMessage,
   type AgentModelSelection,
   type LoadAgentSessionHistoryInput,
@@ -19,6 +20,11 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import {
+  codexSubagentDisplayDetails,
+  codexThreadSnapshot,
+  type CodexSubagentDisplayDetails,
+} from "./codex-app-server-threads";
 import type {
   CodexImageGenerationItem,
   CodexImageGenerationPreparer,
@@ -105,7 +111,7 @@ export const loadCodexSessionHistory = async ({
       }),
     );
   }
-  return toHistory({
+  const history = toHistory({
     input,
     session,
     response,
@@ -114,6 +120,55 @@ export const loadCodexSessionHistory = async ({
     preparedImages,
     readRunningTurnModel,
   });
+  const subagentDetails = await loadSubagentDetails(client, input, response, forkBoundary);
+  for (const message of history) {
+    for (const part of message.parts) {
+      if (part.kind !== "subagent" || !part.externalSessionId) continue;
+      const details = subagentDetails.get(part.externalSessionId);
+      if (!part.agent && details?.agent) part.agent = details.agent;
+      if (!part.description && details?.description) part.description = details.description;
+    }
+  }
+  return history;
+};
+
+const loadSubagentDetails = async (
+  client: CodexAppServerClient,
+  input: LoadAgentSessionHistoryInput,
+  response: CodexThreadHistoryReadResponse,
+  forkBoundary: CodexForkBoundary | null,
+): Promise<Map<string, CodexSubagentDisplayDetails>> => {
+  const parentsByChild = new Map<string, string>();
+  for (const { item, turnIndex } of codexTurnItemsFromThreadRead(response)) {
+    if (item.type !== "subAgentActivity" || item.kind !== "started") continue;
+    const parentThreadId =
+      forkBoundary && turnIndex < forkBoundary.beforeTurnIndex
+        ? forkBoundary.parentThreadId
+        : input.externalSessionId;
+    parentsByChild.set(item.agentThreadId, parentThreadId);
+  }
+  const entries = await Promise.all(
+    [...parentsByChild].map(async ([childThreadId, parentThreadId]) => {
+      const result = await client.threadRead({ threadId: childThreadId, includeTurns: false });
+      const thread = codexThreadSnapshot(result.thread);
+      // Inherited children keep their source directory when a fork uses another worktree.
+      const hasWrongDirectory =
+        parentThreadId === input.externalSessionId && thread.cwd !== input.workingDirectory;
+      if (
+        thread.id !== childThreadId ||
+        hasWrongDirectory ||
+        thread.parentThreadId !== parentThreadId ||
+        (thread.subAgentSource && thread.subAgentSource.parentThreadId !== parentThreadId)
+      ) {
+        throw new AgentRuntimeQueryError(
+          "scope_mismatch",
+          `Codex subagent metadata for '${childThreadId}' does not match its parent and working directory. Reload the matching session.`,
+        );
+      }
+      return [childThreadId, codexSubagentDisplayDetails(thread)] as const;
+    }),
+  );
+  return new Map(entries);
 };
 
 const systemPromptMessage = (

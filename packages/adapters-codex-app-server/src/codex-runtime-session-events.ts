@@ -35,7 +35,7 @@ import {
   expectCodexUserMessageEcho,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
-import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
+import { codexThreadSnapshot, type CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import type { CodexAsyncQuestionState } from "./codex-async-questions";
@@ -613,6 +613,28 @@ export class CodexRuntimeSessionEvents {
     if (notification) {
       this.observeCatalogInvalidation(event.runtimeId, notification);
     }
+    if (notification?.method === "thread/started") {
+      const thread = codexThreadSnapshot(notification.params.thread);
+      const parentThreadId = thread.parentThreadId;
+      if (!parentThreadId) return;
+      const owner = this.resolveRuntimeStreamEventSessionOwner(parentThreadId, event.runtimeId);
+      if (!owner) return;
+      if (owner.targetSession.workingDirectory !== thread.cwd) {
+        throw new Error(
+          `Codex subagent metadata for '${thread.id}' has another working directory. Reload the matching session.`,
+        );
+      }
+      const part = this.deps.subagents.recordThreadDetails(thread, event.runtimeId);
+      if (part) {
+        this.emitSessionEventForSession(owner.targetSession, {
+          type: "assistant_part",
+          externalSessionId: parentThreadId,
+          timestamp: notification.receivedAt,
+          part,
+        });
+      }
+      return;
+    }
     if (notification?.method === "thread/tokenUsage/updated") {
       this.contextUsage.observeNotification(event.runtimeId, notification);
       this.markSnapshotChanged(event.runtimeId, notification.params.threadId);
@@ -794,7 +816,10 @@ export class CodexRuntimeSessionEvents {
   private runtimeStreamEventSessionOwner(
     event: CodexRuntimeStreamEvent,
   ): CodexRuntimeStreamEventSessionOwner | undefined {
-    const threadId = threadIdFromRuntimeStreamEvent(event);
+    const threadId =
+      event.kind === "notification" && event.message.method === "thread/started"
+        ? event.message.params.thread.parentThreadId
+        : threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
       return undefined;
     }

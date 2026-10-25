@@ -5,6 +5,7 @@ import {
 } from "./codex-runtime-event-schema";
 import type { CodexLiveEventPump } from "./codex-app-server-shared";
 import type { CodexAppServerAdapterOptions } from "./types";
+import { codexNotificationThreadId } from "./codex-app-server-requests";
 
 export { type CodexRuntimeStreamEvent } from "./codex-runtime-event-schema";
 
@@ -92,7 +93,7 @@ export const threadIdFromRuntimeStreamEvent = (event: CodexRuntimeStreamEvent): 
     return event.threadId;
   }
   if (event.kind === "notification") {
-    return event.message.method === "skills/changed" ? null : event.message.params.threadId;
+    return codexNotificationThreadId(event.message);
   }
   switch (event.message.method) {
     case "execCommandApproval":

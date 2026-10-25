@@ -218,7 +218,7 @@ describe("AgentChatMessageCard system messages", () => {
 
   test.each([
     { agent: "build", description: "review changes [commit|branch|pr], defaults to uncommitted" },
-    { agent: undefined, description: "random_poem" },
+    { agent: undefined, description: "Inventory hard-coded workflow artifacts" },
   ])("renders the subagent description below its name: %j", ({ agent, description }) => {
     const meta: SubagentMeta = {
       kind: "subagent",

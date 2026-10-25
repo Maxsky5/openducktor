@@ -9,7 +9,7 @@ import { codexCollabAgentToolCallFixture } from "./test-fixtures/codex-protocol"
 
 describe("Codex subagent display details", () => {
   test.each(["live", "thread_read"] as const)(
-    "shows the V2 task label as a description, not an agent name, in %s",
+    "does not turn a V2 hierarchy path into display text in %s",
     (source) => {
       const pipeline = createCodexEventMapperPipeline();
       const notification = codexAppServerRuntimeNotificationSchema.parse({
@@ -46,12 +46,12 @@ describe("Codex subagent display details", () => {
       expect(parts).toEqual([
         expect.objectContaining({
           kind: "subagent",
-          description: "random_poem",
           externalSessionId: "child-thread",
           status: "running",
         }),
       ]);
       expect(parts[0]).not.toHaveProperty("agent");
+      expect(parts[0]).not.toHaveProperty("description");
       expect(parts[0]).not.toHaveProperty("prompt");
     },
   );
@@ -81,6 +81,7 @@ describe("Codex subagent display details", () => {
       startedAt: "2026-07-10T12:00:00.000Z",
       updatedAtMs: null,
       title: "Review the adapter",
+      description: "A different native preview",
       parentThreadId: "parent-thread",
       status: { classification: "running" },
       agentNickname: "Scout",

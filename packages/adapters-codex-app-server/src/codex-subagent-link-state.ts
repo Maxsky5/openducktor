@@ -3,7 +3,11 @@ import type {
   CodexAppServerCollabAgentTool,
   CodexAppServerSubAgentActivityKind,
 } from "@openducktor/contracts";
-import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
+import {
+  codexSubagentDisplayDetails,
+  type CodexSubAgentSourceMetadata,
+  type CodexThreadSnapshot,
+} from "./codex-app-server-threads";
 import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
@@ -176,13 +180,6 @@ const resolveStatus = (
     : existing.status;
 };
 
-const preferredAgentLabel = (thread: CodexThreadSnapshot): string | undefined =>
-  thread.agentNickname ??
-  thread.agentRole ??
-  thread.subAgentSource?.agentNickname ??
-  thread.subAgentSource?.agentRole ??
-  undefined;
-
 class CodexSubagentLinkError extends Error {
   constructor(message: string) {
     super(message);
@@ -248,6 +245,34 @@ export class CodexSubagentLinkState {
   }
 
   recordThread(thread: CodexThreadSnapshot, runtimeId?: string): void {
+    const link = this.threadDetailsLink(thread, runtimeId);
+    if (!link) return;
+    const isActive = thread.status.classification !== "idle";
+    if (isActive) {
+      link.status = "running";
+      link.allowStatusRestart = true;
+    } else {
+      link.status = link.status === "cancelled" ? "cancelled" : "completed";
+    }
+    if (thread.updatedAtMs !== null) {
+      if (isActive) link.startedAtMs = thread.updatedAtMs;
+      else link.endedAtMs = thread.updatedAtMs;
+    }
+    this.upsertLink(link);
+  }
+
+  recordThreadDetails(
+    thread: CodexThreadSnapshot,
+    runtimeId: string,
+  ): CodexSubagentPart | undefined {
+    const link = this.threadDetailsLink(thread, runtimeId);
+    return link ? this.upsertLink(link) : undefined;
+  }
+
+  private threadDetailsLink(
+    thread: CodexThreadSnapshot,
+    runtimeId: string | undefined,
+  ): CodexSubagentLinkInput | undefined {
     const parentThreadIds = [thread.parentThreadId, thread.subAgentSource?.parentThreadId].filter(
       (parentThreadId): parentThreadId is string => Boolean(parentThreadId),
     );
@@ -263,31 +288,19 @@ export class CodexSubagentLinkState {
     if (!parentThreadId || parentThreadId === thread.id) {
       return;
     }
-    const agent = preferredAgentLabel(thread);
+    const { agent, description } = codexSubagentDisplayDetails(thread);
     const existing = this.linkForChild(thread.id, runtimeId);
-    const isActive = thread.status.classification !== "idle";
-    let status: AgentSubagentStatus;
-    if (isActive) {
-      status = "running";
-    } else {
-      status = existing?.status === "cancelled" ? "cancelled" : "completed";
-    }
-    let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
-    if (thread.updatedAtMs !== null) {
-      timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
-    }
+    const codexThreadMetadata: NonNullable<CodexSubagentLinkMetadata["codexThread"]> = {
+      parentThreadId,
+      childThreadId: thread.id,
+    };
     const link: CodexSubagentLinkInput = {
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
-      status,
-      allowStatusRestart: isActive,
-      ...timing,
+      status: existing?.status ?? "pending",
       metadata: {
-        codexThread: {
-          parentThreadId,
-          childThreadId: thread.id,
-        },
+        codexThread: codexThreadMetadata,
       },
     };
     if (runtimeId) {
@@ -296,9 +309,8 @@ export class CodexSubagentLinkState {
     if (agent) {
       link.agent = agent;
     }
-    const codexThreadMetadata = link.metadata?.codexThread;
-    if (!codexThreadMetadata) {
-      throw new CodexSubagentLinkError("Codex subagent link metadata is missing codexThread.");
+    if (description && !existing?.description) {
+      link.description = description;
     }
     if (thread.agentNickname) {
       codexThreadMetadata.agentNickname = thread.agentNickname;
@@ -309,7 +321,7 @@ export class CodexSubagentLinkState {
     if (thread.subAgentSource) {
       codexThreadMetadata.subAgentSource = thread.subAgentSource;
     }
-    this.upsertLink(link);
+    return link;
   }
 
   upsertLink(input: CodexSubagentLinkInput): CodexSubagentPart {
@@ -688,14 +700,8 @@ export class CodexSubagentLinkState {
     if (link.prompt) {
       part.prompt = link.prompt;
     }
-    const activity = link.metadata?.codexSubagent;
-    const agentPath =
-      activity?.source === "subAgentActivity"
-        ? activity.agentPath
-        : link.metadata?.codexThread?.subAgentSource?.agentPath;
-    const description = link.description ?? agentPath?.split("/").at(-1);
-    if (description) {
-      part.description = description;
+    if (link.description) {
+      part.description = link.description;
     }
     if (link.error) {
       part.error = link.error;

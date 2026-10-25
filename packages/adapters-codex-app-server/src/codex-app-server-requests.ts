@@ -1,6 +1,7 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerCommandExecutionApprovalDecision,
+  type CodexAppServerConsumedRuntimeNotification,
   type CodexAppServerJsonValue,
   type CodexAppServerRequestId,
   codexAppServerMcpServerElicitationRequestParamsSchema,
@@ -373,6 +374,7 @@ export const toMcpElicitationApprovalRequest = (
 export const codexNotificationTurnId = (notification: CodexNotificationRecord): string | null => {
   switch (notification.method) {
     case "skills/changed":
+    case "thread/started":
     case "serverRequest/resolved":
     case "thread/status/changed":
       return null;
@@ -384,8 +386,13 @@ export const codexNotificationTurnId = (notification: CodexNotificationRecord): 
   }
 };
 
-export const codexNotificationThreadId = (notification: CodexNotificationRecord): string | null =>
-  notification.method === "skills/changed" ? null : notification.params.threadId;
+export const codexNotificationThreadId = (
+  notification: CodexAppServerConsumedRuntimeNotification,
+): string | null => {
+  if (notification.method === "skills/changed") return null;
+  if (notification.method === "thread/started") return notification.params.thread.id;
+  return notification.params.threadId;
+};
 
 export const codexServerRequestTurnId = (request: CodexServerRequestRecord): string | null => {
   switch (request.method) {
