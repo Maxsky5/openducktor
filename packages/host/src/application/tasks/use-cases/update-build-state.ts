@@ -4,26 +4,30 @@ import {
   requireBuildCompletedDependencies,
   requireDependencies,
 } from "../support/required-task-dependencies";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
+import { requireEffectInput } from "../support/task-workflow-events";
 import {
+  applyEffect,
   blockBuildCompletionTask,
   buildCompletionWorktreePath,
   enrichTask,
-  taskListWithCurrent,
 } from "../support/task-workflow-helpers";
 import { runHookCommandsAllowFailure } from "../support/workflow-hooks";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { CreateTaskServiceInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskBuildStateUseCases = ({
   taskStore,
+  taskWorkflows,
   gitPort,
   taskSessionLifecycleCoordinator,
   settingsConfig,
   systemCommands,
   workspaceSettingsService,
-}: CreateTaskServiceInput) => ({
-  buildBlocked(input: Parameters<TaskService["buildBlocked"]>[0]) {
+}: CreateTaskServiceInput): Pick<
+  TaskServiceWithMutationProgress,
+  "buildBlocked" | "buildResumed" | "buildCompleted"
+> => ({
+  buildBlocked(input) {
     return Effect.scoped(
       Effect.gen(function* () {
         const { repoPath, taskId, reason } = input;
@@ -51,74 +55,55 @@ export const createTaskBuildStateUseCases = ({
           [taskId],
           "block build",
         );
-        const currentTasks = yield* taskStore.listTasks({ repoPath });
-        const current = currentTasks.find((task) => task.id === taskId);
-        if (!current) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Task not found: ${taskId}`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
-
-        if (current.status === "blocked") {
-          return enrichTask(current, currentTasks);
-        }
-
-        const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
-        const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-        return enrichTask(updated, nextTasks);
+        return yield* applyEffect(
+          taskStore,
+          taskWorkflows.forRepo(repoPath),
+          { repoPath, taskId },
+          "build.blocked",
+        );
       }),
     );
   },
 
-  buildResumed(input: Parameters<TaskService["buildResumed"]>[0]) {
+  buildResumed(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* validateTaskTransitionEffect(current, [current], current.status, "in_progress");
-
-      if (current.status === "in_progress") {
-        return enrichTask(current, [current]);
-      }
-
-      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "in_progress" });
-      return enrichTask(updated, [updated]);
+      return yield* applyEffect(
+        taskStore,
+        taskWorkflows.forRepo(repoPath),
+        { repoPath, taskId },
+        "build.resumed",
+      );
     });
   },
 
-  buildCompleted(input: Parameters<TaskService["buildCompleted"]>[0]) {
+  buildCompleted(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireBuildCompletedDependencies(settingsConfig, systemCommands, workspaceSettingsService),
       );
-      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forRepo(repoPath);
 
-      if (current.status === "ai_review" || current.status === "human_review") {
-        return enrichTask(current, currentTasks);
-      }
-      if (current.status !== "in_progress" && current.status !== "blocked") {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `build_completed is only allowed from in_progress, blocked, ai_review, or human_review. Task ${current.id} is ${current.status}.`,
-            details: { repoPath, taskId, status: current.status },
-          }),
-        );
+      const decision = yield* requireEffectInput(
+        "build_completed is",
+        workflow,
+        "build.completed",
+        current,
+        {
+          repoPath,
+          taskId,
+          status: current.status,
+        },
+      );
+      if (decision.kind === "unchanged") {
+        return enrichTask(workflow, current);
       }
 
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const nextStatus =
-        current.aiReviewEnabled && current.artifactSummary.qaReport.verdict !== "approved"
-          ? "ai_review"
-          : "human_review";
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, nextStatus);
+      const nextStatus = decision.to;
 
       const postCompleteHooks = repoConfig.hooks.postComplete
         .map((hook) => hook.trim())
@@ -128,7 +113,7 @@ export const createTaskBuildStateUseCases = ({
           buildCompletionWorktreePath(dependencies.settingsConfig, repoConfig, taskId),
         );
         if (worktreePathResult._tag === "Failure") {
-          yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
+          yield* blockBuildCompletionTask(taskStore, workflow, repoPath, taskId, current);
           return yield* Effect.fail(
             createTaskMutationProgressFailure(
               "build-completed",
@@ -146,7 +131,7 @@ export const createTaskBuildStateUseCases = ({
         );
         if (failure !== null) {
           const message = `Worktree cleanup script command failed: ${failure.hook}\n${failure.stderr}`;
-          yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
+          yield* blockBuildCompletionTask(taskStore, workflow, repoPath, taskId, current);
           return yield* Effect.fail(
             createTaskMutationProgressFailure(
               "build-completed",
@@ -161,10 +146,13 @@ export const createTaskBuildStateUseCases = ({
         }
       }
 
-      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: nextStatus });
-      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-      return enrichTask(updated, nextTasks);
+      const updated = yield* taskStore.transitionTask({
+        repoPath,
+        taskId,
+        status: nextStatus,
+        cause: decision.cause,
+      });
+      return enrichTask(workflow, updated);
     });
   },
 });

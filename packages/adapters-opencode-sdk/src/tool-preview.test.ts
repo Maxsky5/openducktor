@@ -45,12 +45,9 @@ describe("deriveToolPreview", () => {
     expect(
       deriveToolPreview({
         tool: "functions.openducktor_odt_set_plan",
-        rawInput: {
-          taskId: "task-42",
-          subtasks: [{ id: "1" }, { id: "2" }],
-        },
+        rawInput: { taskId: "task-42" },
       }),
-    ).toBe("task-42 · 2 subtasks");
+    ).toBe("task-42");
   });
 
   test("handles singular lsp_diagnostic tool ids like other lsp tools", () => {

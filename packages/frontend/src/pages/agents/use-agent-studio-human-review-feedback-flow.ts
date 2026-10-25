@@ -1,4 +1,9 @@
-import type { TaskCard } from "@openducktor/contracts";
+import {
+  getSessionLaunchAction,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
@@ -9,7 +14,6 @@ import {
 } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-state";
 import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { useHumanReviewFeedbackController } from "@openducktor/frontend-core/tasks/workflow/use-human-review-feedback-controller";
-import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import type { SessionStartExistingSessionOption } from "@openducktor/frontend-core/sessions/start/session-start-types";
 import type { SessionStartLaunchRequest } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type {
@@ -18,7 +22,6 @@ import type {
 } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   taskId: string;
@@ -70,7 +73,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
   });
 
   const shouldInterceptCreateSession = useCallback((option: SessionCreateOption): boolean => {
-    return option.role === "build" && option.launchActionId === "build_after_human_request_changes";
+    return getSessionLaunchAction(option.launchActionId).context === "human_feedback";
   }, []);
 
   const dismissHumanReviewFeedback = useCallback((): void => {

@@ -4,8 +4,8 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  requiredRuntimeSupportedScopes,
 } from "@openducktor/contracts";
+import { getMissingRequiredRuntimeSupportedScopes } from "@openducktor/workflows";
 import {
   filterRuntimeDefinitionsForDefaultSelection,
   filterRuntimeDefinitionsForRole,
@@ -34,11 +34,12 @@ const withCapabilities = (
 });
 
 describe("agent-runtime capability policies", () => {
-  test("pins the required workflow scope set", () => {
-    expect(requiredRuntimeSupportedScopes).toEqual(["workspace", "task", "build"]);
-    expect(OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow.supportedScopes).toEqual(
-      requiredRuntimeSupportedScopes,
-    );
+  test("lets the OpenCode descriptor cover every required workflow scope", () => {
+    expect(
+      getMissingRequiredRuntimeSupportedScopes(
+        OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow.supportedScopes,
+      ),
+    ).toEqual([]);
   });
 
   test("reports workflow and baseline compatibility errors by requirement class", () => {

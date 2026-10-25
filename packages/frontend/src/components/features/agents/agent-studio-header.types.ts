@@ -1,10 +1,12 @@
 import type { PullRequest } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
 import type { ComboboxGroup } from "@/components/ui/combobox";
-import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import type { SessionStartPostAction } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
-import type { AgentWorkflowStepState } from "@openducktor/frontend-core/types/agent-workflow";
+import type { WorkflowRailStep } from "@/types/agent-workflow";
+import type {
+  BuiltinLaunchActionId as SessionLaunchActionId,
+  BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 
 export type AgentRoleOption = {
   role: AgentRole;
@@ -13,11 +15,8 @@ export type AgentRoleOption = {
   disabled?: boolean;
 };
 
-export type AgentWorkflowStep = {
+export type AgentWorkflowStep = WorkflowRailStep & {
   role: AgentRole;
-  label: string;
-  icon: AgentRoleOption["icon"];
-  state: AgentWorkflowStepState;
   sessionValue: string | null;
 };
 

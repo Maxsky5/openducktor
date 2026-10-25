@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { GitConflictAction, GitConflictOperation } from "../contracts";
 import { getGitConflictCopy, UNIDENTIFIED_GIT_CONFLICT_ASK_BLOCKED_REASON } from "./conflict-copy";
 
@@ -5,7 +6,7 @@ export type GitConflictActionsModel = {
   isDisabled: boolean;
   abort: ActionControl;
   help?: ActionControl & {
-    recipientLabel: "Builder" | "agent";
+    recipientLabel: string;
     blockedReason: string | null;
   };
 };
@@ -16,7 +17,7 @@ export const createGitConflictActionsModel = ({
   conflictAction,
   onAbort,
   onAsk,
-  recipientLabel = "Builder",
+  recipientLabel = BUILTIN_ROLE_LABELS.build,
   blockedReason = null,
   isStarting = false,
 }: {
@@ -25,7 +26,7 @@ export const createGitConflictActionsModel = ({
   conflictAction: GitConflictAction | undefined;
   onAbort: () => void;
   onAsk?: (() => void) | undefined;
-  recipientLabel?: "Builder" | "agent" | undefined;
+  recipientLabel?: string | undefined;
   blockedReason?: string | null | undefined;
   isStarting?: boolean | undefined;
 }): GitConflictActionsModel => {

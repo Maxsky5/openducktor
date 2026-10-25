@@ -1,6 +1,5 @@
 import { workflowArtifactId } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { CancelledError, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@openducktor/frontend-core/queries/task-view-sync.test-support";
 import { type RepoTaskData, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
@@ -75,14 +75,15 @@ const recordQueryOperations = (queryClient: QueryClient): string[] => {
 };
 
 describe("TaskViewSync", () => {
-  test.each(["spec", "plan", "qa"] as const)(
+  test.each(["spec", "plan", "qaReport"] as const)(
     "reads an observed %s write once when its timestamp ties",
     async (section) => {
       const timestamp = "2026-04-10T13:10:00.000Z";
       const card = createTaskCardFixture({ id: "task-1" });
-      if (section === "qa")
-        card.artifactSummary.qaReport = { has: true, updatedAt: timestamp, verdict: "approved" };
-      else card.artifactSummary[section] = { has: true, updatedAt: timestamp };
+      card.artifactSummary[section] =
+        section === "qaReport"
+          ? { present: true, updatedAt: timestamp, verdict: "approved" }
+          : { present: true, updatedAt: timestamp };
       const payload = { markdown: "# Later commit", updatedAt: timestamp };
       const loadFreshDocument = mock(async () => payload);
       const listTasks = mock(async () => [card]);
@@ -105,7 +106,7 @@ describe("TaskViewSync", () => {
         event.boardChanges!.artifactChanges = [
           {
             taskId: card.id,
-            artifactIds: [workflowArtifactId(card.id, section === "qa" ? "qaReport" : section)],
+            artifactIds: [workflowArtifactId(card.id, section)],
             removedArtifactIds: [],
           },
         ];
@@ -136,7 +137,7 @@ describe("TaskViewSync", () => {
       queryClient.setQueryData(taskQueryKeys.repoData(repoPath), {
         tasks: [createTaskCardFixture({ id: "task-1" }), other],
       });
-      queryClient.setQueryData(documentQueryKeys.spec(repoPath, "task-1"), {
+      queryClient.setQueryData(documentQueryKeys.document(repoPath, "task-1", "spec"), {
         markdown: "",
         updatedAt: null,
       });
@@ -165,9 +166,9 @@ describe("TaskViewSync", () => {
     const card = createTaskCardFixture({
       id: "task-1",
       artifactSummary: {
-        spec: { has: true, updatedAt },
-        plan: { has: true, updatedAt },
-        qaReport: { has: false, verdict: "not_reviewed" },
+        spec: { present: true, updatedAt },
+        plan: { present: true, updatedAt },
+        qaReport: { present: false },
       },
     });
     const loadFreshDocument = mock(async (_repo: string, _task: string, _section: string) => ({
@@ -175,8 +176,8 @@ describe("TaskViewSync", () => {
       updatedAt,
     }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const specKey = documentQueryKeys.spec("/repo", "task-1");
-    const planKey = documentQueryKeys.plan("/repo", "task-1");
+    const specKey = documentQueryKeys.document("/repo", "task-1", "spec");
+    const planKey = documentQueryKeys.document("/repo", "task-1", "plan");
     queryClient.setQueryData(specKey, { markdown: "# Old", updatedAt: null });
     queryClient.setQueryData(planKey, { markdown: "# Old", updatedAt: null });
     const unsubscribe = observeDocument(queryClient, specKey);
@@ -214,7 +215,7 @@ describe("TaskViewSync", () => {
   test("an older reset event does not reread a newer local document save", async () => {
     const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const key = documentQueryKeys.spec("/repo", "task-1");
+    const key = documentQueryKeys.document("/repo", "task-1", "spec");
     const saved = { markdown: "# Saved after reset", updatedAt: "2026-04-10T13:11:00.000Z" };
     queryClient.setQueryData(key, saved);
     const unsubscribe = observeDocument(queryClient, key);
@@ -230,14 +231,9 @@ describe("TaskViewSync", () => {
     }
   });
 
-  test("applies parent cards, deletion, and the closed-task window without deleting hidden task IDs", async () => {
+  test("applies changed cards, deletion, and the closed-task window without deleting hidden task IDs", async () => {
     const { queryClient, sync } = createSync(createPorts());
-    const parent = createTaskCardFixture({
-      id: "epic",
-      issueType: "epic",
-      subtaskIds: ["child"],
-      availableActions: ["close_task"],
-    });
+    const updated = createTaskCardFixture({ id: "updated", availableActions: ["close_task"] });
     const expired = createTaskCardFixture({
       id: "expired",
       status: "closed",
@@ -252,26 +248,31 @@ describe("TaskViewSync", () => {
       tasks: [
         expired,
         createTaskCardFixture({ id: "deleted" }),
-        createTaskCardFixture({ id: "epic" }),
+        createTaskCardFixture({ id: "updated" }),
         closed,
       ],
     });
-    queryClient.setQueryData(taskQueryKeys.ids("/repo"), ["expired", "deleted", "epic", "closed"]);
-    const removedKey = documentQueryKeys.spec("/repo", "deleted");
+    queryClient.setQueryData(taskQueryKeys.ids("/repo"), [
+      "expired",
+      "deleted",
+      "updated",
+      "closed",
+    ]);
+    const removedKey = documentQueryKeys.document("/repo", "deleted", "spec");
     queryClient.setQueryData(removedKey, { markdown: "# Old", updatedAt: null });
-    const event = boardEvent("/repo", [parent]);
+    const event = boardEvent("/repo", [updated]);
     if (event.kind !== "tasks_updated") throw new Error("Expected update");
     await sync.reconcileExternalEvent(
-      { ...event, taskIds: ["epic", "deleted"], removedTaskIds: ["deleted"] },
+      { ...event, taskIds: ["updated", "deleted"], removedTaskIds: ["deleted"] },
       eventCursor(),
     );
     expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))?.tasks).toEqual([
-      parent,
+      updated,
       closed,
     ]);
     expect(queryClient.getQueryData<string[]>(taskQueryKeys.ids("/repo"))).toEqual([
       "expired",
-      "epic",
+      "updated",
       "closed",
     ]);
     expect(queryClient.getQueryState(removedKey)).toBeUndefined();
@@ -290,7 +291,7 @@ describe("TaskViewSync", () => {
     const result = deferred<{ markdown: string; updatedAt: string | null }>();
     const loadFreshDocument = mock(async () => ({ markdown: "", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const key = documentQueryKeys.spec("/repo", "task-1");
+    const key = documentQueryKeys.document("/repo", "task-1", "spec");
     const read = queryClient.fetchQuery(
       taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", () => result.promise),
     );
@@ -312,7 +313,7 @@ describe("TaskViewSync", () => {
     const restored = { markdown: "# Restored", updatedAt: "2026-04-10T13:11:00.000Z" };
     const loadFreshDocument = mock(async () => restored);
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const key = documentQueryKeys.spec("/repo", "task-1");
+    const key = documentQueryKeys.document("/repo", "task-1", "spec");
     const read = queryClient
       .fetchQuery(
         taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", () => oldRead.promise),
@@ -326,9 +327,9 @@ describe("TaskViewSync", () => {
       );
       const card = createTaskCardFixture({
         artifactSummary: {
-          spec: { has: true, updatedAt: restored.updatedAt },
-          plan: { has: false },
-          qaReport: { has: false, verdict: "not_reviewed" },
+          spec: { present: true, updatedAt: restored.updatedAt },
+          plan: { present: false },
+          qaReport: { present: false },
         },
       });
       await sync.reconcileExternalEvent(
@@ -348,7 +349,7 @@ describe("TaskViewSync", () => {
   test("a save after a pending reset reaches the cache and the imperative reader", async () => {
     const oldRead = deferred<{ markdown: string; updatedAt: string | null }>();
     const { queryClient, sync } = createSync(createPorts());
-    const key = documentQueryKeys.spec("/repo", "task-1");
+    const key = documentQueryKeys.document("/repo", "task-1", "spec");
     const read = queryClient.fetchQuery(
       taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", () => oldRead.promise),
     );
@@ -365,7 +366,7 @@ describe("TaskViewSync", () => {
   });
 
   for (const baseline of ["cached", "pending"] as const) {
-    test.each(["spec", "plan", "qa"] as const)(
+    test.each(["spec", "plan", "qaReport"] as const)(
       `an ordinary task edit keeps an unchanged first %s read with a ${baseline} board`,
       async (section) => {
         const result = deferred<{ markdown: string; updatedAt: string | null }>();
@@ -374,9 +375,9 @@ describe("TaskViewSync", () => {
         const card = createTaskCardFixture({
           updatedAt,
           artifactSummary: {
-            spec: { has: true, updatedAt },
-            plan: { has: true, updatedAt },
-            qaReport: { has: true, updatedAt, verdict: "approved" },
+            spec: { present: true, updatedAt },
+            plan: { present: true, updatedAt },
+            qaReport: { present: true, updatedAt, verdict: "approved" },
           },
         });
         const changed = { ...card, title: "Renamed", updatedAt: "2026-04-10T13:10:00.000Z" };
@@ -435,7 +436,7 @@ describe("TaskViewSync", () => {
     );
   }
 
-  for (const section of ["spec", "plan", "qa"] as const) {
+  for (const section of ["spec", "plan", "qaReport"] as const) {
     test.each([
       "older",
       "newer",
@@ -485,9 +486,9 @@ describe("TaskViewSync", () => {
         const unsubscribe = observer.subscribe(() => {});
         const card = createTaskCardFixture({
           artifactSummary: {
-            spec: { has: true, updatedAt: committedAt },
-            plan: { has: true, updatedAt: committedAt },
-            qaReport: { has: true, updatedAt: committedAt, verdict: "approved" },
+            spec: { present: true, updatedAt: committedAt },
+            plan: { present: true, updatedAt: committedAt },
+            qaReport: { present: true, updatedAt: committedAt, verdict: "approved" },
           },
         });
         const error = new Error("document read unavailable");
@@ -601,7 +602,7 @@ describe("TaskViewSync", () => {
     });
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "deleted-task"), {
+    queryClient.setQueryData(documentQueryKeys.document("/repo", "deleted-task", "spec"), {
       markdown: "# Stale",
       updatedAt: null,
     });
@@ -611,7 +612,8 @@ describe("TaskViewSync", () => {
     expect(loadFreshDocument).not.toHaveBeenCalled();
     expect(listTasks).toHaveBeenCalledWith("/repo");
     expect(
-      queryClient.getQueryState(documentQueryKeys.spec("/repo", "deleted-task"))?.isInvalidated,
+      queryClient.getQueryState(documentQueryKeys.document("/repo", "deleted-task", "spec"))
+        ?.isInvalidated,
     ).toBe(true);
   });
 
@@ -622,7 +624,7 @@ describe("TaskViewSync", () => {
       updatedAt: "2026-04-10T13:10:00.000Z",
     }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
+    const documentKey = documentQueryKeys.document("/repo", "task-1", "spec");
     queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
     const unsubscribe = observeDocument(queryClient, documentKey);
 
@@ -656,11 +658,11 @@ describe("TaskViewSync", () => {
     });
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
     const activeDocuments = [
-      ["spec", documentQueryKeys.spec("/repo", "task-1")],
-      ["plan", documentQueryKeys.plan("/repo", "task-1")],
-      ["qa", documentQueryKeys.qaReport("/repo", "task-1")],
+      ["spec", documentQueryKeys.document("/repo", "task-1", "spec")],
+      ["plan", documentQueryKeys.document("/repo", "task-1", "plan")],
+      ["qaReport", documentQueryKeys.document("/repo", "task-1", "qaReport")],
     ] as const;
-    const inactiveDocumentKey = documentQueryKeys.spec("/repo", "task-2");
+    const inactiveDocumentKey = documentQueryKeys.document("/repo", "task-2", "spec");
     for (const [, key] of activeDocuments) {
       queryClient.setQueryData(key, { markdown: "# Stale", updatedAt: null });
     }
@@ -710,8 +712,8 @@ describe("TaskViewSync", () => {
       return pendingPlan.promise;
     });
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const specKey = documentQueryKeys.spec("/repo", "task-1");
-    const planKey = documentQueryKeys.plan("/repo", "task-1");
+    const specKey = documentQueryKeys.document("/repo", "task-1", "spec");
+    const planKey = documentQueryKeys.document("/repo", "task-1", "plan");
     for (const key of [specKey, planKey]) {
       queryClient.setQueryData(key, { markdown: "# Stale", updatedAt: null });
     }
@@ -751,7 +753,7 @@ describe("TaskViewSync", () => {
     const loadFreshDocument = mock(async () => ({ markdown: "# Snapshot", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
-    queryClient.setQueryData(documentQueryKeys.plan("/inactive", "task-1"), {
+    queryClient.setQueryData(documentQueryKeys.document("/inactive", "task-1", "plan"), {
       markdown: "# Stale",
       updatedAt: null,
     });
@@ -762,7 +764,8 @@ describe("TaskViewSync", () => {
     expect(listTasks).not.toHaveBeenCalledWith("/inactive");
     expect(loadFreshDocument).not.toHaveBeenCalled();
     expect(
-      queryClient.getQueryState(documentQueryKeys.plan("/inactive", "task-1"))?.isInvalidated,
+      queryClient.getQueryState(documentQueryKeys.document("/inactive", "task-1", "plan"))
+        ?.isInvalidated,
     ).toBe(true);
   });
 
@@ -771,11 +774,11 @@ describe("TaskViewSync", () => {
     const calls = recordQueryOperations(queryClient);
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
     queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+    queryClient.setQueryData(documentQueryKeys.document("/repo", "task-1", "spec"), {
       markdown: "# Active stale",
       updatedAt: null,
     });
-    queryClient.setQueryData(documentQueryKeys.spec("/inactive", "task-1"), {
+    queryClient.setQueryData(documentQueryKeys.document("/inactive", "task-1", "spec"), {
       markdown: "# Inactive stale",
       updatedAt: null,
     });
@@ -796,7 +799,7 @@ describe("TaskViewSync", () => {
     }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
     queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
-    const documentKey = documentQueryKeys.spec("/repo-b", "/repo-b-task");
+    const documentKey = documentQueryKeys.document("/repo-b", "/repo-b-task", "spec");
     queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
     const unsubscribe = observeDocument(queryClient, documentKey);
 
@@ -889,7 +892,7 @@ describe("TaskViewSync", () => {
     const { queryClient, sync } = createSync(createPorts());
     queryClient.setQueryData(taskQueryKeys.repoData("/closed"), { tasks: [] });
     queryClient.setQueryData(taskQueryKeys.ids("/closed"), ["task-1"]);
-    queryClient.setQueryData(documentQueryKeys.plan("/closed", "task-1"), {
+    queryClient.setQueryData(documentQueryKeys.document("/closed", "task-1", "plan"), {
       markdown: "# Plan",
       updatedAt: null,
     });
@@ -899,7 +902,9 @@ describe("TaskViewSync", () => {
 
     expect(queryClient.getQueryState(taskQueryKeys.repoData("/closed"))).toBeUndefined();
     expect(queryClient.getQueryState(taskQueryKeys.ids("/closed"))).toBeUndefined();
-    expect(queryClient.getQueryState(documentQueryKeys.plan("/closed", "task-1"))).toBeUndefined();
+    expect(
+      queryClient.getQueryState(documentQueryKeys.document("/closed", "task-1", "plan")),
+    ).toBeUndefined();
     expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/open"))).toEqual({
       tasks: [],
     });

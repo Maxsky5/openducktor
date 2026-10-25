@@ -1,3 +1,4 @@
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import type {
   CodexAppServerAdapter,
@@ -74,9 +75,13 @@ export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly onBackgroundFailure: (
     failure: HostOperationErrorAggregate,
   ) => Effect.Effect<void, never>;
-  readonly resolveRuntimePolicy: (
-    scope: AgentSessionScope,
-  ) => Effect.Effect<CodexEffectivePolicy, HostError>;
+  /** The Codex policy of a session. A workflow role that writes keeps workspace-write. */
+  readonly resolveRuntimePolicy: (input: {
+    repoPath: string;
+    sessionScope: AgentSessionScope;
+  }) => Effect.Effect<CodexEffectivePolicy, HostError>;
+  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  readonly resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   /** Resolves the managed MCP server of the workspace that owns a session repository. */
   readonly resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
   readonly createController?: (options: CodexAppServerAdapterOptions) => CodexSessionController;

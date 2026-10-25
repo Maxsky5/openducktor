@@ -1,3 +1,4 @@
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { randomUUID } from "node:crypto";
 import {
   freeArtifactCodeSchema,
@@ -25,16 +26,16 @@ export const createArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreScope & ArtifactStoreContent & { name: string; code?: string | undefined },
   updatedAt: Date,
+  workflow: TaskWorkflow,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireMutableTask(session, input);
+    yield* requireMutableTask(session, input, workflow);
     yield* validateContentSize(input.content);
-    const code = yield* pickCode(session, input);
+    const code = yield* pickCode(session, input, workflow);
     const row = {
       artifactId: randomUUID(),
       taskId: input.taskId,
       classification: "free" as const,
-      workflowKind: null,
       code,
       name: input.name,
       revision: 1,
@@ -57,9 +58,10 @@ export const renameArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreReference & { name: string },
   updatedAt: Date,
+  workflow: TaskWorkflow,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const previous = yield* requireFreeArtifact(session, input);
+    const previous = yield* requireFreeArtifact(session, input, workflow);
     const changes = { name: input.name, revision: previous.revision + 1, updatedAt };
     const artifact = yield* artifactMetadataFromRow({ ...previous, ...changes });
     yield* session.execute(
@@ -82,9 +84,10 @@ export const replaceArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreReference & ArtifactStoreContent & { name?: string | undefined },
   updatedAt: Date,
+  workflow: TaskWorkflow,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const previous = yield* requireFreeArtifact(session, input);
+    const previous = yield* requireFreeArtifact(session, input, workflow);
     yield* validateContentSize(input.content);
     const changes = {
       name: input.name ?? previous.name,
@@ -114,9 +117,10 @@ export const replaceArtifactInDatabase = (
 export const deleteArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreReference,
+  workflow: TaskWorkflow,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireFreeArtifact(session, input);
+    yield* requireFreeArtifact(session, input, workflow);
     yield* session.execute(
       (database) =>
         database
@@ -135,6 +139,7 @@ export const deleteArtifactInDatabase = (
 const pickCode = (
   session: TaskStoreSession,
   input: ArtifactStoreScope & { name: string; code?: string | undefined },
+  workflow: TaskWorkflow,
 ): Effect.Effect<string, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     if (input.code !== undefined) {
@@ -142,6 +147,12 @@ const pickCode = (
       if (!parsed.success) {
         return yield* new HostValidationError({
           message: parsed.error.issues[0]?.message ?? "Use a valid free artifact code.",
+          field: "code",
+        });
+      }
+      if (workflow.artifact(input.code) !== undefined) {
+        return yield* new HostValidationError({
+          message: `The ${input.code} code identifies a workflow artifact. Choose another code for a free artifact.`,
           field: "code",
         });
       }
@@ -173,7 +184,7 @@ const pickCode = (
       .replace(/[^a-z0-9]+/gu, "-")
       .replace(/^-+|-+$/gu, "");
     let base = slug || "artifact";
-    if (!/^[a-z]/u.test(base) || base === "spec" || base === "plan") {
+    if (!/^[a-z]/u.test(base) || workflow.artifact(base) !== undefined) {
       base = `artifact-${base}`;
     }
     base = base.slice(0, 128).replace(/-+$/u, "");
@@ -185,15 +196,18 @@ const pickCode = (
     return code;
   });
 
+/** A task in a terminal state of its workflow is read-only. */
 const requireMutableTask = (
   session: TaskStoreSession,
   input: ArtifactStoreScope,
+  workflow: TaskWorkflow,
 ): Effect.Effect<void, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const task = yield* requireTaskRow(session, input.taskId, input.repoPath);
-    if (task.status === "closed") {
+    if (workflow.isTerminalState(task.status)) {
       return yield* new HostValidationError({
-        message: "Closed tasks are read-only. Reopen the task before changing a free artifact.",
+        message:
+          "Tasks in a terminal state are read-only. Reopen the task before changing a free artifact.",
         field: "taskId",
       });
     }
@@ -212,16 +226,16 @@ const validateContentSize = (content: Uint8Array): Effect.Effect<void, HostValid
 const requireFreeArtifact = (
   session: TaskStoreSession,
   input: ArtifactStoreReference,
+  workflow: TaskWorkflow,
 ): Effect.Effect<
   Pick<TaskArtifactRow, keyof typeof artifactMetadataSelection>,
   SqliteTaskStoreWriteError
 > =>
   Effect.gen(function* () {
-    yield* requireMutableTask(session, input);
+    yield* requireMutableTask(session, input, workflow);
     if (input.artifactId.startsWith(`workflow:${input.taskId}:`)) {
       return yield* new HostValidationError({
-        message:
-          "Use the Specification, Implementation Plan, or QA workflow control to change a workflow artifact.",
+        message: "Use the workflow control of the artifact to change a workflow artifact.",
         field: "artifactId",
       });
     }

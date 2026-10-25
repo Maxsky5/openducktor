@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { sourceIssueReferenceSchema } from "./git-schemas";
-import { planSubtaskIssueTypeSchema, taskPrioritySchema } from "./task-schemas";
+import { issueTypeSchema, taskPrioritySchema } from "./task-schemas";
 
 export const sourceIssueSchema = sourceIssueReferenceSchema.extend({
   title: z.string().min(1),
@@ -53,7 +53,7 @@ export const issueItemsImportInputSchema = z.object({
       z.object({
         sourceId: z.string().min(1),
         revision: z.string().min(1),
-        issueType: planSubtaskIssueTypeSchema,
+        issueType: issueTypeSchema,
         priority: taskPrioritySchema,
         labels: z.array(z.string()),
       }),

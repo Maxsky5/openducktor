@@ -1,12 +1,13 @@
 import type {
   AgentSessionRecord,
   RepoConfig,
-  TaskCard,
   TaskStopImpactOperation,
 } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import type { GitPort } from "../../../ports/git-port";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
@@ -15,13 +16,13 @@ import {
   collectDeleteWorktreePaths,
   collectResetWorktreePaths,
   managedWorktreeBaseForRepoConfig,
-  workflowCleanupSessionRoles,
+  workflowRoleIds,
 } from "./task-cleanup-support";
 
 export type RemovedWorktreeOperation = Exclude<TaskStopImpactOperation, "reset_implementation">;
 
 export type RemovedWorktreeTarget = {
-  task: TaskCard;
+  task: TaskRecord;
   taskId: string;
   sessions: AgentSessionRecord[];
 };
@@ -37,6 +38,7 @@ type RemovedWorktreeDependencies = {
 const collectRemovedWorktreePaths = (
   { taskWorktreeService, ...dependencies }: RemovedWorktreeDependencies,
   operation: RemovedWorktreeOperation,
+  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   repoPath: string,
   targets: RemovedWorktreeTarget[],
@@ -51,6 +53,7 @@ const collectRemovedWorktreePaths = (
         dependencies,
         repoPath,
         managedWorktreeBasePath,
+        workflow,
         targets,
       );
     }
@@ -62,7 +65,7 @@ const collectRemovedWorktreePaths = (
           managedWorktreeBasePath,
           taskId,
           sessions,
-          workflowCleanupSessionRoles,
+          workflowRoleIds(workflow),
           "reset task",
         ),
       );
@@ -71,11 +74,11 @@ const collectRemovedWorktreePaths = (
     const closeDependencies = taskWorktreeService
       ? { ...dependencies, taskWorktreeService }
       : dependencies;
-    // Close returns early for a closed task, so it removes nothing there.
+    // Close returns early for a terminal task, so it removes nothing there.
     const paths = yield* Effect.forEach(
-      targets.filter(({ task }) => task.status !== "closed"),
+      targets.filter(({ task }) => !workflow.isTerminalState(task.status)),
       ({ task, sessions }) =>
-        collectCloseWorktreePaths(closeDependencies, repoPath, task, sessions),
+        collectCloseWorktreePaths(closeDependencies, repoPath, workflow, task, sessions),
     );
     return paths.flat();
   });
@@ -87,6 +90,7 @@ const collectRemovedWorktreePaths = (
 export const countRemovedWorktrees = (
   dependencies: RemovedWorktreeDependencies,
   operation: RemovedWorktreeOperation,
+  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   repoPath: string,
   targets: RemovedWorktreeTarget[],
@@ -95,6 +99,7 @@ export const countRemovedWorktrees = (
     const paths = yield* collectRemovedWorktreePaths(
       dependencies,
       operation,
+      workflow,
       repoConfig,
       repoPath,
       targets,

@@ -1,4 +1,4 @@
-import type { IssueType } from "@openducktor/contracts";
+import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 import {
   ISSUE_TYPE_CHOICES,
   issueTypeGuidance,
@@ -53,17 +53,6 @@ const issueTypePaint = (theme: AppTheme, issueType: IssueType): IssueTypePaint =
         card: { background: withAlpha(d.muted, 0.8), border: d.input },
         tile: { background: d.secondary, foreground: d.foreground },
         indicator: { background: d.secondary, border: d.input, foreground: d.foreground },
-      };
-    case "epic":
-      return {
-        icon: "layers",
-        card: { background: d.pendingSurface, border: d.pendingBorder },
-        tile: { background: d.pendingSurface, foreground: d.pendingMuted },
-        indicator: {
-          background: d.pendingSurface,
-          border: d.pendingBorder,
-          foreground: d.pendingMuted,
-        },
       };
   }
 };

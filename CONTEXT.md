@@ -41,16 +41,8 @@ The unit of work OpenDucktor coordinates through specification, planning, buildi
 _Avoid_: ticket, card, issue
 
 **Issue Type**:
-The category of a **Task** that determines workflow expectations and hierarchy rules. OpenDucktor **Issue Types** are `epic`, `feature`, `task`, and `bug`.
+The category of a **Task** that determines workflow expectations. OpenDucktor **Issue Types** are `feature`, `task`, and `bug`.
 _Avoid_: task type, label, kind, category
-
-**Epic**:
-A **Task** that can contain direct child tasks. An **Epic** has at most one child level; its child tasks cannot have children.
-_Avoid_: project, milestone, parent story
-
-**Subtask**:
-A direct child of an **Epic**. A **Subtask** is still a **Task**, but it cannot have children.
-_Avoid_: checklist item, nested issue
 
 **Task Status**:
 The SQLite-backed lifecycle status of a **Task**. OpenDucktor **Task Statuses** are `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review`, and `closed`. `ai_review` and `human_review` are statuses, not review activities.

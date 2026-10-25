@@ -1,21 +1,23 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
-  type AgentRole,
-  type AutopilotActionId,
-  type AutopilotEventId,
   type AutopilotOutcome,
   type AutopilotRunEvent,
   autopilotStateSchema,
-  createDefaultNotificationSettings,
   type GlobalConfig,
   globalConfigSchema,
   type HostEventEnvelope,
   type NotificationActionOccurrence,
   repoConfigSchema,
-  type TaskStatus,
   type WorkflowLaunchResult,
 } from "@openducktor/contracts";
-import { AUTOPILOT_ACTION_DEFINITIONS } from "@openducktor/core";
+import {
+  type BuiltinTaskEventId,
+  getAutopilotAction,
+  workflowArtifactSubmitEvent,
+  createBuiltinNotificationSettings,
+} from "@openducktor/workflows";
 import { Deferred, Effect, Fiber } from "effect";
 import { withConfigCommit } from "../../adapters/config/config-commit";
 import {
@@ -25,16 +27,17 @@ import {
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import { createHostEventBus } from "../../events/host-event-bus";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { TaskRecord, TaskStorePort } from "../../ports/task-repository-ports";
 import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskServiceWithMutationProgressTestDouble } from "../../test-support/task-service-test-double";
 import type { AutomaticLaunchInput } from "../agent-sessions/test-support/workflow-launch-harness";
 import { createSerialGate } from "../../effect/serial-gate";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
+import { enrichTask, enrichTasks } from "../tasks/support/task-workflow-helpers";
 import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { type AutopilotService, createAutopilotService } from "./autopilot-service";
 
-const ALL_RULES: Array<{ eventId: AutopilotEventId; actionIds: AutopilotActionId[] }> = [
+const ALL_RULES: Array<{ eventId: string; actionIds: string[] }> = [
   { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
   { eventId: "taskProgressedToReadyForDev", actionIds: ["startBuilder"] },
   { eventId: "taskProgressedToAiReview", actionIds: ["startQa"] },
@@ -83,7 +86,7 @@ const launchResult = (
   workspaceId: request.workspaceId,
   repoPath: request.repoPath,
   taskId: request.taskId,
-  role: AUTOPILOT_ACTION_DEFINITIONS[request.policy.actionId].role,
+  role: getAutopilotAction(request.policy.actionId).role,
   status: "completed",
   ...patch,
 });
@@ -132,45 +135,69 @@ const createAutopilotHarness = async ({
   // Pauses build completion after its commit, before the mutation returns.
   let afterCommitGate: Effect.Effect<void> = Effect.void;
   let taskIdsGate: Effect.Effect<void> = Effect.void;
-  let buildCompletedStatus: TaskStatus = "ai_review";
-  const move = (status: TaskStatus) => (input: { repoPath: string; taskId: string }) =>
-    store(input.repoPath).transitionTask({
-      repoPath: input.repoPath,
-      taskId: input.taskId,
-      status,
-    });
+  let buildCompletedStatus: string = "ai_review";
+  const move = (status: string) => (input: { repoPath: string; taskId: string }) =>
+    store(input.repoPath)
+      .transitionTask({ repoPath: input.repoPath, taskId: input.taskId, status })
+      .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
+  // Each operation commits the workflow decision of its event, with the signal of its outcome.
+  const decided =
+    (eventId: BuiltinTaskEventId, prepare: (task: TaskRecord) => TaskRecord = (task) => task) =>
+    (input: { repoPath: string; taskId: string }) =>
+      store(input.repoPath)
+        .getTask(input)
+        .pipe(
+          Effect.flatMap((task) => {
+            const decision = builtinTaskWorkflow.decide(eventId, prepare(task));
+            if (decision.kind !== "transition") return Effect.succeed(task);
+            return store(input.repoPath).transitionTask({
+              repoPath: input.repoPath,
+              taskId: input.taskId,
+              status: decision.to,
+              cause: decision.cause,
+            });
+          }),
+          Effect.map((task) => enrichTask(builtinTaskWorkflow, task)),
+        );
+  const withApprovedQa = (task: TaskRecord): TaskRecord =>
+    buildCompletedStatus === "human_review"
+      ? {
+          ...task,
+          artifactSummary: {
+            ...task.artifactSummary,
+            qaReport: { present: true, verdict: "approved" },
+          },
+        }
+      : task;
   const base = createTaskServiceWithMutationProgressTestDouble({
     // Publication reads a task snapshot, so the gate pauses an operation after its commit.
     listTasks: (input) =>
-      publicationGate.pipe(Effect.andThen(store(input.repoPath).listTasks(input))),
+      publicationGate.pipe(
+        Effect.andThen(store(input.repoPath).listTasks(input)),
+        Effect.map((tasks) => enrichTasks(builtinTaskWorkflow, tasks)),
+      ),
     listTaskIds: (input) =>
       taskIdsGate.pipe(Effect.andThen(store(input.repoPath).listTaskIds(input))),
-    setSpec: (input) => move("spec_ready")(input).pipe(Effect.as({ markdown: input.markdown })),
-    setPlan: (input) =>
-      move("ready_for_dev")(input).pipe(
+    workflowArtifactSave: (input) => {
+      const eventId = workflowArtifactSubmitEvent(input.code, input.verdict);
+      if (eventId === undefined) throw new Error(`No test event for ${input.code}.`);
+      return decided(eventId)(input).pipe(
         Effect.as({
           artifact: { markdown: input.markdown },
           changes: { taskIds: [input.taskId], removedTaskIds: [] },
         }),
-      ),
+      );
+    },
     buildCompleted: (input) =>
-      move(buildCompletedStatus)(input).pipe(Effect.tap(() => afterCommitGate)),
-    buildBlocked: move("blocked"),
-    buildResumed: move("in_progress"),
-    qaRejected: (input) =>
-      move("in_progress")(input).pipe(
-        Effect.map((task) => ({ task, artifact: { markdown: input.markdown } })),
-      ),
-    qaApproved: (input) =>
-      move("human_review")(input).pipe(
-        Effect.map((task) => ({ task, artifact: { markdown: input.markdown } })),
-      ),
-    humanRequestChanges: move("in_progress"),
+      decided("build-completed", withApprovedQa)(input).pipe(Effect.tap(() => afterCommitGate)),
+    buildBlocked: decided("build-blocked"),
+    buildResumed: decided("build-resumed"),
+    humanRequestChanges: decided("human-request-changes"),
     resetImplementation: move("ready_for_dev"),
     transitionTask: (input) => move(input.status)(input),
     deleteTask: (input) =>
       store(input.repoPath)
-        .deleteTask({ repoPath: input.repoPath, taskId: input.taskId, deleteSubtasks: false })
+        .deleteTask({ repoPath: input.repoPath, taskId: input.taskId })
         .pipe(
           Effect.as({
             ok: true,
@@ -205,7 +232,11 @@ const createAutopilotHarness = async ({
     },
     observeStatusChanges: (changes) => autopilot?.observe(changes),
   });
-  const tasks = createEventPublishingTaskService({ taskService: base, taskSyncService: sync });
+  const tasks = createEventPublishingTaskService({
+    taskWorkflows: builtinTaskWorkflows,
+    taskService: base,
+    taskSyncService: sync,
+  });
 
   let readFailure: HostOperationError | null = null;
   const settingsConfig: SettingsConfigPort = withConfigCommit(
@@ -234,6 +265,7 @@ const createAutopilotHarness = async ({
 
   const start = () => {
     autopilot = createAutopilotService({
+      taskWorkflows: builtinTaskWorkflows,
       settingsConfig,
       tasks,
       mutations: sync,
@@ -264,7 +296,7 @@ const createAutopilotHarness = async ({
             notifications.push(occurrence);
             return Effect.succeed({
               occurrence,
-              settings: createDefaultNotificationSettings(),
+              settings: createBuiltinNotificationSettings(),
               preferenceRevision: 0,
             });
           }),
@@ -281,11 +313,12 @@ const createAutopilotHarness = async ({
     if (!autopilot) throw new Error("Start Autopilot first.");
     return autopilot;
   };
-  const createTask = async (repoPath: string, status: TaskStatus, title = "Task") => {
+  const createTask = async (repoPath: string, status: string, title = "Task") => {
     const task = await Effect.runPromise(
       store(repoPath).createTask({
         repoPath,
-        task: { title, issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title, issueType: "task", priority: 2 },
       }),
     );
     if (status !== "open")
@@ -326,7 +359,7 @@ const createAutopilotHarness = async ({
     setRespond: (next: typeof respond) => {
       respond = next;
     },
-    setBuildCompletedStatus: (status: TaskStatus) => {
+    setBuildCompletedStatus: (status: string) => {
       buildCompletedStatus = status;
     },
     setReadFailure: (failure: HostOperationError) => {
@@ -354,25 +387,35 @@ describe("host Autopilot", () => {
   const plan = (repoPath: string, taskId: string) => ({
     repoPath,
     taskId,
+    code: "plan",
     markdown: "# Plan",
-    subtasks: [],
-    hasExplicitSubtasks: false,
+    submit: true,
+    sourceTool: "workflow_artifact_save",
+    updatedBy: "user",
   });
   test.each<{
     name: string;
-    from: TaskStatus;
-    to: TaskStatus;
+    from: string;
+    to: string;
     mutate: (h: Harness, taskId: string) => Effect.Effect<unknown, unknown>;
-    eventId: AutopilotEventId;
-    actionId: AutopilotActionId;
-    role: AgentRole;
+    eventId: string;
+    actionId: string;
+    role: string;
   }>([
     {
       name: "a spec save from Backlog",
       from: "open",
       to: "spec_ready",
       mutate: (h: Harness, taskId: string) =>
-        h.tasks.setSpec({ repoPath: "/repos/alpha", taskId, markdown: "# Spec" }),
+        h.tasks.workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath: "/repos/alpha",
+          taskId,
+          code: "spec",
+          markdown: "# Spec",
+          submit: true,
+        }),
       eventId: "taskProgressedToSpecReady",
       actionId: "startPlanner",
       role: "planner",
@@ -381,7 +424,8 @@ describe("host Autopilot", () => {
       name: "a plan save from Backlog",
       from: "open",
       to: "ready_for_dev",
-      mutate: (h: Harness, taskId: string) => h.tasks.setPlan(plan("/repos/alpha", taskId)),
+      mutate: (h: Harness, taskId: string) =>
+        h.tasks.workflowArtifactSave(plan("/repos/alpha", taskId)),
       eventId: "taskProgressedToReadyForDev",
       actionId: "startBuilder",
       role: "build",
@@ -390,7 +434,8 @@ describe("host Autopilot", () => {
       name: "a plan save from Spec Ready",
       from: "spec_ready",
       to: "ready_for_dev",
-      mutate: (h: Harness, taskId: string) => h.tasks.setPlan(plan("/repos/alpha", taskId)),
+      mutate: (h: Harness, taskId: string) =>
+        h.tasks.workflowArtifactSave(plan("/repos/alpha", taskId)),
       eventId: "taskProgressedToReadyForDev",
       actionId: "startBuilder",
       role: "build",
@@ -410,7 +455,16 @@ describe("host Autopilot", () => {
       from: "ai_review",
       to: "in_progress",
       mutate: (h: Harness, taskId: string) =>
-        h.tasks.qaRejected({ repoPath: "/repos/alpha", taskId, markdown: "Rejected" }),
+        h.tasks.workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath: "/repos/alpha",
+          taskId,
+          markdown: "Rejected",
+          code: "qaReport",
+          verdict: "rejected",
+          submit: true,
+        }),
       eventId: "taskRejectedByQa",
       actionId: "startReviewQaFeedbacks",
       role: "build",
@@ -420,7 +474,16 @@ describe("host Autopilot", () => {
       from: "blocked",
       to: "in_progress",
       mutate: (h: Harness, taskId: string) =>
-        h.tasks.qaRejected({ repoPath: "/repos/alpha", taskId, markdown: "Rejected" }),
+        h.tasks.workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath: "/repos/alpha",
+          taskId,
+          markdown: "Rejected",
+          code: "qaReport",
+          verdict: "rejected",
+          submit: true,
+        }),
       eventId: "taskRejectedByQa",
       actionId: "startReviewQaFeedbacks",
       role: "build",
@@ -430,7 +493,16 @@ describe("host Autopilot", () => {
       from: "ai_review",
       to: "human_review",
       mutate: (h: Harness, taskId: string) =>
-        h.tasks.qaApproved({ repoPath: "/repos/alpha", taskId, markdown: "Approved" }),
+        h.tasks.workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath: "/repos/alpha",
+          taskId,
+          markdown: "Approved",
+          code: "qaReport",
+          verdict: "approved",
+          submit: true,
+        }),
       eventId: "taskProgressedToHumanReview",
       actionId: "startGeneratePullRequest",
       role: "build",
@@ -496,7 +568,17 @@ describe("host Autopilot", () => {
     await run(h.tasks.buildResumed({ repoPath, taskId: blocked }));
     await run(h.tasks.resetImplementation({ repoPath, taskId: building }));
     await run(h.tasks.transitionTask({ repoPath, taskId: planned, status: "ai_review" }));
-    await run(h.tasks.setSpec({ repoPath, taskId: eligible, markdown: "# Revision" }));
+    await run(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath,
+        taskId: eligible,
+        code: "spec",
+        markdown: "# Revision",
+        submit: true,
+      }),
+    );
     await settleFibers();
 
     expect(h.launched).toEqual([]);
@@ -551,7 +633,16 @@ describe("host Autopilot", () => {
       ),
     );
     const mutation = Effect.runFork(
-      h.tasks.qaRejected({ repoPath: "/repos/alpha", taskId, markdown: "Rejected" }),
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath: "/repos/alpha",
+        taskId,
+        markdown: "Rejected",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
     );
     await run(Deferred.await(entered));
     await settleFibers();
@@ -577,13 +668,61 @@ describe("host Autopilot", () => {
     };
 
     await step(h.tasks.buildCompleted({ repoPath, taskId }), 1);
-    await step(h.tasks.qaRejected({ repoPath, taskId, markdown: "Rejected" }), 2);
+    await step(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath,
+        taskId,
+        markdown: "Rejected",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+      2,
+    );
     await step(h.tasks.buildCompleted({ repoPath, taskId }), 3);
-    await step(h.tasks.qaRejected({ repoPath, taskId, markdown: "Rejected again" }), 4);
+    await step(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath,
+        taskId,
+        markdown: "Rejected again",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+      4,
+    );
     await run(h.tasks.buildBlocked({ repoPath, taskId, reason: "Needs input" }));
-    await step(h.tasks.qaRejected({ repoPath, taskId, markdown: "Rejected from blocked" }), 5);
+    await step(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath,
+        taskId,
+        markdown: "Rejected from blocked",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+      5,
+    );
     await step(h.tasks.buildCompleted({ repoPath, taskId }), 6);
-    await step(h.tasks.qaApproved({ repoPath, taskId, markdown: "Approved" }), 7);
+    await step(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath,
+        taskId,
+        markdown: "Approved",
+        code: "qaReport",
+        verdict: "approved",
+        submit: true,
+      }),
+      7,
+    );
     // Human Review to In Progress is a QA rejection's status pair, but a human request is not one.
     await run(h.tasks.humanRequestChanges({ repoPath, taskId, note: "Change it" }));
     await settleFibers();
@@ -680,7 +819,18 @@ describe("host Autopilot", () => {
         Effect.andThen(Deferred.await(removedRelease)),
       ),
     );
-    await run(h.tasks.qaRejected({ repoPath: "/repos/beta", taskId: betaTask, markdown: "No" }));
+    await run(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath: "/repos/beta",
+        taskId: betaTask,
+        markdown: "No",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+    );
     await run(Deferred.await(removedEntered));
     await h.saveConfig(configFor(ALL_RULES, { beta: { removal: true } }));
     await run(Deferred.succeed(removedRelease, undefined));
@@ -773,7 +923,18 @@ describe("host Autopilot", () => {
     expect(h.service().readState({ workspaceId: "beta" }).outcomes).toEqual([]);
 
     h.setLaunchGate(Effect.void);
-    await run(h.tasks.qaRejected({ repoPath: "/repos/alpha", taskId: alphaTask, markdown: "No" }));
+    await run(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath: "/repos/alpha",
+        taskId: alphaTask,
+        markdown: "No",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+    );
     await waitUntil(() => h.outcomes().length === 2, "coverage after reopen");
     expect(actionsOf(h)).toEqual(["startReviewQaFeedbacks"]);
   });
@@ -785,7 +946,8 @@ describe("host Autopilot", () => {
     // The Builder launch completes the build while it still runs, as a chained agent would.
     h.setRespond((request) =>
       request.policy.actionId === "startBuilder"
-        ? h.tasks.buildCompleted({ repoPath, taskId }).pipe(
+        ? h.tasks.buildResumed({ repoPath, taskId }).pipe(
+            Effect.andThen(h.tasks.buildCompleted({ repoPath, taskId })),
             Effect.mapError(
               (cause) => new HostOperationError({ operation: "x", message: String(cause) }),
             ),
@@ -794,7 +956,7 @@ describe("host Autopilot", () => {
         : Effect.succeed(launchResult(request, { session, startMode: "reuse" })),
     );
 
-    await run(h.tasks.setPlan(plan(repoPath, taskId)));
+    await run(h.tasks.workflowArtifactSave(plan(repoPath, taskId)));
     await waitUntil(() => h.outcomes().length === 2, "the chained outcome");
 
     expect(actionsOf(h)).toEqual(["startBuilder", "startQa"]);
@@ -885,7 +1047,7 @@ describe("host Autopilot", () => {
     const release = await run(Deferred.make<void>());
     h.setLaunchGate(Deferred.await(release));
     await run(h.tasks.buildCompleted({ repoPath, taskId: deleted }));
-    await run(h.tasks.deleteTask({ repoPath, taskId: deleted, deleteSubtasks: false }));
+    await run(h.tasks.deleteTask({ repoPath, taskId: deleted }));
     await run(Deferred.succeed(release, undefined));
     await waitUntil(() => h.outcomes().length === 2, "the deleted task skip");
 
@@ -952,7 +1114,18 @@ describe("host Autopilot", () => {
       failure: null,
     });
 
-    await run(restarted.tasks.qaRejected({ repoPath, taskId, markdown: "Rejected" }));
+    await run(
+      restarted.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath,
+        taskId,
+        markdown: "Rejected",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+    );
     await waitUntil(() => restarted.launched.length === 1, "coverage after restart");
     expect(actionsOf(restarted)).toEqual(["startReviewQaFeedbacks"]);
   });
@@ -967,7 +1140,18 @@ describe("host Autopilot", () => {
 
     await run(h.service().dispose());
     await run(Deferred.succeed(release, undefined));
-    await run(h.tasks.qaRejected({ repoPath: "/repos/alpha", taskId, markdown: "Rejected" }));
+    await run(
+      h.tasks.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath: "/repos/alpha",
+        taskId,
+        markdown: "Rejected",
+        code: "qaReport",
+        verdict: "rejected",
+        submit: true,
+      }),
+    );
     await settleFibers();
 
     expect(h.launched).toEqual([]);
@@ -1000,7 +1184,8 @@ describe("host Autopilot", () => {
     const ready = await startedHarness({ stores: h.stores });
     ready.service().observe({
       repoPath: "/repos/unknown",
-      operation: "qa-rejected",
+      operation: "save-workflow-artifact",
+      signal: "taskRejectedByQa",
       statusChange: {
         previousStatus: "ai_review",
         task: { id: "task", title: "Task", status: "in_progress" },

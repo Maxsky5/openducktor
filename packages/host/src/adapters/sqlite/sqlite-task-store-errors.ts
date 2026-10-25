@@ -12,7 +12,6 @@ import {
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
-import type { WorkflowArtifactKind } from "./sqlite-task-store-schema";
 
 export type SqliteTaskStorePersistenceError = SqliteTaskStoreDataError | TaskStoreError;
 export type SqliteTaskStoreReadError = SqliteTaskStoreDataError | TaskStoreError;
@@ -26,7 +25,7 @@ type SqliteTaskStoreAdapterErrorDetails = {
 export type SqliteTaskStoreDataErrorDetails =
   | { readonly taskId: string }
   | {
-      readonly kind: WorkflowArtifactKind;
+      readonly code: string;
       readonly taskId: string;
       readonly value: number;
     };

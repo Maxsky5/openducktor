@@ -105,11 +105,7 @@ function TaskArtifactList({ owner, taskId }: { owner: WorkOwner; taskId: string 
             <ArtifactRow
               key={artifact.artifactId}
               artifact={artifact}
-              href={routes.documents(
-                workspaceId,
-                taskId,
-                workflowDocumentKey(artifact.workflowKind),
-              )}
+              href={routes.documents(workspaceId, taskId, workflowDocumentKey(artifact.code))}
             />
           ))}
         </ListSection>

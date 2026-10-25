@@ -57,7 +57,7 @@ describe("taskWorkflowSteps", () => {
       agentWorkflows: {
         spec: closed,
         planner: closed,
-        builder: { required: true, canSkip: false, available: false, completed: true },
+        build: { required: true, canSkip: false, available: false, completed: true },
         qa: closed,
       },
     });

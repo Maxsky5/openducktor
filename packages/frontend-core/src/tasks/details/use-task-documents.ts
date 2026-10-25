@@ -7,6 +7,13 @@ import { ensureTaskDocumentQueryData } from "./task-document-query-data";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
 
+/** The workflow artifact code of each document section. */
+const SECTION_CODES = {
+  spec: "spec",
+  plan: "plan",
+  qa: "qaReport",
+} as const satisfies Record<DocumentSectionKey, string>;
+
 export type TaskDocumentState = {
   markdown: string;
   updatedAt: string | null;
@@ -55,9 +62,9 @@ export function useTaskDocuments(taskId: string | null, open: boolean, cacheScop
   const activeTaskId = taskId ?? DISABLED_TASK_ID;
   const queryOptionsBySection = useMemo(
     () => ({
-      spec: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "spec"),
-      plan: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "plan"),
-      qa: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, "qa"),
+      spec: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, SECTION_CODES.spec),
+      plan: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, SECTION_CODES.plan),
+      qa: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, SECTION_CODES.qa),
     }),
     [activeTaskId, cacheScope, queryClient],
   );
@@ -97,9 +104,12 @@ export function useTaskDocuments(taskId: string | null, open: boolean, cacheScop
 
       const options = queryOptionsBySection[section];
       void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-      void fetchFreshTaskDocumentFromQuery(queryClient, cacheScope, taskId, section).catch(
-        () => undefined,
-      );
+      void fetchFreshTaskDocumentFromQuery(
+        queryClient,
+        cacheScope,
+        taskId,
+        SECTION_CODES[section],
+      ).catch(() => undefined);
       return true;
     },
     [cacheScope, enabled, queryClient, queryOptionsBySection, taskId],

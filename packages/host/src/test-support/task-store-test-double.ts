@@ -1,8 +1,29 @@
 import { Effect } from "effect";
+import { HostResourceError } from "../effect/host-errors";
 import type { TaskStorePort } from "../ports/task-repository-ports";
 
 const unexpectedTaskStoreCall = (methodName: keyof TaskStorePort) => () =>
   Effect.die(new Error(`Unexpected task store call: ${methodName}`));
+
+/** A double that lists tasks reads one task from the same list, as the real store does. */
+const getTaskFromList =
+  (listTasks: TaskStorePort["listTasks"]): TaskStorePort["getTask"] =>
+  ({ repoPath, taskId }) =>
+    listTasks({ repoPath }).pipe(
+      Effect.flatMap((tasks) => {
+        const current = tasks.find((task) => task.id === taskId);
+        return current
+          ? Effect.succeed(current)
+          : Effect.fail(
+              new HostResourceError({
+                resource: "task",
+                operation: "test.getTask",
+                message: `Task not found: ${taskId}`,
+                details: { repoPath, taskId },
+              }),
+            );
+      }),
+    );
 
 export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePort>>(
   overrides: Overrides,
@@ -15,7 +36,7 @@ export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePor
   deleteArtifact: unexpectedTaskStoreCall("deleteArtifact"),
   recordAgentSessionActivity: unexpectedTaskStoreCall("recordAgentSessionActivity"),
   clearAgentSessionsByRoles: unexpectedTaskStoreCall("clearAgentSessionsByRoles"),
-  clearQaReports: unexpectedTaskStoreCall("clearQaReports"),
+  clearWorkflowArtifacts: unexpectedTaskStoreCall("clearWorkflowArtifacts"),
   clearTaskArtifacts: unexpectedTaskStoreCall("clearTaskArtifacts"),
   createTask: unexpectedTaskStoreCall("createTask"),
   deleteAgentSession: unexpectedTaskStoreCall("deleteAgentSession"),
@@ -23,17 +44,17 @@ export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePor
   diagnoseRepoStore: unexpectedTaskStoreCall("diagnoseRepoStore"),
   findTask: unexpectedTaskStoreCall("findTask"),
   listTaskReferences: unexpectedTaskStoreCall("listTaskReferences"),
-  getTask: unexpectedTaskStoreCall("getTask"),
+  getTask: overrides.listTasks
+    ? getTaskFromList(overrides.listTasks)
+    : unexpectedTaskStoreCall("getTask"),
   getTaskMetadata: unexpectedTaskStoreCall("getTaskMetadata"),
   listAgentSessionsForTasks: unexpectedTaskStoreCall("listAgentSessionsForTasks"),
   listPullRequestSyncCandidates: unexpectedTaskStoreCall("listPullRequestSyncCandidates"),
   listTaskIds: unexpectedTaskStoreCall("listTaskIds"),
   listTasks: unexpectedTaskStoreCall("listTasks"),
-  recordQaOutcome: unexpectedTaskStoreCall("recordQaOutcome"),
   setDirectMerge: unexpectedTaskStoreCall("setDirectMerge"),
-  setPlanArtifact: unexpectedTaskStoreCall("setPlanArtifact"),
   setPullRequest: unexpectedTaskStoreCall("setPullRequest"),
-  setSpecArtifact: unexpectedTaskStoreCall("setSpecArtifact"),
+  saveWorkflowArtifact: unexpectedTaskStoreCall("saveWorkflowArtifact"),
   transitionTask: unexpectedTaskStoreCall("transitionTask"),
   updateTask: unexpectedTaskStoreCall("updateTask"),
   updateAgentSessionModel: unexpectedTaskStoreCall("updateAgentSessionModel"),

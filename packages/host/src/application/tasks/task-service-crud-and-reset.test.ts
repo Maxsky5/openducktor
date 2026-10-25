@@ -1,6 +1,6 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError, TaskCreatedAssetError } from "../../effect/task-asset-error";
 import { createLiveWorkflowObservations } from "../agent-sessions/live-workflow-observations";
@@ -88,8 +88,7 @@ const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
 const metadataWithSessions = (
   agentSessions: ReturnType<typeof createAgentSessionRecord>[] = [],
 ) => ({
-  spec: { markdown: "" },
-  plan: { markdown: "" },
+  artifacts: {},
   agentSessions,
 });
 const createResetTaskStore = (
@@ -147,7 +146,7 @@ describe("createTaskService task mutations and reset", () => {
                 revision: 2,
                 updatedAt: null,
                 classification: "workflow",
-                workflowKind: "spec",
+                code: "spec",
                 mediaType: "text/markdown",
               },
             ]);
@@ -157,6 +156,7 @@ describe("createTaskService task mutations and reset", () => {
       });
       const base = createTaskServiceWithMutationProgress(createCleanupTaskServiceInput(taskStore));
       const service = createEventPublishingTaskService({
+        taskWorkflows: builtinTaskWorkflows,
         taskService: base,
         taskSyncService: createTaskSyncServiceForTest({
           taskService: base,
@@ -204,7 +204,7 @@ describe("createTaskService task mutations and reset", () => {
           live.accept({ type: "task_completion_updated", observation });
         }),
       );
-      const ids = ["task-1", "child", "unrelated"];
+      const ids = ["task-1", "unrelated"];
       for (const id of ids) {
         const state = completionState.ensure("/repo", id);
         state.observation.failure = {
@@ -217,13 +217,9 @@ describe("createTaskService task mutations and reset", () => {
       }
       let deleted = false;
       const service = createTaskDeleteUseCase({
+        taskWorkflows: builtinTaskWorkflows,
         ...createCleanupTaskServiceInput({
-          listTasks: () =>
-            Effect.succeed([
-              task({ id: "task-1", issueType: "epic" }),
-              task({ id: "child", parentId: "task-1" }),
-              task({ id: "unrelated" }),
-            ]),
+          listTasks: () => Effect.succeed([task({ id: "task-1" }), task({ id: "unrelated" })]),
           getTaskMetadata: () => Effect.succeed(metadataWithSessions()),
           deleteTask: () =>
             Effect.gen(function* () {
@@ -257,7 +253,6 @@ describe("createTaskService task mutations and reset", () => {
           service.deleteTask({
             repoPath: "/repo",
             taskId: "task-1",
-            deleteSubtasks: true,
           }),
         ),
       );
@@ -269,8 +264,7 @@ describe("createTaskService task mutations and reset", () => {
         });
         expect(live.snapshot("/repo").taskCompletions.map(({ taskId }) => taskId)).toEqual(ids);
       } else {
-        for (const id of ["task-1", "child"])
-          expect(completionState.ensure("/repo", id).observation.failure).toBeUndefined();
+        expect(completionState.ensure("/repo", "task-1").observation.failure).toBeUndefined();
         expect(live.snapshot("/repo").taskCompletions.map(({ taskId }) => taskId)).toEqual(
           failure === "publication" ? ["task-1", "unrelated"] : ["unrelated"],
         );
@@ -281,7 +275,7 @@ describe("createTaskService task mutations and reset", () => {
             _tag: "Failure",
             failure: {
               operation: "delete-task",
-              changes: { taskIds: ["task-1", "child"], removedTaskIds: ["task-1", "child"] },
+              changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] },
               failure: {
                 message:
                   failure === "publication"
@@ -310,6 +304,7 @@ describe("createTaskService task mutations and reset", () => {
       { id: createdTaskId, title: "Created", status: "open" },
     );
     const service = createTaskServiceWithMutationProgress({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: {
         createTask: () => Effect.fail(failure),
       },
@@ -319,7 +314,7 @@ describe("createTaskService task mutations and reset", () => {
       service
         .createTask({
           repoPath: "/repo",
-          task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+          task: { title: "Task", issueType: "task", priority: 2 },
         })
         .pipe(Effect.flip),
     );
@@ -333,24 +328,10 @@ describe("createTaskService task mutations and reset", () => {
     });
   });
 
-  test("creates a task after validating parent relationships and enriches the result", async () => {
+  test("creates a task and enriches the result", async () => {
     const calls: unknown[] = [];
-    const createdTask = task({ id: "task-2", parentId: "epic-1", status: "open" });
+    const createdTask = task({ id: "task-2", status: "open" });
     const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [task({ id: "epic-1", issueType: "epic", status: "open" })];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       createTask(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -378,19 +359,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getTaskMetadata() {
         return Effect.succeed(metadataWithSessions());
       },
@@ -422,29 +390,25 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const created = await Effect.runPromise(
-      createTaskService({ taskStore }).createTask({
+      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).createTask({
         repoPath: "/repo",
         task: {
           title: "Child",
           issueType: "task",
           priority: 2,
-          parentId: " epic-1 ",
-          aiReviewEnabled: true,
         },
       }),
     );
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "create",
         input: {
           repoPath: "/repo",
+          status: "open",
           task: {
             title: "Child",
             issueType: "task",
             priority: 2,
-            parentId: "epic-1",
-            aiReviewEnabled: true,
           },
         },
       },
@@ -460,62 +424,6 @@ describe("createTaskService task mutations and reset", () => {
         "close_task",
       ],
     });
-  });
-  test("creates a task with a blank parent id as a standalone task", async () => {
-    const calls: unknown[] = [];
-    const createdTask = task({ id: "task-2", status: "open" });
-    const taskStore: TaskStorePort = {
-      listTasks() {
-        return Effect.die(new Error("unexpected list"));
-      },
-      createTask(input) {
-        return Effect.sync(() => {
-          calls.push({ type: "create", input });
-          return createdTask;
-        });
-      },
-      updateTask() {
-        return Effect.die(new Error("unexpected update"));
-      },
-      getTask() {
-        return Effect.die(new Error("unexpected get"));
-      },
-      transitionTask() {
-        return Effect.die(new Error("unexpected transition"));
-      },
-      deleteTask() {
-        return Effect.die(new Error("unexpected delete"));
-      },
-    };
-
-    await Effect.runPromise(
-      createTaskService({ taskStore }).createTask({
-        repoPath: "/repo",
-        task: {
-          title: "Standalone",
-          issueType: "task",
-          priority: 2,
-          parentId: "   ",
-          aiReviewEnabled: true,
-        },
-      }),
-    );
-
-    expect(calls).toEqual([
-      {
-        type: "create",
-        input: {
-          repoPath: "/repo",
-          task: {
-            title: "Standalone",
-            issueType: "task",
-            priority: 2,
-            parentId: undefined,
-            aiReviewEnabled: true,
-          },
-        },
-      },
-    ]);
   });
   test("creates a standalone task without listing the whole task store first", async () => {
     const calls: unknown[] = [];
@@ -533,9 +441,6 @@ describe("createTaskService task mutations and reset", () => {
       updateTask() {
         return Effect.die(new Error("unexpected update"));
       },
-      getTask() {
-        return Effect.die(new Error("unexpected get"));
-      },
       transitionTask() {
         return Effect.die(new Error("unexpected transition"));
       },
@@ -545,13 +450,12 @@ describe("createTaskService task mutations and reset", () => {
     };
 
     const created = await Effect.runPromise(
-      createTaskService({ taskStore }).createTask({
+      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).createTask({
         repoPath: "/repo",
         task: {
           title: "Standalone",
           issueType: "task",
           priority: 2,
-          aiReviewEnabled: true,
         },
       }),
     );
@@ -561,11 +465,11 @@ describe("createTaskService task mutations and reset", () => {
         type: "create",
         input: {
           repoPath: "/repo",
+          status: "open",
           task: {
             title: "Standalone",
             issueType: "task",
             priority: 2,
-            aiReviewEnabled: true,
           },
         },
       },
@@ -575,111 +479,7 @@ describe("createTaskService task mutations and reset", () => {
       expect.arrayContaining(["view_details", "set_spec", "set_plan", "build_start"]),
     );
   });
-  test("rejects subtasks under non-epic parents before creating", async () => {
-    const taskStore: TaskStorePort = {
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            return [task({ id: "task-1", issueType: "task" })];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTaskMetadata() {
-        return Effect.succeed(metadataWithSessions());
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    const error = await Effect.runPromise(
-      Effect.flip(
-        createTaskService({ taskStore }).createTask({
-          repoPath: "/repo",
-          task: {
-            title: "Child",
-            issueType: "task",
-            priority: 2,
-            parentId: "task-1",
-            aiReviewEnabled: true,
-          },
-        }),
-      ),
-    );
-
-    expect(error).toBeInstanceOf(TaskPolicyError);
-    if (!(error instanceof TaskPolicyError)) throw error;
-    expect(error.code).toBe("TASK_POLICY_ERROR");
-    expect(error.message).toBe("Only epics can have subtasks.");
-  });
-  test("deletes a task without subtasks", async () => {
+  test("deletes a task", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -736,19 +536,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getTaskMetadata(input) {
         return Effect.sync(() => {
           calls.push({ type: "metadata", input });
@@ -772,6 +559,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
@@ -780,7 +568,7 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
@@ -789,113 +577,11 @@ describe("createTaskService task mutations and reset", () => {
       { type: "listBranches", workingDir: "/repo" },
       {
         type: "delete",
-        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
     ]);
   });
-  test("requires confirmation before deleting a task with subtasks", async () => {
-    const calls: unknown[] = [];
-    const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [
-              task({ id: "epic-1", issueType: "epic" }),
-              task({ id: "task-1", parentId: "epic-1" }),
-            ];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({
-          gitPort: createDirectMergeGitPort({ calls }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-          taskStore,
-          workspaceSettingsService: createBuildWorkspaceSettingsService({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            hooks: { postComplete: [] },
-          }),
-        }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: false }),
-      ),
-    ).rejects.toThrow("Task epic-1 has 1 subtasks. Confirm subtask deletion to continue.");
-    expect(calls).toEqual([{ type: "list", input: { repoPath: "/repo" } }]);
-  });
-  test("deletes subtasks with inactive session guard and cleans related worktrees, branches, and browser tabs", async () => {
+  test("deletes a task with inactive session guard and cleans its worktree, branch, and browser tabs", async () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord({
       workingDirectory: "/worktrees/repo/task-1",
@@ -906,10 +592,7 @@ describe("createTaskService task mutations and reset", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "list", input });
-            return [
-              task({ id: "epic-1", issueType: "epic", subtaskIds: ["task-1"] }),
-              task({ id: "task-1", parentId: "epic-1" }),
-            ];
+            return [task({ id: "task-1" })];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -962,19 +645,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -1009,6 +679,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({
             calls,
             branches: {
@@ -1038,11 +709,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo-alias", taskId: "epic-1", deleteSubtasks: true }),
+        }).deleteTask({ repoPath: "/repo-alias", taskId: "task-1" }),
       ),
     ).resolves.toEqual({
       ok: true,
-      changes: { taskIds: ["epic-1", "task-1"], removedTaskIds: ["epic-1", "task-1"] },
+      changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] },
     });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo-alias" } },
@@ -1051,10 +722,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "activityGuard",
         input: {
           repoPath: "/repo",
-          taskSessions: [
-            { taskId: "epic-1", sessions: [] },
-            { taskId: "task-1", sessions: [session] },
-          ],
+          taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
       {
@@ -1065,11 +733,10 @@ describe("createTaskService task mutations and reset", () => {
       },
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
-      { type: "closeTabs", owner: { kind: "task", workspaceId: "repo", taskId: "epic-1" } },
       { type: "closeTabs", owner: { kind: "task", workspaceId: "repo", taskId: "task-1" } },
       {
         type: "delete",
-        input: { repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true },
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
     ]);
   });
@@ -1139,19 +806,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -1186,6 +840,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: {
             ...createDirectMergeGitPort({
               calls,
@@ -1207,7 +862,7 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
     expect(calls).toEqual([
@@ -1230,7 +885,7 @@ describe("createTaskService task mutations and reset", () => {
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "delete",
-        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
     ]);
   });
@@ -1267,6 +922,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: {
             ...createDirectMergeGitPort({
               calls,
@@ -1292,7 +948,7 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("worktree removal race");
     expect(calls).toEqual([
@@ -1376,19 +1032,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -1406,6 +1049,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskStore,
@@ -1414,7 +1058,7 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(
       "task_delete requires runtime session activity checks for tasks with workflow sessions.",
@@ -1442,9 +1086,10 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("runtime stop failed");
     expect(deleted).toBe(false);
@@ -1466,9 +1111,10 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(/Delete cleanup already completed: Stopped 2 live agent sessions,/);
   });
@@ -1488,13 +1134,9 @@ describe("createTaskService task mutations and reset", () => {
       title: "Renamed Task",
       status: "ai_review",
       artifactSummary: {
-        spec: { has: true, updatedAt: "2026-05-01T00:00:00.000Z" },
-        plan: { has: true, updatedAt: "2026-05-02T00:00:00.000Z" },
-        qaReport: {
-          has: true,
-          updatedAt: "2026-05-03T00:00:00.000Z",
-          verdict: "approved",
-        },
+        spec: { present: true, updatedAt: "2026-05-01T00:00:00.000Z" },
+        plan: { present: true, updatedAt: "2026-05-02T00:00:00.000Z" },
+        qaReport: { present: true, updatedAt: "2026-05-03T00:00:00.000Z", verdict: "approved" },
       },
     });
     const taskStore: TaskStorePort = {
@@ -1526,10 +1168,10 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      clearQaReports(input) {
+      clearWorkflowArtifacts(input) {
         return Effect.tryPromise({
           try: async () => {
-            calls.push({ type: "clearQaReports", input });
+            calls.push({ type: "clearWorkflowArtifacts", input });
             return true;
           },
           catch: (cause) =>
@@ -1621,60 +1263,8 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getTaskMetadata() {
         return Effect.succeed(metadataWithSessions(currentSessions));
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected qa");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
@@ -1697,6 +1287,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -1765,7 +1356,10 @@ describe("createTaskService task mutations and reset", () => {
         type: "clearAgentSessions",
         input: { repoPath: "/repo", taskId: "task-1", roles: ["build", "qa"] },
       },
-      { type: "clearQaReports", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "clearWorkflowArtifacts",
+        input: { repoPath: "/repo", taskId: "task-1", codes: ["qaReport"] },
+      },
       {
         type: "setPullRequest",
         input: { repoPath: "/repo", taskId: "task-1", pullRequest: null },
@@ -1776,7 +1370,7 @@ describe("createTaskService task mutations and reset", () => {
       },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "ready_for_dev" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "ready_for_dev", cause: {} },
       },
     ]);
   });
@@ -1916,60 +1510,8 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getTaskMetadata() {
         return Effect.succeed(metadataWithSessions(currentSessions));
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected qa");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
@@ -1992,6 +1534,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({
             calls,
             branches: {
@@ -2054,7 +1597,7 @@ describe("createTaskService task mutations and reset", () => {
       },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "open" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "open", cause: {} },
       },
     ]);
   });
@@ -2092,6 +1635,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
         }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
@@ -2114,6 +1658,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
         }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
@@ -2122,7 +1667,7 @@ describe("createTaskService task mutations and reset", () => {
   });
   test("reports implementation reset failures after the first store clear as partial progress", async () => {
     const failure = new HostOperationError({
-      operation: "task-store.clear-qa-reports",
+      operation: "task-store.clear-workflow-artifacts",
       message: "clear QA reports failed",
     });
     let sessionsCleared = false;
@@ -2134,9 +1679,10 @@ describe("createTaskService task mutations and reset", () => {
           sessionsCleared = true;
           return true;
         }),
-      clearQaReports: () => Effect.fail(failure),
+      clearWorkflowArtifacts: () => Effect.fail(failure),
     };
     const service = createTaskServiceWithMutationProgress({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskActivityGuard: {
@@ -2165,7 +1711,7 @@ describe("createTaskService task mutations and reset", () => {
     expect(result.failure.message).toContain("clear QA reports failed");
     expect(result.failure.message).toContain("Stopped 2 live agent sessions,");
     expect(result.failure.message).not.toContain("records..");
-    expect(result.failure.message).toContain("Cleared Builder and QA session records.");
+    expect(result.failure.message).toContain("Cleared the session records of the worktree roles.");
     expect(result.failure).toMatchObject({ cause: failure });
   });
   test("rejects implementation reset when the canonical worktree is not on a task branch", async () => {
@@ -2180,6 +1726,7 @@ describe("createTaskService task mutations and reset", () => {
         ),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -2215,9 +1762,7 @@ describe("createTaskService task mutations and reset", () => {
     {
       operationLabel: "delete",
       run: (service: ReturnType<typeof createTaskService>) =>
-        service
-          .deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false })
-          .pipe(Effect.asVoid),
+        service.deleteTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.asVoid),
     },
     {
       operationLabel: "reset task",
@@ -2233,6 +1778,7 @@ describe("createTaskService task mutations and reset", () => {
         getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
       };
       const service = createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
         gitPort: createDirectMergeGitPort({
           calls,
           branches: {
@@ -2275,7 +1821,7 @@ describe("createTaskService task mutations and reset", () => {
             revision: 2,
             updatedAt: null,
             classification: "workflow",
-            workflowKind: "spec",
+            code: "spec",
             mediaType: "text/markdown",
           },
           {
@@ -2299,6 +1845,7 @@ describe("createTaskService task mutations and reset", () => {
       clearAgentSessionsByRoles: () => Effect.fail(failure),
     };
     const service = createTaskServiceWithMutationProgress({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskStore,
@@ -2353,19 +1900,6 @@ describe("createTaskService task mutations and reset", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected clear sessions");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      clearQaReports() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected clear QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2453,23 +1987,11 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
     };
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskStore,
@@ -2484,24 +2006,10 @@ describe("createTaskService task mutations and reset", () => {
       "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
     );
   });
-  test("updates a task after validating parent relationships and enriches the result", async () => {
+  test("updates a task and enriches the result", async () => {
     const calls: unknown[] = [];
     const updatedTask = task({ id: "task-1", status: "ready_for_dev", issueType: "feature" });
     const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [task({ id: "task-1", issueType: "task", status: "open" })];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       createTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -2520,19 +2028,6 @@ describe("createTaskService task mutations and reset", () => {
           try: async () => {
             calls.push({ type: "update", input });
             return updatedTask;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2570,7 +2065,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const updated = await Effect.runPromise(
-      createTaskService({ taskStore }).updateTask({
+      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).updateTask({
         repoPath: "/repo",
         taskId: "task-1",
         patch: {
@@ -2581,7 +2076,6 @@ describe("createTaskService task mutations and reset", () => {
       }),
     );
     expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "update",
         input: {
@@ -2599,109 +2093,9 @@ describe("createTaskService task mutations and reset", () => {
       id: "task-1",
       agentWorkflows: {
         planner: { required: true, available: true },
-        builder: { available: true },
+        build: { available: true },
       },
     });
-  });
-  test("rejects update when converting a task with subtasks into a subtask", async () => {
-    const taskStore: TaskStorePort = {
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            return [
-              task({ id: "task-1", issueType: "feature" }),
-              task({ id: "task-2", parentId: "task-1" }),
-              task({ id: "epic-2", issueType: "epic" }),
-            ];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    const error = await Effect.runPromise(
-      Effect.flip(
-        createTaskService({ taskStore }).updateTask({
-          repoPath: "/repo",
-          taskId: "task-1",
-          patch: { parentId: "epic-2" },
-        }),
-      ),
-    );
-
-    expect(error).toBeInstanceOf(TaskPolicyError);
-    if (!(error instanceof TaskPolicyError)) throw error;
-    expect(error.code).toBe("TASK_POLICY_ERROR");
-    expect(error.message).toBe("Tasks with subtasks cannot become subtasks.");
   });
   test("transitions a task after validating workflow rules and enriches the result", async () => {
     const calls: unknown[] = [];
@@ -2747,19 +2141,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -2789,7 +2170,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const transitioned = await Effect.runPromise(
-      createTaskService({ taskStore }).transitionTask({
+      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
         repoPath: "/repo",
         taskId: "task-1",
         status: "in_progress",
@@ -2799,7 +2180,7 @@ describe("createTaskService task mutations and reset", () => {
       { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
       },
     ]);
     expect(transitioned).toMatchObject({
@@ -2849,19 +2230,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -2891,7 +2259,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).transitionTask({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
           repoPath: "/repo",
           taskId: "task-1",
           status: "open",
@@ -2940,19 +2308,6 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -2982,13 +2337,17 @@ describe("createTaskService task mutations and reset", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).transitionTask({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
           repoPath: "/repo",
           taskId: "feature-1",
           status: "in_progress",
         }),
       ),
-    ).rejects.toThrow("Transition not allowed for feature-1 (feature): open -> in_progress");
+    ).rejects.toMatchObject({
+      code: "TASK_TRANSITION_NOT_ALLOWED",
+      message:
+        "set-status:in_progress is not allowed for task feature-1 (feature) from open. Complete required planning first, then use it from ready_for_dev, in_progress, blocked, ai_review, or human_review.",
+    });
   });
 
   test("rejects generic transitions to closed", async () => {
@@ -3000,12 +2359,12 @@ describe("createTaskService task mutations and reset", () => {
 
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).transitionTask({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
           repoPath: "/repo",
           taskId: "task-1",
           status: "closed",
         }),
       ),
-    ).rejects.toThrow("task_transition cannot close tasks");
+    ).rejects.toThrow("task_transition cannot move tasks to closed");
   });
 });

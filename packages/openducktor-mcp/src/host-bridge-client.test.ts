@@ -1,5 +1,9 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { ODT_BROWSER_BRIDGE_TIMEOUT_MS, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import {
+  ODT_BROWSER_BRIDGE_TIMEOUT_MS,
+  ODT_TOOL_SCHEMAS,
+  ODT_MCP_BRIDGE_VERSION,
+} from "@openducktor/contracts";
 import { z } from "zod";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { mcpToolPayloadSchema, type McpToolPayload, OdtToolError } from "./tool-results";
@@ -19,7 +23,6 @@ const summaryPayload = {
     status: "open",
     priority: 2,
     issueType: "task",
-    aiReviewEnabled: true,
     labels: [],
     targetBranch: {
       remote: "origin",
@@ -27,11 +30,10 @@ const summaryPayload = {
     },
     createdAt: "2026-04-09T00:00:00.000Z",
     updatedAt: "2026-04-09T00:00:00.000Z",
-    qaVerdict: "not_reviewed",
-    artifacts: {
-      hasSpec: false,
-      hasPlan: false,
-      hasQaReport: false,
+    workflowArtifacts: {
+      spec: { present: false },
+      plan: { present: false },
+      qaReport: { present: false },
     },
   },
 };
@@ -55,7 +57,7 @@ describe("OdtHostBridgeClient", () => {
         body: body.success ? body.data : undefined,
       });
       return jsonResponse({
-        bridgeVersion: 2,
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: Object.keys(ODT_TOOL_SCHEMAS),
       });
     };
@@ -69,7 +71,7 @@ describe("OdtHostBridgeClient", () => {
     );
 
     await expect(client.ready()).resolves.toEqual({
-      bridgeVersion: 2,
+      bridgeVersion: ODT_MCP_BRIDGE_VERSION,
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
     });
     expect(requests).toEqual([
@@ -106,7 +108,8 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("ready rejects malformed readiness responses", async () => {
-    const fetchImpl: typeof fetch = async () => jsonResponse({ bridgeVersion: 2 });
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse({ bridgeVersion: ODT_MCP_BRIDGE_VERSION });
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     await expect(client.ready()).rejects.toMatchObject({
@@ -118,7 +121,7 @@ describe("OdtHostBridgeClient", () => {
   test("ready rejects readiness responses that omit required tools", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse({
-        bridgeVersion: 2,
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: ["odt_read_task"],
       });
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
@@ -532,7 +535,6 @@ describe("OdtHostBridgeClient", () => {
         priority: 2,
         description: "Created through host bridge",
         labels: ["mcp"],
-        aiReviewEnabled: true,
       }),
     ).resolves.toEqual(summaryPayload);
 
@@ -560,7 +562,6 @@ describe("OdtHostBridgeClient", () => {
           priority: 2,
           description: "Created through host bridge",
           labels: ["mcp"],
-          aiReviewEnabled: true,
         },
       },
       {

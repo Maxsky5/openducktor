@@ -19,7 +19,9 @@ export type SettingsConfigPort = {
   readConfig(
     options?: ReadSettingsConfigOptions,
   ): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
-  writeConfig(config: GlobalConfig): Effect.Effect<void, HostOperationErrorAggregate>;
+  writeConfig(
+    config: GlobalConfig,
+  ): Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   defaultWorktreeBasePath(workspaceId: string): string;
   defaultRepoWorktreeBasePath(repoPath: string): string;
   resolveConfiguredPath(rawPath: string): string;

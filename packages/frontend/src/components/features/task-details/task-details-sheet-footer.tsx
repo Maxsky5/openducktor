@@ -1,11 +1,11 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { PencilLine, Trash2 } from "lucide-react";
-import type { ReactElement } from "react";
 import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import { PencilLine, Trash2 } from "lucide-react";
+import type { ReactElement } from "react";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +21,39 @@ export type TaskDetailsSheetFooterProps = {
   onDeleteSelect?: () => void;
 };
 
+type WorkflowActionOptions = NonNullable<Parameters<typeof resolveTaskCardActions>[1]>;
+
+const workflowActionOptions = ({
+  hasActiveSession,
+  includeActions,
+  activeSessionRole,
+  historicalSessionRoles,
+}: {
+  hasActiveSession: boolean;
+  includeActions: readonly TaskWorkflowAction[] | undefined;
+  activeSessionRole: AgentRole | undefined;
+  historicalSessionRoles: readonly AgentRole[] | undefined;
+}): WorkflowActionOptions => {
+  const options: WorkflowActionOptions = { hasActiveSession };
+  if (includeActions) options.include = includeActions;
+  if (activeSessionRole) options.activeSessionRole = activeSessionRole;
+  if (historicalSessionRoles) options.historicalSessionRoles = historicalSessionRoles;
+  return options;
+};
+
+const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
+  onDeleteSelect
+    ? [
+        {
+          id: "delete-task",
+          label: "Delete task",
+          icon: <Trash2 className="size-3.5" />,
+          destructive: true,
+          onSelect: onDeleteSelect,
+        },
+      ]
+    : [];
+
 // The footer maps each host workflow action and session state to one button set.
 // react-doctor-disable-next-line react-doctor/no-high-complexity-react-function
 export function TaskDetailsSheetFooter({
@@ -34,32 +67,19 @@ export function TaskDetailsSheetFooter({
   onWorkflowAction,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
-  const actionOptions: Parameters<typeof resolveTaskCardActions>[1] = { hasActiveSession };
-  if (includeActions) {
-    actionOptions.include = includeActions;
-  }
-  if (activeSessionRole) {
-    actionOptions.activeSessionRole = activeSessionRole;
-  }
-  if (historicalSessionRoles) {
-    actionOptions.historicalSessionRoles = historicalSessionRoles;
-  }
-  const hasWorkflowAction = Boolean(
-    includeActions && onWorkflowAction
-      ? resolveTaskCardActions(task, actionOptions).allActions.length > 0
-      : false,
-  );
-  const extraMenuActions = onDeleteSelect
-    ? [
-        {
-          id: "delete-task",
-          label: "Delete task",
-          icon: <Trash2 className="size-3.5" />,
-          destructive: true,
-          onSelect: onDeleteSelect,
-        },
-      ]
-    : [];
+  const hasWorkflowAction =
+    includeActions !== undefined &&
+    onWorkflowAction !== undefined &&
+    resolveTaskCardActions(
+      task,
+      workflowActionOptions({
+        hasActiveSession,
+        includeActions,
+        activeSessionRole,
+        historicalSessionRoles,
+      }),
+    ).allActions.length > 0;
+  const extraMenuActions = deleteMenuActions(onDeleteSelect);
 
   return (
     <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">

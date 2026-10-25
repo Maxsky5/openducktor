@@ -1,15 +1,17 @@
 import type {
   GitTargetBranch,
   TaskAssetDescriptionMutation,
-  TaskCard,
   TaskCreateInput,
-  TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 import type { TaskRefreshOptions } from "../../app-state/app-state-contexts";
 import type { AgentSessionReadPort } from "../../queries/agent-sessions";
 import type { ActiveWorkspace } from "../../types/session-slices";
 import type { TaskPullRequestOperations } from "../../types/task-pull-request";
+import type {
+  BuiltinStateId as TaskStatus,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 export type UseTaskOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -35,7 +37,7 @@ export type UseTaskOperationsResult = TaskPullRequestOperations & {
     assets?: TaskAssetDescriptionMutation,
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
   closeTask: (taskId: string) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;

@@ -1,4 +1,4 @@
-import type { PullRequest, TaskCard, TaskPullRequestDetectResult } from "@openducktor/contracts";
+import type { PullRequest, TaskPullRequestDetectResult } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/errors";
@@ -13,6 +13,7 @@ import type { RunTaskMutationWithChatDraftCleanupInput } from "./task-chat-draft
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskPullRequestHostPort = {
   detectPullRequest: (repoPath: string, taskId: string) => Promise<TaskPullRequestDetectResult>;

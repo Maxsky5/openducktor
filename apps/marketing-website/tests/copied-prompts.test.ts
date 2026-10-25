@@ -6,10 +6,10 @@ type BuiltinPrompt = { id: string; template: string };
 
 // The import is dynamic, so the site type check does not check the product source.
 const promptsModule = new URL(
-  "../../../packages/core/src/services/agent-system-prompts.ts",
+  "../../../packages/workflows/src/builtin/agent-prompts.ts",
   import.meta.url,
 ).href;
-// SAFETY: agent-system-prompts.ts exports this function, and a missing export fails the test.
+// SAFETY: The product returns records with string id and template fields.
 const { listBuiltinAgentPromptTemplates } = (await import(promptsModule)) as {
   listBuiltinAgentPromptTemplates: () => BuiltinPrompt[];
 };

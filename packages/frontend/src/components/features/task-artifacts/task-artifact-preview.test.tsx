@@ -33,7 +33,7 @@ test.each([
     revision: 1,
     updatedAt: null,
     classification: "workflow",
-    workflowKind: "spec",
+    code: "spec",
     mediaType: "text/markdown",
   };
   const markup = renderToStaticMarkup(

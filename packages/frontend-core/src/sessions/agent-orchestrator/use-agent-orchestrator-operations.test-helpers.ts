@@ -1,8 +1,8 @@
 import type { AcceptedAgentUserMessage, SendAgentUserMessageInput } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
+export { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 
 export { AgentRuntimeTestAdapter } from "../../test-support/agent-runtime-test-adapter";
-export { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 export { sessionMessagesToArray } from "../../test-support/session-message-test-helpers";
 export { createSessionMessagesState } from "./support/messages";
 export {

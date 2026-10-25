@@ -1,9 +1,11 @@
-import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  buildRoleWorkflowMapForTask,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { buildRoleWorkflowMapForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
-import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
@@ -37,10 +39,6 @@ type BuildWorkflowModelContextArgs = {
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
-};
-
-const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
-  return task?.status === "human_review";
 };
 
 export type WorkflowModelContext = {
@@ -97,9 +95,8 @@ export const buildWorkflowModelContext = ({
     : "";
   const createSessionDisabled = Boolean(selectedSessionIdentity && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
+    task: selectedTask,
     roleEnabledByTask,
-    hasQaRejection: isQaRejectedTask(selectedTask),
-    hasHumanFeedback: isTaskAwaitingHumanFeedback(selectedTask),
     createSessionDisabled,
     roleLabelByRole,
   });

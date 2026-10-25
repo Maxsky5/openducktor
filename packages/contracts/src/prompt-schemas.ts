@@ -1,27 +1,10 @@
 import { z } from "zod";
 
-export const agentPromptTemplateIdValues = [
-  "system.shared.workflow_guards",
-  "system.shared.tool_protocol",
-  "system.shared.task_context",
-  "system.role.spec.base",
-  "system.role.planner.base",
-  "system.role.build.base",
-  "system.role.qa.base",
-  "kickoff.spec_initial",
-  "kickoff.planner_initial",
-  "kickoff.build_implementation_start",
-  "kickoff.build_after_qa_rejected",
-  "kickoff.build_after_human_request_changes",
-  "kickoff.build_pull_request_generation",
-  "kickoff.qa_review",
-  "message.build_rebase_conflict_resolution",
-  "permission.read_only.reject",
-] as const;
-
-export const agentPromptTemplateIdSchema = z.enum(agentPromptTemplateIdValues);
-export type AgentPromptTemplateId = z.infer<typeof agentPromptTemplateIdSchema>;
-const AGENT_PROMPT_TEMPLATE_ID_SET = new Set<string>(agentPromptTemplateIdValues);
+/** A prompt template of the task workflow, or a host-global template. */
+export const agentPromptTemplateIdSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, "Use a non-blank prompt template ID.");
 
 export const agentPromptPlaceholderValues = [
   "role",
@@ -30,7 +13,6 @@ export const agentPromptPlaceholderValues = [
   "task.title",
   "task.issueType",
   "task.status",
-  "task.qaRequired",
   "task.description",
   "humanFeedback",
   "git.operationLabel",
@@ -42,11 +24,6 @@ export const agentPromptPlaceholderValues = [
 export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
 const AGENT_PROMPT_PLACEHOLDER_SET = new Set<string>(agentPromptPlaceholderValues);
-
-const REQUIRED_PLACEHOLDERS_BY_TEMPLATE = new Map<AgentPromptTemplateId, AgentPromptPlaceholder[]>([
-  ["kickoff.build_after_human_request_changes", ["humanFeedback"]],
-  ["kickoff.build_pull_request_generation", ["git.targetBranch"]],
-]);
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
@@ -66,17 +43,15 @@ export const extractPromptTemplatePlaceholders = (template: string): string[] =>
   return tokens;
 };
 
+/** The template that declares the placeholders supplies the required ones. */
 export const validatePromptTemplatePlaceholders = (
   template: string,
-  templateId?: AgentPromptTemplateId,
+  requiredPlaceholders: readonly string[] = [],
 ) => {
   const placeholders = extractPromptTemplatePlaceholders(template);
   const unsupportedPlaceholders = placeholders.filter(
     (placeholder) => !AGENT_PROMPT_PLACEHOLDER_SET.has(placeholder),
   );
-  const requiredPlaceholders = templateId
-    ? (REQUIRED_PLACEHOLDERS_BY_TEMPLATE.get(templateId) ?? [])
-    : [];
   const missingRequiredPlaceholders = requiredPlaceholders.filter(
     (placeholder) => !placeholders.includes(placeholder),
   );
@@ -95,19 +70,8 @@ export const agentPromptOverrideSchema = z.object({
 });
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 
+/** Keyed by prompt template ID. The host checks the IDs against the task workflow. */
 export const repoPromptOverridesSchema = z
-  .record(z.string(), agentPromptOverrideSchema)
-  .superRefine((value, ctx) => {
-    for (const key of Object.keys(value)) {
-      if (AGENT_PROMPT_TEMPLATE_ID_SET.has(key)) {
-        continue;
-      }
-      ctx.addIssue({
-        code: "custom",
-        path: [key],
-        message: `Unknown prompt template id: ${key}`,
-      });
-    }
-  })
+  .record(agentPromptTemplateIdSchema, agentPromptOverrideSchema)
   .default({});
-export type RepoPromptOverrides = Partial<Record<AgentPromptTemplateId, AgentPromptOverride>>;
+export type RepoPromptOverrides = z.output<typeof repoPromptOverridesSchema>;

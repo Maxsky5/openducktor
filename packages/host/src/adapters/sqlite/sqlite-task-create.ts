@@ -8,12 +8,12 @@ import {
   taskIdExhaustedError,
   taskIdPrefixForWorkspaceId,
 } from "./sqlite-task-ids";
-import { requireTaskRow } from "./sqlite-task-queries";
 import type { TaskInsert, TaskStoreSession } from "./sqlite-task-store-schema";
 import { insertTaskIfAbsent } from "./sqlite-task-writes";
 
 export const taskInsertFromCreateInput = (
   task: TaskCreateInput,
+  status: string,
   taskId: string,
   createdAt: Date,
 ): TaskInsert => ({
@@ -22,13 +22,11 @@ export const taskInsertFromCreateInput = (
   description: task.description ?? null,
   directMergeJson: null,
   id: taskId,
-  issueType: task.issueType ?? "task",
+  issueType: task.issueType,
   labelsJson: encodeJson(normalizeLabels(task.labels ?? [])),
-  parentId: task.parentId ?? null,
-  priority: task.priority ?? 2,
+  priority: task.priority,
   pullRequestJson: null,
-  qaRequired: task.aiReviewEnabled === false ? 0 : 1,
-  status: "open",
+  status,
   targetBranchJson: null,
   title: task.title,
   updatedAt: createdAt,
@@ -36,22 +34,18 @@ export const taskInsertFromCreateInput = (
 
 export const insertTaskFromCreateInput = ({
   createdAt,
-  repoPath,
   session,
+  status,
   task,
   workspaceId,
 }: {
   createdAt: Date;
-  repoPath: string;
   session: TaskStoreSession;
+  status: string;
   task: TaskCreateInput;
   workspaceId: string;
 }) =>
   Effect.gen(function* () {
-    const parentId = task.parentId?.trim();
-    if (parentId) {
-      yield* requireTaskRow(session, parentId, repoPath);
-    }
     const prefix = taskIdPrefixForWorkspaceId(workspaceId);
     const firstLength = yield* firstTaskIdHashLength(session, prefix);
     const candidates = taskIdCandidates({
@@ -62,7 +56,12 @@ export const insertTaskFromCreateInput = ({
       title: task.title,
     });
     for (const taskId of candidates) {
-      if (yield* insertTaskIfAbsent(session, taskInsertFromCreateInput(task, taskId, createdAt))) {
+      if (
+        yield* insertTaskIfAbsent(
+          session,
+          taskInsertFromCreateInput(task, status, taskId, createdAt),
+        )
+      ) {
         return taskId;
       }
     }

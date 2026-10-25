@@ -1,10 +1,10 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useEffect } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { summarizeTaskLoadError } from "../task-load-errors";
 import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseTaskQueryReadModelArgs = {
   activeRepoPath: string | null;

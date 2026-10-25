@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -46,6 +45,7 @@ import {
 } from "../../sessions/workspace-agent-sessions";
 import { WorkspaceSessionLiveSourceContext } from "../../workspace-activity/workspace-session-live-source";
 import { useActiveSessionHistoryKeeper } from "../../sessions/agent-orchestrator/history/active-session-history-keeper";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const EMPTY_TASKS: TaskCard[] = [];
 

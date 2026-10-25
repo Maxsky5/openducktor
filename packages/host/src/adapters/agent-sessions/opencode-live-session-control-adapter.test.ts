@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import { AgentSessionTurnActiveError, interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
@@ -47,6 +48,7 @@ describe("OpenCode live session controls", () => {
     });
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: live,
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -103,6 +105,7 @@ describe("OpenCode live session controls", () => {
       };
       const prepared = await Effect.runPromise(
         createOpenCodeLiveSessionAdapterPreparer({
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           liveSessionLifecycle: lifecycle,
           prepareRuntime: async (input) => {
             const native = await harness.prepareRuntime(input);
@@ -150,6 +153,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -197,6 +201,7 @@ describe("OpenCode live session controls", () => {
     const harness = createRuntimeHarness();
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -228,6 +233,7 @@ describe("OpenCode live session controls", () => {
     const harness = createRuntimeHarness();
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -269,6 +275,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -306,6 +313,7 @@ describe("OpenCode live session controls", () => {
     const harness = createRuntimeHarness();
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: async (input) => {
           const native = await harness.prepareRuntime(input);
@@ -351,6 +359,7 @@ describe("OpenCode live session controls", () => {
     });
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -385,6 +394,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -516,6 +526,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -650,6 +661,7 @@ describe("OpenCode live session controls", () => {
     });
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -734,6 +746,7 @@ describe("OpenCode live session controls", () => {
     });
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -818,6 +831,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -877,6 +891,7 @@ describe("OpenCode live session controls", () => {
       const publishedChanges: AgentSessionLiveAdapterChange[] = [];
       const prepared = await Effect.runPromise(
         createOpenCodeLiveSessionAdapterPreparer({
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           liveSessionLifecycle: createLifecycle(publishedChanges),
           prepareRuntime: harness.prepareRuntime,
         })(runtime, ignoreObservationLoss),
@@ -976,6 +991,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -1045,6 +1061,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
@@ -1089,6 +1106,7 @@ describe("OpenCode live session controls", () => {
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle(publishedChanges),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),

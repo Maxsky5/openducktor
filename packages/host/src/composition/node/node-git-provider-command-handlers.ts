@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { createAzureDevOpsConnectionService } from "../../application/git/azure-devops-connection-service";
 import { createAzureAreaPathsService } from "../../application/git/azure-area-paths-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
@@ -21,6 +22,7 @@ type NodeGitProviderCommandHandlers = ReturnType<typeof createGitProviderCommand
 export const createNodeGitProviderCommandHandlers = ({
   resolver,
   issueImportStore,
+  taskWorkflows,
   taskSyncService,
   workspaceSettingsService,
   azureDevOpsConnection,
@@ -28,6 +30,7 @@ export const createNodeGitProviderCommandHandlers = ({
 }: {
   resolver: GitProviderResolver;
   issueImportStore: IssueImportStorePort;
+  taskWorkflows: TaskWorkflowResolver;
   taskSyncService: Pick<TaskSyncService, "publishExternalTaskCreated" | "runMutation">;
   workspaceSettingsService: WorkspaceSettingsService;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
@@ -40,6 +43,7 @@ export const createNodeGitProviderCommandHandlers = ({
     createIssueImportService({
       resolver,
       store: issueImportStore,
+      taskWorkflows,
       workspaceSettingsService,
       publishTaskCreated: taskSyncService.publishExternalTaskCreated,
       runMutation: taskSyncService.runMutation,

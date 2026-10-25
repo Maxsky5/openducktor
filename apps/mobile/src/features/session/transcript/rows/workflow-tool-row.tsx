@@ -16,6 +16,7 @@ import {
 import { memo, type ReactElement, type ReactNode, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { workflowDocumentKey } from "@/features/tasks/artifacts/artifact-list-model";
 import type { HostDocumentKey } from "@/features/tasks/documents/document-rows";
 import { DOCUMENT_PANEL_COPY } from "@/features/tasks/documents/documents-panel-model";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -223,23 +224,12 @@ function WorkflowToolDetails({
 }
 
 const HEADING_ICONS = {
-  spec: "file-text",
-  plan: "list-checks",
-  qa_approved: "shield-check",
-  qa_rejected: "shield-x",
-  qa_report: "shield-check",
+  document: "file-text",
+  review_passed: "shield-check",
+  review_failed: "shield-x",
+  review: "shield-check",
   free: "file",
 } as const satisfies Record<ArtifactToolHeading, IconName>;
-
-/** The Documents view of each workflow heading. A saved file opens in its artifact view instead. */
-const HEADING_DOCUMENTS = {
-  spec: "spec",
-  plan: "plan",
-  qa_approved: "qa",
-  qa_rejected: "qa",
-  qa_report: "qa",
-  free: null,
-} as const satisfies Record<ArtifactToolHeading, HostDocumentKey | null>;
 
 /** The desktop `ArtifactToolMessage`: a workflow card titled with the artifact that the call saves. */
 export const ArtifactToolRow = memo(function ArtifactToolRow({
@@ -277,7 +267,7 @@ export const ArtifactToolRow = memo(function ArtifactToolRow({
       meta={meta}
       displayName={call.title}
       icon={HEADING_ICONS[call.heading]}
-      document={HEADING_DOCUMENTS[call.heading]}
+      document={call.heading === "free" || !call.code ? null : workflowDocumentKey(call.code)}
       action={
         saved?.classification === "free" ? (
           <OpenArtifactButton name={saved.name} taskId={saved.taskId} code={saved.code} />

@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
@@ -6,6 +5,7 @@ import { toast } from "sonner";
 import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskWorkflowTaskComposerModel = {
   open: boolean;

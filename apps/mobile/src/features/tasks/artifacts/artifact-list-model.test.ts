@@ -35,7 +35,7 @@ describe("artifact list model", () => {
       revision: 2,
       updatedAt: null,
       classification: "workflow",
-      workflowKind: "plan",
+      code: "plan",
       mediaType: "text/markdown",
     };
 

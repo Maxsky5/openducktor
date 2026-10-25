@@ -1,9 +1,9 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   type PullRequest,
   type RepositoryGitProviderContext,
-  type TaskCard,
   type TaskApprovalContext,
   type TaskApprovalContextLoadResult,
 } from "@openducktor/contracts";
@@ -186,9 +186,7 @@ const registerDependencySpies = (): void => {
     gitAbortConflict: gitAbortConflictMock,
     agentSessionsList: agentSessionsListMock,
     agentSessionsListForTasks: agentSessionsListForTasksMock,
-    specGet: async () => ({ markdown: "", updatedAt: null }),
-    planGet: async () => ({ markdown: "", updatedAt: null }),
-    qaGetReport: async () => ({ markdown: "", updatedAt: null }),
+    workflowArtifactGet: async () => ({ markdown: "", updatedAt: null }),
     workspaceGetRepoConfig: async () => ({
       workspaceId: "workspace-repo",
       workspaceName: "Repo",

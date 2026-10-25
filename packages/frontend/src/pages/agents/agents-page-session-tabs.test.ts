@@ -1,3 +1,7 @@
+import {
+  BUILTIN_ROLE_LABELS,
+  resolveSessionContinuationLaunchAction,
+} from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
@@ -6,7 +10,6 @@ import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { buildRoleEnabledMapForTask } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import {
   type AgentSessionWorkflowSummary,
@@ -84,12 +87,12 @@ describe("agents-page-session-tabs", () => {
 
   test("builds role enablement from backend workflow payload", () => {
     const task = buildTask({
-      issueType: "epic",
+      issueType: "feature",
       status: "spec_ready",
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -106,7 +109,7 @@ describe("agents-page-session-tabs", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
@@ -509,14 +512,14 @@ describe("agents-page-session-tabs", () => {
       issueType: "feature",
       status: "in_progress",
       artifactSummary: {
-        spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
-        plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
-        qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
+        spec: { present: true, updatedAt: "2026-02-22T08:00:00.000Z" },
+        plan: { present: true, updatedAt: "2026-02-22T08:10:00.000Z" },
+        qaReport: { present: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
       },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -525,7 +528,7 @@ describe("agents-page-session-tabs", () => {
       roleWorkflowsByTask: {
         spec: task.agentWorkflows.spec,
         planner: task.agentWorkflows.planner,
-        build: task.agentWorkflows.builder,
+        build: task.agentWorkflows.build,
         qa: task.agentWorkflows.qa,
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
@@ -564,142 +567,18 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
-  test("keeps qa step rejected in ai_review when no new qa review session has started", () => {
-    const task = buildTask({
-      issueType: "feature",
-      status: "ai_review",
-      artifactSummary: {
-        spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
-        plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
-        qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
-      },
-      agentWorkflows: {
-        spec: { required: true, canSkip: false, available: true, completed: true },
-        planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
-        qa: { required: true, canSkip: false, available: true, completed: false },
-      },
-    });
-
-    const states = buildWorkflowStateByRole({
-      task,
-      roleWorkflowsByTask: {
-        spec: task.agentWorkflows.spec,
-        planner: task.agentWorkflows.planner,
-        build: task.agentWorkflows.builder,
-        qa: task.agentWorkflows.qa,
-      },
-      liveSessionByRole: buildLiveSessionByRoleMap([
-        buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-          status: "stopped",
-        }),
-        buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
-          status: "idle",
-        }),
-      ]),
-    });
-
-    expect(states.qa).toEqual({
-      tone: "rejected",
-      availability: "available",
-      completion: "rejected",
-      liveSession: "idle",
-    });
-  });
-
-  test.each([
-    {
-      name: "starting",
-      session: buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
-        status: "starting",
-      }),
-      expected: { tone: "in_progress" as const, liveSession: "starting" as const },
-    },
-    {
-      name: "running",
-      session: buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
-        status: "running",
-      }),
-      expected: { tone: "in_progress" as const, liveSession: "running" as const },
-    },
-    {
-      name: "waiting_input",
-      session: buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
-        status: "running",
-        pendingQuestions: [{ requestId: "q-1", questions: [] }],
-      }),
-      expected: { tone: "waiting_input" as const, liveSession: "waiting_input" as const },
-    },
-    {
-      name: "error",
-      session: buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
-        status: "error",
-      }),
-      expected: { tone: "failed" as const, liveSession: "error" as const },
-    },
-  ])(
-    "shows qa step as active in ai_review when a new qa review session is $name",
-    ({ session, expected }) => {
-      const task = buildTask({
-        issueType: "feature",
-        status: "ai_review",
-        artifactSummary: {
-          spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
-          plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
-          qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
-        },
-        agentWorkflows: {
-          spec: { required: true, canSkip: false, available: true, completed: true },
-          planner: { required: true, canSkip: false, available: true, completed: true },
-          builder: { required: true, canSkip: false, available: true, completed: true },
-          qa: { required: true, canSkip: false, available: true, completed: false },
-        },
-      });
-
-      const states = buildWorkflowStateByRole({
-        task,
-        roleWorkflowsByTask: {
-          spec: task.agentWorkflows.spec,
-          planner: task.agentWorkflows.planner,
-          build: task.agentWorkflows.builder,
-          qa: task.agentWorkflows.qa,
-        },
-        liveSessionByRole: buildLiveSessionByRoleMap([
-          buildSession({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-            status: "stopped",
-          }),
-          session,
-        ]),
-      });
-
-      expect(states.qa).toEqual({
-        tone: expected.tone,
-        availability: "available",
-        completion: "in_progress",
-        liveSession: expected.liveSession,
-      });
-    },
-  );
-
   test("does not mark builder done from stale approved qa report after build reopens", () => {
     const task = buildTask({
       status: "in_progress",
       artifactSummary: {
-        spec: { has: true, updatedAt: "2026-02-22T09:00:00.000Z" },
-        plan: { has: true, updatedAt: "2026-02-22T09:30:00.000Z" },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+        spec: { present: true, updatedAt: "2026-02-22T09:00:00.000Z" },
+        plan: { present: true, updatedAt: "2026-02-22T09:30:00.000Z" },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
       },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: true },
       },
     });
@@ -709,7 +588,7 @@ describe("agents-page-session-tabs", () => {
       roleWorkflowsByTask: {
         spec: task.agentWorkflows.spec,
         planner: task.agentWorkflows.planner,
-        build: task.agentWorkflows.builder,
+        build: task.agentWorkflows.build,
         qa: task.agentWorkflows.qa,
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
@@ -766,15 +645,16 @@ describe("agents-page-session-tabs", () => {
     const task = buildTask({
       status: "human_review",
       artifactSummary: {
-        spec: { has: true, updatedAt: "2026-02-22T09:00:00.000Z" },
-        plan: { has: true, updatedAt: "2026-02-22T09:30:00.000Z" },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+        spec: { present: true, updatedAt: "2026-02-22T09:00:00.000Z" },
+        plan: { present: true, updatedAt: "2026-02-22T09:30:00.000Z" },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
       },
+      // The host completes the Builder step in every status after build completion.
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
-        qa: { required: true, canSkip: false, available: false, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: true },
       },
     });
 
@@ -783,7 +663,7 @@ describe("agents-page-session-tabs", () => {
       roleWorkflowsByTask: {
         spec: task.agentWorkflows.spec,
         planner: task.agentWorkflows.planner,
-        build: task.agentWorkflows.builder,
+        build: task.agentWorkflows.build,
         qa: task.agentWorkflows.qa,
       },
       liveSessionByRole: buildLiveSessionByRoleMap([]),
@@ -898,7 +778,7 @@ describe("agents-page-session-tabs", () => {
     });
     const groups = buildSessionSelectorGroups({
       sessionsForTask: [specSessionOne, specSessionTwo, plannerSession],
-      roleLabelByRole: { ...AGENT_ROLE_LABELS },
+      roleLabelByRole: { ...BUILTIN_ROLE_LABELS },
     });
 
     expect(groups[0]?.label).toBe("Spec");
@@ -957,25 +837,26 @@ describe("agents-page-session-tabs", () => {
 
     expect(latestByRole.build?.externalSessionId).toBe("build-newer");
   });
+});
 
-  test("builds message-first session options as one available role target", () => {
+describe("buildSessionCreateOptions", () => {
+  const qaRejectedTask = buildTask({
+    status: "in_progress",
+    artifactSummary: {
+      spec: { present: true },
+      plan: { present: true },
+      qaReport: { present: true, verdict: "rejected" },
+    },
+  });
+
+  test("builds one message-first option for each available role", () => {
     const options = buildSessionCreateOptions({
-      roleEnabledByTask: {
-        spec: false,
-        planner: true,
-        build: true,
-        qa: false,
-      },
-      hasQaRejection: true,
-      hasHumanFeedback: false,
+      task: qaRejectedTask,
+      roleEnabledByTask: { spec: false, planner: true, build: true, qa: false },
       createSessionDisabled: false,
-      roleLabelByRole: { ...AGENT_ROLE_LABELS },
+      roleLabelByRole: { ...BUILTIN_ROLE_LABELS },
     });
 
-    expect(options.map((option) => option.launchActionId)).toEqual([
-      "planner_initial",
-      "build_after_qa_rejected",
-    ]);
     expect(options.map((option) => option.id)).toEqual([
       "planner:planner_initial:message_first",
       "build:build_after_qa_rejected:message_first",
@@ -987,25 +868,40 @@ describe("agents-page-session-tabs", () => {
     expect(
       options.every((option) => option.description.includes("without sending a kickoff")),
     ).toBe(true);
+  });
 
-    const plannerCompletedOptions = buildSessionCreateOptions({
-      roleEnabledByTask: {
-        spec: false,
-        planner: false,
-        build: true,
-        qa: false,
-      },
-      hasQaRejection: false,
-      hasHumanFeedback: true,
-      createSessionDisabled: false,
-      roleLabelByRole: { ...AGENT_ROLE_LABELS },
+  test("uses the continuation launch action of each role", () => {
+    for (const task of [qaRejectedTask, buildTask({ status: "human_review" })]) {
+      for (const option of buildSessionCreateOptions({
+        task,
+        roleEnabledByTask: { spec: true, planner: true, build: true, qa: true },
+        createSessionDisabled: false,
+        roleLabelByRole: { ...BUILTIN_ROLE_LABELS },
+      })) {
+        expect(option.launchActionId).toBe(
+          resolveSessionContinuationLaunchAction(option.role, task),
+        );
+      }
+    }
+  });
+
+  test("keeps role order and disables options while a session is working", () => {
+    const options = buildSessionCreateOptions({
+      task: buildTask({ status: "human_review" }),
+      roleEnabledByTask: { spec: true, planner: true, build: true, qa: true },
+      createSessionDisabled: true,
+      roleLabelByRole: { ...BUILTIN_ROLE_LABELS },
     });
 
-    expect(plannerCompletedOptions.map((option) => option.launchActionId)).toEqual([
+    expect(options.map((option) => option.launchActionId)).toEqual([
+      "spec_initial",
+      "planner_initial",
       "build_after_human_request_changes",
+      "qa_review",
     ]);
-    expect(plannerCompletedOptions.map((option) => option.id)).toEqual([
-      "build:build_after_human_request_changes:message_first",
-    ]);
+    for (const option of options) {
+      expect(option.disabled).toBe(true);
+      expect(option.disabledReason).toBe("Wait for the current session to finish.");
+    }
   });
 });

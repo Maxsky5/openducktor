@@ -1,7 +1,7 @@
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { workflowKindForRole } from "@openducktor/frontend-core/queries/artifacts";
+import { roleFocusArtifact, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import type {
@@ -9,7 +9,6 @@ import type {
   TaskArtifactsProps,
 } from "@/components/features/task-artifacts/task-artifacts";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
   type AgentStudioChatComposerContext,
@@ -83,10 +82,10 @@ export function useAgentStudioPageModels({
   });
 
   const identity = selectedSession.selectedSession.identity;
-  const defaultArtifactSelection = useMemo<ArtifactSelection>(
-    () => ({ kind: "workflow", workflowKind: workflowKindForRole(selectedSession.role) }),
-    [selectedSession.role],
-  );
+  const defaultArtifactSelection = useMemo<ArtifactSelection>(() => {
+    const code = roleFocusArtifact(selectedSession.role);
+    return code ? { kind: "workflow", code } : { kind: "collection" };
+  }, [selectedSession.role]);
   const roleSessionKey = JSON.stringify([
     artifactScope?.workspaceId ?? null,
     artifactScope?.repoPath ?? null,

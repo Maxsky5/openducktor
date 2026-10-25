@@ -82,6 +82,11 @@ export const createNotificationPolicy = ({
     const selectedSettings = notificationSettingsSchema.removeDefault().parse(settings);
     onSettingsRecovered();
     const kindSettings = selectedSettings.kinds[occurrence.kind];
+    if (!kindSettings) {
+      throw new Error(
+        `Notification settings have no ${occurrence.kind} setting. Report this settings error.`,
+      );
+    }
     if (!kindSettings.enabled) {
       return { externalPlan: null, inAppDelivered: false };
     }

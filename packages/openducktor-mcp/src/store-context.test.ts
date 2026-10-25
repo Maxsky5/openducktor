@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS, ODT_MCP_BRIDGE_VERSION } from "@openducktor/contracts";
 import { resolveStoreContext } from "./store-context";
 import { mcpToolPayloadSchema, type McpToolPayload } from "./tool-results";
 
@@ -131,7 +131,7 @@ describe("resolveStoreContext", () => {
       await responseBarrier;
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -190,7 +190,7 @@ describe("resolveStoreContext", () => {
       });
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -225,7 +225,7 @@ describe("resolveStoreContext", () => {
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         observedHostTokens.push(readHeader(init?.headers, "x-openducktor-app-token"));
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -247,7 +247,7 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -288,7 +288,7 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -349,7 +349,7 @@ describe("resolveStoreContext", () => {
       if (url === "http://127.0.0.1:14327/invoke/odt_mcp_ready") {
         observedHostTokens.push(readHeader(init?.headers, "x-openducktor-app-token"));
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -415,7 +415,7 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       if (url === "http://127.0.0.1:24327/invoke/odt_mcp_ready") {
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -508,7 +508,7 @@ describe("resolveStoreContext", () => {
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         await readinessBarrier;
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: ["odt_mcp_ready"],
         });
       }
@@ -541,7 +541,7 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
-          bridgeVersion: 2,
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }

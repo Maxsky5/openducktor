@@ -7,6 +7,7 @@ import {
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-task-tool-model";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import type { AgentChatTaskToolName } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import { builtinIssueTypeId, builtinStateId } from "@openducktor/workflows";
 import { memo, type ReactElement, useCallback, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -134,9 +135,9 @@ function TaskResultCard({
       </View>
       <View style={styles.content}>
         <View style={styles.badges}>
-          <IssueTypeBadge issueType={task.issueType} />
+          <IssueTypeBadge issueType={builtinIssueTypeId(task.issueType)} />
           <PriorityBadge priority={task.priority} />
-          <TaskStatusBadge status={task.status} />
+          <TaskStatusBadge status={builtinStateId(task.status)} />
         </View>
         {task.description ? (
           <DescriptionPreview description={task.description} revision={`${rowKey}:${task.id}`} />

@@ -1,7 +1,10 @@
+import type {
+  BuiltinPromptRoleTabId,
+  BuiltinPromptTemplateId as AgentPromptTemplateId,
+} from "@openducktor/workflows";
 import { useSettingsModalClaudePolicy } from "./use-settings-modal-claude-policy";
 import { validateOpenCodePermissions } from "./opencode-permission-validation";
 import type {
-  AgentPromptTemplateId,
   AgentRuntimes,
   GitBranch,
   GitProviderRepository,
@@ -39,7 +42,7 @@ import {
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import { validateAzureDevOpsDraft } from "./settings-modal-save-policy";
-import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
+import type { SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
@@ -104,8 +107,8 @@ export type SettingsModalController = {
   hasPromptValidationErrors: boolean;
   selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   selectedRepoPromptValidationErrorCount: number;
-  globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
-  selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
+  globalPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
+  selectedRepoPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
   reusablePromptValidationState: ReusablePromptValidationState;
   hasReusablePromptValidationErrors: boolean;

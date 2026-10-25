@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
@@ -20,6 +21,7 @@ describe("blocker and approval concurrency", () => {
             let cleanups = 0;
             const writes: string[] = [];
             const service = createTaskService({
+              taskWorkflows: builtinTaskWorkflows,
               gitPort: createGitPortTestDouble({
                 canonicalizePath: (path) =>
                   Effect.gen(function* () {
@@ -41,8 +43,7 @@ describe("blocker and approval concurrency", () => {
                 listTasks: () => Effect.sync(() => [current]),
                 getTaskMetadata: () =>
                   Effect.succeed({
-                    spec: { markdown: "" },
-                    plan: { markdown: "" },
+                    artifacts: {},
                     agentSessions: [],
                   }),
                 transitionTask: (input) =>

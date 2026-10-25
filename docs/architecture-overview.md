@@ -14,7 +14,8 @@ This guide covers the desktop app, the browser runner, and the mobile app. Read 
 | Frontend state | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | UI state, task and workspace operations, provider composition | Schemas, task mutations, source live runtime state |
 | Frontend core | `packages/frontend-core/src/*` | Host connection lifetime, query caches, live session projection, history merge, notification policy, connection recovery, drafts | Presentation, device APIs, workflow policy, source live runtime state |
 | Contracts | `packages/contracts/src/*` | Zod schemas for tasks, sessions, workflows, host commands, and MCP data | Runtime control and workflow policy |
-| Core | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | Ports, role policy, tool mapping, prompt helpers | Shell calls and task-store adapter calls |
+| Core | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*` | Shared ports, ODT tool name helpers, and services | Workflow definitions, role policy, and task-store adapters |
+| Workflows | `packages/workflows/src/*` | Pure workflow evaluation, the built-in definition, role policy, prompts, and presentation rules | I/O, storage, React, runtime descriptors, and native runtime calls |
 | Clients and runtime adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Host client and native runtime protocols | Workflow policy and shell transport |
 | Host | `packages/host/src/*` | Command router, Effect services, live session state, runtime drivers, process, files, Git, task store, and MCP | Frontend cache and public schemas |
 | Runtime orchestration | `packages/runtime-orchestration/src/*` | Shared runtime lifecycle, registry, admission, and lifecycle plans | Platform processes, task policy, and settings persistence |
@@ -46,7 +47,7 @@ Read [ADR 0002](adr/0002-use-effect-in-the-typescript-host.md) and [the TanStack
 
 `packages/frontend-core` (`@openducktor/frontend-core`) owns client behavior that desktop, browser, and mobile clients share. [ADR 0011](adr/0011-own-shared-client-behavior-in-a-platform-independent-package.md) records the decision.
 
-The package runs without DOM, Node, or Bun APIs. Its dependencies are contracts, core, the host client, path support, TanStack Query, React, Zod, and Zustand. `packages/frontend-core/src/platform/platform-globals.d.ts` lists the standard globals that a client platform must supply.
+The package runs without DOM, Node, or Bun APIs. Its dependencies are contracts, core, workflows, the host client, path support, TanStack Query, React, Zod, and Zustand. `packages/frontend-core/src/platform/platform-globals.d.ts` lists the standard globals that a client platform must supply.
 
 This diagram shows how a shell builds one client connection.
 
@@ -95,7 +96,7 @@ Connection rules:
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
 5. The shell calls the host command router.
 6. The host resolves the workspace, opens `<config-root>/task-stores/<workspaceId>/database.sqlite`, and reads through `TaskStorePort`.
-7. The host adds `available_actions` and `agent_workflows`.
+7. The host adds `available_actions` and `agent_workflows` from the workflows package.
 8. TanStack Query caches the result. Frontend read models render columns and actions.
 
 The frontend renders `availableActions`. It does not derive transition rights from status. Host SQLite adapters own database paths, schema setup, records, and cache invalidation.
@@ -140,7 +141,7 @@ Session rules:
 The host runs Autopilot for every open workspace while the host runs. Browser presence and workspace selection have no effect. The browser shows outcomes and offers recovery controls.
 
 1. The task store reports each status change and its operation to `AutopilotService` when the change commits. The mutation still holds its repository mutation gate. A later failure or interruption of the mutation keeps the report.
-2. Autopilot classifies the change from its operation and status pair and reads the rules saved at that moment. Each configured action of a qualifying change gets one attempt.
+2. The host maps the operation to its built-in event. The built-in trigger table names the rule for that event and destination. Autopilot reads the settings saved at that moment. Each matching action gets one attempt.
 3. The attempt waits until the reporting mutation and its publication leave the gate. Then it queues in the workflow launch lane of its task with the automatic policy, a start check, and a kickoff instruction.
 4. At its lane turn, a start check skips the attempt if the workspace closed or was removed, the task was deleted, the rule was disabled, or the task had a later status change. The check reads the workspace state again after its task read.
 5. The host keeps the latest outcome of each task and action. It sends each outcome to all clients as an `openducktor://run-event` payload and publishes the session started or session error notification.
@@ -166,9 +167,52 @@ Rules:
 
 ## Change task workflow state
 
-Human and agent actions meet in the host workflow service. SQLite stores the result.
+Workflow contracts have four parts in `packages/contracts/src`:
 
-Task update events carry `statusChanges` with the previous status and the task snapshot at each committed transition. The SQLite adapter reads both states in the transaction and records them only after commit. The mutation publisher collects these values in its Effect fiber and includes them in the task event, including when later work returns a partial failure. The values stay in memory.
+| Module | Owns |
+|---|---|
+| `workflow-definition-schemas.ts` | Zod schemas for roles, artifacts, states, steps, launch actions, events, guards, actions, signals, and automations. |
+| `workflow-condition-schemas.ts` | Zod schemas for declared fact types, artifact references, and data-only conditions. |
+| `workflow-evaluation.ts` | Types for input, step projections, and event decisions. |
+| `workflow-presentation.ts` | Types for display tone, completion, and live session state. |
+
+`createWorkflow` in `packages/workflows` parses, validates, freezes, and compiles a private definition. It accepts mutable `WorkflowDefinition` input and exposes a deeply readonly `CompiledWorkflowDefinition`. Each definition has a `schemaVersion` for its data format and a `revision` for its content. Evaluation input and decisions identify that workflow and revision. Unknown supplied facts, wrong value types, and invalid references fail explicitly. Evaluation input supplies facts and artifact states. The fact and artifact ID `__proto__` is reserved. A missing fact or artifact state fails when evaluation reads it. Short-circuited branches do not need their facts. `workflow.condition()` compiles an extra condition against the same definition.
+
+Every state decision uses a named event. An event declares its source states, ordered named guards, and ordered outcomes. A guard denial names the failed guard. The first matching outcome keeps the state or selects its destination. No event can leave a terminal state, and an event lists a terminal state only to admit a repeat. Every action declares its availability. An event action also needs its event to admit the input, so it can only narrow admission. View actions do not authorize writes.
+
+The definition also declares the data that host and frontend code read instead of built-in names:
+
+- Artifacts. A document can name the event that its submit sends. A review lists its verdicts, and each verdict names its event and tells if it accepts the work. Conditions can test if an artifact is present and the verdict of a review.
+- Roles. Each role lists its `odt_*` tools, the artifacts that it can write, its workspace access, and its working location.
+- States. Each state has its labels, its notification, and its Agent Studio role.
+- Launch actions. Each agent step lists the ways to start its role: start modes, prompt template, selection condition, prompt context, target branch choice, and worktree need.
+- Signals and automations. An event outcome can raise a signal and name its source role. An automation maps a signal to the launch actions that Autopilot can start.
+- Action order and priority. Task cards show actions in the declared order. The first matching priority rule selects the primary action.
+
+An event can name one host effect from `workflowEventEffectValues`, such as `build.start`, `task.close`, or `pull_request.merged`. Each effect has at most one event. The `status.set` effect is the exception: each target state can have one `status.set` event with one outcome. The host command of an effect decides the event of that effect once and branches on the decision kind, so repeats need no status checks. `task_transition` sends the `status.set` event of its target state. `task_apply_event` sends the event of an available event action that has no effect. A role session start sends the start event of its step after it creates the session. It rejects an event that has an effect, because the command of that effect also runs host work. `packages/host/src/application/tasks/support/task-workflow-events.ts` maps denials to `TaskPolicyError` or the command's `HostValidationError`, and gives the store the signal and source role of each transition. A guard denial reports the message of its guard.
+
+`createTaskWorkflow` in `packages/workflows/src/task-workflow` reads a definition and its prompt templates. It gives the host one API for any workflow: task projection, event decisions, effect and status events, roles, artifacts, launch actions, automations, notifications, and prompts. Only `issueType` is a fact. Artifact states come from the task `artifactSummary`, which is keyed by artifact ID. Host code reads the workflow of a repository through the `TaskWorkflowResolver` port and does not use built-in names. The runtime adapters receive the tools and workspace access of a role through a `WorkflowRolePolicyResolver`. Settings follow the workflows of the host: a read adds the notification and Autopilot defaults of each workflow, and a write fails for a role, prompt template, signal, automation, or notification kind outside them.
+
+The built-in in `packages/workflows/src/builtin` owns the built-in definition, its prompts, and the helpers that the frontend reads. The host client parses task cards with the built-in schema, so the frontend still shows only the built-in workflow. The MCP server lists the issue types and active states of the built-in workflow as a hint. It validates input with the generic schemas, and the host checks the values against the workflow of the task.
+
+Task lists reuse evaluation results for tasks with equal inputs.
+
+The evaluator returns decisions. The host applies effects and writes to SQLite:
+
+```mermaid
+flowchart TD
+    A[Definition and explicit input] --> B[Workflow evaluator]
+    B --> C[Step and action projection]
+    B --> D[Event decision]
+    C --> E[Frontend display]
+    D --> F[Host effects and task write]
+```
+
+Steps have their own IDs, separate from agent roles. A step's required, available, and completed flags describe policy. They do not schedule work or enforce artifact dependencies. Artifact inputs and outputs describe relationships only. Event guards enforce prerequisites. The generic projection has no skip or attempt state; the built-in derives the existing task protocol's `canSkip` flag from `required`.
+
+Every repository uses the built-in workflow until tasks name their workflow. Task and session records do not store a workflow identity, revision, or generic step run. Before workflow selection or editing can persist an assignment, its design must pin an immutable definition revision and define how existing tasks can upgrade. Native runtime calls, transaction boundaries, and cleanup stay in the host.
+
+Task update events carry `statusChanges` with the previous status, the source role, and the task snapshot at each committed transition. The committed observer also receives the signal of the transition, and Autopilot reads it. The SQLite adapter reads both states in the transaction and records them only after commit. The mutation publisher collects these values in its Effect fiber and includes them in the task event, including when later work returns a partial failure. The values stay in memory.
 
 Workflow notifications use these committed transitions. A `snapshot_required` refresh can read newer task data before buffered events arrive, so that read cannot define whether an event changed status. Initial snapshots remain silent. Event IDs and transition positions identify repeated delivery of the same change.
 
@@ -209,11 +253,13 @@ The page does not parse chat text to create a pull request.
 | Task status, issue type, action ID | `packages/contracts/src/task-schemas.ts` | Contracts |
 | Role and start mode | `packages/contracts/src/agent-workflow-schemas.ts` | Contracts |
 | ODT tool names and schemas | `packages/contracts/src/odt-tool-names.ts`, `packages/contracts/src/odt-mcp-schemas.ts` | Contracts |
-| Role tool list | `AGENT_ROLE_TOOL_POLICY` | Core |
-| Workflow rules and derived actions | `packages/host/src/domain/task/*`, `packages/host/src/application/tasks/*` | Host |
+| Role tool list | `AGENT_ROLE_TOOL_POLICY` | Workflows |
+| Generic workflow definitions, decisions, and presentation | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |
+| Workflow evaluation and built-in rules | `packages/workflows/src/*` | Workflows |
+| Workflow execution and typed failures | `packages/host/src/domain/task/*`, `packages/host/src/application/tasks/*` | Host |
 | Task state | SQLite `tasks.status` | Host SQLite adapter |
 | Database identity | `<config-root>/task-stores/<workspaceId>/database.sqlite` | Host SQLite infrastructure |
-| Documents and durable session records | SQLite task and document rows | Host task services |
+| Artifacts and durable session records | SQLite task-store rows | Host task services |
 | Live session state and reply routing | `packages/host/src/application/agent-sessions/*`, `packages/host/src/adapters/agent-sessions/*` | Host runtime adapter |
 | Renderer session view | `packages/frontend-core/src/sessions/agent-orchestrator/session-read-model/*` | Client projection |
 | Transcript history | Selected runtime history adapter | Runtime adapter |
@@ -222,6 +268,7 @@ The page does not parse chat text to create a pull request.
 
 ## Replaceable boundaries
 
+- Workflow definitions and `createWorkflow` in `packages/workflows`.
 - Agent engine ports in `packages/core/src/ports/agent-engine.ts`.
 - Live-session port in `packages/host/src/ports/agent-session-live-adapter-port.ts`.
 - Native runtime code in `packages/adapters-opencode-sdk`, `packages/adapters-codex-app-server`, and `packages/host/src/adapters/claude`.
@@ -230,8 +277,7 @@ The page does not parse chat text to create a pull request.
 ## Cross-layer change order
 
 1. Change a shared data shape in `packages/contracts` first.
-2. Change ODT names or workflow schemas in contracts, core policy, adapters, host, MCP, and UI together.
+2. Change ODT names or workflow schemas in contracts, workflow policy, adapters, host, MCP, and UI together.
 3. Change public MCP schemas and package docs together.
-4. Change host task policy before workflow docs and UI mapping.
-5. Keep policy in host domain or application code. Shells only map transport.
-6. Keep task lifecycle and database paths in the host.
+4. Change workflow rules before their callers and documentation.
+5. Keep workflow rules in `packages/workflows`. Host services own task writes and database paths. Shells map transport.

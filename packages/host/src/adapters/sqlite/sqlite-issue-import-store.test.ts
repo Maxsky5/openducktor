@@ -26,13 +26,13 @@ describe("SQLite Issue imports", () => {
     const input = {
       repoPath: harness.repoPath,
       sourceIssue,
+      status: "open",
       task: {
         title: "Issue title",
         description: "Issue body",
         issueType: "task" as const,
         priority: 2,
         labels: ["bug"],
-        aiReviewEnabled: true,
       },
     };
 
@@ -45,7 +45,6 @@ describe("SQLite Issue imports", () => {
       status: "open",
       sourceIssue,
       labels: ["bug"],
-      aiReviewEnabled: true,
     });
     expect(
       await Effect.runPromise(
@@ -94,13 +93,13 @@ describe("SQLite Issue imports", () => {
       store.createImportedTask({
         repoPath: harness.repoPath,
         sourceIssue,
+        status: "open",
         task: {
           title: "Saved issue",
           description: "Body",
           issueType: "task",
           priority: 2,
           labels: [],
-          aiReviewEnabled: true,
         },
       }),
     );
@@ -127,13 +126,13 @@ describe("SQLite Issue imports", () => {
           scope: "github.com/@repository/456",
           url: "https://github.com/example/unrelated/issues/42",
         },
+        status: "open",
         task: {
           title: "Other repository issue",
           description: "Other body",
           issueType: "task",
           priority: 2,
           labels: [],
-          aiReviewEnabled: true,
         },
       }),
     );

@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
@@ -95,8 +96,12 @@ beforeEach(async () => {
       ),
     ),
   );
-  const base = createTaskServiceWithMutationProgress({ taskStore: harness.store });
+  const base = createTaskServiceWithMutationProgress({
+    taskWorkflows: builtinTaskWorkflows,
+    taskStore: harness.store,
+  });
   service = createEventPublishingTaskService({
+    taskWorkflows: builtinTaskWorkflows,
     taskService: base,
     taskSyncService: createTaskSyncServiceForTest({
       taskService: base,
@@ -116,6 +121,7 @@ const bridgeWith = (
   owner?: RuntimeSessionOwner,
 ) =>
   createOdtMcpBridgeService({
+    taskWorkflows: builtinTaskWorkflows,
     browserAgentTools: { runAgentTool: () => Effect.die("Unexpected browser call") },
     browserCallers: { resolve: () => Effect.die("Unexpected browser caller") },
     managedCallers: {
@@ -281,7 +287,7 @@ test.each([
     issueType: "task",
     status: "spec_ready",
     verdict: undefined,
-    qaVerdict: "not_reviewed",
+    qaReport: { present: false },
   },
   {
     code: "plan",
@@ -289,7 +295,7 @@ test.each([
     issueType: "feature",
     status: "ready_for_dev",
     verdict: undefined,
-    qaVerdict: "not_reviewed",
+    qaReport: { present: false },
   },
   {
     code: "qaReport",
@@ -297,7 +303,7 @@ test.each([
     issueType: "task",
     status: "human_review",
     verdict: "approved",
-    qaVerdict: "approved",
+    qaReport: { present: true, verdict: "approved" },
   },
   {
     code: "qaReport",
@@ -305,11 +311,11 @@ test.each([
     issueType: "task",
     status: "in_progress",
     verdict: "rejected",
-    qaVerdict: "rejected",
+    qaReport: { present: true, verdict: "rejected" },
   },
 ] as const)(
   "saves workflow content through the unified artifact setter %j",
-  async ({ code, start, issueType, status, verdict, qaVerdict }) => {
+  async ({ code, start, issueType, status, verdict, qaReport }) => {
     await seedTaskState(start, issueType);
     const markdown = `# ${code}\nComplete workflow content.`;
     const input = {
@@ -339,7 +345,7 @@ test.each([
     const persisted = await Effect.runPromise(service.findTask(taskScope()));
     expect(persisted).toMatchObject({
       status,
-      artifactSummary: { qaReport: { verdict: qaVerdict } },
+      artifactSummary: { qaReport },
     });
     const read = readTaskArtifactsResultSchema.parse(
       await Effect.runPromise(
@@ -367,24 +373,20 @@ test.each([
     const afterSave = (artifact: TaskMetadataArtifact) =>
       Effect.gen(function* () {
         captured = artifact;
-        const later = { ...taskScope(), markdown: "# Later write" };
-        if (code === "spec") yield* harness.store.setSpecArtifact(later);
-        else if (code === "plan") yield* harness.store.setPlanArtifact(later);
-        else
-          yield* harness.store.recordQaOutcome({
-            ...later,
-            status: "in_progress",
-            verdict: "rejected",
-          });
+        const later = {
+          ...taskScope(),
+          markdown: "# Later write",
+          code,
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+        };
+        yield* harness.store.saveWorkflowArtifact(
+          code === "qaReport" ? { ...later, verdict: "rejected", status: "in_progress" } : later,
+        );
       });
     const bridge = bridgeWith({
-      setSpec: (input) => service.setSpec(input).pipe(Effect.tap(afterSave)),
-      setPlan: (input) =>
-        service.setPlan(input).pipe(Effect.tap(({ artifact }) => afterSave(artifact))),
-      qaApproved: (input) =>
-        service.qaApproved(input).pipe(Effect.tap(({ artifact }) => afterSave(artifact))),
-      qaRejected: (input) =>
-        service.qaRejected(input).pipe(Effect.tap(({ artifact }) => afterSave(artifact))),
+      workflowArtifactSave: (input) =>
+        service.workflowArtifactSave(input).pipe(Effect.tap(({ artifact }) => afterSave(artifact))),
     });
     const input: typeof scope & {
       code: string;
@@ -406,7 +408,9 @@ test.each([
     };
     if (verdict !== undefined) expected.verdict = verdict;
     expect(result).toEqual({ artifact: expected });
-    expect((await Effect.runPromise(service.getTaskMetadata(taskScope())))[code]).toMatchObject({
+    expect(
+      (await Effect.runPromise(service.getTaskMetadata(taskScope()))).artifacts[code],
+    ).toMatchObject({
       markdown: "# Later write",
       revision: 2,
     });
@@ -494,7 +498,7 @@ test.each([
           : bridge.invoke("odt_set_task_artifact", { ...input, caller }),
       );
       const metadata = await Effect.runPromise(service.getTaskMetadata(taskScope()));
-      expect(metadata[code]?.markdown).toBe(markdown);
+      expect(metadata.artifacts[code]?.markdown).toBe(markdown);
     }
     await Effect.runPromise(
       bridge.invoke("odt_set_task_artifact", {
@@ -566,7 +570,14 @@ test.each(["task-1", "Artifact task"])(
   "rejects another managed task's artifact write when the target is %s",
   async (taskId) => {
     await Effect.runPromise(
-      service.setSpec({ ...taskScope(), markdown: "# Keep the existing spec" }),
+      service.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        ...taskScope(),
+        markdown: "# Keep the existing spec",
+        code: "spec",
+        submit: true,
+      }),
     );
     const before = await snapshotTask();
     const error = await Effect.runPromise(
@@ -628,7 +639,16 @@ test("allows a managed Workspace Session to delete a task artifact", async () =>
 
 test("reads a complete spec after task metadata in two calls without artifact ID discovery", async () => {
   const markdown = `# Spec\n${"Keep the complete specification available.\n".repeat(600)}End of spec.`;
-  await Effect.runPromise(service.setSpec({ ...taskScope(), markdown }));
+  await Effect.runPromise(
+    service.workflowArtifactSave({
+      sourceTool: "workflow_artifact_save",
+      updatedBy: "user",
+      ...taskScope(),
+      markdown,
+      code: "spec",
+      submit: true,
+    }),
+  );
   await seedArtifact("notes", "Planner notes", "Notes");
   const bridge = bridgeWith();
 
@@ -677,7 +697,16 @@ test("reads a complete spec after task metadata in two calls without artifact ID
 test("overlaps mixed workflow and free reads and keeps code request order", async () => {
   const first = (await seedArtifact("first", content, "First")).artifact;
   const second = (await seedArtifact("second", content, "Second")).artifact;
-  await Effect.runPromise(service.setSpec({ ...taskScope(), markdown: "# Spec" }));
+  await Effect.runPromise(
+    service.workflowArtifactSave({
+      sourceTool: "workflow_artifact_save",
+      updatedBy: "user",
+      ...taskScope(),
+      markdown: "# Spec",
+      code: "spec",
+      submit: true,
+    }),
+  );
   const workflow = (await Effect.runPromise(service.listTaskArtifacts(taskScope()))).artifacts.find(
     (artifact) => artifact.classification === "workflow",
   );
@@ -782,7 +811,16 @@ test("propagates a selected read failure without returning a partial batch", asy
 });
 
 test("addresses duplicate display names by code across rename, read, and delete", async () => {
-  await Effect.runPromise(service.setSpec({ ...taskScope(), markdown: "# Spec" }));
+  await Effect.runPromise(
+    service.workflowArtifactSave({
+      sourceTool: "workflow_artifact_save",
+      updatedBy: "user",
+      ...taskScope(),
+      markdown: "# Spec",
+      code: "spec",
+      submit: true,
+    }),
+  );
   const first = (await seedArtifact("first", "first bytes", "Notes")).artifact;
   await seedArtifact("second", "second bytes", "Specification");
   const bridge = bridgeWith();
@@ -826,7 +864,7 @@ test("addresses duplicate display names by code across rename, read, and delete"
   expect(collection.artifacts).toHaveLength(2);
   expect(collection.artifacts).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ classification: "workflow", workflowKind: "spec" }),
+      expect.objectContaining({ classification: "workflow", code: "spec" }),
       expect.objectContaining({
         classification: "free",
         code: "first",
@@ -859,9 +897,18 @@ test.each(["odt_read_task_artifacts", "odt_delete_task_artifact"] as const)(
 );
 
 test.each(["spec", "plan", "qaReport"] as const)(
-  "rejects deletion of reserved workflow code %s before store access",
+  "rejects deletion of workflow artifact %s before task access",
   async (code) => {
-    await Effect.runPromise(service.setSpec({ ...taskScope(), markdown: "# Spec" }));
+    await Effect.runPromise(
+      service.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        ...taskScope(),
+        markdown: "# Spec",
+        code: "spec",
+        submit: true,
+      }),
+    );
     const before = await Effect.runPromise(service.listTaskArtifacts(taskScope()));
     const error = await Effect.runPromise(
       bridgeWith()
@@ -869,7 +916,9 @@ test.each(["spec", "plan", "qaReport"] as const)(
         .pipe(Effect.flip),
     );
     expect(error).toMatchObject({ _tag: "HostValidationError" });
-    expect(scopeCalls).toEqual([]);
+    // The tool schema rejects qaReport, which is not a free artifact code. The other codes need
+    // only the workspace lookup, which finds the workflow of the repository.
+    expect(scopeCalls).toEqual(code === "qaReport" ? [] : ["fixture"]);
     expect(await Effect.runPromise(service.listTaskArtifacts(taskScope()))).toEqual(before);
   },
 );

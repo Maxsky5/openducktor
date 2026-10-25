@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
@@ -46,6 +47,7 @@ test("an interrupted artifact write retains lifecycle exclusion and publishes be
       ),
   });
   const base = createTaskServiceWithMutationProgress({
+    taskWorkflows: builtinTaskWorkflows,
     taskStore,
     taskSessionLifecycleCoordinator: coordinator,
   });
@@ -59,15 +61,19 @@ test("an interrupted artifact write retains lifecycle exclusion and publishes be
     },
     eventBus: { publish: (event) => events.push(event) },
   });
-  const service = createEventPublishingTaskService({ taskService: base, taskSyncService: sync });
+  const service = createEventPublishingTaskService({
+    taskWorkflows: builtinTaskWorkflows,
+    taskService: base,
+    taskSyncService: sync,
+  });
   const task = await run(
     harness.store.createTask({
       repoPath: harness.repoPath,
+      status: "open",
       task: {
         title: "Interrupted artifact",
         issueType: "task",
         priority: 2,
-        aiReviewEnabled: true,
       },
     }),
   );

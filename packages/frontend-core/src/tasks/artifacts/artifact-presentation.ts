@@ -1,21 +1,11 @@
 import type { FreeTaskArtifact, TaskArtifact, WorkflowTaskArtifact } from "@openducktor/contracts";
-
-export const WORKFLOW_ARTIFACT_NAMES = {
-  spec: "Specification",
-  plan: "Implementation Plan",
-  qaReport: "QA Report",
-} as const satisfies Record<WorkflowTaskArtifact["workflowKind"], string>;
-
-const WORKFLOW_ORDER = { spec: 0, plan: 1, qaReport: 2 } as const satisfies Record<
-  WorkflowTaskArtifact["workflowKind"],
-  number
->;
+import { workflowArtifactOrder } from "@openducktor/workflows";
 
 /** The collection as both clients list it: workflow artifacts in workflow order, then files by name. */
 export const groupTaskArtifacts = (artifacts: readonly TaskArtifact[]) => ({
   workflow: artifacts
     .filter((item): item is WorkflowTaskArtifact => item.classification === "workflow")
-    .toSorted((a, b) => WORKFLOW_ORDER[a.workflowKind] - WORKFLOW_ORDER[b.workflowKind]),
+    .toSorted((a, b) => workflowArtifactOrder(a.code) - workflowArtifactOrder(b.code)),
   files: artifacts
     .filter((item): item is FreeTaskArtifact => item.classification === "free")
     .toSorted((a, b) => a.name.localeCompare(b.name)),

@@ -1,12 +1,10 @@
 import type {
   AgentSessionIdentity,
   AgentSessionRecord,
-  PlanSubtaskInput,
   PullRequest,
   TaskAssetDescriptionMutation,
   TaskCreateInput,
   TaskDirectMergeInput,
-  TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 
@@ -20,7 +18,7 @@ export type TaskIdInput = RepoPathInput & {
 
 export type ListTasksInput = RepoPathInput & {
   doneVisibleDays?: number;
-  /** Read these tasks and their parents for a committed change event. */
+  /** Read these tasks for a committed change event. */
   taskIds?: readonly string[];
 };
 
@@ -65,9 +63,7 @@ export type CreateTaskUseCaseInput = RepoPathInput & {
   descriptionAssets?: TaskAssetDescriptionMutation;
 };
 
-export type DeleteTaskInput = TaskIdInput & {
-  deleteSubtasks: boolean;
-};
+export type DeleteTaskInput = TaskIdInput;
 
 export type UpdateTaskInput = TaskIdInput & {
   patch: TaskUpdatePatch;
@@ -75,17 +71,30 @@ export type UpdateTaskInput = TaskIdInput & {
 };
 
 export type TransitionTaskInput = TaskIdInput & {
-  status: TaskStatus;
+  status: string;
 };
 
-export type MarkdownArtifactInput = TaskIdInput & {
-  markdown: string;
+/** A workflow event that an event action sends. A host effect event has its own command. */
+export type ApplyTaskEventInput = TaskIdInput & {
+  eventId: string;
 };
 
-export type SetPlanInput = TaskIdInput & {
+export type WorkflowArtifactInput = TaskIdInput & {
+  code: string;
+};
+
+/**
+ * A submit sends the event that the artifact or its verdict declares. A save without submit
+ * changes only a document.
+ */
+export type WorkflowArtifactSaveInput = WorkflowArtifactInput & {
   markdown: string;
-  subtasks: PlanSubtaskInput[];
-  hasExplicitSubtasks: boolean;
+  verdict?: string;
+  submit: boolean;
+  /** The command that saves the artifact, such as `odt_set_task_artifact`. */
+  sourceTool: string;
+  /** The role of the acting session, or `user`. */
+  updatedBy: string;
 };
 
 export type BuildStartInput = TaskIdInput & {

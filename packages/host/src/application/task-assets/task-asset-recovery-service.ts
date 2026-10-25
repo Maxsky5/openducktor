@@ -100,11 +100,7 @@ export const createTaskAssetRecoveryService = ({
             taskId: quarantine.taskId,
           });
           if (taskExists) {
-            yield* taskStore.deleteTask({
-              repoPath,
-              taskId: quarantine.taskId,
-              deleteSubtasks: true,
-            });
+            yield* taskStore.deleteTask({ repoPath, taskId: quarantine.taskId });
           }
           if (existingPromotedAssetIds.length > 0) {
             yield* filePort.removeDurable({

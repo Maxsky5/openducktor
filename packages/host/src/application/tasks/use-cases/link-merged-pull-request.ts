@@ -10,18 +10,20 @@ import {
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
+import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
 import {
-  validatePullRequestManagementStatusEffect,
-  validateTaskTransitionEffect,
-} from "../support/task-validation-effects";
-import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+  requireEffectEvent,
+  requirePullRequestManagement,
+  taskEventPolicyError,
+} from "../support/task-workflow-events";
+import { enrichTask } from "../support/task-workflow-helpers";
 import {
   canSkipRelinkedPullRequestCleanup,
   cleanupMergedTaskState,
   loadTaskBranchCleanup,
 } from "../support/task-worktree-cleanup";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
+import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
 type TaskBranchCleanup = {
   sourceBranch: string;
@@ -29,6 +31,7 @@ type TaskBranchCleanup = {
 };
 
 export const createTaskLinkMergedPullRequestUseCase = ({
+  taskWorkflows,
   gitPort,
   gitProviderResolver,
   taskStore,
@@ -39,12 +42,12 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-}: TaskServiceUseCaseInput) => ({
-  linkMergedPullRequest(input: Parameters<TaskService["linkMergedPullRequest"]>[0]) {
+}: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "linkMergedPullRequest"> => ({
+  linkMergedPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest } = input;
 
-      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const sameExistingPullRequest =
         metadata.pullRequest?.providerId === pullRequest.providerId &&
@@ -71,8 +74,11 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           linkedProviderId: metadata.pullRequest.providerId,
         });
       }
-      if (current.status === "closed" && sameExistingPullRequest) {
-        return enrichTask(current, currentTasks);
+      const workflow = taskWorkflows.forRepo(repoPath);
+      const closeEvent = yield* requireEffectEvent(workflow, "pull_request.merged");
+      const closure = workflow.decide(closeEvent, current);
+      if (closure.kind === "unchanged" && sameExistingPullRequest) {
+        return enrichTask(workflow, current);
       }
 
       const dependencies = yield* requireDependencies(() =>
@@ -85,16 +91,13 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           workspaceSettingsService,
         }),
       );
-      yield* validatePullRequestManagementStatusEffect(current.status);
-      if (metadata.directMerge !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before linking a merged pull request.`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
+      yield* requirePullRequestManagement(workflow, current);
+      yield* ensureNoDirectMergeEffect({
+        operation: "link_merged_pull_request",
+        repoPath,
+        taskId,
+        directMerge: metadata.directMerge,
+      });
       if (pullRequest.state !== "merged") {
         return yield* Effect.fail(
           new HostValidationError({
@@ -143,10 +146,17 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
       const postLink = yield* Effect.result(
         Effect.gen(function* () {
-          yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
+          if (closure.kind === "denied") {
+            return yield* taskEventPolicyError(closeEvent, current, closure);
+          }
           const cleanupEffect = cleanup
             ? cleanupMergedTaskState(
-                { ...dependencies, taskActivityGuard, taskSessionLifecycleCoordinator },
+                {
+                  ...dependencies,
+                  taskActivityGuard,
+                  taskSessionLifecycleCoordinator,
+                  workflow,
+                },
                 taskStore,
                 repoPath,
                 taskId,
@@ -164,6 +174,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
             gitPort: dependencies.gitPort,
             operation: "link merged pull request",
             repoPath,
+            decision: closure,
             taskId,
             taskSessionLifecycleCoordinator,
             taskStore,
@@ -176,9 +187,8 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       }
       const task = postLink.success;
-      const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
-      return enrichTask(task, nextTasks);
+      return enrichTask(workflow, task);
     });
   },
 });

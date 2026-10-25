@@ -1,6 +1,10 @@
-import type { TaskCard as TaskCardData, WorkspaceRecord } from "@openducktor/contracts";
-import type { AgentRole, KanbanColumnId } from "@openducktor/core";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { KanbanColumnId } from "@openducktor/workflows";
+import {
+  type TaskWorkflowAction,
+  type BuiltinTaskCard as TaskCardData,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { useWindowDimensions, View } from "react-native";

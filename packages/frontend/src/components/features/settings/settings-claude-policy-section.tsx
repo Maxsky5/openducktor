@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
 import { claudeRuntimeConfigSchema, type ClaudeRuntimeConfig } from "@openducktor/contracts";
 import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
@@ -10,11 +11,7 @@ import { cn } from "@/lib/utils";
 import { readClaudePolicyField } from "./settings-claude-policy";
 import { ClaudePolicyCard } from "./settings-claude-policy-card";
 import { ClaudeToolAvailabilitySettings } from "./settings-claude-tool-availability";
-import {
-  CLAUDE_POLICY_GROUPS,
-  CLAUDE_POLICY_ROLES,
-  type ClaudePolicyField,
-} from "./settings-claude-policy-fields";
+import { CLAUDE_POLICY_GROUPS, type ClaudePolicyField } from "./settings-claude-policy-fields";
 import type { z } from "zod";
 
 const approvalField = CLAUDE_POLICY_GROUPS[0]!.fields[0]!;
@@ -77,7 +74,7 @@ function ClaudePolicyGroup({
   const defaultCount = group.fields.filter(
     (field) => readClaudePolicyField(config.defaults, field.path) !== undefined,
   ).length;
-  const roleCount = CLAUDE_POLICY_ROLES.reduce(
+  const roleCount = BUILTIN_ROLE_IDS.reduce(
     (count, role) =>
       count +
       group.fields.filter(

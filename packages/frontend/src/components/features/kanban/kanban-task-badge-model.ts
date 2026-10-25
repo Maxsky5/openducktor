@@ -1,6 +1,6 @@
-import type { IssueType } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
-import { Bug, CheckSquare, Layers3, Sparkles } from "lucide-react";
+import { Bug, CheckSquare, Sparkles } from "lucide-react";
+import type { BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 import {
   ISSUE_TYPE_LABELS,
   PRIORITY_LABELS,
@@ -22,13 +22,6 @@ export const ISSUE_TYPE_STYLES = {
     iconClassName: "text-sky-600 dark:text-sky-400",
     className:
       "border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",
-  },
-  epic: {
-    label: ISSUE_TYPE_LABELS.epic,
-    icon: Layers3,
-    iconClassName: "text-violet-600 dark:text-violet-400",
-    className:
-      "border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300",
   },
   task: {
     label: ISSUE_TYPE_LABELS.task,

@@ -1,4 +1,4 @@
-import type { TaskCard, TaskUpdatePatch } from "@openducktor/contracts";
+import type { TaskUpdatePatch } from "@openducktor/contracts";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
@@ -8,12 +8,13 @@ import type {
   TaskAssetRegistryPort,
 } from "../../ports/task-asset-registry-port";
 import type { TaskDescriptionAssetPersistencePort } from "../../ports/task-description-asset-persistence-port";
-import { getTaskCard } from "./sqlite-task-card-read-model";
+import { getTaskRecord } from "./sqlite-task-card-read-model";
 import { insertTaskFromCreateInput } from "./sqlite-task-create";
 import { requireTaskRow } from "./sqlite-task-queries";
 import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
 import { type TaskStoreSession, taskAssets, tasks } from "./sqlite-task-store-schema";
 import { applyTaskPatch } from "./sqlite-task-writes";
+import type { TaskRecord } from "../../ports/task-repository-ports";
 
 export type CreateSqliteTaskAssetRegistryInput = {
   contextProvider: SqliteTaskRepositoryContextProvider;
@@ -62,19 +63,15 @@ const sameAssetIds = (left: string[], right: string[]) => {
 };
 
 const samePatchedTaskFields = (
-  current: TaskCard,
-  expected: TaskCard,
+  current: TaskRecord,
+  expected: TaskRecord,
   patch: TaskUpdatePatch,
 ): boolean => {
   if (patch.title !== undefined && current.title !== expected.title) return false;
   if (patch.description !== undefined && current.description !== expected.description) return false;
   if (patch.priority !== undefined && current.priority !== expected.priority) return false;
   if (patch.issueType !== undefined && current.issueType !== expected.issueType) return false;
-  if (patch.aiReviewEnabled !== undefined && current.aiReviewEnabled !== expected.aiReviewEnabled) {
-    return false;
-  }
   if (patch.labels !== undefined && !sameAssetIds(current.labels, expected.labels)) return false;
-  if (patch.parentId !== undefined && current.parentId !== expected.parentId) return false;
   if (patch.targetBranch !== undefined) {
     if (current.targetBranch?.branch !== expected.targetBranch?.branch) return false;
     if (current.targetBranch?.remote !== expected.targetBranch?.remote) return false;
@@ -167,21 +164,21 @@ export const createSqliteTaskAssetRegistry = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
-        ({ session, workspaceId }) =>
+        ({ session, workspaceId, workflow }) =>
           session.transaction(
             "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
             (transaction) =>
               Effect.gen(function* () {
                 const taskId = yield* insertTaskFromCreateInput({
                   createdAt: now(),
-                  repoPath: input.repoPath,
                   session: transaction,
+                  status: input.status,
                   task: input.task,
                   workspaceId,
                 });
                 yield* input.prepareFiles(taskId);
                 yield* insertAssets(transaction, taskId, input.assets);
-                return yield* getTaskCard(transaction, taskId, input.repoPath);
+                return yield* getTaskRecord(transaction, taskId, input.repoPath, workflow);
               }),
           ),
       );
@@ -190,12 +187,17 @@ export const createSqliteTaskAssetRegistry = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
-        ({ session }) =>
+        ({ session, workflow }) =>
           session.transaction(
             "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
             (transaction) =>
               Effect.gen(function* () {
-                const currentTask = yield* getTaskCard(transaction, input.taskId, input.repoPath);
+                const currentTask = yield* getTaskRecord(
+                  transaction,
+                  input.taskId,
+                  input.repoPath,
+                  workflow,
+                );
                 const currentAssets = yield* transaction.execute(
                   (database) =>
                     database
@@ -241,8 +243,8 @@ export const createSqliteTaskAssetRegistry = ({
                     "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets.deleteAssets",
                   );
                 }
-                yield* applyTaskPatch(transaction, input, now());
-                return yield* getTaskCard(transaction, input.taskId, input.repoPath);
+                yield* applyTaskPatch(transaction, input, now(), workflow);
+                return yield* getTaskRecord(transaction, input.taskId, input.repoPath, workflow);
               }),
           ),
       );

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { runtimeSpeedCapabilitySchema } from "./agent-speed-schemas";
 import {
-  type AgentRole,
   type AgentToolName,
   agentSessionStartModeSchema,
   agentToolNameSchema,
@@ -614,28 +613,6 @@ export const optionalRuntimeCapabilityKeys = [
   "optionalSurfaces.supportsSubagents",
   "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const satisfies readonly RuntimeCapabilityKey[];
-
-export const runtimeRequiredScopesByRole = {
-  spec: ["workspace"],
-  planner: ["workspace"],
-  qa: ["task"],
-  build: ["build", "workspace"],
-} as const satisfies Record<AgentRole, readonly RuntimeSupportedScope[]>;
-
-const requiredRuntimeSupportedScopeSet = new Set<RuntimeSupportedScope>(
-  Object.values(runtimeRequiredScopesByRole).flat(),
-);
-
-export const requiredRuntimeSupportedScopes = runtimeSupportedScopeValues.filter((scope) =>
-  requiredRuntimeSupportedScopeSet.has(scope),
-);
-
-export const getMissingRequiredRuntimeSupportedScopes = (
-  supportedScopes: readonly RuntimeSupportedScope[],
-): RuntimeSupportedScope[] => {
-  const supportedScopeSet = new Set<RuntimeSupportedScope>(supportedScopes);
-  return requiredRuntimeSupportedScopes.filter((scope) => !supportedScopeSet.has(scope));
-};
 
 export type RuntimeCapabilityClass =
   | "baseline"

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  agentPromptTemplateIdValues,
   settingsSnapshotSaveInputSchema,
   type AgentModelDefault,
   type SettingsRepoConfig,
@@ -11,6 +10,7 @@ import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
+import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows";
 
 const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo-a",
@@ -160,7 +160,7 @@ describe("settings save transforms", () => {
 
   test("preserves every known prompt override key when preparing save payloads", () => {
     const source: RepoPromptOverrides = Object.fromEntries(
-      agentPromptTemplateIdValues.map((templateId, index) => [
+      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId, index) => [
         templateId,
         {
           template: ` ${templateId} template `,
@@ -172,9 +172,9 @@ describe("settings save transforms", () => {
 
     const saveReady = preparePromptOverridesForSave(source);
     const saveReadyKeys = Object.keys(saveReady).sort();
-    expect(saveReadyKeys).toEqual(agentPromptTemplateIdValues.toSorted());
+    expect(saveReadyKeys).toEqual(BUILTIN_PROMPT_TEMPLATE_IDS.toSorted());
 
-    for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
+    for (const [index, templateId] of BUILTIN_PROMPT_TEMPLATE_IDS.entries()) {
       const entry = saveReady[templateId];
       expect(entry).toEqual({
         template: `${templateId} template`,

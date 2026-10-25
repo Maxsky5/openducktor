@@ -17,8 +17,6 @@ import type { HostCommandHandlerError } from "../router/host-command-router";
 type TaskCommandService = Parameters<typeof createTaskCommandHandlers>[0];
 const createTaskCommandService = (overrides: Partial<TaskCommandService>): TaskCommandService => ({
   ...createTaskServiceTestDouble({}),
-  qaApproved: () => Effect.die(new Error("Unexpected qaApproved call")),
-  qaRejected: () => Effect.die(new Error("Unexpected qaRejected call")),
   ...overrides,
 });
 
@@ -29,21 +27,18 @@ const taskFixture: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  parentId: undefined,
-  subtaskIds: [],
   pullRequest: undefined,
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-05-10T10:00:00.000Z",
@@ -74,8 +69,7 @@ const directMergeFixture: TaskDirectMergeResult = {
   task: taskFixture,
 };
 const metadataFixture: TaskMetadataPayload = {
-  spec: artifactFixture,
-  plan: artifactFixture,
+  artifacts: { spec: artifactFixture, plan: artifactFixture },
   agentSessions: [],
 };
 const buildSessionFixture: BuildSessionBootstrap = {
@@ -459,133 +453,19 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      savePlanArtifact(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "plan_save_artifact", input });
-            return artifactFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+      workflowArtifactGet(input) {
+        return Effect.sync(() => {
+          calls.push({ command: "workflow_artifact_get", input });
+          return artifactFixture;
         });
       },
-      planGet(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "plan_get", input });
-            return artifactFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      saveSpecArtifact(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "spec_save_artifact", input });
-            return artifactFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      specGet(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "spec_get", input });
-            return artifactFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlan(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "set_plan", input });
-            return {
-              artifact: { markdown: "# Plan" },
-              changes: { taskIds: ["task-1"], removedTaskIds: [] },
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpec(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "set_spec", input });
-            return artifactFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      qaApproved(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "qa_approved", input });
-            return { task: taskFixture, artifact: artifactFixture };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      qaGetReport(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "qa_get_report", input });
-            return artifactFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      qaRejected(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "qa_rejected", input });
-            return { task: taskFixture, artifact: artifactFixture };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+      workflowArtifactSave(input) {
+        return Effect.sync(() => {
+          calls.push({ command: "workflow_artifact_save", input });
+          return {
+            artifact: artifactFixture,
+            changes: { taskIds: [input.taskId], removedTaskIds: [] },
+          };
         });
       },
       repoPullRequestSync(input) {
@@ -630,6 +510,10 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
+      applyTaskEvent(input) {
+        calls.push({ command: "task_apply_event", input });
+        return Effect.succeed(taskFixture);
+      },
       updateTask(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -651,14 +535,12 @@ describe("createTaskCommandHandlers", () => {
       runHandler(
         handlers.task_create?.({
           repoPath: "/repo",
-          input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+          input: { title: "Task", issueType: "task", priority: 2 },
         }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.task_delete?.({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: true }),
-      ),
+      runHandler(handlers.task_delete?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(handlers.task_close?.({ repoPath: "/repo", taskId: "task-1" })),
@@ -756,6 +638,11 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
+        handlers.task_apply_event?.({ repoPath: "/repo", taskId: "task-1", eventId: "defer" }),
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      runHandler(
         handlers.build_blocked?.({ repoPath: "/repo", taskId: "task-1", reason: "Blocked" }),
       ),
     ).resolves.toBeDefined();
@@ -783,27 +670,6 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.qa_approved?.({
-          repoPath: "/repo",
-          taskId: "task-1",
-          reportMarkdown: "Looks good",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.qa_rejected?.({
-          repoPath: "/repo",
-          taskId: "task-1",
-          reportMarkdown: "Needs work",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(handlers.qa_get_report?.({ repoPath: "/repo", taskId: "task-1" })),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
         handlers.repo_pull_request_sync?.({ repoPath: "/repo", expectedWorkspaceId: "repo-id" }),
       ),
     ).resolves.toEqual({ ok: true });
@@ -820,41 +686,47 @@ describe("createTaskCommandHandlers", () => {
       runHandler(handlers.human_approve?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.set_spec?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })),
-    ).resolves.toBeDefined();
+      runHandler(
+        handlers.workflow_artifact_save?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "qaReport",
+          markdown: "Looks good",
+          verdict: "approved",
+          submit: true,
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+        }),
+      ),
+    ).resolves.toEqual(artifactFixture);
     await expect(
       runHandler(
-        handlers.spec_save_artifact?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
+        handlers.workflow_artifact_save?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "spec",
+          markdown: "# Spec",
+          submit: false,
+        }),
       ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(handlers.spec_get?.({ repoPath: "/repo", taskId: "task-1" })),
-    ).resolves.toBeDefined();
+    ).resolves.toEqual(artifactFixture);
     await expect(
       runHandler(
-        handlers.set_plan?.({ repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } }),
+        handlers.workflow_artifact_get?.({ repoPath: "/repo", taskId: "task-1", code: "plan" }),
       ),
-    ).resolves.toEqual({ markdown: "# Plan" });
-    await expect(
-      runHandler(
-        handlers.plan_save_artifact?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Plan" }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(handlers.plan_get?.({ repoPath: "/repo", taskId: "task-1" })),
-    ).resolves.toBeDefined();
+    ).resolves.toEqual(artifactFixture);
     expect(calls).toEqual([
       { command: "tasks_list", input: { repoPath: "/repo" } },
       {
         command: "task_create",
         input: {
           repoPath: "/repo",
-          task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+          task: { title: "Task", issueType: "task", priority: 2 },
         },
       },
       {
         command: "task_delete",
-        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: true },
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_close",
@@ -947,6 +819,10 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
       },
       {
+        command: "task_apply_event",
+        input: { repoPath: "/repo", taskId: "task-1", eventId: "defer" },
+      },
+      {
         command: "build_blocked",
         input: { repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
       },
@@ -967,18 +843,6 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } },
       },
       {
-        command: "qa_approved",
-        input: { repoPath: "/repo", taskId: "task-1", markdown: "Looks good" },
-      },
-      {
-        command: "qa_rejected",
-        input: { repoPath: "/repo", taskId: "task-1", markdown: "Needs work" },
-      },
-      {
-        command: "qa_get_report",
-        input: { repoPath: "/repo", taskId: "task-1" },
-      },
-      {
         command: "repo_pull_request_sync",
         input: { repoPath: "/repo", expectedWorkspaceId: "repo-id" },
       },
@@ -991,34 +855,33 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1" },
       },
       {
-        command: "set_spec",
-        input: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-      },
-      {
-        command: "spec_save_artifact",
-        input: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
-      },
-      {
-        command: "spec_get",
-        input: { repoPath: "/repo", taskId: "task-1" },
-      },
-      {
-        command: "set_plan",
+        command: "workflow_artifact_save",
         input: {
           repoPath: "/repo",
           taskId: "task-1",
-          markdown: "# Plan",
-          subtasks: [],
-          hasExplicitSubtasks: false,
+          code: "qaReport",
+          markdown: "Looks good",
+          submit: true,
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          verdict: "approved",
         },
       },
       {
-        command: "plan_save_artifact",
-        input: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
+        command: "workflow_artifact_save",
+        input: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "spec",
+          markdown: "# Spec",
+          submit: false,
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+        },
       },
       {
-        command: "plan_get",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        command: "workflow_artifact_get",
+        input: { repoPath: "/repo", taskId: "task-1", code: "plan" },
       },
     ]);
   });

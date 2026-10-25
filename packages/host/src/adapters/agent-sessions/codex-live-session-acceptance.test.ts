@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { EventEmitter } from "node:events";
 import { createInterface } from "node:readline";
 import { PassThrough } from "node:stream";
@@ -146,6 +147,7 @@ const sendFirstMessage = async (
   const registry = createCodexAppServerTransportRegistry();
   registry.registerTransport(runtimeId, transport);
   const controller = new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     runtime: { kind: "codex", runtimeId, runtimeRoute: { type: "stdio", identity: runtimeId } },
     resolveManagedMcpServer: async () => ({ command: ["odt-mcp"], environment: {} }),
     transportFactory: () => createCodexRuntimeTransport(registry, runtimeId),

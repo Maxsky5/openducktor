@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
@@ -82,6 +83,7 @@ describe("createTaskService build start worktree handling", () => {
       };
       const coordinator = createTaskSessionLifecycleCoordinator();
       const service = createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
         ...createDependencies(calls, taskStore),
         taskSessionLifecycleCoordinator: coordinator,
       });
@@ -116,6 +118,7 @@ describe("createTaskService build start worktree handling", () => {
     const deps = createDependencies(calls, {});
     const failure = new HostValidationError({ field: "repoPath", message: "invalid repository" });
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       ...deps,
       workspaceSettingsService: {
         ...deps.workspaceSettingsService,
@@ -144,6 +147,7 @@ describe("createTaskService build start worktree handling", () => {
     });
     const coordinator = createTaskSessionLifecycleCoordinator();
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       ...deps,
       taskSessionLifecycleCoordinator: coordinator,
       worktreeActions: {
@@ -199,6 +203,7 @@ describe("createTaskService build start worktree handling", () => {
     const deps = createDependencies(calls, taskStore);
     const coordinator = createTaskSessionLifecycleCoordinator();
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       ...deps,
       taskSessionLifecycleCoordinator: coordinator,
       worktreeFiles: {
@@ -247,6 +252,7 @@ describe("createTaskService build start worktree handling", () => {
     };
     const deps = createDependencies(calls, taskStore);
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       ...deps,
       worktreeFiles: {
         ...deps.worktreeFiles,
@@ -306,7 +312,7 @@ describe("createTaskService build start worktree handling", () => {
     );
     expect(calls).toContainEqual({
       type: "transition",
-      input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+      input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
     });
   });
 
@@ -336,7 +342,7 @@ describe("createTaskService build start worktree handling", () => {
       expect(current.status).toBe("in_progress");
       expect(calls).toContainEqual({
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
       });
     },
   );
@@ -381,6 +387,7 @@ describe("createTaskService build start worktree handling", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           ...dependencies,
           gitPort,
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
@@ -421,7 +428,11 @@ describe("createTaskService build start worktree handling", () => {
 
     await expect(
       Effect.runPromise(
-        createTaskService({ ...dependencies, runtimeRegistry }).buildStart({
+        createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
+          ...dependencies,
+          runtimeRegistry,
+        }).buildStart({
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -470,6 +481,7 @@ describe("createTaskService build start worktree handling", () => {
     });
     const startResult = Effect.runPromise(
       createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
         ...dependencies,
         taskSessionLifecycleCoordinator: coordinator,
       }).buildStart({

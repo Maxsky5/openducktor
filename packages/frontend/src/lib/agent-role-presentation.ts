@@ -1,7 +1,9 @@
-import { agentRoleValues } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  BUILTIN_ROLE_IDS,
+  BUILTIN_ROLE_LABELS,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import { createLucideIcon, type LucideIcon } from "lucide-react";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 
 // Custom drawings on the lucide 24px grid, so role icons keep the same stroke and sizing as other app icons.
 export const SpecRoleIcon = createLucideIcon("role-spec", [
@@ -45,8 +47,8 @@ export const AGENT_ROLE_ICONS = {
   qa: QaRoleIcon,
 } satisfies Record<AgentRole, LucideIcon>;
 
-export const ROLE_OPTIONS = agentRoleValues.map((role) => ({
+export const ROLE_OPTIONS = BUILTIN_ROLE_IDS.map((role) => ({
   role,
-  label: AGENT_ROLE_LABELS[role],
+  label: BUILTIN_ROLE_LABELS[role],
   icon: AGENT_ROLE_ICONS[role],
 }));

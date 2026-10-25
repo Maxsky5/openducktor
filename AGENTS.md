@@ -44,8 +44,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 | `packages/frontend` | Shared React UI |
 | `packages/frontend-core` | Client connections, caches, session projection, recovery, and drafts |
 | `packages/contracts` | Public Zod schemas and data contracts |
-| `packages/core` | Agent ports, role policy, workflow tool mapping, and prompt helpers |
-| `packages/host` | Effect use cases, task policy, runtime drivers, and platform adapters |
+| `packages/core` | Agent ports, ODT tool name helpers, and shared services |
+| `packages/workflows` | Pure workflow evaluation, built-in rules, role policy, prompts, and presentation metadata |
+| `packages/host` | Effect use cases, task mutations, runtime drivers, and platform adapters |
 | `packages/runtime-orchestration` | Shared runtime lifecycle, registry, and admission rules |
 | `packages/adapters-opencode-sdk` | OpenCode V2 protocol adapter |
 | `packages/adapters-codex-app-server` | Codex app-server protocol adapter |

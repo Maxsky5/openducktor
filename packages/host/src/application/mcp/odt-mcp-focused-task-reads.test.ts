@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { repoConfigSchema } from "@openducktor/contracts";
@@ -87,7 +88,12 @@ describe("focused MCP task reads", () => {
         ).toBeLessThanOrEqual(maxTaskRows);
         expect(
           reads
-            .filter((read) => read.columns.includes("kind") && !read.columns.includes("markdown"))
+            .filter(
+              (read) =>
+                read.columns.includes("code") &&
+                !read.columns.includes("name") &&
+                !read.columns.includes("markdown"),
+            )
             .reduce((sum, read) => sum + read.count, 0),
         ).toBe(artifactSummaryRows);
         if (taskId === "repo-0")
@@ -217,7 +223,6 @@ describe("focused MCP task reads", () => {
               harness.store.deleteTask({
                 repoPath: harness.repoPath,
                 taskId: "repo-0",
-                deleteSubtasks: false,
               }),
             ),
           ),
@@ -316,6 +321,7 @@ describe("focused MCP task reads", () => {
         ),
     });
     return createOdtMcpToolContext({
+      taskWorkflows: builtinTaskWorkflows,
       browserAgentTools: {
         runAgentTool: () => Effect.die(new Error("Task reads never run browser tools.")),
       },
@@ -326,9 +332,7 @@ describe("focused MCP task reads", () => {
         resolve: () => Effect.die(new Error("Task reads never resolve a browser caller.")),
       },
       taskService: {
-        ...createTaskService({ taskStore: store }),
-        qaApproved: () => Effect.die(new Error("Task reads never approve QA.")),
-        qaRejected: () => Effect.die(new Error("Task reads never reject QA.")),
+        ...createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore: store }),
       },
       workspaceSettingsService: {
         getRepoConfig: () =>
@@ -386,7 +390,7 @@ async function seedTasks(harness: SqliteTaskStoreTestHarness): Promise<void> {
           }),
         );
         yield* session.execute((db) => db.insert(tasks).values(rows), "test.insertTasks");
-        for (const kind of ["spec", "implementation_plan", "qa_report"] as const) {
+        for (const kind of ["spec", "plan", "qaReport"] as const) {
           for (const revision of [1, 2, 3]) {
             yield* session.execute(
               (db) =>
@@ -395,12 +399,12 @@ async function seedTasks(harness: SqliteTaskStoreTestHarness): Promise<void> {
                     taskId: row.id,
                     artifactId: `workflow:${row.id}:${kind}`,
                     classification: "workflow" as const,
-                    workflowKind: kind,
+                    code: kind,
                     name: kind,
                     revision,
                     markdown: `${kind} revision ${revision}`,
                     format: "plain_text" as const,
-                    verdict: kind === "qa_report" ? ("approved" as const) : null,
+                    verdict: kind === "qaReport" ? ("approved" as const) : null,
                     updatedAt: row.updatedAt,
                   })),
                 ),

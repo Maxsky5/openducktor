@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentKickoffTemplateId } from "@openducktor/core";
+import type { AgentKickoffTemplateId } from "@openducktor/workflows";
 import {
   FEEDBACK_MESSAGE_REQUIRED_ERROR,
   resolveSessionStartKickoffPromptContext,

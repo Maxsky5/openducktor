@@ -22,7 +22,6 @@ const renderDialog = (
       onCancel={() => {}}
       onConfirm={() => {}}
       task={{ id: "task-1", title: "Fix login" }}
-      subtasksCount={0}
       impact={{
         isLoading: false,
         isLoadingStopImpact,

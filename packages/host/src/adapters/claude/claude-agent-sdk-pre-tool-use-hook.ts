@@ -3,6 +3,7 @@ import { findClaudeSubagentSessionByAgentId } from "./claude-agent-sdk-event-ses
 import { parseClaudePreToolUseIngress } from "./claude-agent-sdk-ingress-schemas";
 import { authorizeClaudeToolUse } from "./claude-agent-sdk-permissions";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+import type { WorkflowRolePolicy } from "@openducktor/core";
 
 const denyToolUse = (message: string) => ({
   hookSpecificOutput: {
@@ -14,8 +15,11 @@ const denyToolUse = (message: string) => ({
 
 export const createClaudePreToolUseHook = ({
   session,
+  rolePolicy,
 }: {
   session: ClaudeSessionContext;
+  /** The policy of the workflow role, or null for a repository session. */
+  rolePolicy: WorkflowRolePolicy | null;
 }): HookCallback => {
   return async (input, _toolUseId, { signal }) => {
     const preToolUseInput = parseClaudePreToolUseIngress(input);
@@ -32,6 +36,7 @@ export const createClaudePreToolUseHook = ({
     }
     const authorization = await authorizeClaudeToolUse({
       session,
+      rolePolicy,
       toolName: preToolUseInput.tool_name,
       toolInput,
     });

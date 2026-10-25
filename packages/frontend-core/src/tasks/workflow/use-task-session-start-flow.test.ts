@@ -1,6 +1,6 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "../../sessions/start/session-start-orchestration";
 import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
 import { createFeedbackFake } from "../../test-support/feedback-fake";

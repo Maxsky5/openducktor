@@ -1,10 +1,6 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
-import type {
-  AgentSessionRecord,
-  TaskCard,
-  WorkspaceRecord,
-  WorkspaceSession,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import {
   chatFeedbackTarget,
   findChatRecord,

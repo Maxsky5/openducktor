@@ -168,8 +168,8 @@ export const createStartTaskWorkflowSession =
             );
           }
           const completed = yield* Effect.result(
-            taskSessionStart.complete(prepared, (transitionInput) =>
-              writes.transitionTask(transitionInput).pipe(
+            taskSessionStart.complete(prepared, (start) =>
+              writes.applyStartEvent(start).pipe(
                 Effect.map(({ task, publish }) => {
                   publications.push(publish);
                   return task;

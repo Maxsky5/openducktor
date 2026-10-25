@@ -1,4 +1,4 @@
-import type { AgentRole, RepoConfig } from "@openducktor/contracts";
+import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { GitPort } from "../../../ports/git-port";
@@ -17,7 +17,7 @@ export const resolveTaskSessionStartTarget = ({
   gitPort: GitPort;
   repoConfig: RepoConfig;
   taskId: string;
-  role: AgentRole;
+  role: string;
   targetWorkingDirectory?: string;
 }) =>
   Effect.gen(function* () {

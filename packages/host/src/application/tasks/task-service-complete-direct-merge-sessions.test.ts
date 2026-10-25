@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Deferred, Effect, Fiber } from "effect";
 import type {
   AgentSessionRecord,
@@ -44,6 +45,7 @@ const createHarness = ({
   const coordinator = createTaskSessionLifecycleCoordinator();
   let current = task({ status });
   const service = createTaskService({
+    taskWorkflows: builtinTaskWorkflows,
     publishCompletion: (observation) =>
       Effect.sync(() => {
         observations.push(observation);
@@ -89,8 +91,7 @@ const createHarness = ({
       listTasks: () => Effect.sync(() => [current]),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "" },
-          plan: { markdown: "" },
+          artifacts: {},
           agentSessions: [createAgentSessionRecord({ role })],
           directMerge: {
             method: "merge_commit",

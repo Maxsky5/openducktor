@@ -1,8 +1,4 @@
-import type {
-  DirectMergeRecord,
-  TaskCard,
-  TaskDirectMergeCompleteIntent,
-} from "@openducktor/contracts";
+import type { DirectMergeRecord, TaskDirectMergeCompleteIntent } from "@openducktor/contracts";
 import { Cause, Effect } from "effect";
 import {
   HostOperationError,
@@ -17,18 +13,19 @@ import { completeTaskPublication } from "./complete-task-publication";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import { cleanupDirectMergeTaskState } from "./task-worktree-cleanup";
 import { enrichTask } from "./task-workflow-helpers";
+import { decisionTransition, type AdmittedTaskEvent } from "./task-workflow-events";
 
 /** Callers hold the task lifecycle guard and validate closure before entering this operation. */
 export const closeMergedTask = (
   services: ReturnType<typeof requireMergedTaskCleanupDependencies> &
     Pick<
       TaskServiceUseCaseInput,
-      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator"
+      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator" | "taskWorkflows"
     > & { taskActivityGuard: TaskActivityGuardPort | undefined },
   input: TaskDirectMergeCompleteIntent,
   merge: DirectMergeRecord,
-  currentTasks: TaskCard[],
   state: TaskCompletionState,
+  decision: AdmittedTaskEvent,
   operation: "direct-merge" | "complete-direct-merge",
 ) =>
   Effect.uninterruptible(
@@ -46,7 +43,10 @@ export const closeMergedTask = (
             yield* completionState.publish(state);
             if (!state.observation.cleanupCompleted) {
               yield* cleanupDirectMergeTaskState(
-                services,
+                {
+                  ...services,
+                  workflow: services.taskWorkflows.forRepo(repoPath),
+                },
                 taskStore,
                 repoPath,
                 taskId,
@@ -58,7 +58,7 @@ export const closeMergedTask = (
               state.observation.cleanupCompleted = true;
             }
             const task = yield* Effect.uninterruptible(
-              taskStore.transitionTask({ repoPath, taskId, status: "closed" }).pipe(
+              taskStore.transitionTask({ repoPath, taskId, ...decisionTransition(decision) }).pipe(
                 Effect.tap(() =>
                   Effect.sync(() => {
                     state.observation.taskClosed = true;
@@ -69,10 +69,7 @@ export const closeMergedTask = (
             );
             state.observation.phase = "settled";
             yield* completionState.publish(state);
-            return enrichTask(
-              task,
-              currentTasks.map((entry) => (entry.id === taskId ? task : entry)),
-            );
+            return enrichTask(services.taskWorkflows.forRepo(repoPath), task);
           }),
         ),
       );

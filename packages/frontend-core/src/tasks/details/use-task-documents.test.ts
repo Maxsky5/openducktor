@@ -42,7 +42,7 @@ const withDocuments = async (
   run: (view: DocumentView) => Promise<void>,
 ) => {
   // The hook has no reader override. The test host supplies the reads.
-  const connection = createTestClientConnection({ client: { taskWorkflowArtifactGet: read } });
+  const connection = createTestClientConnection({ client: { workflowArtifactGet: read } });
   let view: DocumentView | undefined;
   try {
     view = renderDocuments(connection);
@@ -60,13 +60,13 @@ const waitForDocuments = (
 
 const cachedSpec = (view: DocumentView, repo = REPO, taskId = TASK_ID) =>
   view.result.current.queryClient.getQueryData<TaskDocumentPayload>(
-    documentQueryKeys.spec(repo, taskId),
+    documentQueryKeys.document(repo, taskId, "spec"),
   );
 
 describe("useTaskDocuments", () => {
   test("document query ensure revalidates stale cached documents on demand", async () => {
     const queryClient = createClientQueryClient();
-    const queryKey = documentQueryKeys.plan(REPO, TASK_ID);
+    const queryKey = documentQueryKeys.document(REPO, TASK_ID, "plan");
     const cached = document("# Cached plan");
     const fresh = document("# Fresh plan", "2026-05-07T20:05:00.000Z");
     const read = mock(async () => fresh);
@@ -145,7 +145,7 @@ describe("useTaskDocuments", () => {
       expect(view.result.current.documents.specDoc.markdown).toBe(fresh.markdown);
       expect(cachedSpec(view)).toEqual(fresh);
       expect(view.result.current.documents.planDoc.markdown).toBe("plan content");
-      expect(view.result.current.documents.qaDoc.markdown).toBe("qa content");
+      expect(view.result.current.documents.qaDoc.markdown).toBe("qaReport content");
     });
   });
 
@@ -181,7 +181,7 @@ describe("useTaskDocuments", () => {
       await waitForDocuments(view, {
         specDoc: nextDocument,
         planDoc: { markdown: "plan next" },
-        qaDoc: { markdown: "qa next" },
+        qaDoc: { markdown: "qaReport next" },
       });
       await act(async () => {
         oldRead.resolve(oldDocument);
@@ -234,9 +234,18 @@ describe("useTaskDocuments", () => {
     try {
       act(() => {
         const queryClient = view.result.current.queryClient;
-        queryClient.setQueryData(documentQueryKeys.spec(REPO, TASK_ID), document("spec V1"));
-        queryClient.setQueryData(documentQueryKeys.plan(REPO, TASK_ID), document("plan V1"));
-        queryClient.setQueryData(documentQueryKeys.qaReport(REPO, TASK_ID), document("qa V1"));
+        queryClient.setQueryData(
+          documentQueryKeys.document(REPO, TASK_ID, "spec"),
+          document("spec V1"),
+        );
+        queryClient.setQueryData(
+          documentQueryKeys.document(REPO, TASK_ID, "plan"),
+          document("plan V1"),
+        );
+        queryClient.setQueryData(
+          documentQueryKeys.document(REPO, TASK_ID, "qaReport"),
+          document("qa V1"),
+        );
       });
       view.rerender({ taskId: TASK_ID, repo: REPO, open: true });
       await waitForDocuments(view, {

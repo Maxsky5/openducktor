@@ -1,11 +1,14 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import type {
+  TaskWorkflowAction,
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { type ComponentProps, type ReactElement, useEffect, useRef, useState } from "react";
 import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
 import { TASK_DETAILS_WORKFLOW_ACTIONS } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import {
   resolveHistoricalSessionRoles,
@@ -66,7 +69,6 @@ export function TaskDetailsSheetContent(
   const {
     activeWorkspace = null,
     task,
-    allTasks,
     onOpenChange,
     onEdit = workflowActions?.onEdit,
     onDelete = workflowActions?.onDelete,
@@ -85,7 +87,6 @@ export function TaskDetailsSheetContent(
     createTaskDetailsViewModelOptions({
       activeWorkspace,
       task,
-      allTasks,
       open,
       onOpenChange,
       workflowActions,
@@ -126,7 +127,6 @@ export function TaskDetailsSheetContent(
       <SheetHeader className="border-b border-border bg-card px-5 py-4">
         <TaskDetailsSheetHeader
           task={task}
-          subtasksCount={viewModel.subtasks.length}
           taskLabels={viewModel.taskLabels}
           gitProviderContext={workflowActions?.gitProviderContext}
           gitProviderReadError={workflowActions?.gitProviderReadError ?? null}
@@ -139,8 +139,6 @@ export function TaskDetailsSheetContent(
           task={task}
           {...(activeWorkspace ? { repoPath: activeWorkspace.repoPath } : {})}
           {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
-          shouldRenderSubtasks={viewModel.shouldRenderSubtasks}
-          subtasks={viewModel.subtasks}
         />
       </div>
 
@@ -148,11 +146,7 @@ export function TaskDetailsSheetContent(
 
       {/* Inside the sheet content, so the non-modal sheet treats focus in them as its own. */}
       {onDelete ? (
-        <TaskDeleteConfirmDialog
-          {...viewModel.deleteConfirm.dialog}
-          task={task}
-          subtasksCount={viewModel.subtasks.length}
-        />
+        <TaskDeleteConfirmDialog {...viewModel.deleteConfirm.dialog} task={task} />
       ) : null}
       {workflowActions?.onResetTask ? (
         <TaskResetConfirmDialog {...viewModel.resetConfirm.dialog} task={task} />
@@ -197,7 +191,6 @@ function getActiveTaskSessionContext(
 function createTaskDetailsViewModelOptions({
   activeWorkspace,
   task,
-  allTasks,
   open,
   onOpenChange,
   workflowActions,
@@ -207,7 +200,6 @@ function createTaskDetailsViewModelOptions({
 }: {
   activeWorkspace: TaskDetailsSheetProps["activeWorkspace"];
   task: TaskDetailsSheetProps["task"];
-  allTasks: TaskDetailsSheetProps["allTasks"];
   open: boolean;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
   workflowActions: TaskWorkflowActions | null;
@@ -218,7 +210,6 @@ function createTaskDetailsViewModelOptions({
   const options: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
     activeWorkspace: activeWorkspace ?? null,
     task,
-    allTasks,
     open,
     onOpenChange,
     ...workflowActions,

@@ -1,3 +1,5 @@
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
+import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -52,19 +54,17 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: false, completed: false },
     planner: { required: false, canSkip: true, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: true, canSkip: false, available: false, completed: false },
   },
   updatedAt: "2026-01-02T03:04:05Z",
@@ -146,9 +146,13 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
-type TaskServiceTestInput = Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
+type TaskServiceTestInput = Omit<
+  CreateTaskServiceInput,
+  "taskStore" | "taskActivityGuard" | "taskWorkflows"
+> & {
   taskActivityGuard?: TaskActivityGuardPort;
   taskStore: TaskStorePort;
+  taskWorkflows?: TaskWorkflowResolver;
 };
 
 const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceInput => {
@@ -176,6 +180,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
     worktreeActions: rest.worktreeActions ?? createBuildWorktreeActions([]),
     toolDiscovery: resolvedToolDiscovery,
     taskStore: createTaskStorePort(taskStore),
+    taskWorkflows: rest.taskWorkflows ?? builtinTaskWorkflows,
   };
   if (workspaceSettingsService) {
     taskServiceInput.workspaceSettingsService = workspaceSettingsService;

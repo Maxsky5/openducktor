@@ -1,4 +1,4 @@
-import type { TaskAssetOperation, TaskCard } from "@openducktor/contracts";
+import type { TaskAssetOperation } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
@@ -99,28 +99,3 @@ export const toNewTaskAssetRecords = (assets: StagedTaskAsset[]): NewTaskAssetRe
     byteSize: asset.byteSize,
     createdAt: new Date(),
   }));
-
-export const taskIdsForDelete = (
-  tasks: TaskCard[],
-  rootTaskId: string,
-  recursive: boolean,
-): string[] => {
-  if (!recursive) {
-    return [rootTaskId];
-  }
-  const result: string[] = [];
-  const pending = [rootTaskId];
-  while (pending.length > 0) {
-    const taskId = pending.pop();
-    if (!taskId || result.includes(taskId)) {
-      continue;
-    }
-    result.push(taskId);
-    for (const task of tasks) {
-      if (task.parentId === taskId) {
-        pending.push(task.id);
-      }
-    }
-  }
-  return result;
-};

@@ -1,4 +1,4 @@
-import type { KanbanColumnId } from "@openducktor/core";
+import type { KanbanColumnId } from "@openducktor/workflows";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

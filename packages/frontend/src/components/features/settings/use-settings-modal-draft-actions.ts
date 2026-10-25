@@ -1,4 +1,5 @@
 import type {
+  AgentModelDefault,
   AgentRuntimes,
   GlobalGitConfig,
   SettingsRepoConfig,
@@ -231,10 +232,9 @@ export const useSettingsModalDraftActions = ({
           ...repoConfig,
           agentDefaults: {
             ...repoConfig.agentDefaults,
-            [role]: {
-              ...nextRoleDefault,
-              [field]: value,
-            },
+            // SAFETY: the draft can hold a default without runtimeKind. prepareModelDefaultsForSave
+            // rejects that default before the save.
+            [role]: { ...nextRoleDefault, [field]: value } as AgentModelDefault,
           },
         };
       });

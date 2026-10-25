@@ -1,5 +1,5 @@
-import type { QaReportVerdict, TaskMetadataArtifact } from "@openducktor/contracts";
-import { and, eq, sql } from "drizzle-orm";
+import { type TaskMetadataArtifact, workflowArtifactId } from "@openducktor/contracts";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { z } from "zod";
 import { requireTaskRow } from "./sqlite-task-queries";
@@ -10,55 +10,46 @@ import {
 import {
   TASK_WORKFLOW_ARTIFACT_FORMAT_PLAIN_TEXT,
   type TaskArtifactInsert,
-  type WorkflowArtifactKind,
   type TaskStoreSession,
   taskArtifacts,
 } from "./sqlite-task-store-schema";
 
-const ODT_SET_SPEC_SOURCE_TOOL = "odt_set_spec";
-const ODT_SET_PLAN_SOURCE_TOOL = "odt_set_plan";
-const ODT_QA_APPROVED_SOURCE_TOOL = "odt_qa_approved";
-const ODT_QA_REJECTED_SOURCE_TOOL = "odt_qa_rejected";
-
-const workflowArtifactNames = {
-  spec: "Specification",
-  implementation_plan: "Implementation Plan",
-  qa_report: "QA Report",
-} satisfies Record<WorkflowArtifactKind, string>;
-
+/** A new revision of a workflow artifact. The caller names its command and acting role. */
 export const insertWorkflowArtifact = (
   session: TaskStoreSession,
   input: {
-    kind: WorkflowArtifactKind;
+    code: string;
+    name: string;
     markdown: string;
-    sourceTool: string;
     taskId: string;
     updatedAt: Date;
+    verdict?: string | undefined;
+    sourceTool: string;
     updatedBy: string;
-    verdict?: QaReportVerdict | undefined;
   },
 ): Effect.Effect<TaskMetadataArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const revision = yield* nextWorkflowArtifactRevision(session, input.taskId, input.kind);
+    const { code, verdict } = input;
+    const revision = yield* nextWorkflowArtifactRevision(session, input.taskId, code);
     const markdown = input.markdown.trim();
     const artifact: TaskArtifactInsert = {
-      artifactId: `workflow:${input.taskId}:${input.kind}`,
+      artifactId: workflowArtifactId(input.taskId, code),
       classification: "workflow",
-      name: workflowArtifactNames[input.kind],
+      code,
+      name: input.name,
       format: TASK_WORKFLOW_ARTIFACT_FORMAT_PLAIN_TEXT,
-      workflowKind: input.kind,
       markdown,
       revision,
       sourceTool: input.sourceTool,
       taskId: input.taskId,
       updatedAt: input.updatedAt,
       updatedBy: input.updatedBy,
-      verdict: input.verdict ?? null,
+      verdict: verdict ?? null,
     };
     yield* session.execute(
       (database) => database.insert(taskArtifacts).values(artifact),
       "sqliteTaskStore.insertWorkflowArtifact.insertWorkflowArtifact",
-      { kind: input.kind, taskId: input.taskId },
+      { code, taskId: input.taskId },
     );
     return {
       markdown,
@@ -67,13 +58,16 @@ export const insertWorkflowArtifact = (
     };
   });
 
-export const clearQaReportArtifacts = (
+/** Deletes every revision of the workflow artifacts with these codes. */
+export const clearWorkflowArtifacts = (
   session: TaskStoreSession,
   taskId: string,
   repoPath: string,
+  codes: readonly string[],
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     yield* requireTaskRow(session, taskId, repoPath);
+    if (codes.length === 0) return true;
     yield* session.execute(
       (database) =>
         database
@@ -82,10 +76,10 @@ export const clearQaReportArtifacts = (
             and(
               eq(taskArtifacts.taskId, taskId),
               eq(taskArtifacts.classification, "workflow"),
-              eq(taskArtifacts.workflowKind, "qa_report"),
+              inArray(taskArtifacts.code, [...codes]),
             ),
           ),
-      "sqliteTaskRepository.clearQaReports.deleteArtifacts",
+      "sqliteTaskRepository.clearWorkflowArtifacts.deleteArtifacts",
     );
     return true;
   });
@@ -104,16 +98,10 @@ export const clearTaskArtifacts = (
     return true;
   });
 
-export const qaReportSourceTool = (verdict: QaReportVerdict): string =>
-  verdict === "approved" ? ODT_QA_APPROVED_SOURCE_TOOL : ODT_QA_REJECTED_SOURCE_TOOL;
-
-export const specSourceTool = ODT_SET_SPEC_SOURCE_TOOL;
-export const planSourceTool = ODT_SET_PLAN_SOURCE_TOOL;
-
 const nextWorkflowArtifactRevision = (
   session: TaskStoreSession,
   taskId: string,
-  kind: WorkflowArtifactKind,
+  code: string,
 ): Effect.Effect<number, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -125,12 +113,12 @@ const nextWorkflowArtifactRevision = (
             and(
               eq(taskArtifacts.taskId, taskId),
               eq(taskArtifacts.classification, "workflow"),
-              eq(taskArtifacts.workflowKind, kind),
+              eq(taskArtifacts.code, code),
             ),
           )
           .limit(1),
       "sqliteTaskStore.nextWorkflowArtifactRevision.selectRevision",
-      { kind, taskId },
+      { code, taskId },
     );
     const revision = rows[0]?.revision ?? null;
     if (revision === null) {
@@ -141,7 +129,7 @@ const nextWorkflowArtifactRevision = (
       return yield* new SqliteTaskStoreDataError({
         message: "SQLite workflow artifact revision must be a number.",
         field: "revision",
-        details: { kind, taskId, value: revision },
+        details: { code, taskId, value: revision },
       });
     }
     return parsedRevision.data + 1;

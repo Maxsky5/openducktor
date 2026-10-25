@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import {
   TASK_ARTIFACT_MAX_FILE_BYTES,
@@ -24,18 +25,22 @@ const setup = async () => {
   const task = await run(
     harness.store.createTask({
       repoPath: harness.repoPath,
-      task: { title: "Artifacts", issueType: "task", priority: 2, aiReviewEnabled: true },
+      status: "open",
+      task: { title: "Artifacts", issueType: "task", priority: 2 },
     }),
   );
   const scope = { repoPath: harness.repoPath, taskId: task.id };
-  const base = createTaskServiceWithMutationProgress({ taskStore: harness.store });
+  const base = createTaskServiceWithMutationProgress({
+    taskWorkflows: builtinTaskWorkflows,
+    taskStore: harness.store,
+  });
   return { ...harness, scope, base };
 };
 
 describe("task artifact service", () => {
-  test.each(["qaApproved", "qaRejected"] as const)(
-    "%s returns the committed QA artifact when another write arrives before publication",
-    async (method) => {
+  test.each(["approved", "rejected"] as const)(
+    "an %s QA save returns its committed artifact when another write arrives before publication",
+    async (verdict) => {
       const h = await setup();
       const saved = Deferred.makeUnsafe<void>();
       const release = Deferred.makeUnsafe<void>();
@@ -43,11 +48,12 @@ describe("task artifact service", () => {
       try {
         await run(h.store.transitionTask({ ...h.scope, status: "ai_review" }));
         const base = createTaskServiceWithMutationProgress({
+          taskWorkflows: builtinTaskWorkflows,
           taskStore: {
             ...h.store,
-            recordQaOutcome: (input) =>
+            saveWorkflowArtifact: (input) =>
               Effect.gen(function* () {
-                const receipt = yield* h.store.recordQaOutcome(input);
+                const receipt = yield* h.store.saveWorkflowArtifact(input);
                 yield* Deferred.succeed(saved, undefined);
                 yield* Deferred.await(release);
                 return receipt;
@@ -56,6 +62,7 @@ describe("task artifact service", () => {
         });
         const events: ExternalTaskSyncEvent[] = [];
         const service = createEventPublishingTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           taskService: base,
           taskSyncService: createTaskSyncServiceForTest({
             taskService: base,
@@ -63,29 +70,41 @@ describe("task artifact service", () => {
             eventBus: { publish: (event) => events.push(event) },
           }),
         });
-        const first = run(service[method]({ ...h.scope, markdown: "First review" }));
+        const first = run(
+          service.workflowArtifactSave({
+            sourceTool: "workflow_artifact_save",
+            updatedBy: "user",
+            ...h.scope,
+            code: "qaReport",
+            markdown: "First review",
+            verdict,
+            submit: true,
+          }),
+        );
         pending = first;
         await run(Deferred.await(saved));
         const newer = await run(
-          h.store.recordQaOutcome({
+          h.store.saveWorkflowArtifact({
+            sourceTool: "workflow_artifact_save",
+            updatedBy: "user",
             ...h.scope,
             markdown: "Later review",
             verdict: "approved",
             status: "human_review",
+            code: "qaReport",
           }),
         );
         await run(Deferred.succeed(release, undefined));
         const result = await first;
         expect(result.artifact).toMatchObject({ markdown: "First review", revision: 1 });
         expect(newer.artifact).toMatchObject({ markdown: "Later review", revision: 2 });
-        expect(result.task).toMatchObject({
-          status: method === "qaApproved" ? "human_review" : "in_progress",
-          artifactSummary: {
-            qaReport: { verdict: method === "qaApproved" ? "approved" : "rejected" },
-          },
-        });
         expect(events).toHaveLength(1);
-        expect((await run(h.store.getTaskMetadata(h.scope))).qaReport?.markdown).toBe(
+        expect(events[0]).toMatchObject({
+          statusChanges: [
+            { task: { status: verdict === "approved" ? "human_review" : "in_progress" } },
+          ],
+        });
+        expect((await run(h.store.getTaskMetadata(h.scope))).artifacts.qaReport?.markdown).toBe(
           "Later review",
         );
       } finally {
@@ -248,6 +267,7 @@ describe("task artifact service", () => {
         eventBus: { publish: (event) => events.push(event) },
       });
       const service = createEventPublishingTaskService({
+        taskWorkflows: builtinTaskWorkflows,
         taskService: h.base,
         taskSyncService: sync,
       });
@@ -297,9 +317,9 @@ describe("task artifact service", () => {
       const task = await run(h.store.getTask(h.scope));
       expect(task.status).toBe("open");
       expect(task.artifactSummary).toMatchObject({
-        spec: { has: false },
-        plan: { has: false },
-        qaReport: { has: false, verdict: "not_reviewed" },
+        spec: { present: false },
+        plan: { present: false },
+        qaReport: { present: false },
       });
       expect((await run(service.listTaskArtifacts(h.scope))).artifacts).toEqual([]);
     } finally {
@@ -338,7 +358,15 @@ describe("task artifact service", () => {
       const current = await run(h.base.readTaskArtifact(ref));
       expect(current.artifact).toEqual(artifact);
       expect(Buffer.from(current.dataBase64, "base64")).toEqual(content);
-      await run(h.store.setSpecArtifact({ ...h.scope, markdown: "# Spec" }));
+      await run(
+        h.store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          ...h.scope,
+          markdown: "# Spec",
+          code: "spec",
+        }),
+      );
       expect(
         await run(
           Effect.flip(
@@ -371,6 +399,7 @@ describe("task artifact service", () => {
     try {
       await run(Deferred.await(entered));
       const service = createTaskServiceWithMutationProgress({
+        taskWorkflows: builtinTaskWorkflows,
         taskStore: h.store,
         taskSessionLifecycleCoordinator: coordinator,
       });

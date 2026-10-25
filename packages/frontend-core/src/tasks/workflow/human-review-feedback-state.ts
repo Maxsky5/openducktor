@@ -1,8 +1,8 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type {
   HumanReviewFeedbackModalModel,
   HumanReviewFeedbackState,
 } from "./human-review-feedback-types";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export const createHumanReviewFeedbackState = (
   _tasks: TaskCard[],

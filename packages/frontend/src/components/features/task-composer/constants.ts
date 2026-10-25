@@ -1,7 +1,7 @@
-import type { IssueType } from "@openducktor/contracts";
+import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 import { ISSUE_TYPE_CHOICES } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import type { IssueTypeChoice } from "@openducktor/frontend-core/tasks/create/task-composer-types";
-import { Bug, Layers3, ListTodo, Sparkles } from "lucide-react";
+import { Bug, ListTodo, Sparkles } from "lucide-react";
 import type { IssueTypeOption } from "@/types/task-composer";
 
 const ISSUE_TYPE_PRESENTATION = {
@@ -22,12 +22,6 @@ const ISSUE_TYPE_PRESENTATION = {
     accentClass: "border-input bg-muted/80",
     iconClass: "bg-secondary text-foreground",
     indicatorClass: "border-input bg-secondary text-foreground",
-  },
-  epic: {
-    icon: Layers3,
-    accentClass: "border-pending-border bg-pending-surface",
-    iconClass: "bg-pending-surface text-pending-muted",
-    indicatorClass: "border-pending-border bg-pending-surface text-pending-muted",
   },
 } satisfies Record<IssueType, Omit<IssueTypeOption, keyof IssueTypeChoice>>;
 

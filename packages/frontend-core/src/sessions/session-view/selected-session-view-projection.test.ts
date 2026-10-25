@@ -1,3 +1,4 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
@@ -7,7 +8,6 @@ import {
   readyAgentSessionReadModelLoadState,
 } from "../../types/agent-session-read-model";
 import type { RepoSettingsInput } from "../../types/session-slices";
-import type { TaskCard } from "@openducktor/contracts";
 import { toAgentSessionSummary } from "../agent-sessions-store";
 import {
   type AgentSessionFixtureOverrides,

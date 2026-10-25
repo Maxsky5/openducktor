@@ -1,3 +1,4 @@
+import { WORKTREE_AGENT_ROLES } from "@openducktor/workflows";
 import { useMemo } from "react";
 import type { DiffDataState } from "@openducktor/frontend-core/git/contracts";
 import type { GitPanelReads } from "@openducktor/frontend-core/git/reads/use-git-panel-reads";
@@ -193,7 +194,8 @@ function taskGitContext(
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
   });
   const usesTaskWorktree =
-    selectedView.role === "build" || selectedView.role === "qa" || sessionWorktreePath != null;
+    (selectedView.role !== null && WORKTREE_AGENT_ROLES.includes(selectedView.role)) ||
+    sessionWorktreePath != null;
   const gitPanelContextMode: TaskGitContextMode = usesTaskWorktree ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
     gitPanelContextMode === "repository"

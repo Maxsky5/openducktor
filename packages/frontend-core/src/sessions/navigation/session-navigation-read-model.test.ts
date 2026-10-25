@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord, TaskCard, WorkspaceSession } from "@openducktor/contracts";
+import type { AgentSessionRecord, WorkspaceSession } from "@openducktor/contracts";
 import type {
   WorkspaceSessionFault,
   WorkspaceSessionLiveFacts,
@@ -15,6 +15,7 @@ import {
   type SessionNavigationWorkspace,
   type SessionNavigationWorkspaceSources,
 } from "./session-navigation-read-model";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const workspace = (workspaceId = "alpha"): SessionNavigationWorkspace => ({
   workspaceId,
@@ -584,7 +585,7 @@ describe("buildSessionNavigationModel", () => {
       agentWorkflows: {
         spec: { ...completed },
         planner: { ...completed },
-        builder: { ...completed },
+        build: { ...completed },
         qa: { ...completed },
       },
     });

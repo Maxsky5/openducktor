@@ -27,6 +27,7 @@
     "@openducktor/frontend-core": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/path-support": "workspace:*",
+    "@openducktor/workflows": "workspace:*",
     "@pierre/diffs": "1.5.2",
     "@pierre/trees": "1.0.0-beta.6",
     "@radix-ui/react-checkbox": "^1.4.1",

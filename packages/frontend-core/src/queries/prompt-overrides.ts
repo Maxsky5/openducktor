@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import { mergePromptOverrides } from "@openducktor/core";
+import { mergePromptOverrides } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "./workspace";
 

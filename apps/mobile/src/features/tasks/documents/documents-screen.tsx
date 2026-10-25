@@ -69,9 +69,9 @@ const initialDocument = (
 ): HostDocumentKey => {
   const named = DOCUMENT_KINDS.find((kind) => kind === requested);
   if (named) return named;
-  if (summary.spec.has) return "spec";
-  if (summary.plan.has) return "plan";
-  if (summary.qaReport.has) return "qa";
+  if (summary.spec?.present) return "spec";
+  if (summary.plan?.present) return "plan";
+  if (summary.qaReport?.present) return "qa";
   return "spec";
 };
 

@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Exit } from "effect";
 import {
@@ -5,12 +6,12 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentRuntimeCatalog,
   settingsSnapshotSchema,
-  taskCardSchema,
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
 import { handleClaudeSdkMessage } from "../../adapters/claude/claude-agent-sdk-events";
 import { createClaudeSession } from "../../adapters/claude/claude-agent-sdk-session-io.test-support";
@@ -21,6 +22,7 @@ import { createAgentSessionCommandService } from "./agent-session-command-servic
 import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { createAgentMessageDeliveryService } from "./agent-message-delivery-service";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import { taskCardFixture } from "../../test-support/task-card-fixture";
 
 const target = {
   repoPath: "/repo",
@@ -85,14 +87,14 @@ const setup = (
   const taskReader = {
     getTask: () =>
       Effect.succeed(
-        taskCardSchema.parse({
+        taskCardFixture({
+          artifactSummary: emptyArtifactSummary(),
           id: "task-1",
           title: "Task",
           description: "",
           status: "in_progress",
           priority: 2,
           issueType: "task",
-          aiReviewEnabled: true,
           createdAt: "2026-10-13T12:00:00Z",
           updatedAt: "2026-10-13T12:00:00Z",
         }),
@@ -103,6 +105,7 @@ const setup = (
   };
   const unexpected = () => Effect.die(new Error("Unexpected native work"));
   const commands = createAgentSessionCommandService({
+    taskWorkflows: builtinTaskWorkflows,
     canonicalizeRepoPath: Effect.succeed,
     taskReader,
     taskLifecycle: createTaskSessionLifecycleCoordinator(),
@@ -116,6 +119,7 @@ const setup = (
     approvalPolicy: { reply: unexpected },
     readSessionRootRefs: () => Effect.succeed([recipient]),
     turnPreparation: createSessionTurnPreparation({
+      taskWorkflows: builtinTaskWorkflows,
       taskReader,
       queries,
       settings: {
@@ -217,7 +221,7 @@ const setup = (
         ),
       agentSessionUpsert: unexpected,
       agentSessionUpdateModel: () => Effect.succeed(true),
-      transitionTask: unexpected,
+      applyStartEvent: unexpected,
     },
     repositoryPolicy: {
       run: (_ref, _op, work) => work,

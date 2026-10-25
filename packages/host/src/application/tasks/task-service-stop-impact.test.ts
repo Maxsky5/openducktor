@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
@@ -15,8 +16,7 @@ type TestSession = ReturnType<typeof createAgentSessionRecord>;
 type CountCall = { sessionIds: string[]; sessionRoles: string[] };
 
 const metadataWithSessions = (agentSessions: TestSession[]) => ({
-  spec: { markdown: "" },
-  plan: { markdown: "" },
+  artifacts: {},
   agentSessions,
 });
 
@@ -84,9 +84,13 @@ const createService = (
     }),
   };
   if (guard) {
-    return createTaskService({ ...input, taskActivityGuard: guard });
+    return createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
+      ...input,
+      taskActivityGuard: guard,
+    });
   }
-  return createTaskService(input);
+  return createTaskService({ taskWorkflows: builtinTaskWorkflows, ...input });
 };
 
 describe("getTaskStopImpact", () => {
@@ -104,40 +108,6 @@ describe("getTaskStopImpact", () => {
 
     expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 0 });
     expect(countCalls).toEqual([]);
-  });
-
-  test("delete derives hidden descendants from the authoritative task graph", async () => {
-    const countCalls: Array<{ sessionIds: string[]; sessionRoles: string[] }> = [];
-    const guard = makeGuard(new Set(["live-build"]), countCalls);
-    const service = createService(
-      {
-        "task-1": [createAgentSessionRecord({ externalSessionId: "live-build" })],
-        "task-2": [
-          createAgentSessionRecord({
-            externalSessionId: "idle-planner",
-            role: "planner",
-          }),
-        ],
-      },
-      guard,
-      [task({ id: "task-1" }), task({ id: "task-2", parentId: "task-1" })],
-    );
-
-    const result = await Effect.runPromise(
-      service.getTaskStopImpact({
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        operation: "delete",
-      }),
-    );
-
-    expect(result).toEqual({ stoppableSessionCount: 1, removedWorktreeCount: 1 });
-    expect(countCalls).toEqual([
-      {
-        sessionIds: ["live-build", "idle-planner"],
-        sessionRoles: ["build", "planner"],
-      },
-    ]);
   });
 
   test("reset task previews every workflow-role session including repo-root planner sessions", async () => {

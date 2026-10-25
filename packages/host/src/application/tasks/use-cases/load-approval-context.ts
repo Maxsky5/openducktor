@@ -2,7 +2,6 @@ import type { TaskApprovalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   canonicalTargetBranch,
-  ensureHumanApprovalStatus,
   normalizeApprovalTargetBranch,
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
@@ -10,6 +9,7 @@ import { HostValidationError } from "../../../effect/host-errors";
 import { requireApprovalContextDependencies } from "../support/approval-context-dependencies";
 import { requireDependencies } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
+import { requireHumanReviewStatus } from "../support/task-workflow-events";
 import {
   effectiveTargetBranchForTask,
   findLatestCleanupTarget,
@@ -17,6 +17,7 @@ import {
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
+  taskWorkflows,
   gitPort,
   taskStore,
   settingsConfig,
@@ -36,14 +37,8 @@ export const createTaskApprovalContextUseCase = ({
       );
 
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* Effect.try({
-        try: () => ensureHumanApprovalStatus(current.status),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      const workflow = taskWorkflows.forRepo(repoPath);
+      yield* requireHumanReviewStatus(workflow, current);
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
@@ -53,7 +48,7 @@ export const createTaskApprovalContextUseCase = ({
         const directMerge = metadata.directMerge;
         const targetBranch = normalizeApprovalTargetBranch(directMerge.targetBranch);
         const cleanupTarget = yield* findLatestCleanupTarget(
-          dependencies,
+          { ...dependencies, worktreeRoles: workflow.worktreeRoles },
           taskStore,
           effectiveRepoPath,
           taskId,

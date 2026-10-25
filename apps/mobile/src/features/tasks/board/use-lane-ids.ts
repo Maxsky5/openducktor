@@ -1,4 +1,4 @@
-import type { KanbanColumnId } from "@openducktor/core";
+import type { KanbanColumnId } from "@openducktor/workflows";
 import { useMemo } from "react";
 import type { BoardColumn } from "./board-columns";
 

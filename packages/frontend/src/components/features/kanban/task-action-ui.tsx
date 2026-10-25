@@ -6,7 +6,7 @@ import {
   QaRoleIcon,
   SpecRoleIcon,
 } from "@/lib/agent-role-presentation";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import type { TaskWorkflowAction } from "@openducktor/workflows";
 import { taskActionTone } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 
 export const TASK_ACTION_ICON = {

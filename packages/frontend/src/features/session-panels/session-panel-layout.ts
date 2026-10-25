@@ -1,5 +1,9 @@
-import { agentRoleValues, type BrowserTabSummary } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  BUILTIN_ROLE_IDS,
+  BUILTIN_DEFAULT_RIGHT_PANEL_BY_ROLE,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
+import { type BrowserTabSummary } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
   HOST_TAB_KINDS,
@@ -21,7 +25,7 @@ export type SessionPanelOwner =
 export type SessionPanelSelectionKey = AgentRole | "chat";
 
 export const SESSION_PANEL_SELECTION_KEYS = [
-  ...agentRoleValues,
+  ...BUILTIN_ROLE_IDS,
   "chat",
 ] as const satisfies readonly SessionPanelSelectionKey[];
 
@@ -126,15 +130,12 @@ export type SessionPanelLayoutUpdate = (
 const PANEL_IDS: readonly PanelId[] = ["right", "bottom"];
 
 const DEFAULT_RIGHT_SELECTION = {
-  spec: "document",
-  planner: "document",
-  build: "diffs",
-  qa: "document",
+  ...BUILTIN_DEFAULT_RIGHT_PANEL_BY_ROLE,
   chat: "diffs",
 } satisfies Record<SessionPanelSelectionKey, ToolTabKind>;
 
 const SELECTION_KEYS_BY_OWNER_KIND = {
-  task: agentRoleValues,
+  task: BUILTIN_ROLE_IDS,
   chat: ["chat"],
 } as const satisfies Record<SessionOwnerKind, readonly SessionPanelSelectionKey[]>;
 

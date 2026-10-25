@@ -1,4 +1,5 @@
-import type { AgentSessionRecord, RepoConfig, TaskCard } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
+import type { AgentSessionRecord, RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
@@ -17,6 +18,7 @@ import {
   managedWorktreeBaseForRepoConfig,
 } from "./task-cleanup-support";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type CanonicalImplementationResetTarget = {
   branch: string;
@@ -38,6 +40,7 @@ export const appendImplementationResetCleanupProgress = <E>(
 // Reset and its preview must use the same worktree session list.
 export const collectImplementationResetSessionState = (
   dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
+  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   taskId: string,
   sessions: AgentSessionRecord[],
@@ -54,6 +57,7 @@ export const collectImplementationResetSessionState = (
       sessionState: yield* collectSessionsUsingCanonicalWorktree(
         dependencies.gitPort,
         dependencies.settingsConfig,
+        workflow,
         sessions,
         canonicalWorktree,
       ),
@@ -101,7 +105,7 @@ export const cleanupImplementationResetActivity = (
 export const resolveCanonicalImplementationResetTarget = (
   gitPort: GitPort,
   workspaceSettingsService: WorkspaceSettingsService,
-  task: TaskCard,
+  task: TaskRecord,
   repoPath: string,
   canonicalWorktreePath: string,
   branchPrefix: string,

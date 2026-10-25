@@ -1,9 +1,15 @@
 import {
+  taskHasSessionPage,
+  taskNeedsInput,
+  roleWorkflowForTask,
+  type BuiltinTaskCard as TaskCard,
+  builtinRoleId,
+} from "@openducktor/workflows";
+import {
   DEFAULT_APPEARANCE_SETTINGS,
   type AgentSessionRecord,
   type RuntimeKind,
   type SidebarSessionGrouping,
-  type TaskCard,
   type WorkspaceRecord,
   type WorkspaceSession,
 } from "@openducktor/contracts";
@@ -21,14 +27,13 @@ import {
 } from "../../lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { buildRoleWorkflowState } from "../../lib/agent-workflow-state";
-import { roleWorkflowForTask } from "../../lib/task-agent-workflows";
 import { parseTimestamp } from "../../lib/timestamps";
 import {
   workspaceSessionIdentity,
   workspaceSessionTitle,
 } from "../agent-orchestrator/session-read-model/workspace-session-records";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
-import type { AgentWorkflowStepTone } from "../../types/agent-workflow";
+import type { WorkflowStepTone } from "../../types/agent-workflow";
 
 /**
  * One server read as the sidebar sees it. Loading and failure never become empty data.
@@ -87,7 +92,7 @@ export type SessionNavigationEntry = {
   /** Saved runtime identity, or null for a task without a saved session. */
   runtimeKind: RuntimeKind | null;
   /** Workflow state for a task session. Other entries have no workflow role. */
-  workflowTone: AgentWorkflowStepTone | null;
+  workflowTone: WorkflowStepTone | null;
   attention: SessionNavigationAttentionReason[];
   status: SessionNavigationStatus;
   /** Saved session start time keeps running rows independent of activity updates. */
@@ -202,10 +207,10 @@ const taskBlockSnapshot = (sources: SessionNavigationWorkspaceSources): TaskBloc
     {
       workspaceId: sources.workspace.workspaceId,
       tasks: sources.tasks.data
-        .filter((task) => task.status !== "closed")
+        .filter((task) => taskHasSessionPage(task))
         .map((task) => ({
           taskId: task.id,
-          blocked: task.status === "blocked",
+          blocked: taskNeedsInput(task),
           target: taskBlockTarget(sources, task),
         })),
     },
@@ -217,7 +222,7 @@ const taskBlockTarget = (
   task: TaskCard,
 ): TaskBlockTarget | null => {
   const read = sources.taskSessions.get(task.id);
-  if (task.status !== "blocked" || read?.status !== "ready" || read.refreshError !== null) {
+  if (!taskNeedsInput(task) || read?.status !== "ready" || read.refreshError !== null) {
     return null;
   }
   const record = latestStartedRecord(read.data);
@@ -226,7 +231,7 @@ const taskBlockTarget = (
         kind: "task_session",
         workspaceId: sources.workspace.workspaceId,
         taskId: task.id,
-        role: record.role,
+        role: builtinRoleId(record.role),
         identity: toAgentSessionIdentity(record),
       }
     : { kind: "task", workspaceId: sources.workspace.workspaceId, taskId: task.id, role: null };
@@ -320,10 +325,10 @@ const taskEntries = (
   const { workspace, live } = sources;
   const entries: SessionNavigationEntry[] = [];
   for (const task of sources.tasks.data) {
-    if (task.status === "closed") continue;
+    if (!taskHasSessionPage(task)) continue;
     const read = sources.taskSessions.get(task.id);
     if (read?.status !== "ready") continue;
-    const isBlocked = task.status === "blocked";
+    const isBlocked = taskNeedsInput(task);
     if (read.data.length === 0) {
       // Only a current empty read proves that the task has no saved session.
       if (isBlocked && read.refreshError === null) {
@@ -371,7 +376,7 @@ const taskEntries = (
           kind: "task_session",
           workspaceId: workspace.workspaceId,
           taskId: task.id,
-          role: record.role,
+          role: builtinRoleId(record.role),
           identity,
         },
         {
@@ -380,8 +385,8 @@ const taskEntries = (
           runtimeKind: record.runtimeKind,
           workflowTone: buildRoleWorkflowState({
             task,
-            role: record.role,
-            workflow: roleWorkflowForTask(task, record.role),
+            role: builtinRoleId(record.role),
+            workflow: roleWorkflowForTask(task, builtinRoleId(record.role)),
             liveSession: facts?.activityState ?? "none",
           }).tone,
           attention,

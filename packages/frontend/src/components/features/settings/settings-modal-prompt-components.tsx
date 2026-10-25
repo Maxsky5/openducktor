@@ -1,4 +1,9 @@
-import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
+import {
+  BUILTIN_PROMPT_ROLE_TABS,
+  type BuiltinPromptTemplateId as AgentPromptTemplateId,
+} from "@openducktor/workflows";
+import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { ChevronDown, CircleAlert } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,14 +13,12 @@ import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segm
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { PromptRoleTabId } from "./settings-modal-constants";
-import { PROMPT_ROLE_TABS } from "./settings-modal-constants";
 import type { PromptInheritedPreview } from "./settings-prompt-inheritance";
 
 type PromptRoleTabsProps = {
-  value: PromptRoleTabId;
-  onChange: (next: PromptRoleTabId) => void;
-  errorCounts: Record<PromptRoleTabId, number>;
+  value: BuiltinPromptRoleTabId;
+  onChange: (next: BuiltinPromptRoleTabId) => void;
+  errorCounts: Record<BuiltinPromptRoleTabId, number>;
   disabled: boolean;
 };
 
@@ -32,7 +35,7 @@ export function PromptRoleTabs({
       role="tablist"
       aria-label="Prompt role tabs"
     >
-      {PROMPT_ROLE_TABS.map((entry) => {
+      {BUILTIN_PROMPT_ROLE_TABS.map((entry) => {
         const tabErrorCount = errorCounts[entry.id];
         const isActive = value === entry.id;
 

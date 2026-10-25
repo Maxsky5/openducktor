@@ -4,26 +4,17 @@ import type {
   AgentSessionModelSelection,
   AgentSessionLiveRef,
   AgentSessionRecord,
-  AgentRole,
-  AutopilotActionId,
   RepoConfig,
-  TaskCard,
   WorkflowLaunchDecision,
   WorkflowLaunchRequest,
-  SessionLaunchActionId,
 } from "@openducktor/contracts";
 import type { WorkflowLaunchAttemptRequest } from "./workflow-launch-types";
+import { findCatalogModel, resolveSavedModelAlias } from "@openducktor/core";
 import {
-  AUTOPILOT_ACTION_DEFINITIONS,
-  buildAgentKickoffPrompt,
-  buildAgentSystemPrompt,
-  findCatalogModel,
-  getSessionLaunchAction,
-  mergePromptOverrides,
-  type SessionLaunchAction,
-  resolvePullRequestTarget,
-  resolveSavedModelAlias,
-} from "@openducktor/core";
+  requirePullRequestTarget,
+  type TaskWorkflow,
+  type TaskWorkflowLaunchAction,
+} from "@openducktor/workflows";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostValidationError, toHostOperationError } from "../../effect/host-errors";
@@ -31,7 +22,8 @@ import type { GitPort } from "../../ports/git-port";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { TaskStorePort, TaskRecord } from "../../ports/task-repository-ports";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
@@ -60,6 +52,7 @@ export type WorkflowLaunchPreparationDependencies = {
     "agentSessionsList" | "agentSessionUpdateModel" | "humanRequestChanges" | "updateTask"
   >;
   taskReader: Pick<TaskStorePort, "getTask">;
+  taskWorkflows: TaskWorkflowResolver;
   worktrees: Pick<TaskWorktreeService, "getTaskWorktree">;
   startPreparation: Pick<TaskSessionStartPreparationService, "validateTarget">;
   git: Pick<GitPort, "canonicalizePath">;
@@ -78,38 +71,43 @@ export const prepareWorkflowLaunch = (
   onReuse: (source: AgentSessionLiveRef) => void,
 ) =>
   Effect.gen(function* () {
-    const actionId = workflowActionId(request);
-    const action = getSessionLaunchAction(actionId);
+    const workflow = deps.taskWorkflows.forRepo(repoPath);
+    const action = yield* requireLaunchAction(workflow, request);
+    const actionId = action.id;
+    const roleLabel = workflow.role(action.role).label;
     let task = yield* deps.taskReader.getTask({ repoPath, taskId: request.taskId });
-    yield* validateTaskSessionWorkflowAvailable(task, action.role, repoPath);
+    yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
     const settings = yield* deps.settings.getSettingsSnapshot();
-    const overrides = mergePromptOverrides({
+    const overrides = workflow.prompts.mergeOverrides({
       globalOverrides: settings.globalPromptOverrides,
       repoOverrides: config.promptOverrides,
     });
     // Validate input before any task mutation or runtime creation.
+    const overrideProblem = workflow.prompts.findOverrideProblem(overrides);
+    if (overrideProblem !== undefined) return yield* launchValidationError(overrideProblem);
     const messageParts =
       request.instruction.kind === "message"
         ? yield* deps.resolveParts(request.instruction.parts)
         : undefined;
     const feedback =
       request.instruction.kind === "kickoff" ? request.instruction.feedback?.trim() : undefined;
+    const kickoffTemplateId = action.template.kind === "kickoff" ? action.template.id : undefined;
     if (request.instruction.kind === "kickoff") {
       if (request.instruction.text !== undefined && !request.instruction.text.trim())
         return yield* launchValidationError("Kickoff prompt must not be blank.");
-      if (actionId === "build_after_human_request_changes" && !feedback)
+      if (action.context === "human_feedback" && !feedback)
         return yield* launchValidationError("Feedback message is required before sending.");
-      if (!action.kickoffTemplateId)
+      if (kickoffTemplateId === undefined)
         return yield* launchValidationError(
           `Action '${actionId}' does not define a kickoff prompt.`,
         );
     }
-    if (request.beforeStartAction && actionId !== "build_after_human_request_changes")
+    if (request.beforeStartAction && action.context !== "human_feedback")
       return yield* launchValidationError(
         "Human request changes requires the Apply Human Changes action.",
       );
     const targetBranch = request.targetBranch ?? task.targetBranch ?? config.defaultTargetBranch;
-    if (actionId === "build_pull_request_generation") {
+    if (action.context === "pull_request") {
       const unavailable = yield* pullRequestUnavailableReason(deps, repoPath);
       if (unavailable) {
         if (request.policy.kind === "automatic")
@@ -117,28 +115,22 @@ export const prepareWorkflowLaunch = (
         return yield* launchValidationError(unavailable);
       }
       yield* Effect.try({
-        try: () => resolvePullRequestTarget(targetBranch),
+        try: () => requirePullRequestTarget(action.template.id, targetBranch),
         catch: (cause) => toHostOperationError(cause, "workflow-launch.pull-request-target"),
       });
     }
-    const kickoffContext: Pick<
-      Parameters<typeof buildAgentKickoffPrompt>[0],
-      "extraPlaceholders" | "git"
-    > = {};
-    if (feedback) kickoffContext.extraPlaceholders = { humanFeedback: feedback };
-    if (actionId === "build_pull_request_generation") kickoffContext.git = { targetBranch };
-    const kickoffText = (task: TaskCard) =>
+    const kickoffText = (task: TaskRecord) =>
       Effect.try({
         try: () =>
           request.instruction.kind === "kickoff" && request.instruction.text !== undefined
             ? request.instruction.text
-            : buildAgentKickoffPrompt({
-                role: action.role,
-                templateId: action.kickoffTemplateId!,
+            : workflow.prompts.kickoffPrompt({
+                launchActionId: action.id,
                 task: toPromptTask(task),
+                humanFeedback: feedback || undefined,
+                targetBranch: action.context === "pull_request" ? targetBranch : undefined,
                 overrides,
-                ...kickoffContext,
-              }),
+              }).prompt,
         catch: (cause) => toHostOperationError(cause, "workflow-launch.instruction"),
       });
     if (request.instruction.kind === "kickoff" && !(yield* kickoffText(task)).trim())
@@ -148,6 +140,7 @@ export const prepareWorkflowLaunch = (
         ? { kind: "decided" as const, decision: request.policy.decision }
         : yield* decideAutomaticLaunch(deps, {
             request,
+            workflow,
             actionId: request.policy.actionId,
             repoPath,
             config,
@@ -156,7 +149,7 @@ export const prepareWorkflowLaunch = (
           });
     if (resolved.kind === "skipped") return resolved;
     const decision = resolved.decision;
-    if (!action.allowedStartModes.includes(decision.startMode))
+    if (!action.startModes.includes(decision.startMode))
       return yield* launchValidationError(
         `Action '${actionId}' does not permit '${decision.startMode}'.`,
       );
@@ -186,7 +179,7 @@ export const prepareWorkflowLaunch = (
         const sourcePath = yield* deps.git.canonicalizePath(source.workingDirectory);
         if (normalizePathForComparison(sourcePath) === normalizePathForComparison(repoPath))
           return yield* launchValidationError(
-            "Legacy repository-root task sessions cannot be forked. Start a fresh Builder in the task worktree.",
+            `Legacy repository-root task sessions cannot be forked. Start a fresh ${roleLabel} session in the task worktree.`,
           );
         if (decision.selectedModel.runtimeKind !== source.runtimeKind)
           return yield* launchValidationError(
@@ -222,7 +215,7 @@ export const prepareWorkflowLaunch = (
     const descriptor = yield* resolveRuntimeDescriptorForTaskSession(
       deps.definitions,
       runtimeKind,
-      action.role,
+      workflow.role(action.role),
     );
     if (!descriptor.capabilities.sessionLifecycle.supportedStartModes.includes(decision.startMode))
       return yield* launchValidationError(
@@ -244,12 +237,12 @@ export const prepareWorkflowLaunch = (
       });
     }
     task = yield* deps.taskReader.getTask({ repoPath, taskId: request.taskId });
-    yield* validateTaskSessionWorkflowAvailable(task, action.role, repoPath);
-    const systemPrompt = buildAgentSystemPrompt({
+    yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
+    const systemPrompt = workflow.prompts.systemPrompt({
       role: action.role,
       task: toPromptTask(task),
       overrides,
-    });
+    }).prompt;
     const parts =
       request.instruction.kind === "kickoff"
         ? [{ kind: "text" as const, text: yield* kickoffText(task) }]
@@ -266,10 +259,20 @@ export const prepareWorkflowLaunch = (
 
 const launchValidationError = (message: string) =>
   new HostValidationError({ field: "workflowLaunch", message });
-export const workflowActionId = (request: WorkflowLaunchAttemptRequest): SessionLaunchActionId =>
-  request.policy.kind === "manual"
-    ? request.policy.actionId
-    : AUTOPILOT_ACTION_DEFINITIONS[request.policy.actionId].launchActionId;
+/** The launch action of a manual start, or the launch action of an Autopilot automation. */
+export const requireLaunchAction = (
+  workflow: TaskWorkflow,
+  request: WorkflowLaunchAttemptRequest,
+): Effect.Effect<TaskWorkflowLaunchAction, HostValidationError> =>
+  Effect.try({
+    try: () =>
+      workflow.launchAction(
+        request.policy.kind === "manual"
+          ? request.policy.actionId
+          : workflow.automation(request.policy.actionId).launchActionId,
+      ),
+    catch: (cause) => launchValidationError(errorMessage(cause)),
+  });
 
 export const resolveLaunchWorkspace = (
   deps: Pick<WorkflowLaunchPreparationDependencies, "settings" | "git">,
@@ -291,6 +294,7 @@ const decideAutomaticLaunch = (
   deps: WorkflowLaunchPreparationDependencies,
   {
     request,
+    workflow,
     actionId,
     repoPath,
     config,
@@ -298,16 +302,17 @@ const decideAutomaticLaunch = (
     alwaysStartQaReviewsFresh,
   }: {
     request: WorkflowLaunchAttemptRequest;
-    actionId: AutopilotActionId;
+    workflow: TaskWorkflow;
+    actionId: string;
     repoPath: string;
     config: RepoConfig;
-    action: SessionLaunchAction;
+    action: TaskWorkflowLaunchAction;
     alwaysStartQaReviewsFresh: boolean;
   },
 ) =>
   Effect.gen(function* () {
-    const automatic = AUTOPILOT_ACTION_DEFINITIONS[actionId];
-    const { role, allowedStartModes } = action;
+    const automatic = workflow.automation(actionId);
+    const { role, startModes: allowedStartModes } = action;
     const records = yield* deps.tasks.agentSessionsList({ repoPath, taskId: request.taskId });
     const latest = records
       .filter((record) => record.role === role)
@@ -319,7 +324,7 @@ const decideAutomaticLaunch = (
     };
     const configuredModel = () =>
       resolveConfiguredDefaultModel(deps, repoPath, config, role, request.workspaceId);
-    if (automatic.startPolicy.kind === "latestRoleSession") {
+    if (automatic.start === "latest_role_session") {
       if (!sourceSession)
         return {
           kind: "skipped" as const,
@@ -335,17 +340,23 @@ const decideAutomaticLaunch = (
       };
       return { kind: "decided" as const, decision };
     }
-    const forceFreshQa = automatic.id === "startQa" && alwaysStartQaReviewsFresh;
-    const continuation = allowedStartModes.includes("reuse")
-      ? yield* deps.worktrees.getTaskWorktree({ repoPath, taskId: request.taskId })
-      : null;
-    if (allowedStartModes.includes("reuse") && !continuation && role !== "qa")
+    // A role that writes a review starts each Autopilot review fresh when the setting asks for it.
+    const forceFreshQa =
+      alwaysStartQaReviewsFresh &&
+      workflow.role(role).writes.some((code) => workflow.artifact(code)?.kind === "review");
+    const canReuse = allowedStartModes.includes("reuse");
+    const continuation =
+      canReuse || action.requiresWorktree
+        ? yield* deps.worktrees.getTaskWorktree({ repoPath, taskId: request.taskId })
+        : null;
+    if (action.requiresWorktree && !continuation)
       return {
         kind: "skipped" as const,
-        reason: `Builder continuation cannot start until a task worktree exists for task ${request.taskId}.`,
+        reason: `${workflow.role(role).label} continuation cannot start until a task worktree exists for task ${request.taskId}.`,
       };
     if (
       !forceFreshQa &&
+      canReuse &&
       continuation &&
       sourceSession &&
       normalizePathForComparison(sourceSession.workingDirectory) ===
@@ -366,7 +377,7 @@ const resolveConfiguredDefaultModel = (
   deps: WorkflowLaunchPreparationDependencies,
   repoPath: string,
   config: RepoConfig,
-  role: AgentRole,
+  role: string,
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
@@ -442,11 +453,10 @@ const withSpeed = (
   return speed === null ? selection : { ...selection, speed };
 };
 
-const toPromptTask = (task: TaskCard) => ({
+const toPromptTask = (task: TaskRecord) => ({
   taskId: task.id,
   title: task.title,
   issueType: task.issueType,
   status: task.status,
-  qaRequired: task.aiReviewEnabled,
   description: task.description,
 });

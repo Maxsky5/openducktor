@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
+import { workflowIdSchema } from "./workflow-condition-schemas";
 
-export const agentRoleValues = ["spec", "planner", "build", "qa"] as const;
 export const agentSessionStartModeValues = ["fresh", "reuse", "fork"] as const;
 export const agentToolNameValues = ODT_WORKFLOW_AGENT_TOOL_NAMES;
 
-export const agentRoleSchema = z.enum(agentRoleValues);
-export type AgentRole = z.infer<typeof agentRoleSchema>;
+/** A role of the task workflow. The workflow of the task validates it. */
+export const agentRoleSchema = workflowIdSchema;
 
 export const agentSessionStartModeSchema = z.enum(agentSessionStartModeValues);
 export type AgentSessionStartMode = z.infer<typeof agentSessionStartModeSchema>;

@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -33,6 +34,7 @@ test("a closed workspace still reports its open tasks and their session director
     },
   });
   const manager = createSqliteTaskRepositoryContextManager({
+    taskWorkflows: builtinTaskWorkflows,
     configDir: harness.configDir,
     processEnv: {},
     openConnection: openSqliteTaskStoreTestConnection,

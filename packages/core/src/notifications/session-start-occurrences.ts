@@ -1,5 +1,4 @@
 import type {
-  AgentRole,
   NotificationActionOccurrence,
   NotificationSessionIdentity,
 } from "@openducktor/contracts";
@@ -17,16 +16,10 @@ export type SessionStartOccurrenceInput = {
   launchAttemptId: string;
   taskId: string;
   taskTitle?: string;
-  role: AgentRole;
+  role: string;
+  roleLabel: string;
   session?: NotificationSessionIdentity;
   errorAttentionId?: string;
-};
-
-const roleLabel = (role: AgentRole): string => {
-  if (role === "spec") return "Spec Agent Session";
-  if (role === "planner") return "Planner Agent Session";
-  if (role === "build") return "Builder Agent Session";
-  return "QA Agent Session";
 };
 
 const sessionKey = ({
@@ -62,7 +55,7 @@ export const buildSessionStartedOccurrence = (
   repositoryLabel: workspace.repositoryLabel,
   task: task(input),
   role: input.role,
-  sessionLabel: roleLabel(input.role),
+  sessionLabel: `${input.roleLabel} Agent Session`,
   status: "Agent Session started.",
   navigationTarget: {
     type: "agent_session",
@@ -107,6 +100,6 @@ export const buildSessionStartErrorOccurrence = (
         .slice(0, 240) || "The session failed. Open it for details.",
     navigationTarget: errorNavigationTarget(workspace, input),
   };
-  if (input.session) occurrence.sessionLabel = roleLabel(input.role);
+  if (input.session) occurrence.sessionLabel = `${input.roleLabel} Agent Session`;
   return occurrence;
 };

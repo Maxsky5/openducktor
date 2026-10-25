@@ -1,12 +1,14 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
-import { roleWorkflowForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import {
+  roleWorkflowForTask,
+  type BuiltinTaskCard as TaskCard,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type {
-  AgentWorkflowStepState,
-  AgentWorkflowStepTone,
+  WorkflowStepPresentation,
+  WorkflowStepTone,
 } from "@openducktor/frontend-core/types/agent-workflow";
 import type { TaskSessionGroup } from "./task-sessions-model";
 
@@ -14,7 +16,7 @@ import type { TaskSessionGroup } from "./task-sessions-model";
 export type TaskWorkflowStep = {
   role: AgentRole;
   label: string;
-  state: AgentWorkflowStepState;
+  state: WorkflowStepPresentation;
   /** The state in one or two words, such as "Done" or "Needs input". */
   stateLabel: string;
   /** True while a session of the role works. */
@@ -34,7 +36,7 @@ const STATE_LABELS = {
   rejected: "Rejected",
   waiting_input: "Needs input",
   failed: "Failed",
-} as const satisfies Record<AgentWorkflowStepTone, string>;
+} as const satisfies Record<WorkflowStepTone, string>;
 
 /**
  * The four Workflow Roles of a task in workflow order, each with its state from the task workflow
@@ -56,7 +58,7 @@ export const taskWorkflowSteps = (
     const skipped = task.status === "closed" && state.tone === "blocked";
     return {
       role,
-      label: AGENT_ROLE_LABELS[role],
+      label: BUILTIN_ROLE_LABELS[role],
       state,
       stateLabel: skipped ? "Skipped" : STATE_LABELS[state.tone],
       working: newest?.live ?? false,

@@ -1,4 +1,4 @@
-import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { Link2, Sparkles, Unlink } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskHeaderBadges } from "@/components/features/tasks/task-header-badges";
@@ -14,10 +14,10 @@ import { statusBadgeClassName } from "@/lib/task-status-presentation";
 import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { formatElapsedAgo, useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;
-  subtasksCount: number;
   taskLabels: string[];
   onDetectPullRequest?: () => void;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
@@ -125,7 +125,6 @@ function TaskDates({
 
 export function TaskDetailsSheetHeader({
   task,
-  subtasksCount,
   taskLabels,
   onDetectPullRequest,
   gitProviderContext,
@@ -164,7 +163,7 @@ export function TaskDetailsSheetHeader({
       </div>
 
       <div className="flex flex-wrap items-start gap-2">
-        <TaskHeaderBadges task={task} subtasksCount={subtasksCount} />
+        <TaskHeaderBadges task={task} />
         {showDetectPullRequest || showUnlinkPullRequest ? (
           <TaskPullRequestActions
             disabledReason={detectPullRequestDisabledReason}

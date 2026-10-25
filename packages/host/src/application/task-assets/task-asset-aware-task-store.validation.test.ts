@@ -9,10 +9,10 @@ describe("asset-aware task store", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Malformed asset",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "![broken](odt-asset:not-a-uuid)",
         },
@@ -36,10 +36,10 @@ describe("asset-aware task store", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Update target",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "Before",
         },
@@ -76,10 +76,10 @@ describe("asset-aware task store", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Too many assets",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description,
         },
@@ -103,10 +103,10 @@ describe("asset-aware task store", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Update target",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "Before",
         },
@@ -145,10 +145,10 @@ describe("asset-aware task store", () => {
     const createError = await captureTaskAssetError(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Missing staged asset",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description,
         },
@@ -158,10 +158,10 @@ describe("asset-aware task store", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Update target",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "Before",
         },

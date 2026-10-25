@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { JSONType } from "zod";
 import { workspaceRecordSchema } from "./git-schemas";
-import { DEFAULT_NOTIFICATION_SETTINGS } from "./notification-schemas";
+import { createDefaultNotificationSettings } from "./notification-schemas";
 import {
   APP_PLATFORM_VALUES,
-  AUTOPILOT_EVENT_IDS,
   agentModelFavoriteKey,
   agentModelFavoritesSchema,
   autopilotSettingsSchema,
@@ -671,21 +670,21 @@ describe("config-schemas", () => {
       },
     });
 
-    expect(resolveCodexEffectivePolicy(config, "qa")).toEqual({
+    expect(resolveCodexEffectivePolicy(config, "qa", false)).toEqual({
       sandboxMode: "workspace-write",
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       approvalsReviewerApplies: true,
       commandNetworkAccess: true,
     });
-    expect(resolveCodexEffectivePolicy(config, "spec")).toEqual({
+    expect(resolveCodexEffectivePolicy(config, "spec", false)).toEqual({
       sandboxMode: "read-only",
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       approvalsReviewerApplies: true,
       commandNetworkAccess: true,
     });
-    expect(resolveCodexEffectivePolicy(config, "build")).toEqual({
+    expect(resolveCodexEffectivePolicy(config, "build", true)).toEqual({
       sandboxMode: "workspace-write",
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
@@ -711,7 +710,7 @@ describe("config-schemas", () => {
       },
     });
 
-    expect(resolveCodexEffectivePolicy(config, null)).toEqual({
+    expect(resolveCodexEffectivePolicy(config, null, false)).toEqual({
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
       approvalsReviewer: "auto_review",
@@ -730,11 +729,11 @@ describe("config-schemas", () => {
       },
     });
 
-    expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
+    expect(resolveCodexEffectivePolicy(config, "spec", false)).toMatchObject({
       approvalPolicy: "never",
       approvalsReviewerApplies: false,
     });
-    expect(resolveCodexEffectivePolicy(config, "qa")).toMatchObject({
+    expect(resolveCodexEffectivePolicy(config, "qa", false)).toMatchObject({
       sandboxMode: "danger-full-access",
       commandNetworkAccess: false,
     });
@@ -752,11 +751,11 @@ describe("config-schemas", () => {
       },
     });
 
-    expect(resolveCodexEffectivePolicy(config, "spec")).toMatchObject({
+    expect(resolveCodexEffectivePolicy(config, "spec", false)).toMatchObject({
       sandboxMode: "danger-full-access",
       approvalPolicy: "never",
     });
-    expect(resolveCodexEffectivePolicy(config, "planner")).toMatchObject({
+    expect(resolveCodexEffectivePolicy(config, "planner", false)).toMatchObject({
       sandboxMode: "danger-full-access",
       approvalPolicy: "never",
     });
@@ -789,19 +788,6 @@ describe("config-schemas", () => {
     );
   });
 
-  test("rejects explicit builder read-only sandbox with field path", () => {
-    const result = codexRuntimeConfigSchema.safeParse({
-      enabled: true,
-      executablePath: "/bin/codex",
-      roleOverrides: { build: { sandboxMode: "read-only" } },
-    });
-
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error("explicit builder read-only must fail");
-    expect(result.error.issues[0]?.path.join(".")).toBe("roleOverrides.build.sandboxMode");
-    expect(result.error.issues[0]?.message).toContain("build role sandboxMode cannot be read-only");
-  });
-
   test("rejects invalid codex values and out-of-scope keys", () => {
     const baseConfig = { enabled: true, executablePath: "/usr/local/bin/codex" } as const;
     for (const value of ["on-failure", "guardian_subagent", { mode: "on-request" }]) {
@@ -823,17 +809,9 @@ describe("config-schemas", () => {
       expect(() => codexRuntimeConfigSchema.parse({ ...baseConfig, [key]: true })).toThrow();
     }
 
-    const invalidRoleOverride = codexRuntimeConfigSchema.safeParse({
-      ...baseConfig,
-      roleOverrides: { review: {} },
-    });
-    expect(invalidRoleOverride.success).toBe(false);
-    if (invalidRoleOverride.success) throw new Error("unsupported Codex role must fail");
-    expect(invalidRoleOverride.error.issues[0]).toMatchObject({
-      code: "unrecognized_keys",
-      path: ["roleOverrides"],
-      keys: ["review"],
-    });
+    expect(
+      codexRuntimeConfigSchema.safeParse({ ...baseConfig, roleOverrides: { " ": {} } }).success,
+    ).toBe(false);
     expect(() =>
       codexRuntimeConfigSchema.parse({
         ...baseConfig,
@@ -1120,7 +1098,7 @@ describe("config-schemas", () => {
     ).toThrow();
   });
 
-  test("defaults autopilot rules for every supported event", () => {
+  test("defaults to no autopilot rules", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
@@ -1128,8 +1106,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
 
-    expect(parsed.autopilot.rules.map((rule) => rule.eventId)).toEqual([...AUTOPILOT_EVENT_IDS]);
-    expect(parsed.autopilot.rules.every((rule) => rule.actionIds.length === 0)).toBe(true);
+    expect(parsed.autopilot.rules).toEqual([]);
     expect(parsed.autopilot.alwaysStartQaReviewsFresh).toBe(false);
   });
 
@@ -1191,7 +1168,7 @@ describe("config-schemas", () => {
     expect(first.autopilot.rules).not.toBe(second.autopilot.rules);
   });
 
-  test("normalizes autopilot rule order and dedupes actions", () => {
+  test("keeps the autopilot rule order and dedupes actions", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
@@ -1212,14 +1189,8 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.autopilot.rules).toEqual([
+      { eventId: "taskProgressedToHumanReview", actionIds: ["startGeneratePullRequest"] },
       { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
-      { eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { eventId: "taskProgressedToAiReview", actionIds: [] },
-      { eventId: "taskRejectedByQa", actionIds: [] },
-      {
-        eventId: "taskProgressedToHumanReview",
-        actionIds: ["startGeneratePullRequest"],
-      },
     ]);
   });
 
@@ -1258,7 +1229,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
 
-    expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
-    expect(snapshot.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+    expect(config.notifications).toEqual(createDefaultNotificationSettings());
+    expect(snapshot.notifications).toEqual(createDefaultNotificationSettings());
   });
 });

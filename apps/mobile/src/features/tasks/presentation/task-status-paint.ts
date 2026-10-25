@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@openducktor/contracts";
+import { type BuiltinStateId as TaskStatus } from "@openducktor/workflows";
 import {
   statusLabel,
   statusTone,

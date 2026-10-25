@@ -17,19 +17,17 @@ const card = (id: string): TaskCard => ({
   status: "open",
   issueType: "task",
   priority: 2,
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: false, completed: false },
     planner: { required: false, canSkip: true, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: true, canSkip: false, available: false, completed: false },
   },
   createdAt: "2026-04-10T13:00:00.000Z",
@@ -37,7 +35,7 @@ const card = (id: string): TaskCard => ({
 });
 
 describe("external-task-sync-schemas", () => {
-  test("preserves an optional source role and rejects unknown roles", () => {
+  test("preserves an optional source role and rejects blank roles", () => {
     const change = {
       previousStatus: "blocked",
       task: { id: "task-1", title: "Task", status: "human_review" },
@@ -46,9 +44,9 @@ describe("external-task-sync-schemas", () => {
     expect(taskEventStatusChangeSchema.parse({ ...change, sourceRole: "build" }).sourceRole).toBe(
       "build",
     );
-    expect(
-      taskEventStatusChangeSchema.safeParse({ ...change, sourceRole: "unknown" }).success,
-    ).toBe(false);
+    expect(taskEventStatusChangeSchema.safeParse({ ...change, sourceRole: " " }).success).toBe(
+      false,
+    );
   });
   test("parses external task created sync events", () => {
     const eventId = "event-µ-1";
@@ -247,7 +245,7 @@ describe("external-task-sync-schemas", () => {
       [],
       [changed, changed],
       [{ ...changed, title: "Stale title" }],
-      [{ ...changed, subtaskIds: [1] }],
+      [{ ...changed, priority: 9 }],
     ]) {
       expect(
         tasksUpdatedEventSchema.safeParse({

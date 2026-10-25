@@ -9,8 +9,7 @@ import {
 } from "./task-create-modal-model";
 
 const baseState: ComposerState = {
-  issueType: "epic",
-  aiReviewEnabled: true,
+  issueType: "feature",
   title: "  Implement sync  ",
   priority: 2,
   description: "line one\n\nline two",
@@ -27,20 +26,11 @@ describe("task-create-modal-model", () => {
   test("builds create payload with normalized multi-line content", () => {
     expect(toTaskCreateInput(baseState)).toEqual({
       title: "Implement sync",
-      issueType: "epic",
-      aiReviewEnabled: true,
+      issueType: "feature",
       priority: 2,
       description: "line one\n\nline two",
       labels: ["backend", "urgent"],
     });
-  });
-
-  test("does not include parent on create", () => {
-    expect(toTaskCreateInput(baseState).parentId).toBeUndefined();
-  });
-
-  test("builds update patch without parent changes", () => {
-    expect(toTaskUpdatePatch(baseState).parentId).toBeUndefined();
   });
 
   test("trims outer Markdown whitespace in create and update payloads", () => {
@@ -53,11 +43,9 @@ describe("task-create-modal-model", () => {
   });
 
   test("reports unsaved document changes by active section", () => {
-    expect(hasUnsavedDocumentChanges("spec", { isSpecDirty: true, isPlanDirty: false })).toBe(true);
-    expect(hasUnsavedDocumentChanges("plan", { isSpecDirty: true, isPlanDirty: false })).toBe(
-      false,
-    );
-    expect(hasUnsavedDocumentChanges(null, { isSpecDirty: true, isPlanDirty: true })).toBe(false);
+    expect(hasUnsavedDocumentChanges("spec", { spec: true, plan: false })).toBe(true);
+    expect(hasUnsavedDocumentChanges("plan", { spec: true, plan: false })).toBe(false);
+    expect(hasUnsavedDocumentChanges(null, { spec: true, plan: true })).toBe(false);
   });
 
   test("treats only a newer host document as a conflict", () => {

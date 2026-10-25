@@ -16,7 +16,6 @@ import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
-  AgentRole,
   AgentSessionScope,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
@@ -62,7 +61,7 @@ export type AgentChatMessageMeta =
       kind: "assistant";
       partId?: string;
       sourceMessageId?: string;
-      agentRole?: AgentRole;
+      agentRole?: string;
       providerId?: string;
       modelId?: string;
       variant?: string;

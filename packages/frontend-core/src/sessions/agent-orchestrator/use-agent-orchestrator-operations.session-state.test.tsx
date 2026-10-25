@@ -126,9 +126,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalStopSession = AgentRuntimeTestAdapter.prototype.stopSession;
     const originalResumeSession = AgentRuntimeTestAdapter.prototype.resumeSession;
     const originalSendUserMessage = AgentRuntimeTestAdapter.prototype.sendUserMessage;
@@ -137,9 +135,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     AgentRuntimeTestAdapter.prototype.stopSession = async () => {
       stopCalls += 1;
     };
@@ -256,9 +252,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       AgentRuntimeTestAdapter.prototype.stopSession = originalStopSession;
       AgentRuntimeTestAdapter.prototype.resumeSession = originalResumeSession;
       AgentRuntimeTestAdapter.prototype.sendUserMessage = originalSendUserMessage;
@@ -271,17 +265,13 @@ describe("use-agent-orchestrator-operations session state", () => {
   test("keeps an existing session sendable after task workflow availability changes", async () => {
     let sendCalls = 0;
 
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalSendUserMessage = AgentRuntimeTestAdapter.prototype.sendUserMessage;
     const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     AgentRuntimeTestAdapter.prototype.sendUserMessage = async (input) => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
@@ -328,9 +318,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
 
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       AgentRuntimeTestAdapter.prototype.sendUserMessage = originalSendUserMessage;
       AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
@@ -339,18 +327,14 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("updates local state after the host accepts a model update", async () => {
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalUpdateSessionModel = AgentRuntimeTestAdapter.prototype.updateSessionModel;
     const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     const storedSession = structuredClone(persistedSessionFixture);
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     AgentRuntimeTestAdapter.prototype.updateSessionModel = async () => {};
     AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
@@ -406,9 +390,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       expect(updatedSession?.selectedModel).toEqual(BUILD_SELECTION);
     } finally {
       await harness.unmount();
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       AgentRuntimeTestAdapter.prototype.updateSessionModel = originalUpdateSessionModel;
       AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
@@ -499,17 +481,13 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("uses the host live snapshot when persisted records omit status", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = async () => ({
       models: {
         status: "available",
@@ -557,9 +535,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
@@ -1192,9 +1168,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("attaches idle host live sessions without resuming them on repo refresh", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalResumeSession = AgentRuntimeTestAdapter.prototype.resumeSession;
     const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = AgentRuntimeTestAdapter.prototype.loadSessionTodos;
@@ -1202,9 +1176,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     let resumeCalls = 0;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     AgentRuntimeTestAdapter.prototype.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
@@ -1252,9 +1224,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       AgentRuntimeTestAdapter.prototype.resumeSession = originalResumeSession;
       AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       AgentRuntimeTestAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;

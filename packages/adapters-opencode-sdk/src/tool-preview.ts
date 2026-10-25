@@ -188,15 +188,6 @@ const summarizeOdtMutation = (
     const taskId = readTrimmedString(input, ["taskId"]);
     return [taskId, providerId, number].filter((value) => value && value.length > 0).join(" · ");
   }
-  if (tool === "odt_set_plan") {
-    const subtaskCount = countCollectionItems(input?.subtasks);
-    if (subtaskCount !== null) {
-      const taskId = readTrimmedString(input, ["taskId"]);
-      return taskId
-        ? `${taskId} · ${subtaskCount} subtask${subtaskCount === 1 ? "" : "s"}`
-        : `${subtaskCount} subtask${subtaskCount === 1 ? "" : "s"}`;
-    }
-  }
   return readTrimmedString(input, ["taskId"]);
 };
 

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  CreateTaskInputSchema,
   getWorkspacesResultSchema,
   ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
   ODT_TOOL_SCHEMAS,
@@ -32,7 +31,6 @@ describe("odt mcp public task schemas", () => {
       status: "open",
       priority: 2,
       issueType: "task",
-      aiReviewEnabled: true,
       labels: [],
       targetBranch: {
         remote: "origin",
@@ -57,7 +55,6 @@ describe("odt mcp public task schemas", () => {
         status: "open",
         priority: 2,
         issueType: "task",
-        aiReviewEnabled: true,
         labels: [],
         targetBranch: {
           remote: "origin",
@@ -65,15 +62,14 @@ describe("odt mcp public task schemas", () => {
         },
         createdAt: "2026-04-09T00:00:00.000Z",
         updatedAt: "2026-04-09T00:00:00.000Z",
-        qaVerdict: "not_reviewed",
-        artifacts: {
-          hasSpec: false,
-          hasPlan: false,
-          hasQaReport: false,
+        workflowArtifacts: {
+          spec: { present: true },
+          qaReport: { present: true, verdict: "approved" },
         },
       },
     });
 
+    expect(parsed.task.workflowArtifacts.qaReport).toEqual({ present: true, verdict: "approved" });
     expect(parsed.task.targetBranch).toEqual({
       remote: "origin",
       branch: "main",
@@ -134,26 +130,6 @@ describe("odt mcp public task schemas", () => {
     }
   });
 
-  test("public create rejects epic with an explanatory validation message", () => {
-    const result = CreateTaskInputSchema.safeParse({
-      title: "Epic work",
-      issueType: "epic",
-      priority: 2,
-    });
-
-    expect(result.success).toBe(false);
-    if (result.success) {
-      return;
-    }
-    expect(result.error.issues).toContainEqual(
-      expect.objectContaining({
-        path: ["issueType"],
-        message:
-          "issueType must be task, feature, or bug. Epic creation is not supported by the public MCP create tool.",
-      }),
-    );
-  });
-
   test("public update accepts a partial patch and clears fields with typed values", () => {
     expect(UpdateTaskInputSchema.parse({ taskId: " task-1 " })).toEqual({ taskId: "task-1" });
     expect(UpdateTaskInputSchema.parse({ taskId: "task-1", description: "   " })).toEqual({
@@ -169,7 +145,6 @@ describe("odt mcp public task schemas", () => {
         priority: 0,
         labels: [" backend ", "ui"],
         issueType: "bug",
-        aiReviewEnabled: false,
       }),
     ).toEqual({
       workspaceId: "repo",
@@ -179,15 +154,11 @@ describe("odt mcp public task schemas", () => {
       priority: 0,
       labels: ["backend", "ui"],
       issueType: "bug",
-      aiReviewEnabled: false,
     });
   });
 
   test("public update rejects unknown fields, null values, empty titles, and empty labels entries", () => {
     expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", status: "closed" }).success).toBe(
-      false,
-    );
-    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", parentId: "task-2" }).success).toBe(
       false,
     );
     expect(
@@ -202,25 +173,6 @@ describe("odt mcp public task schemas", () => {
     expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", priority: 5 }).success).toBe(false);
     expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", description: null }).success).toBe(
       false,
-    );
-    expect(
-      UpdateTaskInputSchema.safeParse({ taskId: "task-1", aiReviewEnabled: null }).success,
-    ).toBe(false);
-  });
-
-  test("public update rejects epic issue type with an explanatory validation message", () => {
-    const result = UpdateTaskInputSchema.safeParse({ taskId: "task-1", issueType: "epic" });
-
-    expect(result.success).toBe(false);
-    if (result.success) {
-      return;
-    }
-    expect(result.error.issues).toContainEqual(
-      expect.objectContaining({
-        path: ["issueType"],
-        message:
-          "issueType must be task, feature, or bug. Epic updates are not supported by the public MCP update tool.",
-      }),
     );
   });
 
@@ -417,7 +369,7 @@ describe("odt mcp public task schemas", () => {
     }).toThrow();
   });
 
-  test("the artifact writer accepts plan content and rejects an unknown subtasks field", () => {
+  test("the artifact writer accepts plan content and rejects unknown fields", () => {
     const valid = SetTaskArtifactInputSchema.parse({
       workspaceId: "repo",
       taskId: "task-1",
@@ -433,13 +385,13 @@ describe("odt mcp public task schemas", () => {
       taskId: "task-1",
       code: "plan",
       content: "# Plan",
-      subtasks: [{ title: "Subtask" }],
+      extra: true,
     });
 
     expect(result.success).toBe(false);
     if (!result.success) {
       const messages = result.error.issues.map((issue) => issue.message).join(" ");
-      expect(messages).toContain("subtasks");
+      expect(messages).toContain("extra");
     }
   });
 });

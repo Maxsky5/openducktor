@@ -3,7 +3,6 @@ import type {
   FreeTaskArtifact,
   TaskArtifact,
   TaskArtifactCollection,
-  TaskCard,
 } from "@openducktor/contracts";
 import { workflowArtifactId } from "@openducktor/contracts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core";
@@ -11,11 +10,9 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
 import {
   documentQueryKeys,
-  loadPlanDocumentFromQuery,
-  loadSpecDocumentFromQuery,
+  loadTaskDocumentFromQuery,
   taskDocumentQueryOptions,
   type TaskDocument,
-  type TaskDocumentSection,
 } from "@openducktor/frontend-core/queries/documents";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createElement, useState } from "react";
@@ -25,6 +22,7 @@ import {
   type TaskArtifactsProps,
   TaskArtifactsView,
 } from "./task-artifacts";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 /** The session panel with local selection, as its page model owns it. */
 function StatefulPanel(props: TaskArtifactsProps) {
@@ -79,11 +77,10 @@ const setup = (
     return content(artifact);
   });
   const readWorkflow = mock(
-    async (
-      _repoPath: string,
-      _taskId: string,
-      _section: TaskDocumentSection,
-    ): Promise<TaskDocument> => ({ markdown: "hello", updatedAt: null }),
+    async (_repoPath: string, _taskId: string, _code: string): Promise<TaskDocument> => ({
+      markdown: "hello",
+      updatedAt: null,
+    }),
   );
   const remove = mock(async ({ artifactId }: { artifactId: string }) => {
     artifacts = artifacts.filter((item) => item.artifactId !== artifactId);
@@ -99,7 +96,7 @@ const setup = (
         return { artifacts, canManageFree };
       },
       taskArtifactRead: read,
-      taskWorkflowArtifactGet: readWorkflow,
+      workflowArtifactGet: readWorkflow,
       taskArtifactDelete: remove,
     },
   });
@@ -136,27 +133,26 @@ const setup = (
 };
 
 describe("task artifacts collection", () => {
-  test.each([
-    ["spec", loadSpecDocumentFromQuery],
-    ["plan", loadPlanDocumentFromQuery],
-  ] as const)(
+  test.each(["spec", "plan"] as const)(
     "a %s preview shares its fresh document with the editor",
-    async (workflowKind, load) => {
+    async (code) => {
       const workflow: TaskArtifact = {
-        artifactId: workflowArtifactId("task-1", workflowKind),
+        artifactId: workflowArtifactId("task-1", code),
         taskId: "task-1",
         name: "Workflow output",
         revision: 1,
         updatedAt: null,
         classification: "workflow",
-        workflowKind,
+        code,
         mediaType: "text/markdown",
       };
       const view = setup([workflow]);
       try {
         fireEvent.click(await screen.findByRole("button", { name: /^Workflow output / }));
         expect(await screen.findByText("hello")).toBeTruthy();
-        expect(await load(view.connection.queryClient, "/repo", "task-1")).toEqual({
+        expect(
+          await loadTaskDocumentFromQuery(view.connection.queryClient, "/repo", "task-1", code),
+        ).toEqual({
           markdown: "hello",
           updatedAt: null,
         });
@@ -169,29 +165,28 @@ describe("task artifacts collection", () => {
   );
 
   test("shows cached workflows at once while their collection is still loading", async () => {
-    const workflows: TaskArtifact[] = (["spec", "plan"] as const).map((workflowKind) => ({
-      artifactId: workflowArtifactId("task-1", workflowKind),
+    const workflows: TaskArtifact[] = (["spec", "plan"] as const).map((code) => ({
+      artifactId: workflowArtifactId("task-1", code),
       taskId: "task-1",
-      name: workflowKind === "spec" ? "Specification" : "Implementation Plan",
+      name: code === "spec" ? "Specification" : "Implementation Plan",
       revision: 1,
       updatedAt: null,
       classification: "workflow",
-      workflowKind,
+      code,
       mediaType: "text/markdown",
     }));
     const pendingCollection = Promise.withResolvers<TaskArtifactCollection>();
     const pendingDocument = Promise.withResolvers<TaskDocument>();
     const read = mock(
-      async (
-        _repoPath: string,
-        _taskId: string,
-        _section: TaskDocumentSection,
-      ): Promise<TaskDocument> => ({ markdown: "hello", updatedAt: null }),
+      async (_repoPath: string, _taskId: string, _code: string): Promise<TaskDocument> => ({
+        markdown: "hello",
+        updatedAt: null,
+      }),
     );
     const connection = createTestClientConnection({
       client: {
         taskArtifactsList: () => pendingCollection.promise,
-        taskWorkflowArtifactGet: read,
+        workflowArtifactGet: read,
       },
     });
     await Promise.all(
@@ -202,11 +197,11 @@ describe("task artifacts collection", () => {
       ),
     );
     const artifactSummary: TaskCard["artifactSummary"] = {
-      spec: { has: true },
-      plan: { has: true },
-      qaReport: { has: false, verdict: "not_reviewed" },
+      spec: { present: true },
+      plan: { present: true },
+      qaReport: { present: false },
     };
-    const selectedView = (workflowKind: "spec" | "plan") =>
+    const selectedView = (code: "spec" | "plan") =>
       createElement(
         ClientConnectionProvider,
         { connection },
@@ -214,7 +209,7 @@ describe("task artifacts collection", () => {
           repoPath: "/repo",
           taskId: "task-1",
           artifactSummary,
-          selection: { kind: "workflow", workflowKind },
+          selection: { kind: "workflow", code },
           onSelectionChange: () => {},
         }),
       );
@@ -241,7 +236,7 @@ describe("task artifacts collection", () => {
       read.mockImplementationOnce(() => pendingDocument.promise);
       act(() => {
         void connection.queryClient.invalidateQueries({
-          queryKey: documentQueryKeys.spec("/repo", "task-1"),
+          queryKey: documentQueryKeys.document("/repo", "task-1", "spec"),
           exact: true,
         });
       });
@@ -265,7 +260,7 @@ describe("task artifacts collection", () => {
         revision: 1,
         updatedAt: null,
         classification: "workflow",
-        workflowKind: "spec",
+        code: "spec",
         mediaType: "text/markdown",
       };
       const view = setup([workflow]);
@@ -283,7 +278,7 @@ describe("task artifacts collection", () => {
         });
         await act(async () => {
           await view.connection.queryClient.invalidateQueries({
-            queryKey: documentQueryKeys.spec("/repo", "task-1"),
+            queryKey: documentQueryKeys.document("/repo", "task-1", "spec"),
             exact: true,
           });
         });
@@ -311,22 +306,22 @@ describe("task artifacts collection", () => {
 
   test("selects a workflow by kind and requests the collection when navigating back", async () => {
     const workflow: TaskArtifact = {
-      artifactId: "workflow:task-1:qa_report",
+      artifactId: workflowArtifactId("task-1", "qaReport"),
       taskId: "task-1",
       name: "QA Report",
       revision: 1,
       updatedAt: null,
       classification: "workflow",
-      workflowKind: "qaReport",
+      code: "qaReport",
       mediaType: "text/markdown",
     };
     const view = setup([freeArtifact(), workflow], {
-      selection: { kind: "workflow", workflowKind: "qaReport" },
+      selection: { kind: "workflow", code: "qaReport" },
     });
     try {
       expect(await screen.findByText("hello")).toBeTruthy();
       expect(screen.getByRole("heading", { name: "QA Report" })).toBeTruthy();
-      expect(view.readWorkflow).toHaveBeenCalledWith("/repo", "task-1", "qa");
+      expect(view.readWorkflow).toHaveBeenCalledWith("/repo", "task-1", "qaReport");
       expect(view.read).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "All artifacts" }));
       expect(view.onSelectionChange.mock.calls).toEqual([[{ kind: "collection" }]]);
@@ -344,21 +339,19 @@ describe("task artifacts collection", () => {
       revision: 1,
       updatedAt: null,
       classification: "workflow",
-      workflowKind: "plan",
+      code: "plan",
       mediaType: "text/markdown",
     };
     const pendingCollection = Promise.withResolvers<TaskArtifactCollection>();
-    const read = mock(
-      async (_repoPath: string, _taskId: string, _section: TaskDocumentSection) => ({
-        markdown: "hello",
-        updatedAt: null,
-      }),
-    );
+    const read = mock(async (_repoPath: string, _taskId: string, _code: string) => ({
+      markdown: "hello",
+      updatedAt: null,
+    }));
     const onSelectionChange = mock((_selection: ArtifactSelection) => {});
     const connection = createTestClientConnection({
       client: {
         taskArtifactsList: () => pendingCollection.promise,
-        taskWorkflowArtifactGet: read,
+        workflowArtifactGet: read,
       },
     });
     const selectedView = (hasPlan: boolean) =>
@@ -369,11 +362,11 @@ describe("task artifacts collection", () => {
           repoPath: "/repo",
           taskId: "task-1",
           artifactSummary: {
-            spec: { has: false },
-            plan: { has: hasPlan },
-            qaReport: { has: false, verdict: "not_reviewed" },
+            spec: { present: false },
+            plan: { present: hasPlan },
+            qaReport: { present: false },
           },
-          selection: { kind: "workflow", workflowKind: "plan" },
+          selection: { kind: "workflow", code: "plan" },
           onSelectionChange,
         }),
       );
@@ -395,7 +388,7 @@ describe("task artifacts collection", () => {
 
   test("keeps an absent workflow selected until its output is created", async () => {
     const view = setup([freeArtifact()], {
-      selection: { kind: "workflow", workflowKind: "plan" },
+      selection: { kind: "workflow", code: "plan" },
     });
     try {
       expect(await screen.findByText("Implementation Plan has not been created yet.")).toBeTruthy();
@@ -408,7 +401,7 @@ describe("task artifacts collection", () => {
         revision: 1,
         updatedAt: null,
         classification: "workflow",
-        workflowKind: "plan",
+        code: "plan",
         mediaType: "text/markdown",
       };
       act(() =>
@@ -683,7 +676,7 @@ describe("task artifacts collection", () => {
       revision: 1,
       updatedAt: null,
       classification: "workflow",
-      workflowKind: "spec",
+      code: "spec",
       mediaType: "text/markdown",
     };
     const view = setup([workflow]);
@@ -694,10 +687,13 @@ describe("task artifacts collection", () => {
       fireEvent.click(expand);
       expect(screen.getByRole("dialog").textContent).toContain("hello");
       act(() => {
-        view.connection.queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-          markdown: "Changed content",
-          updatedAt: "2026-10-22T13:00:00Z",
-        });
+        view.connection.queryClient.setQueryData(
+          documentQueryKeys.document("/repo", "task-1", "spec"),
+          {
+            markdown: "Changed content",
+            updatedAt: "2026-10-22T13:00:00Z",
+          },
+        );
       });
       await waitFor(() => expect(screen.getByText("Changed content")).toBeTruthy());
       expect(screen.getByRole("dialog").textContent).toContain("hello");
@@ -733,9 +729,9 @@ describe("task artifacts collection", () => {
       const view = setup([], {
         variant: "section",
         artifactSummary: {
-          spec: { has: true },
-          plan: { has: false },
-          qaReport: { has: false, verdict: "not_reviewed" },
+          spec: { present: true },
+          plan: { present: false },
+          qaReport: { present: false },
         },
       });
       try {

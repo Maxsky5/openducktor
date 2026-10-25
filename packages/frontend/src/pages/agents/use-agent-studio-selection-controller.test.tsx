@@ -1595,7 +1595,7 @@ describe("useAgentStudioSelectionController", () => {
           available: true,
           completed: false,
         },
-        builder: {
+        build: {
           required: true,
           canSkip: false,
           available: true,

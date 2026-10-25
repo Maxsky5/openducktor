@@ -33,22 +33,22 @@ describe("SQLite task agent session batches", () => {
       const firstTask = await Effect.runPromise(
         store.createTask({
           repoPath,
+          status: "open",
           task: {
             title: "First sessions",
             issueType: "task",
             priority: 2,
-            aiReviewEnabled: true,
           },
         }),
       );
       const secondTask = await Effect.runPromise(
         store.createTask({
           repoPath,
+          status: "open",
           task: {
             title: "Second sessions",
             issueType: "task",
             priority: 2,
-            aiReviewEnabled: true,
           },
         }),
       );
@@ -102,11 +102,11 @@ describe("SQLite task session model updates", () => {
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
+          status: "open",
           task: {
             title: "Session model",
             issueType: "task",
             priority: 2,
-            aiReviewEnabled: true,
           },
         }),
       );
@@ -160,11 +160,11 @@ describe("SQLite task session model updates", () => {
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
+          status: "open",
           task: {
             title: "Codex session model",
             issueType: "bug",
             priority: 1,
-            aiReviewEnabled: true,
           },
         }),
       );

@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { type ReactElement, useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
@@ -6,6 +5,7 @@ import { TaskResetConfirmDialog } from "@/components/features/task-details/task-
 import type { TaskConfirmRequestAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
 import { useTaskConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-confirm-dialog";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type TaskConfirmWorkspaceIdentity = { workspaceId: string; repoPath: string };
 
@@ -111,16 +111,12 @@ function RequestedTaskConfirmDialog({
   const [lastTask, setLastTask] = useState(currentTask);
   if (currentTask && currentTask !== lastTask) setLastTask(currentTask);
   const task = currentTask ?? lastTask;
-  const { dialog, subtasksCount } = useTaskConfirmDialog({
+  const { dialog } = useTaskConfirmDialog({
     action: request.action,
     task,
-    allTasks: tasks,
     enabled: true,
     initiallyOpen: true,
-    run:
-      request.action === "delete"
-        ? (taskId) => onDelete(taskId, { deleteSubtasks: true })
-        : onResetTask,
+    run: request.action === "delete" ? onDelete : onResetTask,
     onSucceeded: () => onSucceeded(request.taskId),
   });
   const dialogProps = {
@@ -134,7 +130,7 @@ function RequestedTaskConfirmDialog({
   };
 
   return request.action === "delete" ? (
-    <TaskDeleteConfirmDialog {...dialogProps} subtasksCount={subtasksCount} />
+    <TaskDeleteConfirmDialog {...dialogProps} />
   ) : (
     <TaskResetConfirmDialog {...dialogProps} />
   );

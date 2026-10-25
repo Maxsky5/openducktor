@@ -27,8 +27,7 @@ const createTaskStore = (
 ): StopServiceDependencies["taskReader"] => ({
   getTaskMetadata: () =>
     Effect.succeed({
-      spec: { markdown: "" },
-      plan: { markdown: "" },
+      artifacts: {},
       agentSessions: [
         {
           externalSessionId: "external-session-1",

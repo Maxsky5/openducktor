@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type { GitCurrentBranch, RepoActions } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -23,6 +24,7 @@ const worktreePath = "/worktrees/repo/task-1";
 const createService = (gitOverrides: Partial<GitPort>) => {
   const calls: unknown[] = [];
   return createTaskSessionStartPreparationService({
+    taskWorkflows: builtinTaskWorkflows,
     taskStore: createTaskStoreTestDouble({
       getTask: () => Effect.succeed(task({ status: "human_review" })),
     }),
@@ -153,6 +155,7 @@ const actions: RepoActions = {
 
 const createNewWorktreeService = (calls: unknown[], worktreeActions: WorktreeActionRunner) =>
   createTaskSessionStartPreparationService({
+    taskWorkflows: builtinTaskWorkflows,
     taskStore: createTaskStoreTestDouble({
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
     }),

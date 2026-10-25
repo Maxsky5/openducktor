@@ -1,10 +1,11 @@
 import { Effect } from "effect";
-import { taskCardSchema } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
 } from "./host-command-router";
+import { taskCardFixture } from "../../test-support/task-card-fixture";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
@@ -46,11 +47,11 @@ describe("createHostCommandRouter", () => {
     expect(receivedArgs).toEqual({ repoPath: "/repo" });
   });
   test("preserves valid optional fields in typed handler output", async () => {
-    const task = taskCardSchema.parse({
+    const task = taskCardFixture({
+      artifactSummary: emptyArtifactSummary(),
       createdAt: "2026-08-28T00:00:00.000Z",
       id: "task-1",
       issueType: "feature",
-      parentId: undefined,
       pullRequest: undefined,
       status: "open",
       targetBranch: undefined,

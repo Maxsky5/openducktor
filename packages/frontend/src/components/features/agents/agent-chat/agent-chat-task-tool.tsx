@@ -2,6 +2,7 @@ import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import { ImageIcon } from "lucide-react";
 import { lazy, Suspense, useMemo, useState, type ComponentProps, type ReactElement } from "react";
 import type { Components, ExtraProps } from "react-markdown";
+import { builtinIssueTypeId, builtinStateId } from "@openducktor/workflows";
 import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
@@ -79,10 +80,10 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
         </CardHeader>
         <CardContent className="flex flex-col gap-3 px-4 py-4">
           <div className="flex flex-wrap items-center gap-1.5">
-            <IssueTypeBadge issueType={task.issueType} />
+            <IssueTypeBadge issueType={builtinIssueTypeId(task.issueType)} />
             <PriorityBadge priority={task.priority} />
-            <Badge variant="outline" className={statusBadgeClassName(task.status)}>
-              {statusLabel(task.status)}
+            <Badge variant="outline" className={statusBadgeClassName(builtinStateId(task.status))}>
+              {statusLabel(builtinStateId(task.status))}
             </Badge>
           </div>
           {task.description && (

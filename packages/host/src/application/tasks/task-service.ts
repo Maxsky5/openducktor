@@ -27,6 +27,7 @@ import {
   type TaskStopImpact,
   type TaskStopImpactRequest,
 } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
 import {
@@ -49,9 +50,9 @@ import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runt
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type {
   TaskReference,
-  TaskQaOutcomeResult,
   TaskStoreError,
   TaskStorePort,
 } from "../../ports/task-repository-ports";
@@ -67,6 +68,8 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 import { failOperationAfterRollback } from "./support/task-worktree-rollback";
+import { requireEffectEvent } from "./support/task-workflow-events";
+import { applyTaskEvent } from "./support/task-workflow-helpers";
 import {
   mapTaskServiceErrors,
   mapTaskCreationProgressErrors,
@@ -85,15 +88,16 @@ import type {
   DirectMergeInput,
   ListAgentSessionsForTasksInput,
   ListTasksInput,
-  MarkdownArtifactInput,
+  WorkflowArtifactInput,
+  WorkflowArtifactSaveInput,
   OptionalNoteInput,
   PullRequestLinkMergedInput,
   PullRequestNumberInput,
   PullRequestUpsertInput,
   RepoPathInput,
-  SetPlanInput,
   TaskIdInput,
   TransitionTaskInput,
+  ApplyTaskEventInput,
   UpdateTaskInput,
 } from "./task-inputs";
 import {
@@ -110,7 +114,10 @@ import { createTaskDirectMergeUseCase } from "./use-cases/direct-merge";
 import { createTaskLinkMergedPullRequestUseCase } from "./use-cases/link-merged-pull-request";
 import { createTaskApprovalContextUseCase } from "./use-cases/load-approval-context";
 import { createArtifactUseCases } from "./use-cases/manage-artifacts";
-import { createWorkflowArtifactUseCases } from "./use-cases/manage-workflow-artifacts";
+import {
+  createWorkflowArtifactUseCases,
+  type WorkflowArtifactSaveResult,
+} from "./use-cases/manage-workflow-artifacts";
 import { createTaskPullRequestManagementUseCases } from "./use-cases/manage-pull-requests";
 import { createTaskCrudUseCases } from "./use-cases/manage-tasks";
 import { createTaskQueryUseCases } from "./use-cases/query-tasks";
@@ -207,23 +214,19 @@ export type TaskService = {
   resetTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   updateTask(input: UpdateTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
   transitionTask(input: TransitionTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
-  specGet(input: TaskIdInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
-  setSpec(input: MarkdownArtifactInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
-  saveSpecArtifact(
-    input: MarkdownArtifactInput,
+  applyTaskEvent(input: ApplyTaskEventInput): Effect.Effect<TaskCard, TaskServiceError>;
+  /** Commits the start event of a role step. A session start sends it after session creation. */
+  applyStartEvent(input: ApplyTaskEventInput): Effect.Effect<TaskCard, TaskServiceError>;
+  workflowArtifactGet(
+    input: WorkflowArtifactInput,
   ): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
-  planGet(input: TaskIdInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
-  setPlan(input: SetPlanInput): Effect.Effect<TaskSetPlanResult, TaskServiceError>;
-  savePlanArtifact(
-    input: MarkdownArtifactInput,
-  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
-  qaGetReport(input: TaskIdInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
+  workflowArtifactSave(
+    input: WorkflowArtifactSaveInput,
+  ): Effect.Effect<WorkflowArtifactSaveResult, TaskServiceError>;
   buildBlocked(input: BuildBlockedInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildStart(input: BuildStartInput): Effect.Effect<BuildSessionBootstrap, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
-  qaApproved(input: MarkdownArtifactInput): Effect.Effect<TaskCard, TaskServiceError>;
-  qaRejected(input: MarkdownArtifactInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanRequestChanges(input: OptionalNoteInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanApprove(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   repoPullRequestSync(
@@ -235,10 +238,6 @@ export type TaskService = {
 };
 export type TaskDeleteResult = {
   ok: boolean;
-  changes: TaskChangeSet;
-};
-export type TaskSetPlanResult = {
-  artifact: TaskMetadataArtifact;
   changes: TaskChangeSet;
 };
 export type TaskResetResult = {
@@ -253,12 +252,9 @@ export type TaskServiceWithMutationProgress = Omit<
   | "directMerge"
   | "completeDirectMerge"
   | "linkMergedPullRequest"
-  | "qaApproved"
-  | "qaRejected"
   | "resetImplementation"
   | "resetTask"
-  | "setPlan"
-  | "setSpec"
+  | "workflowArtifactSave"
   | "updateTask"
 > & {
   buildCompleted(
@@ -285,14 +281,9 @@ export type TaskServiceWithMutationProgress = Omit<
   resetTask(
     input: TaskIdInput,
   ): Effect.Effect<TaskResetResult, TaskServiceError | TaskMutationProgressFailure>;
-  qaApproved(input: MarkdownArtifactInput): Effect.Effect<TaskQaOutcomeResult, TaskServiceError>;
-  qaRejected(input: MarkdownArtifactInput): Effect.Effect<TaskQaOutcomeResult, TaskServiceError>;
-  setSpec(
-    input: MarkdownArtifactInput,
-  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError | TaskMutationProgressFailure>;
-  setPlan(
-    input: SetPlanInput,
-  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
+  workflowArtifactSave(
+    input: WorkflowArtifactSaveInput,
+  ): Effect.Effect<WorkflowArtifactSaveResult, TaskServiceError | TaskMutationProgressFailure>;
   updateTask(
     input: UpdateTaskInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
@@ -314,6 +305,7 @@ export type CreateTaskServiceInput = {
   gitPort?: GitPort;
   gitProviderResolver?: GitProviderResolver;
   taskStore: TaskStorePort;
+  taskWorkflows: TaskWorkflowResolver;
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
   systemCommands?: SystemCommandPort;
@@ -332,6 +324,21 @@ export type TaskServiceUseCaseInput = Omit<
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   completionState: ReturnType<typeof createTaskCompletionState>;
 };
+/** The role of the step that the build.start event starts. */
+const requireBuildStartRole = (workflow: TaskWorkflow) =>
+  requireEffectEvent(workflow, "build.start").pipe(
+    Effect.flatMap((eventId) => {
+      const role = workflow.startEventRole(eventId);
+      return role === undefined
+        ? Effect.fail(
+            TaskPolicyError.policy(
+              `Task workflow "${workflow.definition.id}" starts no step with its build.start event. Name it as the startEventId of a step.`,
+            ),
+          )
+        : Effect.succeed(role);
+    }),
+  );
+
 export const createTaskServiceWithMutationProgress = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => createTaskServiceImplementation(input);
@@ -384,17 +391,23 @@ const createTaskServiceImplementation = (
             [startInput.taskId],
             "start build",
           );
+          const role = yield* requireBuildStartRole(input.taskWorkflows.forRepo(canonicalRepoPath));
           const preparationInput: TaskSessionStartPreparationInput = {
             canonicalRepoPath,
             taskId: startInput.taskId,
-            role: "build",
+            role,
             runtimeKind: startInput.runtimeKind,
           };
           const prepared = yield* taskSessionStart.prepare(preparationInput);
           let rollback = prepared.rollback;
           const completion = yield* Effect.gen(function* () {
-            yield* taskSessionStart.complete(prepared, (transitionInput) =>
-              input.taskStore.transitionTask(transitionInput),
+            yield* taskSessionStart.complete(prepared, ({ repoPath, taskId, eventId }) =>
+              applyTaskEvent(
+                input.taskStore,
+                input.taskWorkflows.forRepo(canonicalRepoPath),
+                { repoPath, taskId },
+                eventId,
+              ),
             );
             // A committed build retains its worktree when cancellation arrives.
             rollback = () => Effect.void;
@@ -458,22 +471,18 @@ const createTaskServiceImplementation = (
     listTaskIds: (input) => mapTaskServiceErrors(service.listTaskIds(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
     getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
-    planGet: (input) => mapTaskServiceErrors(service.planGet(input)),
-    qaApproved: (input) => mapTaskServiceErrors(service.qaApproved(input)),
-    qaGetReport: (input) => mapTaskServiceErrors(service.qaGetReport(input)),
-    qaRejected: (input) => mapTaskServiceErrors(service.qaRejected(input)),
     repoPullRequestSync: (input) => mapTaskServiceErrors(service.repoPullRequestSync(input)),
     repoPullRequestSyncDetailed: (input) =>
       mapTaskMutationProgressErrors(service.repoPullRequestSyncDetailed(input)),
     resetImplementation: (input) =>
       mapTaskMutationProgressErrors(service.resetImplementation(input)),
     resetTask: (input) => mapTaskMutationProgressErrors(service.resetTask(input)),
-    savePlanArtifact: (input) => mapTaskServiceErrors(service.savePlanArtifact(input)),
-    saveSpecArtifact: (input) => mapTaskServiceErrors(service.saveSpecArtifact(input)),
-    setPlan: (input) => mapTaskMutationProgressErrors(service.setPlan(input)),
-    setSpec: (input) => mapTaskMutationProgressErrors(service.setSpec(input)),
-    specGet: (input) => mapTaskServiceErrors(service.specGet(input)),
+    workflowArtifactGet: (input) => mapTaskServiceErrors(service.workflowArtifactGet(input)),
+    workflowArtifactSave: (input) =>
+      mapTaskMutationProgressErrors(service.workflowArtifactSave(input)),
     transitionTask: (input) => mapTaskServiceErrors(service.transitionTask(input)),
+    applyTaskEvent: (input) => mapTaskServiceErrors(service.applyTaskEvent(input)),
+    applyStartEvent: (input) => mapTaskServiceErrors(service.applyStartEvent(input)),
     unlinkPullRequest: (input) => mapTaskServiceErrors(service.unlinkPullRequest(input)),
     updateTask: (input) => mapTaskMutationProgressErrors(service.updateTask(input)),
     upsertPullRequest: (input) => mapTaskServiceErrors(service.upsertPullRequest(input)),

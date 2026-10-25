@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
@@ -10,8 +12,12 @@ import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createTaskServiceWithMutationProgressTestDouble } from "../../test-support/task-service-test-double";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
 import { createTaskSyncService } from "./sync/task-sync-service";
+import { enrichTask, enrichTasks } from "./support/task-workflow-helpers";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
-import type { TaskServiceWithMutationProgress } from "./task-service";
+import {
+  createTaskServiceWithMutationProgress,
+  type TaskServiceWithMutationProgress,
+} from "./task-service";
 
 const createServices = (
   store: TaskStorePort,
@@ -20,8 +26,10 @@ const createServices = (
   const events: ExternalTaskSyncEvent[] = [];
   const failures: unknown[] = [];
   const base = createTaskServiceWithMutationProgressTestDouble({
-    listTasks: (input) => store.listTasks(input),
-    transitionTask: (input) => store.transitionTask(input),
+    listTasks: (input) =>
+      store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflow, tasks))),
+    transitionTask: (input) =>
+      store.transitionTask(input).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
     ...overrides,
   });
   const sync = createTaskSyncService({
@@ -59,7 +67,11 @@ const createServices = (
     events,
     failures,
     sync,
-    service: createEventPublishingTaskService({ taskService: base, taskSyncService: sync }),
+    service: createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
+      taskService: base,
+      taskSyncService: sync,
+    }),
   };
 };
 
@@ -85,29 +97,41 @@ test.each([
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
-          task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+          status: "open",
+          task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
       await Effect.runPromise(
         store.transitionTask({ repoPath, taskId: task.id, status: previousStatus }),
       );
-      const transition = () =>
-        store.transitionTask({ repoPath, taskId: task.id, status: "human_review" });
-      const { service, events } = createServices(
-        store,
-        operation === "qaApproved"
-          ? {
-              qaApproved: () =>
-                transition().pipe(
-                  Effect.map((task) => ({ task, artifact: { markdown: "Approved" } })),
-                ),
-            }
-          : { buildCompleted: transition },
-      );
+      const { service, events } = createServices(store, {
+        workflowArtifactSave: createTaskServiceWithMutationProgress({
+          taskWorkflows: builtinTaskWorkflows,
+          taskStore: store,
+        }).workflowArtifactSave,
+        buildCompleted: () =>
+          store
+            .transitionTask({
+              repoPath,
+              taskId: task.id,
+              status: "human_review",
+              cause: { signal: "taskProgressedToHumanReview", sourceRole: "build" },
+            })
+            .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
+      });
       await Effect.runPromise(
         operation === "qaApproved"
           ? service
-              .qaApproved({ repoPath, taskId: task.id, markdown: "Approved" })
+              .workflowArtifactSave({
+                sourceTool: "workflow_artifact_save",
+                updatedBy: "user",
+                repoPath,
+                taskId: task.id,
+                markdown: "Approved",
+                code: "qaReport",
+                verdict: "approved",
+                submit: true,
+              })
               .pipe(Effect.asVoid)
           : service.buildCompleted({ repoPath, taskId: task.id }).pipe(Effect.asVoid),
       );
@@ -132,7 +156,8 @@ test("keeps the committed transition and reports a failed publication snapshot w
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
-        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     let snapshotReads = 0;
@@ -148,7 +173,7 @@ test("keeps the committed transition and reports a failed publication snapshot w
       transitionTask: (input) =>
         Effect.gen(function* () {
           mutations += 1;
-          return yield* store.transitionTask(input);
+          return enrichTask(builtinTaskWorkflow, yield* store.transitionTask(input));
         }),
     });
     const failure = await Effect.runPromise(
@@ -178,7 +203,8 @@ test.each([false, true])(
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
-          task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+          status: "open",
+          task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
       const { service, sync, events, failures } = createServices(store, {
@@ -193,7 +219,7 @@ test.each([false, true])(
               committed.resolve();
               yield* Effect.promise(() => release.promise);
             }
-            return result;
+            return enrichTask(builtinTaskWorkflow, result);
           }),
       });
       const first = Effect.runPromise(
@@ -251,23 +277,31 @@ test("publishes committed transitions when the rest of a mutation fails", async 
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
-        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
-    const failure = new HostOperationError({ operation: "set-spec", message: "Cleanup failed" });
+    const failure = new HostOperationError({
+      operation: "build-completed",
+      message: "Cleanup failed",
+    });
     const { service, events, failures } = createServices(store, {
-      setSpec: (input) =>
+      buildCompleted: (input) =>
         Effect.gen(function* () {
-          yield* store.transitionTask({ ...input, status: "spec_ready" });
+          yield* store.transitionTask({
+            repoPath: input.repoPath,
+            taskId: input.taskId,
+            status: "spec_ready",
+          });
           return yield* new TaskMutationProgressFailure({
-            operation: "set-spec",
+            operation: "build-completed",
             changes: { taskIds: [input.taskId], removedTaskIds: [] },
             failure,
           });
         }),
     });
     const result = await Effect.runPromise(
-      Effect.result(service.setSpec({ repoPath, taskId: task.id, markdown: "Spec" })),
+      Effect.result(service.buildCompleted({ repoPath, taskId: task.id })),
     );
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") expect(result.failure).toBe(failure);
@@ -287,7 +321,8 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
-        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const database = new Database(databasePath);
@@ -302,7 +337,16 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       verdict: "approved" as const,
       markdown: "Approved",
     };
-    const failed = await Effect.runPromise(collectTaskStatusChanges(store.recordQaOutcome(input)));
+    const failed = await Effect.runPromise(
+      collectTaskStatusChanges(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          ...input,
+          code: "qaReport",
+        }),
+      ),
+    );
     expect(failed.result._tag).toBe("Failure");
     expect(failed.statusChanges).toEqual([]);
     expect((await Effect.runPromise(store.getTask({ repoPath, taskId: task.id }))).status).toBe(
@@ -312,7 +356,14 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     cleanupDatabase.run("DROP TRIGGER reject_qa");
     cleanupDatabase.close();
     const completed = await Effect.runPromise(
-      collectTaskStatusChanges(store.recordQaOutcome(input)),
+      collectTaskStatusChanges(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          ...input,
+          code: "qaReport",
+        }),
+      ),
     );
     expect(completed.result._tag).toBe("Success");
     expect(completed.statusChanges).toEqual([
@@ -330,7 +381,8 @@ test("captures transitions made by pull request synchronization", async () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
-        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const { sync, events, failures } = createServices(store, {

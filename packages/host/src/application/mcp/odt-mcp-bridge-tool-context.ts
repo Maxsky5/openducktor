@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { OdtBrowserToolName, WorkspaceScopedOdtToolName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -10,11 +11,7 @@ import type { BrowserCallerResolver } from "../browser/browser-caller-resolver";
 import type { ManagedCallerResolver } from "../agent-sessions/managed-caller-resolver";
 import type { BrowserService } from "../browser/browser-service-types";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
-import type {
-  TaskService,
-  TaskServiceError,
-  TaskServiceWithMutationProgress,
-} from "../tasks/task-service";
+import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
@@ -58,17 +55,16 @@ type OdtMcpTaskService = Pick<
   | "listTaskReferences"
   | "linkPullRequest"
   | "listTasks"
-  | "setPlan"
-  | "setSpec"
   | "updateTask"
-> &
-  Pick<TaskServiceWithMutationProgress, "qaApproved" | "qaRejected">;
+  | "workflowArtifactSave"
+>;
 type OdtMcpWorkspaceSettingsService = Pick<
   WorkspaceSettingsService,
   "getRepoConfig" | "listWorkspaces"
 >;
 
 export type CreateOdtMcpToolContextInput = {
+  taskWorkflows: TaskWorkflowResolver;
   browserAgentTools: Pick<BrowserService, "runAgentTool">;
   browserCallers: BrowserCallerResolver;
   managedCallers: ManagedCallerResolver;
@@ -78,6 +74,7 @@ export type CreateOdtMcpToolContextInput = {
 };
 
 export const createOdtMcpToolContext = ({
+  taskWorkflows,
   browserAgentTools,
   browserCallers,
   managedCallers,
@@ -115,6 +112,7 @@ export const createOdtMcpToolContext = ({
     taskScopeForWorkspace(workspaceId, taskId).pipe(Effect.map(({ task }) => task));
 
   return {
+    taskWorkflows,
     browserAgentTools,
     browserCallers,
     managedCallers,

@@ -178,10 +178,10 @@ describe("asset-aware task store compensation", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Promotion failure",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -247,10 +247,10 @@ describe("asset-aware task store compensation", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Resolver create failure",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -316,10 +316,10 @@ describe("asset-aware task store compensation", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Destination collision",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -381,10 +381,10 @@ describe("asset-aware task store compensation", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Purge failure",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -436,10 +436,10 @@ describe("asset-aware task store compensation", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Discard failure",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -596,10 +596,10 @@ describe("asset-aware task store compensation", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Partial create",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -641,7 +641,6 @@ describe("asset-aware task store compensation", () => {
       purgeStore.deleteTask({
         repoPath: purgeHarness.repoPath,
         taskId: purgeOwned.task.id,
-        deleteSubtasks: false,
       }),
     );
     expect(purgeError.durableState).toBe("committed_cleanup_pending");
@@ -683,7 +682,6 @@ describe("asset-aware task store compensation", () => {
       restoreStore.deleteTask({
         repoPath: restoreHarness.repoPath,
         taskId: restoreOwned.task.id,
-        deleteSubtasks: false,
       }),
     );
     expect(restoreError.durableState).toBe("unknown");

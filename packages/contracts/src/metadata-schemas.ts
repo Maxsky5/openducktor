@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
-import { qaWorkflowVerdictSchema } from "./task-schemas";
+import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
+/** A stored workflow artifact. Only a review has a verdict. */
 export const taskMetadataArtifactSchema = z.object({
   markdown: z.string().default(""),
+  verdict: workflowIdSchema.optional(),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   revision: z.preprocess(
     (value) => (value === null ? undefined : value),
@@ -14,28 +16,12 @@ export const taskMetadataArtifactSchema = z.object({
 });
 export type TaskMetadataArtifact = z.infer<typeof taskMetadataArtifactSchema>;
 
-export const taskMetadataQaReportSchema = z.object({
-  markdown: z.string(),
-  verdict: qaWorkflowVerdictSchema,
-  updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  revision: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    z.number().int().nonnegative().optional(),
-  ),
-  error: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-});
-export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
-
 const taskMetadataPayloadFields = {
-  spec: taskMetadataArtifactSchema,
-  plan: taskMetadataArtifactSchema,
+  /** The stored workflow artifacts keyed by artifact code. */
+  artifacts: z.record(workflowArtifactIdSchema, taskMetadataArtifactSchema).default({}),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
     gitTargetBranchSchema.optional(),
-  ),
-  qaReport: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    taskMetadataQaReportSchema.optional(),
   ),
   pullRequest: z.preprocess(
     (value) => (value === null ? undefined : value),

@@ -3,7 +3,6 @@ import { settleImageGenerationMessages } from "./image-generation-settlement";
 import { createImageGenerationMessage } from "./image-generation-messages";
 import type {
   AgentModelSelection,
-  AgentRole,
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
@@ -244,7 +243,7 @@ const historyPartToChatMessage = (
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
-    role: AgentRole | null;
+    role: string | null;
   },
 ): AgentChatMessage[] => {
   const next: AgentChatMessage[] = [];

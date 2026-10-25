@@ -1,23 +1,44 @@
 import type {
   AgentSessionAuthorizedRoot,
   AgentSessionLiveEnvelope,
+  AgentSessionLivePendingApprovalRequest,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
+  RuntimeDescriptor,
 } from "@openducktor/contracts";
-import {
-  agentSessionRefKey,
-  buildReadOnlyPermissionRejectionMessage,
-  requiresReadOnlyApprovalRejection,
-} from "@openducktor/core";
+import { agentSessionRefKey, normalizeOdtWorkflowToolName } from "@openducktor/core";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
 import { Deferred, Effect, Exit, FiberSet, Scope } from "effect";
 import { HostValidationError, type HostError, errorMessage } from "../../effect/host-errors";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { requireWorkflowRole } from "../tasks/support/task-workflow-events";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import { createHostOperationWorkers } from "../../effect/host-operation-workers";
+
+/** A read-only role may use the workflow tools of its policy. Reject its other tools that write. */
+const requiresReadOnlyApprovalRejection = (
+  role: TaskWorkflowRole,
+  request: AgentSessionLivePendingApprovalRequest,
+  descriptor: RuntimeDescriptor,
+): boolean => {
+  if (role.workspaceAccess !== "read") return false;
+  let permittedWorkflowTool = false;
+  for (const name of [request.action?.name, request.tool?.name]) {
+    if (!name) continue;
+    const canonical = normalizeOdtWorkflowToolName(name, descriptor.workflowToolAliasesByCanonical);
+    if (canonical) {
+      if (!role.tools.some((tool) => tool === canonical)) return true;
+      permittedWorkflowTool = true;
+    }
+    if (descriptor.readOnlyRoleBlockedTools.includes(name)) return true;
+  }
+  return !permittedWorkflowTool && request.mutation === "mutating";
+};
 
 export const createHostApprovalPolicy = (deps: {
   live: Pick<
@@ -26,6 +47,7 @@ export const createHostApprovalPolicy = (deps: {
   >;
   readRoots: (repoPath: string) => Effect.Effect<AgentSessionAuthorizedRoot[], HostError>;
   definitions: RuntimeDefinitionsService;
+  taskWorkflows: TaskWorkflowResolver;
   preparation: Pick<ReturnType<typeof createSessionTurnPreparation>, "promptOverrides">;
   reportFailure: (error: HostError) => Effect.Effect<void>;
 }) => {
@@ -104,9 +126,14 @@ export const createHostApprovalPolicy = (deps: {
             deps.definitions,
             resolved.owner.runtimeKind,
           );
+          const workflow = deps.taskWorkflows.forRepo(root.repoPath);
+          const workflowRole =
+            root.sessionScope.kind === "workflow"
+              ? yield* requireWorkflowRole(workflow, root.sessionScope.role)
+              : null;
           const reject =
-            root.sessionScope.kind === "workflow" &&
-            requiresReadOnlyApprovalRejection(root.sessionScope.role, resolved.request, descriptor);
+            workflowRole !== null &&
+            requiresReadOnlyApprovalRejection(workflowRole, resolved.request, descriptor);
           if (policyOnly && !reject) return;
           const outcome = reject ? "reject" : input.outcome;
           if (
@@ -125,7 +152,7 @@ export const createHostApprovalPolicy = (deps: {
           const work = Effect.gen(function* () {
             let message = input.message;
             if (reject && root.sessionScope.kind === "workflow")
-              message = buildReadOnlyPermissionRejectionMessage({
+              message = workflow.prompts.readOnlyRejection({
                 role: root.sessionScope.role,
                 overrides: yield* deps.preparation.promptOverrides({
                   ...root,

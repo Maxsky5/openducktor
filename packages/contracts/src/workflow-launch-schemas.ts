@@ -5,19 +5,10 @@ import { sessionLaunchResultSchema } from "./session-launch-schemas";
 import { agentRoleSchema, agentSessionStartModeSchema } from "./agent-workflow-schemas";
 import { agentSessionControlSendInputSchema } from "./agent-session-control-schemas";
 import { gitTargetBranchSchema } from "./git-schemas";
+import { workflowIdSchema } from "./workflow-condition-schemas";
 
-export const sessionLaunchActionIds = [
-  "spec_initial",
-  "planner_initial",
-  "build_implementation_start",
-  "build_after_qa_rejected",
-  "build_after_human_request_changes",
-  "build_pull_request_generation",
-  "build_rebase_conflict_resolution",
-  "qa_review",
-] as const;
-
-export type SessionLaunchActionId = (typeof sessionLaunchActionIds)[number];
+/** A launch action of the task workflow. */
+export const sessionLaunchActionIdSchema = workflowIdSchema;
 
 export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
   z
@@ -55,7 +46,7 @@ export const workflowLaunchRequestSchema = z
     policy: z
       .object({
         kind: z.literal("manual"),
-        actionId: z.enum(sessionLaunchActionIds),
+        actionId: sessionLaunchActionIdSchema,
         decision: workflowLaunchDecisionSchema,
       })
       .strict(),

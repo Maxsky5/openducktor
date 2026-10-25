@@ -1,12 +1,12 @@
 import type { TerminalContext } from "@openducktor/contracts";
-import type { AgentWorkflowStepTone } from "../../types/agent-workflow";
+import type { WorkflowStepTone } from "../../types/agent-workflow";
 import type { SessionNavigationEntry } from "./session-navigation-read-model";
 
 /**
  * The state of the role or chat icon of a session row: a workflow tone, or muted. Each client
  * maps the tone to its own color.
  */
-export type SessionEntryIconTone = AgentWorkflowStepTone | "muted";
+export type SessionEntryIconTone = WorkflowStepTone | "muted";
 
 /** Task role icons follow the workflow rail. Known attention always keeps its warning cue. */
 export const sessionEntryIconTone = (entry: SessionNavigationEntry): SessionEntryIconTone => {

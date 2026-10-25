@@ -7,7 +7,6 @@ import {
   resolveSettings,
 } from "@anthropic-ai/claude-agent-sdk";
 import { type ClaudePolicyFields, CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { sanitizeChildProcessEnvironment } from "../../infrastructure/process/process-environment";
@@ -30,7 +29,8 @@ import type {
   ClaudeSessionInput,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
-import { claudeWorkflowRole, isReadOnlyWorkflowRole } from "./claude-agent-sdk-utils";
+import type { WorkflowRolePolicy } from "@openducktor/core";
+import { claudeWorkflowRole } from "./claude-agent-sdk-utils";
 import { getDisabledTools } from "./claude-tool-availability";
 
 export type ClaudeAgentSdkOptionsDependencies = {
@@ -123,20 +123,24 @@ export const buildClaudeAgentSdkOptions = async ({
   sessionOptions,
 }: BuildClaudeAgentSdkOptionsInput): Promise<Options> => {
   const workflowRole = claudeWorkflowRole(input);
+  const rolePolicy =
+    workflowRole === null
+      ? null
+      : serviceInput.resolveWorkflowRolePolicy({ repoPath: input.repoPath, role: workflowRole });
   session.disabledTools = getDisabledTools(claudePolicy?.toolAvailability);
   const [mcpServers, resolvedSettings] = await Promise.all([
     buildClaudeMcpServers({
       resolvedDependencies,
       serviceInput,
       session,
-      workflowRole,
+      rolePolicy,
     }),
     resolveSettings({ cwd: input.workingDirectory }),
   ]);
   const overlay = claudePolicy;
   const permissionMode = overlay?.permissionMode;
   const model = input.model;
-  const readOnlyWorkflowRole = isReadOnlyWorkflowRole(workflowRole);
+  const readOnlyWorkflowRole = rolePolicy?.readOnly === true;
   const systemPrompt = [
     "systemPrompt" in input && input.systemPrompt ? input.systemPrompt : null,
     buildClaudeOpenDucktorRuntimePrompt(input.workingDirectory),
@@ -163,7 +167,7 @@ export const buildClaudeAgentSdkOptions = async ({
     hooks: {
       PreToolUse: [
         {
-          hooks: [createClaudePreToolUseHook({ session })],
+          hooks: [createClaudePreToolUseHook({ session, rolePolicy })],
         },
       ],
       PostToolUse: [
@@ -183,7 +187,7 @@ export const buildClaudeAgentSdkOptions = async ({
       preset: "claude_code",
       append: systemPrompt,
     },
-    canUseTool: createClaudeCanUseTool({ session, now, randomId, emit }),
+    canUseTool: createClaudeCanUseTool({ session, rolePolicy, now, randomId, emit }),
     onUserDialog: createClaudeUserDialogHandler({
       session,
       now,
@@ -293,12 +297,12 @@ const buildClaudeMcpServers = async ({
   resolvedDependencies,
   serviceInput,
   session,
-  workflowRole,
+  rolePolicy,
 }: {
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   serviceInput: CreateClaudeAgentSdkServiceInput;
   session: ClaudeSessionContext;
-  workflowRole: ReturnType<typeof claudeWorkflowRole>;
+  rolePolicy: WorkflowRolePolicy | null;
 }): Promise<Record<string, McpServerConfig>> => {
   const [command, ...args] = resolvedDependencies.mcpCommand;
   if (!command) {
@@ -311,10 +315,10 @@ const buildClaudeMcpServers = async ({
     resolvedDependencies.mcpBridgeConnection,
     "claude",
   );
-  const bridgeEnvironment = workflowRole
+  const bridgeEnvironment = rolePolicy
     ? {
         ...baseBridgeEnvironment,
-        ODT_ALLOWED_TOOLS: AGENT_ROLE_TOOL_POLICY[workflowRole].join(","),
+        ODT_ALLOWED_TOOLS: rolePolicy.tools.join(","),
       }
     : baseBridgeEnvironment;
   const { ODT_HOST_TOKEN: hostToken, ...publicBridgeEnvironment } = bridgeEnvironment;

@@ -1,4 +1,11 @@
-import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
+import {
+  BUILTIN_PROMPT_IDS_BY_ROLE,
+  BUILTIN_PROMPT_TEMPLATE_DESCRIPTIONS,
+  BUILTIN_PROMPT_TEMPLATE_LABELS,
+  type BuiltinPromptTemplateId as AgentPromptTemplateId,
+} from "@openducktor/workflows";
+import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import {
   canClearPromptOverride,
@@ -7,25 +14,19 @@ import {
   togglePromptOverrideEnabled,
   updatePromptOverrideTemplate,
 } from "@/components/features/settings";
-import type { PromptRoleTabId } from "./settings-modal-constants";
-import {
-  BUILTIN_PROMPTS_BY_ID,
-  PROMPT_IDS_BY_ROLE,
-  PROMPT_TEMPLATE_DESCRIPTIONS,
-  PROMPT_TEMPLATE_LABELS,
-} from "./settings-modal-constants";
+import { BUILTIN_PROMPTS_BY_ID } from "./settings-modal-constants";
 import { PromptOverrideCard, PromptRoleTabs } from "./settings-modal-prompt-components";
 import type { PromptInheritedPreview } from "./settings-prompt-inheritance";
 
 type PromptOverridesSectionProps = {
   title: string;
   description: string;
-  tab: PromptRoleTabId;
-  errorCountsByTab: Record<PromptRoleTabId, number>;
+  tab: BuiltinPromptRoleTabId;
+  errorCountsByTab: Record<BuiltinPromptRoleTabId, number>;
   overrides: RepoPromptOverrides;
   validationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   disabled: boolean;
-  onTabChange: (next: PromptRoleTabId) => void;
+  onTabChange: (next: BuiltinPromptRoleTabId) => void;
   onUpdateOverrides: (updater: (current: RepoPromptOverrides) => RepoPromptOverrides) => void;
   resolveInheritedPreview: (
     templateId: AgentPromptTemplateId,
@@ -46,7 +47,7 @@ export function PromptOverridesSection({
   onUpdateOverrides,
   resolveInheritedPreview,
 }: PromptOverridesSectionProps): ReactElement {
-  const promptIds = PROMPT_IDS_BY_ROLE[tab];
+  const promptIds = BUILTIN_PROMPT_IDS_BY_ROLE[tab];
   const visibleErrorCount = promptIds.filter((templateId) =>
     Boolean(validationErrors[templateId]),
   ).length;
@@ -89,8 +90,8 @@ export function PromptOverridesSection({
           return (
             <PromptOverrideCard
               key={templateId}
-              label={PROMPT_TEMPLATE_LABELS[templateId]}
-              description={PROMPT_TEMPLATE_DESCRIPTIONS[templateId]}
+              label={BUILTIN_PROMPT_TEMPLATE_LABELS[templateId]}
+              description={BUILTIN_PROMPT_TEMPLATE_DESCRIPTIONS[templateId]}
               override={override}
               inheritedPreview={inheritedPreview}
               disabled={disabled}

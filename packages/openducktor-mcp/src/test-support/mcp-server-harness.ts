@@ -14,6 +14,7 @@ import {
   type ReadTaskArtifactsResult,
   type McpTaskArtifact,
   odtToolErrorPayloadSchema,
+  ODT_MCP_BRIDGE_VERSION,
 } from "@openducktor/contracts";
 import { mcpToolPayloadSchema, type McpToolPayload } from "../tool-results";
 
@@ -81,15 +82,13 @@ export const taskSummaryPayload = {
     status: "open",
     priority: 2,
     issueType: "task",
-    aiReviewEnabled: true,
     labels: ["mcp"],
     createdAt: "2026-04-18T00:00:00Z",
     updatedAt: "2026-04-18T00:00:00Z",
-    qaVerdict: "not_reviewed",
-    artifacts: {
-      hasSpec: false,
-      hasPlan: false,
-      hasQaReport: false,
+    workflowArtifacts: {
+      spec: { present: false },
+      plan: { present: false },
+      qaReport: { present: false },
     },
   },
 };
@@ -150,7 +149,10 @@ export const startMockBridge = async (
 
     if (url === "/invoke/odt_mcp_ready") {
       requests.push({ url, body: await readJsonBody(request) });
-      writeJson(response, { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
+      writeJson(response, {
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [...ODT_MCP_TOOL_NAMES],
+      });
       return;
     }
 

@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
@@ -58,6 +59,7 @@ describe("createClaudeAgentSdkSession", () => {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -143,6 +145,7 @@ describe("createClaudeAgentSdkSession", () => {
         const events: AgentEvent[] = [];
         const sessionStore = createClaudeAgentSdkSessionStore();
         const serviceInput: CreateClaudeAgentSdkServiceInput = {
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           claudeExecutablePath: process.execPath,
           launchPolicy: {
             resolve: () => Effect.succeed({}),
@@ -240,6 +243,7 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -332,6 +336,7 @@ describe("createClaudeAgentSdkSession", () => {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -432,6 +437,7 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -531,6 +537,7 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -642,6 +649,7 @@ describe("createClaudeAgentSdkSession", () => {
       const onContinuationAdmission = mock(() => {});
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -749,6 +757,7 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -873,6 +882,7 @@ describe("createClaudeAgentSdkSession", () => {
       const onContinuationAdmission = mock(() => {});
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -977,6 +987,7 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         claudeExecutablePath: process.execPath,
         launchPolicy: {
           resolve: () => Effect.succeed({}),
@@ -1087,6 +1098,7 @@ describe("createClaudeAgentSdkSession", () => {
         const events: AgentEvent[] = [];
         const sessionStore = createClaudeAgentSdkSessionStore();
         const serviceInput: CreateClaudeAgentSdkServiceInput = {
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           claudeExecutablePath: process.execPath,
           launchPolicy: {
             resolve: () => Effect.succeed({}),

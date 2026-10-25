@@ -12,11 +12,13 @@ const task = (id = "task-1"): PublicTaskSummaryTask => ({
   priority: 2,
   issueType: "task",
   labels: ["accessibility"],
-  aiReviewEnabled: true,
   createdAt: "2026-09-08T10:00:00.000Z",
   updatedAt: "2026-09-08T10:00:00.000Z",
-  qaVerdict: "not_reviewed",
-  artifacts: { hasSpec: false, hasPlan: false, hasQaReport: false },
+  workflowArtifacts: {
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
+  },
 });
 
 const createToolElement = (tool: string, fields: Partial<ToolMeta>) =>

@@ -1,8 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type NotificationOsCapability,
-} from "@openducktor/contracts";
+import { type NotificationOsCapability } from "@openducktor/contracts";
 import type { PropsWithChildren } from "react";
 import {
   createBridge,
@@ -21,6 +18,7 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceStateContext } from "../app-state-contexts";
 import { useNotificationContext } from "../notifications/notification-context";
 import { NotificationProvider } from "./notification-provider";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 describe("notification permission recovery", () => {
   test.each([
@@ -39,7 +37,7 @@ describe("notification permission recovery", () => {
           if (delivery === "throw") throw new Error("Test delivery failed.");
           return { status: "failed", message: "Test delivery failed." };
         });
-        const settings = createDefaultNotificationSettings();
+        const settings = createBuiltinNotificationSettings();
         settings.volumePercent = 0;
         await h.hook.run(async (context) => {
           if (delivery === "throw") {
@@ -174,9 +172,9 @@ const createHarness = (
     showOsNotification,
     async mount(): Promise<void> {
       await hook.mount();
-      const settings = createDefaultNotificationSettings();
+      const settings = createBuiltinNotificationSettings();
       settings.volumePercent = 0;
-      settings.kinds["workflow.closed"].target = "os";
+      settings.kinds["workflow.closed"] = { enabled: true, target: "os", sound: "inherit" };
       await hook.run(() => {
         if (!onOccurrence) throw new Error("Notification listener is missing.");
         onOccurrence(workflowClosedOccurrence("blocked"), settings);

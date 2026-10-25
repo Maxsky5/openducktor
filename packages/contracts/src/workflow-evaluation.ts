@@ -5,9 +5,16 @@ type WorkflowIdentity = {
   definitionRevision: number;
 };
 
+/** Only a present review artifact has a verdict. */
+export type WorkflowArtifactState = {
+  present: boolean;
+  verdict?: string | undefined;
+};
+
 export type WorkflowInput = WorkflowIdentity & {
   state: string;
   facts: Record<string, WorkflowValue>;
+  artifacts: Record<string, WorkflowArtifactState>;
 };
 
 type WorkflowStepProjectionFields = {
@@ -31,28 +38,41 @@ export type WorkflowHumanStepProjection = WorkflowStepProjectionFields & {
 
 export type WorkflowStepProjection = WorkflowAgentStepProjection | WorkflowHumanStepProjection;
 
-type WorkflowEventDecisionFields = WorkflowIdentity & {
-  eventId: string;
+/** The ID types of one workflow definition. A definition with enum IDs gives typed results. */
+export type WorkflowIds = {
+  state: string;
+  event: string;
+  action: string;
+  step: string;
+  role: string;
+  signal: string;
+  launchAction: string;
 };
 
-export type WorkflowDecision =
-  | (WorkflowEventDecisionFields & {
+type WorkflowEventDecisionFields<Ids extends WorkflowIds> = WorkflowIdentity & {
+  eventId: Ids["event"];
+};
+
+export type WorkflowDecision<Ids extends WorkflowIds = WorkflowIds> =
+  | (WorkflowEventDecisionFields<Ids> & {
       kind: "denied";
-      state: string;
+      state: Ids["state"];
       reason: "terminal_state" | "source_state";
     })
-  | (WorkflowEventDecisionFields & {
+  | (WorkflowEventDecisionFields<Ids> & {
       kind: "denied";
-      state: string;
+      state: Ids["state"];
       reason: "guard";
       guardId: string;
     })
-  | (WorkflowEventDecisionFields & {
+  | (WorkflowEventDecisionFields<Ids> & {
       kind: "unchanged";
-      state: string;
+      state: Ids["state"];
     })
-  | (WorkflowEventDecisionFields & {
+  | (WorkflowEventDecisionFields<Ids> & {
       kind: "transition";
-      from: string;
-      to: string;
+      from: Ids["state"];
+      to: Ids["state"];
+      signal?: Ids["signal"];
+      sourceRole?: Ids["role"];
     });

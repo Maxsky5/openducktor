@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { ensureCleanTaskWorktree } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
@@ -12,12 +12,14 @@ import {
   requirePullRequestLinkDependencies,
   requirePullRequestUpsertDependencies,
 } from "../support/required-task-dependencies";
-import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
+import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
+import { requirePullRequestManagement } from "../support/task-workflow-events";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 type Cases = Pick<TaskService, "linkPullRequest" | "upsertPullRequest" | "unlinkPullRequest">;
 
 export const createTaskPullRequestManagementUseCases = ({
+  taskWorkflows,
   gitPort,
   gitProviderResolver,
   taskStore,
@@ -35,26 +37,21 @@ export const createTaskPullRequestManagementUseCases = ({
         }),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* validatePullRequestManagementStatusEffect(current.status);
+      yield* requirePullRequestManagement(taskWorkflows.forRepo(repoPath), current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task ${taskId} already has a linked pull request.`,
-            details: { repoPath, taskId },
-          }),
-        );
+        return yield* new HostValidationError({
+          field: "taskId",
+          message: `Task ${taskId} already has a linked pull request.`,
+          details: { repoPath, taskId },
+        });
       }
-      if (metadata.directMerge !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before linking a pull request.`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
+      yield* ensureNoDirectMergeEffect({
+        operation: "link_pull_request",
+        repoPath,
+        taskId,
+        directMerge: metadata.directMerge,
+      });
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
@@ -91,17 +88,15 @@ export const createTaskPullRequestManagementUseCases = ({
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
       const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
-      if (metadata.directMerge !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `A local direct merge is already recorded for task ${taskId}. Finish or discard that direct merge workflow before opening a pull request.`,
-            details: { repoPath: effectiveRepoPath, taskId },
-          }),
-        );
-      }
+      yield* ensureNoDirectMergeEffect({
+        operation: "upsert_pull_request",
+        repoPath: effectiveRepoPath,
+        taskId,
+        directMerge: metadata.directMerge,
+      });
       const approval = yield* loadOpenApprovalContext(
         dependencies,
+        taskWorkflows.forRepo(repoPath),
         taskId,
         current,
         metadata,
@@ -111,18 +106,16 @@ export const createTaskPullRequestManagementUseCases = ({
         try: () => ensureCleanTaskWorktree(approval),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: errorMessage(cause),
             cause,
           }),
       });
       if (!approval.workingDirectory) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
-            details: { repoPath: effectiveRepoPath, taskId },
-          }),
-        );
+        return yield* new HostValidationError({
+          field: "taskId",
+          message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
+          details: { repoPath: effectiveRepoPath, taskId },
+        });
       }
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
@@ -144,13 +137,11 @@ export const createTaskPullRequestManagementUseCases = ({
         },
       );
       if (pushResult.outcome === "rejected_non_fast_forward") {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Failed to push the task branch before creating the pull request: ${pushResult.output}`,
-            details: { repoPath: effectiveRepoPath, taskId },
-          }),
-        );
+        return yield* new HostValidationError({
+          field: "taskId",
+          message: `Failed to push the task branch before creating the pull request: ${pushResult.output}`,
+          details: { repoPath: effectiveRepoPath, taskId },
+        });
       }
       const pushDetails = {
         repoPath: effectiveRepoPath,
@@ -182,16 +173,14 @@ export const createTaskPullRequestManagementUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* validatePullRequestManagementStatusEffect(current.status);
+      yield* requirePullRequestManagement(taskWorkflows.forRepo(repoPath), current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest === undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task ${taskId} does not have a linked pull request.`,
-            details: { repoPath, taskId },
-          }),
-        );
+        return yield* new HostValidationError({
+          field: "taskId",
+          message: `Task ${taskId} does not have a linked pull request.`,
+          details: { repoPath, taskId },
+        });
       }
       return yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest: null });
     });

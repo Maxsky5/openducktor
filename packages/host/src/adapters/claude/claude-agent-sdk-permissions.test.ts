@@ -1,3 +1,4 @@
+import { claudeTestRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
@@ -26,6 +27,7 @@ describe("createClaudeCanUseTool", () => {
       const session = createClaudeRepositoryPermissionTestSession();
       const hook = createClaudePreToolUseHook({
         session,
+        rolePolicy: claudeTestRolePolicy(session),
       });
       const input = {
         hook_event_name: "PreToolUse" as const,
@@ -52,6 +54,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -80,6 +83,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createClaudeRepositoryPermissionTestSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -110,12 +114,18 @@ describe("createClaudeCanUseTool", () => {
       expect(
         await authorizeClaudeToolUse({
           session,
+          rolePolicy: claudeTestRolePolicy(session),
           toolName: `mcp__openducktor__${tool}`,
           toolInput: {},
         }),
       ).toMatchObject({ behavior: "allow", approval: "trusted_odt" });
       expect(
-        await authorizeClaudeToolUse({ session, toolName: `mcp__other__${tool}`, toolInput: {} }),
+        await authorizeClaudeToolUse({
+          session,
+          rolePolicy: claudeTestRolePolicy(session),
+          toolName: `mcp__other__${tool}`,
+          toolInput: {},
+        }),
       ).toMatchObject({ behavior: "allow", approval: "interactive" });
     },
   );
@@ -128,6 +138,7 @@ describe("createClaudeCanUseTool", () => {
         expect(
           await authorizeClaudeToolUse({
             session,
+            rolePolicy: claudeTestRolePolicy(session),
             toolName: `mcp__openducktor__${tool}`,
             toolInput: { tabId: "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b", ref: "e12" },
           }),
@@ -144,6 +155,7 @@ describe("createClaudeCanUseTool", () => {
         const events: AgentEvent[] = [];
         const canUseTool = createClaudeCanUseTool({
           session,
+          rolePolicy: claudeTestRolePolicy(session),
           now: () => "2026-06-25T12:00:00.000Z",
           randomId: () => "request-1",
           emit: (_session, event) => events.push(event),
@@ -171,6 +183,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createSession("spec");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -200,6 +213,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -242,6 +256,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createSession("build");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -288,6 +303,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createSession("build");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -339,6 +355,7 @@ describe("createClaudeCanUseTool", () => {
     const session = createSession("build");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -395,6 +412,7 @@ describe("createClaudeCanUseTool", () => {
     addNestedSubagent(session);
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -443,6 +461,7 @@ describe("createClaudeCanUseTool", () => {
     addNestedSubagent(session);
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),

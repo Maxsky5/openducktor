@@ -9,7 +9,13 @@ export const createCodexControlPolicyBinder =
     runtimeId: string,
     resolveRuntimePolicy: CreateCodexLiveSessionAdapterPreparerInput["resolveRuntimePolicy"],
   ) =>
-  <Input extends { readonly runtimeKind: string; readonly sessionScope?: AgentSessionScope }>(
+  <
+    Input extends {
+      readonly repoPath: string;
+      readonly runtimeKind: string;
+      readonly sessionScope?: AgentSessionScope;
+    },
+  >(
     input: Input,
     operation: string,
   ) => {
@@ -32,7 +38,7 @@ export const createCodexControlPolicyBinder =
         }),
       );
     }
-    return resolveRuntimePolicy(sessionScope).pipe(
+    return resolveRuntimePolicy({ repoPath: input.repoPath, sessionScope }).pipe(
       Effect.map((policy) => {
         const binding: Extract<AgentRuntimePolicyBinding, { runtimeKind: "codex" }> = {
           runtimeKind: "codex",

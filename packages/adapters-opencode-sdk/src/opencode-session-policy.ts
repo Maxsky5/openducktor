@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionScope } from "@openducktor/core";
+import type { AgentSessionScope, WorkflowRolePolicyResolver } from "@openducktor/core";
 import { withAgentSessionTitle } from "@openducktor/core";
 import {
   buildRepositoryScopedPermissionRules,
@@ -16,10 +16,15 @@ export type OpencodeSessionPolicy = {
     | { kind: "repository" };
 };
 
+/** A workflow session gets the permissions of its role in the task workflow of the repository. */
 export const resolveOpencodeSessionPolicy = (
-  sessionScope: AgentSessionScope | null | undefined,
+  {
+    sessionScope,
+    repoPath,
+  }: { sessionScope?: AgentSessionScope | null | undefined; repoPath: string },
   runtimeDescriptor: RuntimeDescriptor,
   action: string,
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
 ): OpencodeSessionPolicy => {
   if (!sessionScope) {
     throw new Error(`Cannot ${action} without session context.`);
@@ -28,7 +33,7 @@ export const resolveOpencodeSessionPolicy = (
     sessionScope.kind === "workflow"
       ? {
           permission: buildRoleScopedPermissionRules({
-            role: sessionScope.role,
+            rolePolicy: resolveWorkflowRolePolicy({ repoPath, role: sessionScope.role }),
             runtimeDescriptor,
           }),
           scope: { kind: "workflow", role: sessionScope.role },

@@ -1,3 +1,4 @@
+import { requireWorkflowIssueType } from "../tasks/support/task-workflow-events";
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
@@ -10,9 +11,8 @@ import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
-  activeStatuses,
   findFreeTaskArtifact,
-  isWorkflowArtifactCode,
+  publicWorkflowArtifacts,
   mapPublicTask,
   mapTaskSummary,
   missingFreeTaskArtifact,
@@ -45,14 +45,26 @@ export const executeOdtMcpReadTool = (
 
 const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const { tasksForWorkspace } = context;
     const parsed = yield* parseToolInput(
       "odt_search_tasks",
       ODT_TOOL_SCHEMAS.odt_search_tasks,
       input,
     );
-    const tasks = (yield* tasksForWorkspace(parsed.workspaceId ?? "")).filter((task) => {
-      if (!activeStatuses.has(task.status)) {
+    const repoPath = yield* context.repoPathForWorkspace(parsed.workspaceId ?? "");
+    const workflow = context.taskWorkflows.forRepo(repoPath);
+    if (parsed.issueType !== undefined) yield* requireWorkflowIssueType(workflow, parsed.issueType);
+    if (
+      parsed.status !== undefined &&
+      (workflow.isTerminalState(parsed.status) ||
+        !workflow.definition.states.some(({ id }) => id === parsed.status))
+    ) {
+      return yield* new HostValidationError({
+        field: "status",
+        message: `Status ${parsed.status} is not an open state of task workflow "${workflow.definition.id}".`,
+      });
+    }
+    const tasks = (yield* context.taskService.listTasks({ repoPath })).filter((task) => {
+      if (workflow.isTerminalState(task.status)) {
         return false;
       }
       if (parsed.priority !== undefined && task.priority !== parsed.priority) {
@@ -161,7 +173,7 @@ const executeReadTask: OdtMcpReadToolHandler = (context, input) =>
     return yield* parseResponse("odt_read_task", RESPONSE_SCHEMAS.odt_read_task, {
       task: {
         ...mapPublicTask(task),
-        qaVerdict: task.artifactSummary.qaReport.verdict,
+        workflowArtifacts: publicWorkflowArtifacts(task),
         artifacts: collection.artifacts.map(toMcpTaskArtifact),
       },
     });
@@ -178,12 +190,13 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
-    const listedArtifacts = parsed.codes.some((code) => !isWorkflowArtifactCode(code))
+    const workflow = context.taskWorkflows.forRepo(repoPath);
+    const listedArtifacts = parsed.codes.some((code) => !workflow.artifact(code))
       ? (yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id })).artifacts
       : [];
     const selections = [];
     for (const code of parsed.codes) {
-      if (isWorkflowArtifactCode(code)) {
+      if (workflow.artifact(code)) {
         selections.push({ artifactId: workflowArtifactId(task.id, code), workflow: true });
         continue;
       }

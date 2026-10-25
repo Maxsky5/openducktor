@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
@@ -96,6 +97,7 @@ const runTestScopeProductionConfigCase = async ({
 
   try {
     const services = createNodeTaskAssetServices({
+      taskWorkflows: builtinTaskWorkflows,
       assertOwnershipReadAdmitted: () => Effect.void,
       configDir: { root: configuredConfigDir, scope: "test" },
       configuredTaskStore: createTaskStoreTestDouble({

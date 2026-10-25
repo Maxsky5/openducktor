@@ -1,711 +1,230 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
-import type { TaskCard } from "@openducktor/contracts";
-import { collectTaskStatusChanges } from "../../ports/task-status-changes";
-import { HostOperationError } from "../../effect/host-errors";
-import { createEventPublishingTaskService } from "./event-publishing-task-service";
-import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
-import {
-  createEventBus,
-  createTaskSyncServiceForTest,
-} from "./sync/task-sync-service.test-support";
-import {
-  createTaskService,
-  createTaskServiceWithMutationProgress,
-  type TaskStorePort,
-  task,
-} from "./test-support/task-workflow-harness";
+import { createTaskService, type TaskStorePort, task } from "./test-support/task-workflow-harness";
 
-describe("createTaskService planning", () => {
-  test.each([
-    { name: "complete replacement", oldChildren: 1, failCreation: false },
-    { name: "partial replacement", oldChildren: 1, failCreation: true },
-    { name: "partial initial creation", oldChildren: 0, failCreation: true },
-  ])(
-    "publishes complete committed child cards after $name",
-    async ({ oldChildren, failCreation }) => {
-      let tasks: TaskCard[] = [
-        task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
-        ...Array.from({ length: oldChildren }, () => task({ id: "old-child", parentId: "epic-1" })),
-      ];
-      const failure = new HostOperationError({
-        operation: "create-task",
-        message: "second creation failed",
-      });
-      let creates = 0;
-      const taskStore: TaskStorePort = {
-        listTasks: () => Effect.succeed(tasks),
-        setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
-        deleteTask: ({ taskId }) =>
-          Effect.sync(() => {
-            tasks = tasks.filter((entry) => entry.id !== taskId);
-            return true;
-          }),
-        createTask: ({ task: input }) =>
-          Effect.suspend(() => {
-            creates += 1;
-            if (failCreation && creates === 2) return Effect.fail(failure);
-            const created = task({
-              id: `new-${creates}`,
-              title: input.title,
-              issueType: input.issueType,
-              priority: input.priority,
-              aiReviewEnabled: input.aiReviewEnabled,
-              description: input.description ?? "",
-              labels: input.labels ?? [],
-            });
-            if (input.parentId !== undefined) created.parentId = input.parentId;
-            tasks = [...tasks, created];
-            return Effect.succeed(created);
-          }),
-        transitionTask: ({ taskId, status }) =>
-          Effect.sync(() => {
-            tasks = tasks.map((entry) => (entry.id === taskId ? { ...entry, status } : entry));
-            return tasks.find((entry) => entry.id === taskId)!;
-          }),
-      };
-      const { eventBus, events } = createEventBus();
-      const taskSyncService = createTaskSyncServiceForTest({
-        eventBus,
-        taskService: {
-          listTasks: ({ taskIds }) =>
-            Effect.sync(() => {
-              if (!taskIds) throw new Error("Publication must request scoped cards.");
-              return tasks
-                .filter((entry) => taskIds.includes(entry.id))
-                .map((entry) =>
-                  entry.issueType === "epic"
-                    ? {
-                        ...entry,
-                        subtaskIds: tasks
-                          .filter((child) => child.parentId === entry.id)
-                          .map((child) => child.id),
-                      }
-                    : entry,
-                );
-            }),
-          repoPullRequestSyncDetailed: () =>
-            Effect.succeed({
-              ran: false,
-              changedTaskIds: [],
-              reason: "not_configured",
-              message: "Configure a Git provider.",
-            }),
-        },
-        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-      });
-      const service = createEventPublishingTaskService({
-        taskService: createTaskServiceWithMutationProgress({ taskStore }),
-        taskSyncService,
-      });
-      const result = await Effect.runPromise(
-        Effect.result(
-          service.setPlan({
-            repoPath: "/repo",
-            taskId: "epic-1",
-            markdown: "# Replacement plan",
-            hasExplicitSubtasks: true,
-            subtasks: [
-              { title: "First", issueType: "task" },
-              { title: "Second", issueType: "task" },
-            ],
-          }),
-        ),
-      );
-      expect(result._tag).toBe(failCreation ? "Failure" : "Success");
-      if (result._tag === "Failure") expect(result.failure).toBe(failure);
-      expect(events).toHaveLength(1);
-      const event = events[0];
-      expect(event?.kind).toBe("tasks_updated");
-      if (event?.kind !== "tasks_updated") throw new Error("Expected committed plan event.");
-      const childIds = failCreation ? ["new-1"] : ["new-1", "new-2"];
-      expect(event.taskIds).toEqual(["epic-1", ...(oldChildren ? ["old-child"] : []), ...childIds]);
-      expect(event.removedTaskIds).toEqual(oldChildren ? ["old-child"] : []);
-      const [epic, ...children] = tasks;
-      if (!epic) throw new Error("Expected committed epic.");
-      expect(event.boardChanges?.cards).toEqual([{ ...epic, subtaskIds: childIds }, ...children]);
-    },
-  );
+const savedArtifact = { markdown: "# Saved", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 };
 
-  test("sets spec markdown and promotes open tasks to spec_ready", async () => {
+/** A store that records saves and transitions of one task. */
+const recordingStore = (current: ReturnType<typeof task>, calls: unknown[]): TaskStorePort => ({
+  getTask: (input) => Effect.sync(() => (calls.push({ type: "get", input }), current)),
+  saveWorkflowArtifact: (input) =>
+    Effect.sync(() => {
+      calls.push({ type: "save", input });
+      return { task: current, artifact: { ...savedArtifact, markdown: input.markdown } };
+    }),
+  transitionTask: (input) =>
+    Effect.sync(() => {
+      calls.push({ type: "transition", input });
+      return { ...current, status: input.status };
+    }),
+});
+
+describe("createTaskService workflow artifact saves", () => {
+  test("submits a spec with the status and signal of its save event in one store write", async () => {
     const calls: unknown[] = [];
-    const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [task({ id: "task-1", status: "open", issueType: "feature" })];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "setSpec", input });
-            return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "transition", input });
-            return task({ id: "task-1", status: "spec_ready", issueType: "feature" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({ taskStore }).setSpec({
-          repoPath: "/repo",
-          taskId: "task-1",
-          markdown: "# Spec",
-        }),
-      ),
-    ).resolves.toEqual({
-      markdown: "# Spec",
-      updatedAt: "2026-05-10T10:00:00.000Z",
-      revision: 1,
-    });
-    expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
-      { type: "setSpec", input: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" } },
-      {
-        type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "spec_ready" },
-      },
-    ]);
-  });
-  test("reports spec transition failures after writing a artifact as partial progress", async () => {
-    const failure = new HostOperationError({
-      operation: "task-store.transition-task",
-      message: "transition failed",
-    });
-    const taskStore: TaskStorePort = {
-      listTasks: () =>
-        Effect.succeed([task({ id: "task-1", issueType: "feature", status: "open" })]),
-      setSpecArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
-      transitionTask: () => Effect.fail(failure),
-    };
-
-    const result = await Effect.runPromise(
-      createTaskServiceWithMutationProgress({ taskStore })
-        .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })
-        .pipe(Effect.flip),
+    const current = task({ id: "task-1", status: "open", issueType: "feature" });
+    const saved = await Effect.runPromise(
+      createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskStore: recordingStore(current, calls),
+      }).workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath: "/repo",
+        taskId: "task-1",
+        code: "spec",
+        markdown: "# Spec",
+        submit: true,
+      }),
     );
 
-    if (!(result instanceof TaskMutationProgressFailure)) {
-      throw new Error("Expected a TaskMutationProgressFailure");
-    }
-    expect(result.operation).toBe("set-spec");
-    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
-    expect(result.failure).toBe(failure);
-  });
-  test("sets an epic plan, replaces direct subtasks, and promotes to ready_for_dev", async () => {
-    const calls: unknown[] = [];
-    const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [
-              task({ id: "epic-1", status: "spec_ready", issueType: "epic" }),
-              task({ id: "old-child", status: "ready_for_dev", parentId: "epic-1" }),
-            ];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "setPlan", input });
-            return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 2 };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "delete", input });
-            return true;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "create", input });
-            return task({ id: `created-${input.task.title}`, parentId: "epic-1" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "transition", input });
-            return task({ id: "epic-1", status: "ready_for_dev", issueType: "epic" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({ taskStore }).setPlan({
-          repoPath: "/repo",
-          taskId: "epic-1",
-          markdown: "# Plan",
-          hasExplicitSubtasks: true,
-          subtasks: [
-            { title: " Build UI ", issueType: "task", priority: 1, description: " Ship it " },
-            { title: "build ui", issueType: "task", priority: 1 },
-            { title: "Wire API", issueType: "feature" },
-          ],
-        }),
-      ),
-    ).resolves.toEqual({
-      artifact: {
-        markdown: "# Plan",
-        updatedAt: "2026-05-10T10:00:00.000Z",
-        revision: 2,
-      },
-      changes: {
-        taskIds: ["epic-1", "old-child", "created-Build UI", "created-Wire API"],
-        removedTaskIds: ["old-child"],
-      },
-    });
-    expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
-      { type: "setPlan", input: { repoPath: "/repo", taskId: "epic-1", markdown: "# Plan" } },
-      {
-        type: "delete",
-        input: { repoPath: "/repo", taskId: "old-child", deleteSubtasks: false },
-      },
-      {
-        type: "create",
-        input: {
-          repoPath: "/repo",
-          task: {
-            title: "Build UI",
-            issueType: "task",
-            priority: 1,
-            description: "Ship it",
-            aiReviewEnabled: true,
-            parentId: "epic-1",
-          },
-        },
-      },
-      {
-        type: "create",
-        input: {
-          repoPath: "/repo",
-          task: {
-            title: "Wire API",
-            issueType: "feature",
-            priority: 2,
-            description: undefined,
-            aiReviewEnabled: true,
-            parentId: "epic-1",
-          },
-        },
-      },
-      {
-        type: "transition",
-        input: { repoPath: "/repo", taskId: "epic-1", status: "ready_for_dev" },
-      },
-    ]);
-  });
-  test("saves plan artifacts without applying workflow transitions", async () => {
-    const calls: unknown[] = [];
-    const taskStore: TaskStorePort = {
-      getTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "get", input });
-            return task({ id: "task-1", status: "in_progress" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "setPlan", input });
-            return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 3 };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected list");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({ taskStore }).savePlanArtifact({
-          repoPath: "/repo",
-          taskId: "task-1",
-          markdown: "# Plan",
-        }),
-      ),
-    ).resolves.toEqual({
-      markdown: "# Plan",
-      updatedAt: "2026-05-10T10:00:00.000Z",
-      revision: 3,
+    expect(saved).toEqual({
+      artifact: { ...savedArtifact, markdown: "# Spec" },
+      changes: { taskIds: ["task-1"], removedTaskIds: [] },
     });
     expect(calls).toEqual([
       { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "setPlan", input: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" } },
+      {
+        type: "save",
+        input: {
+          repoPath: "/repo",
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          taskId: "task-1",
+          code: "spec",
+          markdown: "# Spec",
+          status: "spec_ready",
+          cause: { signal: "taskProgressedToSpecReady" },
+        },
+      },
     ]);
   });
-  test("reports transition failures after writing a plan as partial progress", async () => {
-    const failure = new HostOperationError({
-      operation: "task-store.transition-task",
-      message: "transition failed",
-    });
-    const taskStore: TaskStorePort = {
-      listTasks: () =>
-        Effect.succeed([task({ id: "task-1", issueType: "feature", status: "spec_ready" })]),
-      setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
-      transitionTask: () => Effect.fail(failure),
-    };
 
-    const result = await Effect.runPromise(
-      createTaskServiceWithMutationProgress({ taskStore })
-        .setPlan({
+  test("saves a document draft without a workflow event", async () => {
+    const calls: unknown[] = [];
+    const current = task({ id: "task-1", status: "in_progress" });
+    await Effect.runPromise(
+      createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskStore: recordingStore(current, calls),
+      }).workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
+        repoPath: "/repo",
+        taskId: "task-1",
+        code: "plan",
+        markdown: "# Plan",
+        submit: false,
+      }),
+    );
+
+    expect(calls).toEqual([
+      {
+        type: "save",
+        input: {
           repoPath: "/repo",
           taskId: "task-1",
+          code: "plan",
           markdown: "# Plan",
-          subtasks: [],
-          hasExplicitSubtasks: false,
-        })
-        .pipe(Effect.flip),
-    );
-
-    if (!(result instanceof TaskMutationProgressFailure)) {
-      throw new Error("Expected a TaskMutationProgressFailure");
-    }
-    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
-    expect(result.failure).toBe(failure);
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+        },
+      },
+    ]);
   });
-  test("reports initial epic subtask replacement failures as partial progress", async () => {
-    const failure = new HostOperationError({
-      operation: "task-store.delete-task",
-      message: "child delete failed",
-    });
-    const taskStore: TaskStorePort = {
-      listTasks: () =>
-        Effect.succeed([
-          task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
-          task({ id: "child-1", parentId: "epic-1" }),
-        ]),
-      setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
-      deleteTask: () => Effect.fail(failure),
-    };
 
-    const result = await Effect.runPromise(
-      createTaskServiceWithMutationProgress({ taskStore })
-        .setPlan({
+  test.each([
+    {
+      start: "ai_review",
+      verdict: "approved",
+      status: "human_review",
+      cause: { signal: "taskProgressedToHumanReview", sourceRole: "qa" },
+    },
+    {
+      start: "blocked",
+      verdict: "approved",
+      status: "human_review",
+      cause: { signal: "taskProgressedToHumanReview", sourceRole: "qa" },
+    },
+    {
+      start: "human_review",
+      verdict: "rejected",
+      status: "in_progress",
+      cause: { signal: "taskRejectedByQa" },
+    },
+    {
+      start: "blocked",
+      verdict: "rejected",
+      status: "in_progress",
+      cause: { signal: "taskRejectedByQa" },
+    },
+  ] as const)(
+    "commits a $verdict review from $start with its event status and signal",
+    async ({ start, verdict, status, cause }) => {
+      const calls: unknown[] = [];
+      const current = task({ id: "task-1", status: start });
+      await Effect.runPromise(
+        createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
+          taskStore: recordingStore(current, calls),
+        }).workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
           repoPath: "/repo",
-          taskId: "epic-1",
-          markdown: "# Plan",
-          hasExplicitSubtasks: true,
-          subtasks: [{ title: "Replacement", issueType: "task" }],
+          taskId: "task-1",
+          code: "qaReport",
+          markdown: "# Report",
+          verdict,
+          submit: true,
+        }),
+      );
+
+      expect(calls).toEqual([
+        { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+        {
+          type: "save",
+          input: {
+            repoPath: "/repo",
+            sourceTool: "workflow_artifact_save",
+            updatedBy: "user",
+            taskId: "task-1",
+            code: "qaReport",
+            markdown: "# Report",
+            verdict,
+            status,
+            cause,
+          },
+        },
+      ]);
+    },
+  );
+
+  test.each([
+    {
+      name: "an unknown code",
+      input: { code: "notes", submit: true },
+      message: "Unknown workflow artifact notes. Use one of spec, plan, qaReport.",
+    },
+    {
+      name: "a document verdict",
+      input: { code: "spec", verdict: "approved", submit: true },
+      message: "Specification has no verdicts. Save it without a verdict.",
+    },
+    {
+      name: "a review without a verdict",
+      input: { code: "qaReport", submit: true },
+      message: "Submit the QA Report with one verdict: approved or rejected.",
+    },
+    {
+      name: "a review draft",
+      input: { code: "qaReport", verdict: "approved", submit: false },
+      message: "Submit the QA Report with one verdict: approved or rejected.",
+    },
+  ])("rejects $name before a store write", async ({ input, message }) => {
+    const calls: unknown[] = [];
+    const error = await Effect.runPromise(
+      createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskStore: recordingStore(task({ id: "task-1", status: "ai_review" }), calls),
+      })
+        .workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath: "/repo",
+          taskId: "task-1",
+          markdown: "# Text",
+          ...input,
         })
         .pipe(Effect.flip),
     );
 
-    if (!(result instanceof TaskMutationProgressFailure)) {
-      throw new Error("Expected a TaskMutationProgressFailure");
-    }
-    expect(result.changes).toEqual({ taskIds: ["epic-1"], removedTaskIds: [] });
-    expect(result.failure).toBe(failure);
+    expect(error.message).toBe(message);
+    expect(calls).toEqual([]);
   });
-  test("publishes removed epic children when later replacement deletion fails", async () => {
-    const mutationFailure = new HostOperationError({
-      operation: "task-store.delete-task",
-      message: "second child delete failed",
-    });
-    let deletionCount = 0;
-    const taskStore: TaskStorePort = {
-      listTasks: () =>
-        Effect.succeed([
-          task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
-          task({ id: "child-1", parentId: "epic-1" }),
-          task({ id: "child-2", parentId: "epic-1" }),
-        ]),
-      setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
-      deleteTask: () => {
-        deletionCount += 1;
-        return deletionCount === 1 ? Effect.succeed(true) : Effect.fail(mutationFailure);
-      },
-    };
-    const events: Array<{ taskIds: string[]; removedTaskIds: string[] }> = [];
-    const service = createEventPublishingTaskService({
-      taskService: createTaskServiceWithMutationProgress({ taskStore }),
-      taskSyncService: {
-        runMutation: (_repoPath, mutation) => mutation,
-        runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
-          collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
-        publishExternalTaskCreated: () => Effect.void,
-        publishTasksUpdated: (_repoPath, changes) =>
-          Effect.sync(() => {
-            events.push(changes);
-            return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
-          }),
-        syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-    });
 
-    await expect(
-      Effect.runPromise(
-        service
-          .setPlan({
-            repoPath: "/repo",
-            taskId: "epic-1",
-            markdown: "# Plan",
-            hasExplicitSubtasks: true,
-            subtasks: [{ title: "Replacement", issueType: "task" }],
-          })
-          .pipe(Effect.flip),
-      ),
-    ).resolves.toBe(mutationFailure);
-    expect(events).toEqual([{ taskIds: ["epic-1", "child-1"], removedTaskIds: ["child-1"] }]);
+  test("rejects a submit that its event does not admit, before a store write", async () => {
+    const calls: unknown[] = [];
+    const error = await Effect.runPromise(
+      createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskStore: recordingStore(task({ id: "task-1", status: "open" }), calls),
+      })
+        .workflowArtifactSave({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "qaReport",
+          markdown: "# Report",
+          verdict: "approved",
+          submit: true,
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(error.message).toBe(
+      "Saving the QA Report is only allowed from blocked, ai_review, or human_review (current: open).",
+    );
+    expect(calls).toEqual([{ type: "get", input: { repoPath: "/repo", taskId: "task-1" } }]);
   });
 });

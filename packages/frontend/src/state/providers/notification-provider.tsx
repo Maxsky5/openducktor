@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { NotificationNavigationTarget, WorkspaceRecord } from "@openducktor/contracts";
 import {
   type PropsWithChildren,
@@ -123,11 +124,20 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     };
     return {
       publishSessionStarted(input) {
-        runtime.publish(buildSessionStartedOccurrence(resolveWorkspace(input), input));
+        runtime.publish(
+          buildSessionStartedOccurrence(resolveWorkspace(input), {
+            ...input,
+            roleLabel: BUILTIN_ROLE_LABELS[input.role],
+          }),
+        );
       },
       async publishSessionError(input, localErrorMessage) {
         return await runtime.publishAndWait(
-          buildSessionStartErrorOccurrence(resolveWorkspace(input), input, localErrorMessage),
+          buildSessionStartErrorOccurrence(
+            resolveWorkspace(input),
+            { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
+            localErrorMessage,
+          ),
           localErrorMessage,
           input.inAppFeedbackHandled,
         );

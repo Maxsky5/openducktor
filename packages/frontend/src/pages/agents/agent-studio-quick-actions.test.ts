@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
@@ -11,6 +10,7 @@ import {
   withGitConflictQuickAction,
 } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { createAgentSessionSummaryFixture } from "./agent-studio-test-utils";
+import type { BuiltinActionId as TaskAction } from "@openducktor/workflows";
 
 const buildSession = (
   overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
@@ -34,7 +34,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: true, completed: true },
       },
     });
@@ -126,7 +126,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: false },
         planner: { required: true, canSkip: false, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
@@ -169,7 +169,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: false },
         planner: { required: true, canSkip: false, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     };
@@ -285,7 +285,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -316,7 +316,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -337,14 +337,15 @@ describe("agent-studio-quick-actions", () => {
   });
 
   test("uses status-specific primary quick actions for AI review and QA rejection", () => {
+    // The host offers change requests in every review status.
     const aiReviewTaskWithoutPullRequest = buildTask({
       id: "task-1",
       status: "ai_review",
-      availableActions: [],
+      availableActions: ["human_request_changes"],
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
@@ -404,14 +405,14 @@ describe("agent-studio-quick-actions", () => {
       status: "in_progress",
       availableActions: [],
       artifactSummary: {
-        spec: { has: true },
-        plan: { has: true },
-        qaReport: { has: true, verdict: "rejected" },
+        spec: { present: true },
+        plan: { present: true },
+        qaReport: { present: true, verdict: "rejected" },
       },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -434,7 +435,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -525,7 +526,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -576,11 +577,11 @@ describe("agent-studio-quick-actions", () => {
     const task = buildTask({
       id: "task-1",
       status: "human_review",
-      availableActions: [],
+      availableActions: ["human_request_changes"],
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: true, completed: true },
       },
     });
@@ -627,7 +628,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });

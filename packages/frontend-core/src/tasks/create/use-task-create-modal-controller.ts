@@ -1,4 +1,9 @@
-import type { IssueType, TaskAssetFailure, TaskCard } from "@openducktor/contracts";
+import {
+  byDocumentCode,
+  type BuiltinIssueTypeId as IssueType,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { TaskAssetFailure } from "@openducktor/contracts";
 import {
   type Dispatch,
   useCallback,
@@ -9,7 +14,7 @@ import {
   useRef,
 } from "react";
 import {
-  SpecStateContext,
+  DocumentStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
   useRequiredContext,
@@ -35,7 +40,6 @@ import {
 } from "../operations/use-task-description-asset-operations";
 import {
   collectKnownLabels,
-  ISSUE_TYPE_DEFAULTS,
   toComposerState,
   toPrioritySelectOptions,
 } from "./task-composer-options";
@@ -153,7 +157,6 @@ const initialTaskCreateModalState = (
 
 const areComposerStatesEqual = (left: ComposerState, right: ComposerState): boolean =>
   left.issueType === right.issueType &&
-  left.aiReviewEnabled === right.aiReviewEnabled &&
   left.title === right.title &&
   left.priority === right.priority &&
   left.description === right.description &&
@@ -194,11 +197,7 @@ const taskCreateModalReducer = (
       return {
         ...state,
         selectedCreateIssueType: action.issueType,
-        composer: {
-          ...state.composer,
-          issueType: action.issueType,
-          aiReviewEnabled: ISSUE_TYPE_DEFAULTS[action.issueType].aiReviewEnabled,
-        },
+        composer: { ...state.composer, issueType: action.issueType },
         step: "details",
       };
     case "stepChanged":
@@ -450,16 +449,13 @@ function selectTaskCreateModalView({
   modalState: TaskCreateModalState;
   mode: ComposerMode;
 }) {
-  const isSpecDirty =
-    documents.spec.loaded && documents.spec.draftMarkdown !== documents.spec.serverMarkdown;
-  const isPlanDirty =
-    documents.plan.loaded && documents.plan.draftMarkdown !== documents.plan.serverMarkdown;
+  const dirtyDocuments = byDocumentCode(
+    (code) =>
+      documents[code].loaded && documents[code].draftMarkdown !== documents[code].serverMarkdown,
+  );
   const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
   const activeDraft = activeDocument?.draftMarkdown ?? "";
-  const hasUnsavedActiveDocument = hasUnsavedDocumentChanges(activeDocumentSection, {
-    isSpecDirty,
-    isPlanDirty,
-  });
+  const hasUnsavedActiveDocument = hasUnsavedDocumentChanges(activeDocumentSection, dirtyDocuments);
   const isSaving = modalState.isSubmitting || modalState.isSavingDocument !== null;
   const isBusy = isSaving || isUploading;
   const isRecoveryBlocked = taskAssetFailureRequiresLock(modalState.taskAssetFailure);
@@ -473,15 +469,9 @@ function selectTaskCreateModalView({
   } else if (modalState.hasExternalTaskConflict) {
     footerError = { message: EXTERNAL_TASK_CONFLICT_MESSAGE, outcomeUnknown: false };
   }
-  const isActiveDocumentDirty =
-    activeDocumentSection === "spec"
-      ? isSpecDirty
-      : activeDocumentSection === "plan"
-        ? isPlanDirty
-        : false;
+  const isActiveDocumentDirty = hasUnsavedActiveDocument;
   return {
-    isSpecDirty,
-    isPlanDirty,
+    dirtyDocuments,
     activeDocument,
     activeDraft,
     hasUnsavedActiveDocument,
@@ -527,8 +517,10 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     TasksStateContext,
     "useTaskCreateModalController",
   );
-  const { loadSpecDocument, loadPlanDocument, saveSpecArtifact, savePlanArtifact } =
-    useRequiredContext(SpecStateContext, "useTaskCreateModalController");
+  const { loadDocument, saveDocument: saveTaskDocument } = useRequiredContext(
+    DocumentStateContext,
+    "useTaskCreateModalController",
+  );
   const descriptionAssetOperations = useTaskDescriptionAssetOperations(workspaceId, readFileBase64);
 
   const mode: ComposerMode = task ? "edit" : "create";
@@ -566,8 +558,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     open,
     taskId,
     activeSection: activeDocumentSection,
-    loadSpecDocument,
-    loadPlanDocument,
+    loadDocument,
   });
 
   useExternalTaskSync({ open, task, taskId, initialTitle, initialEditSection, composer, dispatch });
@@ -614,8 +605,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   const priorityOptions = useMemo(() => toPrioritySelectOptions(), []);
 
   const {
-    isSpecDirty,
-    isPlanDirty,
+    dirtyDocuments,
     activeDocument,
     activeDraft,
     hasUnsavedActiveDocument,
@@ -714,7 +704,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     if (
       isDocumentNewerOnHost(
         activeDocument.updatedAt,
-        task.artifactSummary[activeDocumentSection].updatedAt,
+        task.artifactSummary[activeDocumentSection]?.updatedAt,
       )
     ) {
       dispatch({
@@ -727,10 +717,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     const markdown = activeDocument.draftMarkdown.trim();
     dispatch({ type: "documentSaveStarted", section: activeDocumentSection });
     try {
-      const saved =
-        activeDocumentSection === "spec"
-          ? await saveSpecArtifact(task.id, markdown)
-          : await savePlanArtifact(task.id, markdown);
+      const saved = await saveTaskDocument(task.id, activeDocumentSection, markdown);
       applySavedDocument(activeDocumentSection, markdown, saved.updatedAt);
     } catch (reason) {
       dispatch({
@@ -780,8 +767,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     knownLabels,
     priorityOptions,
     isTaskDraftDirty,
-    isSpecDirty,
-    isPlanDirty,
+    dirtyDocuments,
     isSubmitting,
     isSavingDocument,
     isBusy,

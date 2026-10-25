@@ -1,5 +1,12 @@
-import type { AgentSessionRecord, KanbanTaskCardView, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  taskHasSessionPage,
+  type TaskWorkflowAction,
+  isQaRejectedTask,
+  BUILTIN_ROLE_LABELS,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { AgentSessionRecord, KanbanTaskCardView } from "@openducktor/contracts";
 import { PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
 import type {
@@ -12,7 +19,6 @@ import {
   QaRejectedBadge,
 } from "@/components/features/kanban/kanban-task-badges";
 import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
 import {
   getTaskFooter,
   type WorkflowPendingState,
@@ -25,7 +31,6 @@ import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workf
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
@@ -33,9 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
-import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
 import { cn } from "@/lib/utils";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { getPriorityStyle, ISSUE_TYPE_STYLES } from "./kanban-task-badge-model";
 
 type CardProps = {
@@ -125,7 +128,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
               role="status"
               className="mt-1 break-words text-xs text-muted-foreground"
             >
-              {AGENT_ROLE_LABELS[session.role]}
+              {BUILTIN_ROLE_LABELS[session.role]}
               {session.activityState === "error" ? " error" : ""}. Status unavailable:{" "}
               {session.statusUnavailableReason}
             </p>
@@ -168,18 +171,32 @@ const sameStrings = (left: string[], right: string[]): boolean => {
   return true;
 };
 
+/** Cards show artifact presence and verdicts, not artifact times. */
+const sameArtifactStates = (
+  left: TaskCard["artifactSummary"],
+  right: TaskCard["artifactSummary"],
+): boolean => {
+  const codes = Object.keys(left);
+  return (
+    codes.length === Object.keys(right).length &&
+    codes.every(
+      (code) =>
+        left[code]?.present === right[code]?.present &&
+        left[code]?.verdict === right[code]?.verdict,
+    )
+  );
+};
+
 const sameTask = (left: TaskCard, right: TaskCard): boolean =>
   left.id === right.id &&
   left.updatedAt === right.updatedAt &&
   left.title === right.title &&
   left.status === right.status &&
   left.issueType === right.issueType &&
-  left.artifactSummary.qaReport.has === right.artifactSummary.qaReport.has &&
-  left.artifactSummary.qaReport.verdict === right.artifactSummary.qaReport.verdict &&
+  sameArtifactStates(left.artifactSummary, right.artifactSummary) &&
   left.sourceIssue === right.sourceIssue &&
   left.priority === right.priority &&
   sameStrings(left.labels, right.labels) &&
-  sameStrings(left.subtaskIds, right.subtaskIds) &&
   left.pullRequest?.number === right.pullRequest?.number &&
   left.pullRequest?.url === right.pullRequest?.url &&
   left.pullRequest?.state === right.pullRequest?.state &&
@@ -495,8 +512,7 @@ function TaskStatus({
   task: TaskCard;
   compact?: boolean;
 }): ReactElement | null {
-  const hasStatus =
-    task.subtaskIds.length > 0 || Boolean(task.pullRequest) || Boolean(task.sourceIssue);
+  const hasStatus = Boolean(task.pullRequest) || Boolean(task.sourceIssue);
   if (!hasStatus && !isQaRejectedTask(task)) {
     return null;
   }
@@ -504,20 +520,6 @@ function TaskStatus({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <QaRejectedBadge task={task} />
-      {task.subtaskIds.length > 0 ? (
-        <Badge
-          variant="secondary"
-          className={
-            compact
-              ? "h-6 rounded-full px-2 text-xs"
-              : "h-6 rounded-full border border-border bg-card px-2.5 text-[11px] text-foreground"
-          }
-        >
-          {compact && task.subtaskIds.length === 1
-            ? "1 subtask"
-            : `${task.subtaskIds.length} subtasks`}
-        </Badge>
-      ) : null}
       {task.pullRequest ? (
         <TaskPullRequestLink
           pullRequest={task.pullRequest}
@@ -595,7 +597,7 @@ function TaskActions({
   pendingState,
   compact = false,
 }: TaskActionsProps): ReactElement | null {
-  if (task.status === "closed") {
+  if (!taskHasSessionPage(task)) {
     return null;
   }
 
@@ -710,7 +712,7 @@ function TaskActions({
           hasActiveSession && primaryActiveSession ? (
             <>
               <PlayCircle className="size-3" />
-              {AGENT_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
+              {BUILTIN_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
               <span
                 className={taskActionSessionStatusClassName(compact, primarySessionIsWaitingInput)}
               >

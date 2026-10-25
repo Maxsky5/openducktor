@@ -358,7 +358,7 @@ Saved tool choices apply to fresh and forked sessions through a fixed native exc
 
 ### Workflow prompts
 
-The built-in prompt templates live in [agent-system-prompts.ts](../packages/core/src/services/agent-system-prompts.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
+The built-in prompt templates live in [prompt-templates.ts](../packages/workflows/src/builtin/prompt-templates.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
 
 For each changed template, set `builtinVersion` to the target branch's version plus one. Increment it only once per PR, even when later commits revise the prompt.
 
@@ -366,7 +366,7 @@ Existing custom overrides remain active. Users must review, update, or disable o
 
 ### Permissions and pending input
 
-Shared role policy lists canonical `odt_*` tools. The descriptor maps them to native aliases and lists native tools blocked for read-only roles.
+The roles of the built-in workflow definition in `packages/workflows` list the canonical `odt_*` tools of each role. `AGENT_ROLE_TOOL_POLICY` reads them from the definition. The runtime descriptor in `packages/contracts` maps them to native aliases and lists native tools blocked for read-only roles. Adapters classify native tools and apply native permissions.
 
 Inherit native permissions and sandbox settings. Add session hooks through SDK options. Let unclassified tools use the native approval path. Shared code does not edit user settings or parse shell commands.
 

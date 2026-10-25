@@ -1,4 +1,4 @@
-import type { ManagedMcpServerResolver } from "@openducktor/core";
+import type { ManagedMcpServerResolver, WorkflowRolePolicyResolver } from "@openducktor/core";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import {
   createPrepareOpencodeSessionRuntime,
@@ -29,6 +29,7 @@ export type CreateOpenCodeRuntimeCompositionInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   readEnv: () => NodeJS.ProcessEnv;
   resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   settingsConfig: SettingsConfigPort;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   toolDiscovery: ToolDiscoveryPort;
@@ -44,6 +45,7 @@ export const createOpenCodeRuntimeComposition = ({
   liveSessionLifecycle,
   readEnv,
   resolveMcpServerConfig,
+  resolveWorkflowRolePolicy,
   settingsConfig,
   taskSessionLifecycleCoordinator,
   toolDiscovery,
@@ -102,10 +104,12 @@ export const createOpenCodeRuntimeComposition = ({
     liveSessionLifecycle,
     prepareLiveSessionAdapter: createOpenCodeLiveSessionAdapterPreparer({
       liveSessionLifecycle,
+      resolveWorkflowRolePolicy,
       prepareRuntime: createPrepareOpencodeSessionRuntime({
         readDirectory,
         resolveCreationSettings: (scope) => Effect.runPromise(creationSettings.resolve(scope)),
         resolveMcpServerConfig: resolveOpencodeMcpServerConfig,
+        resolveWorkflowRolePolicy,
       }),
     }),
   });

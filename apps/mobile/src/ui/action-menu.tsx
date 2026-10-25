@@ -1,3 +1,4 @@
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import {
   Fragment,
   type PropsWithChildren,
@@ -12,7 +13,6 @@ import { type EdgeInsets, useSafeAreaInsets } from "react-native-safe-area-conte
 import { StyleSheet } from "react-native-unistyles";
 import { useOptionalCommandGate } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
-import type { AgentRole } from "@openducktor/core";
 import { AnchoredPopover, useAnchoredPopover } from "./anchored-popover";
 import { RoleIcon } from "./brand-icons";
 import { Icon } from "./icon";

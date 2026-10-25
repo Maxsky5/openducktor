@@ -6,7 +6,6 @@ describe("task badge labels", () => {
     expect(ISSUE_TYPE_LABELS).toEqual({
       bug: "Bug",
       feature: "Feature",
-      epic: "Epic",
       task: "Task",
     });
   });

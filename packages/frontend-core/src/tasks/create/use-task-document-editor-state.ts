@@ -1,7 +1,9 @@
+import { byDocumentCode, type BuiltinDocumentCode } from "@openducktor/workflows";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type { DocumentEditorView } from "./task-composer-types";
 
-export type TaskDocumentSection = "spec" | "plan";
+/** The workflow documents that the composer edits. */
+export type TaskDocumentSection = BuiltinDocumentCode;
 
 type DocumentSectionState = {
   serverMarkdown: string;
@@ -25,8 +27,7 @@ type UseTaskDocumentEditorStateArgs = {
   open: boolean;
   taskId: string | null;
   activeSection: TaskDocumentSection | null;
-  loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
-  loadPlanDocument: (taskId: string) => Promise<TaskDocumentPayload>;
+  loadDocument: (taskId: string, code: TaskDocumentSection) => Promise<TaskDocumentPayload>;
   loadTimeoutMs?: number;
 };
 
@@ -96,31 +97,17 @@ type TaskDocumentEditorAction =
       updatedAt: string;
     };
 
-const createInitialDocumentState = () =>
-  ({
-    spec: {
-      serverMarkdown: "",
-      draftMarkdown: "",
-      updatedAt: null,
-      isLoading: false,
-      loaded: false,
-      error: null,
-    },
-    plan: {
-      serverMarkdown: "",
-      draftMarkdown: "",
-      updatedAt: null,
-      isLoading: false,
-      loaded: false,
-      error: null,
-    },
-  }) satisfies TaskDocumentEditorState;
+const createInitialDocumentState = (): TaskDocumentEditorState =>
+  byDocumentCode(() => ({
+    serverMarkdown: "",
+    draftMarkdown: "",
+    updatedAt: null,
+    isLoading: false,
+    loaded: false,
+    error: null,
+  }));
 
-const createInitialViewState = () =>
-  ({
-    spec: "split",
-    plan: "split",
-  }) satisfies TaskDocumentViewState;
+const createInitialViewState = (): TaskDocumentViewState => byDocumentCode(() => "split");
 
 const createTaskDocumentEditorLocalState = (
   context: TaskDocumentEditorContext,
@@ -249,8 +236,7 @@ export function useTaskDocumentEditorState({
   open,
   taskId,
   activeSection,
-  loadSpecDocument,
-  loadPlanDocument,
+  loadDocument,
   loadTimeoutMs = DOCUMENT_LOAD_TIMEOUT_MS,
 }: UseTaskDocumentEditorStateArgs): UseTaskDocumentEditorStateResult {
   const editorContext = useMemo<TaskDocumentEditorContext>(
@@ -293,10 +279,7 @@ export function useTaskDocumentEditorState({
       return currentSections satisfies Record<TaskDocumentSection, boolean>;
     }
 
-    const nextSections = {
-      spec: false,
-      plan: false,
-    };
+    const nextSections = byDocumentCode(() => false);
     sectionsByContext.set(context, nextSections);
     return nextSections satisfies Record<TaskDocumentSection, boolean>;
   }, []);
@@ -321,12 +304,7 @@ export function useTaskDocumentEditorState({
         section,
       });
 
-      return withTimeout(
-        section === "spec"
-          ? loadSpecDocument(loadContext.taskId)
-          : loadPlanDocument(loadContext.taskId),
-        loadTimeoutMs,
-      )
+      return withTimeout(loadDocument(loadContext.taskId, section), loadTimeoutMs)
         .then((payload) => {
           if (loadContext !== contextRef.current) {
             return;
@@ -352,13 +330,7 @@ export function useTaskDocumentEditorState({
           });
         });
     },
-    [
-      getInFlightSectionsForContext,
-      editorContext,
-      loadPlanDocument,
-      loadSpecDocument,
-      loadTimeoutMs,
-    ],
+    [getInFlightSectionsForContext, editorContext, loadDocument, loadTimeoutMs],
   );
 
   useEffect(() => {

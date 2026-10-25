@@ -1,3 +1,5 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { withTaskWorkflowSettings } from "./task-workflow-settings";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createOpenCodeCreationSettings } from "./opencode-creation-settings";
 import { createClaudeLaunchPolicy } from "../runtimes/claude-launch-policy";
@@ -5,10 +7,10 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  createDefaultNotificationSettings,
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
-  DEFAULT_NOTIFICATION_SETTINGS,
   type GlobalConfig,
   type RepoConfig,
 } from "@openducktor/contracts";
@@ -17,6 +19,7 @@ import { createSettingsConfigAdapter } from "../../adapters/settings/settings-co
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 const createWorkspaceSettingsService = (
   ...args: Parameters<typeof createEffectWorkspaceSettingsService>
@@ -59,7 +62,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
       { eventId: "taskProgressedToHumanReview", actionIds: [] },
     ],
   },
-  notifications: DEFAULT_NOTIFICATION_SETTINGS,
+  notifications: createBuiltinNotificationSettings(),
   remoteAccess: { enabled: false, configuration: null },
   agentRuntimes: {
     opencode: {
@@ -319,7 +322,9 @@ describe("createWorkspaceSettingsService", () => {
     }
   });
   test("returns default settings snapshot when config is missing", async () => {
-    const service = createWorkspaceSettingsService(createFakeSettingsConfig());
+    const service = createWorkspaceSettingsService(
+      withTaskWorkflowSettings(createFakeSettingsConfig(), builtinTaskWorkflows),
+    );
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     expect(snapshot.theme).toBe("system");
     expect(snapshot.agentRuntimes?.opencode).toEqual({
@@ -334,7 +339,8 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
     expect(snapshot.autopilot.alwaysStartQaReviewsFresh).toBe(false);
-    expect(snapshot.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+    // A missing config stays missing in the workflow settings, so the snapshot has no workflow kinds.
+    expect(snapshot.notifications).toEqual(createDefaultNotificationSettings());
     expect(snapshot.agentModelFavorites).toEqual([]);
     expect(snapshot.workspaces).toEqual({});
   });
@@ -1725,7 +1731,7 @@ describe("createWorkspaceSettingsService", () => {
 
   test("preserves notifications during unrelated settings writes", async () => {
     const notifications = {
-      ...DEFAULT_NOTIFICATION_SETTINGS,
+      ...createBuiltinNotificationSettings(),
       volumePercent: 70,
     };
     const settingsConfig = createFakeSettingsConfig({
@@ -1899,7 +1905,9 @@ describe("createWorkspaceSettingsService", () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig(),
     });
-    const service = createWorkspaceSettingsService(settingsConfig);
+    const service = createWorkspaceSettingsService(
+      withTaskWorkflowSettings(settingsConfig, builtinTaskWorkflows),
+    );
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
 
     await expect(

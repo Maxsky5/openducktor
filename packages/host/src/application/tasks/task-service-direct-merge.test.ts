@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import type { TaskCompletionObservation } from "@openducktor/contracts";
 import { createDefaultGlobalConfig } from "../../config/global-config";
@@ -23,6 +24,7 @@ describe("createTaskService direct merge", () => {
   test("requires worktree files before starting a local direct merge", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       systemCommands: createApprovalSystemCommands(),
@@ -59,6 +61,65 @@ describe("createTaskService direct merge", () => {
     });
     expect(calls).toEqual([]);
   });
+  test("rejects a repeated direct merge before Git work or task writes", async () => {
+    const calls: unknown[] = [];
+    const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
+      gitPort: createDirectMergeGitPort({ calls }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskStore: {
+        listTasks: () => Effect.succeed([task({ status: "human_review" })]),
+        getTaskMetadata: () =>
+          Effect.succeed({
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
+            agentSessions: [],
+            directMerge: {
+              method: "merge_commit",
+              sourceBranch: "odt/task-1",
+              targetBranch: { remote: "origin", branch: "main" },
+              mergedAt: "2026-05-10T00:00:00.000Z",
+            },
+          }),
+        setDirectMerge: () => Effect.die("must not replace the recorded merge"),
+        transitionTask: () => Effect.die("must not change task status"),
+      },
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { postComplete: [] },
+      }),
+    });
+    const result = await Effect.runPromise(
+      Effect.result(
+        service.directMerge({
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: {
+            mergeMethod: "merge_commit",
+            expected: {
+              taskStatus: "human_review",
+              sourceBranch: "odt/task-1",
+              targetBranch: { remote: "origin", branch: "main" },
+            },
+          },
+        }),
+      ),
+    );
+    expect(result).toMatchObject({
+      _tag: "Failure",
+      failure: {
+        _tag: "HostValidationError",
+        field: "taskId",
+        message:
+          "A local direct merge is already recorded for task task-1. Finish the direct merge workflow before trying again.",
+        details: { repoPath: "/repo", taskId: "task-1" },
+      },
+    });
+    expect(calls).toEqual([]);
+  });
+
   test("records a published direct merge and moves ai review to human review", async () => {
     const calls: unknown[] = [];
     const humanReviewTask = task({ status: "human_review" });
@@ -73,8 +134,7 @@ describe("createTaskService direct merge", () => {
         return Effect.sync(() => {
           calls.push({ type: "metadata", input });
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           };
         });
@@ -93,6 +153,7 @@ describe("createTaskService direct merge", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitProviderResolver: {
         resolve: () => Effect.die(new Error("direct merge must not resolve a Git provider")),
         resolveConfigured: () =>
@@ -219,7 +280,7 @@ describe("createTaskService direct merge", () => {
       },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "human_review" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "human_review", cause: {} },
       },
     ]);
   });
@@ -238,8 +299,7 @@ describe("createTaskService direct merge", () => {
         listTasks: () => Effect.succeed([task({ status: "ai_review" })]),
         getTaskMetadata: () =>
           Effect.succeed({
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           }),
         setDirectMerge: () =>
@@ -254,6 +314,7 @@ describe("createTaskService direct merge", () => {
       };
       const calls: unknown[] = [];
       const service = createTaskServiceWithMutationProgress({
+        taskWorkflows: builtinTaskWorkflows,
         publishCompletion: (observation) =>
           Effect.gen(function* () {
             observations.push(observation);
@@ -354,8 +415,7 @@ describe("createTaskService direct merge", () => {
         return Effect.sync(() => {
           calls.push({ type: "metadata", input });
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           };
         });
@@ -374,6 +434,7 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -476,8 +537,7 @@ describe("createTaskService direct merge", () => {
         return Effect.sync(() => {
           calls.push({ type: "metadata", input });
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             directMerge: {
               method: "merge_commit",
               sourceBranch: "odt/task-1",
@@ -496,6 +556,7 @@ describe("createTaskService direct merge", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
         cleanupTaskSessions: (input) =>
@@ -552,7 +613,7 @@ describe("createTaskService direct merge", () => {
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
       },
     ]);
   });
@@ -567,8 +628,7 @@ describe("createTaskService direct merge", () => {
       getTaskMetadata() {
         return Effect.sync(() => {
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             directMerge: {
               method: "merge_commit",
               sourceBranch: "odt/task-1",
@@ -588,6 +648,7 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: {
             ...createDirectMergeGitPort({
               calls,
@@ -616,8 +677,7 @@ describe("createTaskService direct merge", () => {
       getTaskMetadata() {
         return Effect.sync(() => {
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           };
         });
@@ -631,6 +691,7 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,

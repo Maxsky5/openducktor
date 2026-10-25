@@ -1,10 +1,19 @@
+import { CLAUDE_RUNTIME_CAPABILITIES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+
 import type { AgentModelCatalog } from "../types/agent-orchestrator";
 import { resolveLoadedSessionSelection } from "./saved-session-model";
 
 const catalog: AgentModelCatalog = {
-  runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+  runtime: {
+    kind: "claude",
+    label: "Claude",
+    description: "Claude model catalog",
+    readOnlyRoleBlockedTools: [],
+    workflowToolAliasesByCanonical: {},
+    capabilities: CLAUDE_RUNTIME_CAPABILITIES,
+    capabilityLimits: [],
+  },
   models: [
     {
       id: "claude-opus-5-5",

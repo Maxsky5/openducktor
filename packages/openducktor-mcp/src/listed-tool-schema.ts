@@ -1,5 +1,6 @@
+import { builtinWorkflow, workflowToolInputSchema } from "@openducktor/workflows";
 import { z } from "zod";
-import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import { type ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 
 const listedToolObjectSchema = z.record(z.string(), z.json());
 
@@ -68,6 +69,11 @@ const compactListedSchema = (schema: JsonObject): JsonObject => {
   return compact;
 };
 
+/**
+ * The listed input schema of a tool. It names the issue types and active states of the built-in
+ * task workflow as a hint. The server validates input with the generic schema, and the host
+ * checks the values against the task workflow.
+ */
 export const getListedToolInputSchema = (
   toolName: RegisteredToolName,
   options: { hideWorkspaceId: boolean },
@@ -75,7 +81,7 @@ export const getListedToolInputSchema = (
   const jsonSchema = listedToolSchemaSchema.parse(
     compactListedSchema(
       jsonObjectSchema.parse(
-        z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], {
+        z.toJSONSchema(workflowToolInputSchema(builtinWorkflow.definition, toolName), {
           io: "input",
         }),
       ),

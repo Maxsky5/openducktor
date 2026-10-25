@@ -36,12 +36,13 @@ export const createWorkspaceSessionLaunchService = (deps: WorkspaceSessionLaunch
   return createSessionLaunchService<WorkspaceSessionLaunchRequest, WorkspaceSessionLaunchResult>({
     runtime: deps.live,
     send: (_request, input, options) => deps.commands.sendUserMessage(input, options),
-    initial: (request) => ({
-      workspaceId: request.workspaceId,
-      repoPath: request.repoPath,
-      sessionId: request.sessionId,
-      status: "completed",
-    }),
+    initial: (request) =>
+      Effect.succeed({
+        workspaceId: request.workspaceId,
+        repoPath: request.repoPath,
+        sessionId: request.sessionId,
+        status: "completed" as const,
+      }),
     key: (request) => JSON.stringify([request.workspaceId, request.sessionId]),
     run: (attempt) =>
       Effect.gen(function* () {

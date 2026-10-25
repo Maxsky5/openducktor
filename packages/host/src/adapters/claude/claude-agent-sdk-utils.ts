@@ -134,9 +134,6 @@ export const claudeSessionRef = (session: ClaudeSessionContext): SessionRef => (
   externalSessionId: session.externalSessionId,
 });
 
-export const isReadOnlyWorkflowRole = (role: AgentRole | null): boolean =>
-  role !== null && role !== "build";
-
 export const canonicalOdtToolName = (toolName: string): OdtToolName | null =>
   normalizeOdtToolName(toolName, toClaudeOdtToolAliases);
 

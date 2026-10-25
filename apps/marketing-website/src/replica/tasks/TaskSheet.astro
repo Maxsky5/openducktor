@@ -47,9 +47,7 @@ const DOCUMENTS = [
         </div>
         <StatusPill status="open" badge />
       </div>
-      <TaskBadges kind={task.kind} priority={task.priority}
-        ><span class="ts-qa">AI QA required</span></TaskBadges
-      >
+      <TaskBadges kind={task.kind} priority={task.priority} />
       <div class="ts-labels">{task.labels.map((name) => <LabelChip name={name} />)}</div>
     </div>
     <div class="ts-body">

@@ -1,10 +1,6 @@
 import type { Effect } from "effect";
 import type { SessionLaunchService } from "./session-launch-types";
-import type {
-  AutopilotActionId,
-  WorkflowLaunchRequest,
-  WorkflowLaunchResult,
-} from "@openducktor/contracts";
+import type { WorkflowLaunchRequest, WorkflowLaunchResult } from "@openducktor/contracts";
 import type { HostError } from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { TaskSessionOperations } from "./task-session-operations";
@@ -34,7 +30,7 @@ export type AutomaticWorkflowLaunchStartCheck = Effect.Effect<
 export type AutomaticWorkflowLaunchRequest = Omit<WorkflowLaunchRequest, "policy"> & {
   policy: {
     kind: "automatic";
-    actionId: AutopilotActionId;
+    actionId: string;
     startCheck: AutomaticWorkflowLaunchStartCheck;
   };
 };

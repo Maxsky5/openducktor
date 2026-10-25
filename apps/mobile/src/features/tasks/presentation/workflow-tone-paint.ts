@@ -1,4 +1,4 @@
-import type { AgentWorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
+import type { WorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
 import { withAlpha } from "@/theme/color-alpha";
 import type { AppTheme } from "@/theme/tokens";
 
@@ -9,10 +9,7 @@ export type WorkflowToneColors = { surface: string; border: string; text: string
  * `AGENT_WORKFLOW_TONE_TEXT_CLASSES` and `AGENT_WORKFLOW_TONE_ICON_CLASSES` text and icon, with
  * the surface and border of the role buttons.
  */
-export const workflowToneColors = (
-  theme: AppTheme,
-  tone: AgentWorkflowStepTone,
-): WorkflowToneColors => {
+export const workflowToneColors = (theme: AppTheme, tone: WorkflowStepTone): WorkflowToneColors => {
   const d = theme.desktop;
   switch (tone) {
     case "in_progress":
@@ -62,7 +59,7 @@ export const workflowToneColors = (
  * The desktop `WORKFLOW_CONNECTOR_CLASSES` color between two steps, from the state of the next
  * step: the `*-ring` color of each tone.
  */
-export const workflowConnectorColor = (theme: AppTheme, tone: AgentWorkflowStepTone): string => {
+export const workflowConnectorColor = (theme: AppTheme, tone: WorkflowStepTone): string => {
   const d = theme.desktop;
   switch (tone) {
     case "done":

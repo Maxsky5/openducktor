@@ -1,3 +1,4 @@
+import { taskHasSessionPage } from "@openducktor/workflows";
 import { defaultFilter } from "cmdk";
 import type { PaletteAction, PaletteChat, PaletteTask } from "./command-palette-types";
 import { ACTION_RESULT_LIMIT, CHAT_RESULT_LIMIT, TASK_RESULT_LIMIT } from "./constants";
@@ -74,8 +75,8 @@ const keepOrder = (): number => 0;
 
 /** Tasks that are not closed come first, then the latest update. */
 const compareTasks = (left: PaletteTask, right: PaletteTask): number => {
-  const leftClosed = left.task.status === "closed";
-  if (leftClosed !== (right.task.status === "closed")) return leftClosed ? 1 : -1;
+  const leftClosed = !taskHasSessionPage(left.task);
+  if (leftClosed !== !taskHasSessionPage(right.task)) return leftClosed ? 1 : -1;
   return right.task.updatedAt.localeCompare(left.task.updatedAt);
 };
 

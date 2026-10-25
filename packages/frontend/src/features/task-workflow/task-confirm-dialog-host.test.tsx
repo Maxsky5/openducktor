@@ -27,7 +27,7 @@ type HostProps = Parameters<typeof useTaskConfirmDialogHost>[0];
 const createHandlers = () => ({
   tasks: [task],
   onResetTask: mock(async (_taskId: string) => {}),
-  onDelete: mock(async (_taskId: string, _options: { deleteSubtasks: boolean }) => {}),
+  onDelete: mock(async (_taskId: string) => {}),
   onSucceeded: mock((_taskId: string) => {}),
 });
 
@@ -98,7 +98,7 @@ describe("TaskConfirmDialogHost", () => {
 
   test.each([
     ["reset_task", "onResetTask", [task.id]],
-    ["delete", "onDelete", [task.id, { deleteSubtasks: true }]],
+    ["delete", "onDelete", [task.id]],
   ] as const)(
     "runs the confirmed %s through %s, then reports the success",
     async (action, handlerName, expectedArgs) => {

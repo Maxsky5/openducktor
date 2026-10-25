@@ -13,6 +13,7 @@ import {
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
   remoteNegotiationResultSchema,
+  REMOTE_PROTOCOL_VERSION,
   type RemoteClientHello,
 } from "@openducktor/contracts";
 import { createEffectHostCommandRouter } from "../../host/src/interface/router/host-command-router";
@@ -32,7 +33,7 @@ import { createHostCommandLifetime } from "./host-command-lifetime";
 afterAll(removeFakeShell);
 const hello: RemoteClientHello = {
   appVersion: "mobile-8",
-  supportedProtocolVersions: [2],
+  supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
   requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
   optionalCapabilities: ["future.optional"],
 };

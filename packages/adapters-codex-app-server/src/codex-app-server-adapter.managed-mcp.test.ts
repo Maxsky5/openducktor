@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
-import {
-  AGENT_ROLE_TOOL_POLICY,
-  type PolicyBoundSessionRef,
-  workflowAgentSessionScope,
-} from "@openducktor/core";
+import { type PolicyBoundSessionRef, workflowAgentSessionScope } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
 import {
   codexStartSessionInput,
   createHarness,

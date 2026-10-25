@@ -3,7 +3,6 @@ import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   type RemoteHostDescriptor,
-  type TaskCard,
 } from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
 import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
@@ -23,6 +22,7 @@ import {
   createTestHostConnection,
 } from "./test-support/test-client-connection";
 import { waitForExpectation } from "./test-support/wait-for-expectation";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const REPO_PATH = "/repo";
 const chatDraftIdentity = { workspaceId: "workspace-1", workspaceSessionId: "session-1" };

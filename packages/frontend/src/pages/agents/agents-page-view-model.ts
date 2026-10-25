@@ -1,10 +1,14 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { WorkflowStepPresentation } from "@openducktor/frontend-core/types/agent-workflow";
+import {
+  BUILTIN_ROLE_LABELS,
+  BUILTIN_STEPS,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import { workflowStepRailState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import type { AgentRoleOption, AgentStudioHeaderModel } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
-import type { AgentWorkflowStepState } from "@openducktor/frontend-core/types/agent-workflow";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
 
@@ -14,7 +18,7 @@ export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<Age
       acc[entry.role] = entry.label;
       return acc;
     },
-    { ...AGENT_ROLE_LABELS },
+    { ...BUILTIN_ROLE_LABELS },
   );
 };
 
@@ -28,7 +32,7 @@ export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
   roleOptions: AgentRoleOption[];
-  workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
+  workflowStateByRole: Record<AgentRole, WorkflowStepPresentation>;
   selectedRole: AgentRole | null;
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   onWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
@@ -50,15 +54,19 @@ export const buildAgentStudioHeaderModel = (args: {
   pullRequest: args.selectedTask?.pullRequest ?? null,
   onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
   selectedRole: args.selectedRole,
-  workflowSteps: args.roleOptions.map((entry) => {
-    const workflowSession = args.workflowSessionByRole[entry.role];
-    return {
-      role: entry.role,
-      label: entry.label,
-      icon: entry.icon,
-      state: args.workflowStateByRole[entry.role],
+  workflowSteps: BUILTIN_STEPS.flatMap((step) => {
+    const roleOption = args.roleOptions.find((option) => option.role === step.roleId);
+    if (!roleOption) return [];
+    const workflowSession = args.workflowSessionByRole[step.roleId];
+    const entry = {
+      id: step.id,
+      role: step.roleId,
+      label: step.label,
+      icon: roleOption.icon,
+      state: args.workflowStateByRole[step.roleId],
       sessionValue: workflowSession ? agentSessionIdentityKey(workflowSession) : null,
     };
+    return [{ ...entry, ...workflowStepRailState(entry) }];
   }),
   onWorkflowStepSelect: args.onWorkflowStepSelect,
   sessionSelector: {

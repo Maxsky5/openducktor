@@ -3,7 +3,6 @@ import type {
   AgentModelAttachmentSupport as ContractsAgentModelAttachmentSupport,
   AgentModelCatalog as ContractsAgentModelCatalog,
   AgentModelDescriptor as ContractsAgentModelDescriptor,
-  AgentRole as ContractsAgentRole,
   AgentRuntimeEvent as ContractsAgentRuntimeEvent,
   AgentRuntimeCatalog as ContractsAgentRuntimeCatalog,
   AgentRuntimeCatalogSurface as ContractsAgentRuntimeCatalogSurface,
@@ -44,9 +43,7 @@ import type {
   RepoRuntimeRef,
   RuntimeCapabilities,
   RuntimeDescriptor,
-  WorkflowArtifactKind,
 } from "@openducktor/contracts";
-import { ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
 
 export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 
@@ -70,7 +67,8 @@ export type AgentSessionLiveScope = ContractsAgentSessionLiveScope;
 export type AgentSessionLiveSnapshot = ContractsAgentSessionLiveSnapshot;
 export type AgentSessionTranscriptEvent = ContractsAgentSessionTranscriptEvent;
 
-export type AgentRole = ContractsAgentRole;
+/** A role of the task workflow. */
+export type AgentRole = string;
 export type KnownGitProviderId = ContractsKnownGitProviderId;
 export type AgentSessionStartMode = ContractsAgentSessionStartMode;
 export type AgentToolName = ContractsAgentToolName;
@@ -216,40 +214,6 @@ export type AgentToolType =
   | "generic";
 
 export type AgentSessionStatus = ContractsAgentTranscriptSessionStatus;
-
-export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
-
-const COMMON_TASK_TOOLS = [
-  "odt_read_task",
-  "odt_read_task_assets",
-  "odt_read_task_artifacts",
-  "odt_set_task_artifact",
-  "odt_delete_task_artifact",
-  "odt_search_tasks",
-  "odt_create_task",
-  "odt_update_task",
-] as const satisfies readonly AgentToolName[];
-
-export const AGENT_ROLE_TOOL_POLICY = {
-  spec: [...COMMON_TASK_TOOLS, ...ODT_BROWSER_TOOL_NAMES],
-  planner: [...COMMON_TASK_TOOLS, ...ODT_BROWSER_TOOL_NAMES],
-  build: [
-    ...COMMON_TASK_TOOLS,
-    "odt_build_blocked",
-    "odt_build_resumed",
-    "odt_build_completed",
-    "odt_set_pull_request",
-    ...ODT_BROWSER_TOOL_NAMES,
-  ],
-  qa: [...COMMON_TASK_TOOLS, ...ODT_BROWSER_TOOL_NAMES],
-} satisfies AgentRoleToolPolicy;
-
-export const AGENT_ROLE_WORKFLOW_CODES = {
-  spec: ["spec"],
-  planner: ["plan"],
-  build: ["spec", "plan"],
-  qa: ["qaReport"],
-} as const satisfies Record<AgentRole, readonly WorkflowArtifactKind[]>;
 
 /**
  * Runtime adapters may emit this contract before a session ref is attached.

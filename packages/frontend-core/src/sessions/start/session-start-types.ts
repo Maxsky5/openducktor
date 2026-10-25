@@ -3,9 +3,12 @@ import type {
   RuntimeKind,
   AgentSessionUserMessagePart,
 } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { AgentMessageSendOptions, AgentSessionIdentity } from "../../types/agent-orchestrator";
-import type { SessionLaunchActionId } from "../../lib/session-launch-actions";
+import type {
+  BuiltinLaunchActionId as SessionLaunchActionId,
+  BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 
 export type SessionStartExistingSessionOption = {
   value: string;

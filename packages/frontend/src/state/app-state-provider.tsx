@@ -2,7 +2,7 @@ import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import type { RemoteAccessBridge } from "@openducktor/contracts";
 import type {
   DelegationStateContextValue,
-  SpecStateContextValue,
+  DocumentStateContextValue,
   TasksStateContextValue,
 } from "@openducktor/frontend-core/types/state-slices";
 import type {
@@ -17,7 +17,7 @@ import type {
 import { createAgentRuntimeServices } from "@openducktor/frontend-core/sessions/agent-runtime-services";
 import {
   DelegationStateContext,
-  SpecStateContext,
+  DocumentStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
   useRequiredContext,
@@ -41,7 +41,7 @@ import { DelegationStateProvider } from "@openducktor/frontend-core/app-state/pr
 import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
 import { HostRuntimeStatusProvider } from "@openducktor/frontend-core/app-state/providers/host-runtime-status-provider";
 import { ManualPullRequestSyncProvider } from "./providers/manual-pull-request-sync-provider";
-import { SpecStateProvider } from "@openducktor/frontend-core/app-state/providers/spec-state-provider";
+import { DocumentStateProvider } from "@openducktor/frontend-core/app-state/providers/document-state-provider";
 import { TasksStateProvider } from "@openducktor/frontend-core/app-state/providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 import { NotificationProvider } from "./providers/notification-provider";
@@ -72,7 +72,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       loadRepoRuntimeCatalog={runtimeCatalogOperations.loadRuntimeCatalog}
       loadRepoRuntimeFileSearch={runtimeCatalogOperations.loadRepoRuntimeFileSearch}
     >
-      <SpecStateProvider>
+      <DocumentStateProvider>
         <HostRuntimeStatusProvider>
           <DiagnosticsAutoOpenProvider>
             <ChecksStateProvider>
@@ -100,7 +100,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
             </ChecksStateProvider>
           </DiagnosticsAutoOpenProvider>
         </HostRuntimeStatusProvider>
-      </SpecStateProvider>
+      </DocumentStateProvider>
     </AppRuntimeProvider>
   );
 }
@@ -125,8 +125,8 @@ export const useTasksState = (): TasksStateContextValue =>
 export const useDelegationState = (): DelegationStateContextValue =>
   useRequiredContext(DelegationStateContext, "useDelegationState");
 
-export const useSpecState = (): SpecStateContextValue =>
-  useRequiredContext(SpecStateContext, "useSpecState");
+export const useDocumentState = (): DocumentStateContextValue =>
+  useRequiredContext(DocumentStateContext, "useDocumentState");
 
 export const useAgentOperations = (): AgentOperationsContextValue => useAgentOperationsContext();
 

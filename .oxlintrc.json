@@ -306,6 +306,7 @@
               "@openducktor/frontend-core",
               "@openducktor/host-client",
               "@openducktor/path-support",
+              "@openducktor/workflows",
               "@tanstack/react-query",
               "react",
               "zod",

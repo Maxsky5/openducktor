@@ -1,6 +1,10 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import {
+  isQaRejectedTask,
+  taskActionLabel,
+  type BuiltinTaskCard as TaskCard,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
@@ -10,17 +14,16 @@ import {
   ISSUE_TYPE_LABELS,
   getPriorityLabel,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import type { TaskWorkflowAction } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import {
   type TaskActionTone,
   taskActionIsDestructive,
-  taskActionLabel,
   taskActionTone,
   taskSessionStatusLabel,
 } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { IconName } from "@/ui/icon-names";
 import { TASK_ACTION_ICONS } from "../presentation/task-action-paint";
 
@@ -127,7 +130,7 @@ export const buildTaskCardModel = ({
   const waitingInput = footer.primarySessionIsWaitingInput;
   const session = activeSession
     ? {
-        roleLabel: AGENT_ROLE_LABELS[activeSession.role] ?? activeSession.role,
+        roleLabel: BUILTIN_ROLE_LABELS[activeSession.role] ?? activeSession.role,
         statusLabel: taskSessionStatusLabel({
           session: activeSession,
           isWaitingInput: waitingInput,

@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, spyOn, test } from "bun:test";
 import { Effect } from "effect";
 import { z, type JSONType } from "zod";
@@ -93,6 +94,7 @@ const createHarness = async (loseModelResponse = false) => {
     nativeConnection,
     {
       resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+      resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     },
     {
       readDirectory: async (_directory, read) => read(),
@@ -148,7 +150,11 @@ const createHarness = async (loseModelResponse = false) => {
       stopSession: (input) => controller.stopSession(input),
       updateSessionModel: (input) => controller.updateSessionModel(input),
     },
-    state: createOpenCodeLiveSessionState({ runtime, nextOccurrenceId: () => crypto.randomUUID() }),
+    state: createOpenCodeLiveSessionState({
+      resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+      runtime,
+      nextOccurrenceId: () => crypto.randomUUID(),
+    }),
     serializeRuntime: (work) => work,
     commit: (_operation, mutation) =>
       Effect.sync(() => {

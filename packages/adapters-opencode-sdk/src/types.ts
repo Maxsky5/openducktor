@@ -1,5 +1,6 @@
 import type { OpenCodeClient, V2Event } from "@opencode/client";
 import type { AgentSessionScope, OpenCodeCreationSettings } from "@openducktor/contracts";
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 
 /** Private process connection. Never include authentication in public routes or records. */
 export type OpenCodeRuntimeConnection = {
@@ -23,6 +24,8 @@ export type OpencodeStreamEventLog = {
 export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
 export type OpencodeSdkAdapterOptions = {
   resolveCreationSettings: (scope: AgentSessionScope) => Promise<OpenCodeCreationSettings>;
+  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   createClient?: ClientFactory;
   logEvent?: OpencodeEventLogger;
 };

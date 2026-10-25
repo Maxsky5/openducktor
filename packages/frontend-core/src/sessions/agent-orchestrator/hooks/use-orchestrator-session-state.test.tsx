@@ -1,6 +1,5 @@
 import "../../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { getSessionHistoryFreshnessTracker } from "../../../queries/agent-session-history-freshness-tracker";
 import { createAgentSessionCollection, listAgentSessions } from "../../agent-session-collection";
@@ -8,6 +7,7 @@ import { createSessionMessagesState } from "../support/messages";
 import { createHookHarness as createSharedHookHarness } from "../../../test-support/react-hook-harness";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const taskFixture: TaskCard = {
   id: "task-1",
@@ -16,19 +16,17 @@ const taskFixture: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-03-01T09:00:00.000Z",

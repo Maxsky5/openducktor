@@ -151,38 +151,6 @@ test("MCP rejects artifact reads without codes and removed artifact selectors", 
   }
 });
 
-test("MCP rejects invalid workflow artifact writes and workflow deletion before the bridge", async () => {
-  const bridge = await startMockBridge();
-  const client = new Client({ name: "artifact-reserved-code-test", version: "1" });
-  try {
-    await client.connect(await createTransport(bridge.url, { workspaceId: "repo" }));
-    for (const code of ["spec", "plan", "qaReport"]) {
-      const saved = await client.callTool({
-        name: "odt_set_task_artifact",
-        arguments: {
-          taskId: "task-1",
-          code,
-          name: "Notes",
-          fileName: "notes.txt",
-          mediaType: "text/plain",
-          content: "Notes",
-        },
-      });
-      const deleted = await client.callTool({
-        name: "odt_delete_task_artifact",
-        arguments: { taskId: "task-1", code },
-      });
-      expect(saved.isError).toBe(true);
-      expect(deleted.isError).toBe(true);
-    }
-    expect(bridge.requests.filter((request) => request.url.includes("task_artifact"))).toHaveLength(
-      0,
-    );
-  } finally {
-    await client.close();
-  }
-});
-
 test("MCP rejects conflicting or nested artifact content before the bridge", async () => {
   const bridge = await startMockBridge();
   const client = new Client({ name: "artifact-content-shape-test", version: "1" });

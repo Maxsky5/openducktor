@@ -18,10 +18,45 @@ const createDefinition = (): WorkflowDefinition => ({
     { id: "decision", type: "enum", values: ["approved", "rejected"] },
     { id: "comment", type: "string" },
   ],
-  roles: [{ id: "reviewer", label: "Reviewer" }],
-  artifacts: [{ id: "release-notes", label: "Release notes" }],
+  roles: [
+    {
+      id: "reviewer",
+      label: "Reviewer",
+      tools: ["odt_read_task", "odt_set_task_artifact"],
+      writes: ["release-review"],
+      workspaceAccess: "read",
+      location: "repository",
+      runtimeScopes: ["workspace"],
+    },
+  ],
+  artifacts: [
+    { id: "release-notes", label: "Release notes", shortLabel: "Notes", kind: "document" },
+    {
+      id: "release-review",
+      label: "Release review",
+      kind: "review",
+      verdicts: [{ id: "approved", label: "Approved", passes: true, eventId: "save-decision" }],
+    },
+  ],
   states: [
-    { id: "draft", label: "Draft", title: "Release draft" },
+    {
+      id: "draft",
+      label: "Draft",
+      title: "Release draft",
+      shortLabel: "Draft",
+      studioRole: "reviewer",
+      notification: {
+        kind: "workflow.draft",
+        defaultSetting: { enabled: true, target: "both", sound: "inherit" },
+        label: "Draft",
+        description: "A release moves to Draft.",
+        title: "Draft",
+        body: "The release is a draft.",
+        status: "Release moved to Draft.",
+        route: "agent_studio",
+        role: "reviewer",
+      },
+    },
     { id: "released", label: "Released", terminal: true },
   ],
   initialState: "draft",
@@ -35,7 +70,20 @@ const createDefinition = (): WorkflowDefinition => ({
       outputs: [],
       requiredWhen: { fact: "reviewRequired", equals: true },
       availableWhen: { all: [{ stateIn: ["draft"] }, { not: { fact: "frozen", equals: true } }] },
-      completedWhen: { fact: "reviewedAt", equals: null },
+      completedWhen: { artifact: "release-review", verdict: "approved" },
+      launchActions: [
+        {
+          id: "review-release",
+          label: "Review release",
+          startModes: ["fresh", "reuse"],
+          defaultStartMode: "reuse",
+          template: { kind: "kickoff", id: "kickoff.review" },
+          selectWhen: { artifact: "release-notes", present: true },
+          context: "pull_request",
+          targetBranch: true,
+          requiresWorktree: false,
+        },
+      ],
     },
     {
       id: "approve-release",
@@ -57,6 +105,15 @@ const createDefinition = (): WorkflowDefinition => ({
       eventId: "save-decision",
       availableWhen: { not: { fact: "frozen", equals: true } },
     },
+    {
+      id: "start-review",
+      label: "Start review",
+      labels: [{ when: { fact: "frozen", equals: true }, label: "Review frozen notes" }],
+      kind: "session",
+      stepId: "review-notes",
+      launchActionIds: ["review-release"],
+      availableWhen: true,
+    },
     { id: "view-notes", label: "View notes", kind: "view", availableWhen: true },
   ],
   events: [
@@ -65,14 +122,70 @@ const createDefinition = (): WorkflowDefinition => ({
       from: ["draft"],
       guards: [{ id: "not-frozen", when: { not: { fact: "frozen", equals: true } } }],
       outcomes: [
-        { when: { fact: "decision", equals: "approved" }, to: "released" },
+        {
+          when: { fact: "decision", equals: "approved" },
+          to: "released",
+          signal: "released",
+          sourceRole: "reviewer",
+        },
         { when: true, to: null },
       ],
     },
   ],
+  signals: [
+    {
+      id: "released",
+      label: "When a release ships",
+      description: "Runs when a decision releases the notes.",
+      automations: ["announce"],
+    },
+  ],
+  automations: [
+    {
+      id: "announce",
+      label: "Announce",
+      description: "Starts the review session again.",
+      launchActionId: "review-release",
+      start: "latest_role_session",
+    },
+  ],
+  actionOrder: [{ when: true, actions: ["approve", "start-review", "view-notes"] }],
+  actionPriority: [{ when: { stateIn: ["draft"] }, actions: ["start-review"] }],
 });
 
 describe("workflow definition schemas", () => {
+  test("requires launch actions on agent steps and session actions, and verdicts on reviews", () => {
+    const definition = createDefinition();
+    const [agentStep] = definition.steps;
+    const sessionAction = definition.actions[1];
+    const review = definition.artifacts[1];
+    for (const invalidDefinition of [
+      { ...definition, steps: [{ ...agentStep, launchActions: [] }] },
+      { ...definition, actions: [{ ...sessionAction, launchActionIds: [] }] },
+      { ...definition, artifacts: [{ ...review, verdicts: [] }] },
+      { ...definition, artifacts: [{ ...review, kind: "document" }] },
+      { ...definition, roles: [{ ...definition.roles[0], workspaceAccess: "admin" }] },
+      { ...definition, roles: [{ ...definition.roles[0], tools: ["shell"] }] },
+    ]) {
+      expect(workflowDefinitionSchema.safeParse(invalidDefinition).success).toBe(false);
+    }
+  });
+
+  test("rejects reserved artifact IDs in declarations and conditions", () => {
+    const definition = createDefinition();
+    for (const result of [
+      workflowDefinitionSchema.safeParse({
+        ...definition,
+        artifacts: [{ id: "__proto__", label: "Prototype", kind: "document" }],
+      }),
+      workflowConditionSchema.safeParse({ artifact: "__proto__", present: true }),
+    ]) {
+      expect(result.success).toBe(false);
+      if (result.success) throw new Error("Expected the reserved artifact ID to fail validation.");
+      expect(result.error.message).toContain('Artifact ID \\"__proto__\\" is reserved.');
+    }
+  });
+
   test("preserves a JSON definition with custom roles, artifacts, states, and both step kinds", () => {
     const definition = createDefinition();
 
@@ -163,10 +276,10 @@ describe("workflow definition schemas", () => {
         events: [{ ...event, outcomes: [{ when: true, destination: "released" }] }],
       },
       { ...definition, actions: [{ ...definition.actions[0], availableWhen: undefined }] },
-      { ...definition, actions: [{ ...definition.actions[1], availableWhen: undefined }] },
+      { ...definition, actions: [{ ...definition.actions[2], availableWhen: undefined }] },
       { ...definition, actions: [{ ...definition.actions[0], guard: true }] },
       { ...definition, actions: [{ ...definition.actions[0], eventId: undefined }] },
-      { ...definition, actions: [{ ...definition.actions[1], eventId: "save-decision" }] },
+      { ...definition, actions: [{ ...definition.actions[2], eventId: "save-decision" }] },
     ]) {
       expect(workflowDefinitionSchema.safeParse(invalidDefinition).success).toBe(false);
     }
@@ -211,7 +324,7 @@ describe("workflow definition schemas", () => {
     expect(
       workflowDefinitionSchema.safeParse({
         ...definition,
-        roles: [{ id: "__proto__", label: "Reviewer" }],
+        roles: [{ ...definition.roles[0], id: "__proto__" }],
         events: [{ ...definition.events[0], id: "__proto__" }],
       }).success,
     ).toBe(true);

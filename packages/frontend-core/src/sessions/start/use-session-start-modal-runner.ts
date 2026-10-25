@@ -1,3 +1,4 @@
+import { supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +13,6 @@ import {
 } from "../../lib/target-branch";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { RepoSettingsInput } from "../../types/session-slices";
-import { supportsTaskTargetBranchSelection } from "./constants";
 import { isSessionStartFailureFeedbackHandled } from "./session-start-orchestration";
 import type {
   NewSessionStartDecision,

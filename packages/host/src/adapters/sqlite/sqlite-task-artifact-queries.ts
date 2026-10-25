@@ -23,7 +23,6 @@ export const artifactMetadataSelection = {
   artifactId: taskArtifacts.artifactId,
   taskId: taskArtifacts.taskId,
   classification: taskArtifacts.classification,
-  workflowKind: taskArtifacts.workflowKind,
   code: taskArtifacts.code,
   revision: taskArtifacts.revision,
   name: taskArtifacts.name,
@@ -142,21 +141,13 @@ export const artifactMetadataFromRow = (
       { taskId: row.taskId },
     );
   }
-  let workflowKind: string | null = row.workflowKind;
-  if (workflowKind === "implementation_plan") {
-    workflowKind = "plan";
-  } else if (workflowKind === "qa_report") {
-    workflowKind = "qaReport";
-  }
   const workflow = {
     ...base,
-    workflowKind,
+    artifactId: row.artifactId,
+    code: row.code,
     mediaType: "text/markdown",
   };
-  const metadata =
-    row.workflowKind === "qa_report"
-      ? { ...workflow, verdict: row.verdict ?? "not_reviewed" }
-      : workflow;
+  const metadata = row.verdict === null ? workflow : { ...workflow, verdict: row.verdict };
   return validateWithSchema(taskArtifactSchema, metadata, "task artifact metadata", {
     taskId: row.taskId,
   });

@@ -12,7 +12,7 @@ describe("TaskDetailsSheetHeader", () => {
       updatedAt: "2026-03-12T12:24:09.000Z",
     });
     const html = renderToStaticMarkup(
-      createElement(TaskDetailsSheetHeader, { task, subtasksCount: 0, taskLabels: [] }),
+      createElement(TaskDetailsSheetHeader, { task, taskLabels: [] }),
     );
     expect(html).toContain('Created <time dateTime="2026-03-10T08:00:00.000Z"');
     expect(html).toContain('Updated <time dateTime="2026-03-12T12:24:09.000Z"');
@@ -23,7 +23,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderContext: null,
         onDetectPullRequest: () => {},
@@ -37,7 +36,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderContext: createGitProviderContextFixture({ available: false }),
         onDetectPullRequest: () => {},
@@ -54,7 +52,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderReadError: "Could not load the current Git provider: connection failed",
         onDetectPullRequest: () => {},
@@ -71,7 +68,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
         gitProviderReadError: "Could not load the current Git provider: connection failed",
@@ -88,16 +84,15 @@ describe("TaskDetailsSheetHeader", () => {
       title: "Fix OAuth flow",
       status: "in_progress",
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
       },
     });
 
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
       }),
     );
@@ -124,7 +119,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
       }),
     );
@@ -142,7 +136,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
@@ -173,7 +166,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
@@ -207,7 +199,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         onUnlinkPullRequest: () => {},
         isUnlinkingPullRequest: true,
@@ -238,7 +229,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         onUnlinkPullRequest: () => {},
       }),
@@ -256,7 +246,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
@@ -277,7 +266,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
         onDetectPullRequest: () => {},
       }),
@@ -298,7 +286,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: [],
       }),
     );
@@ -312,7 +299,6 @@ describe("TaskDetailsSheetHeader", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetailsSheetHeader, {
         task,
-        subtasksCount: 0,
         taskLabels: ["frontend", "ux"],
       }),
     );

@@ -1,7 +1,7 @@
+import { BUILTIN_ROLE_LABELS, createBuiltinNotificationSettings } from "@openducktor/workflows";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { expect, mock, spyOn, test } from "bun:test";
-import { createDefaultNotificationSettings } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement } from "react";
 import { toast, type Action } from "sonner";
@@ -58,7 +58,7 @@ test("renders Retry below the recovery error at full width", async () => {
 test.each(["in_app", "both", "os", "disabled"] as const)(
   "shows one recovery toast and leaves the session error notification to the host with %s notifications",
   async (target) => {
-    const settings = createDefaultNotificationSettings();
+    const settings = createBuiltinNotificationSettings();
     settings.osFocus = "always_send";
     settings.soundFocus = "always_play";
     settings.volumePercent = 30;
@@ -138,7 +138,7 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
           runtime.publishAndWait(
             buildSessionStartErrorOccurrence(
               { repoPath: "/repo", repositoryLabel: "Repo" },
-              input,
+              { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
               message,
             ),
             message,

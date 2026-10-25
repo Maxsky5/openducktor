@@ -306,7 +306,7 @@ const ODT_TOOL_DEFINITIONS = [
     execute: (store, input) => store.getWorkspaces(input),
   }),
   defineOdtTool("odt_create_task", ODT_TOOL_SCHEMAS.odt_create_task, {
-    description: "Create a task, feature, or bug, and return its summary. Epics are not supported.",
+    description: "Create a task, feature, or bug, and return its summary.",
     execute: (store, input) => store.createTask(input),
   }),
   defineOdtTool("odt_search_tasks", ODT_TOOL_SCHEMAS.odt_search_tasks, {
@@ -316,7 +316,7 @@ const ODT_TOOL_DEFINITIONS = [
   }),
   defineOdtTool("odt_read_task", ODT_TOOL_SCHEMAS.odt_read_task, {
     description:
-      "Read one task's fields, QA verdict, and all current workflow and free artifact metadata. Call it first.",
+      "Read one task's fields, workflow artifact states, and all current workflow and free artifact metadata. Call it first.",
     execute: (store, input) => store.readTask(input),
   }),
   defineOdtTool("odt_read_task_assets", ODT_TOOL_SCHEMAS.odt_read_task_assets, {
@@ -327,14 +327,14 @@ const ODT_TOOL_DEFINITIONS = [
   }),
   defineOdtTool("odt_read_task_artifacts", ODT_TOOL_SCHEMAS.odt_read_task_artifacts, {
     description:
-      "Read artifact content by code. Use spec, plan, or qaReport for workflow content; get free codes from odt_read_task.",
+      "Read artifact content by code. Get the workflow and free artifact codes from odt_read_task.",
     execute: (store, input) => store.readTaskArtifacts(input),
     nativeResult: toTaskArtifactsToolResult,
     outputSchema: readTaskArtifactsOutputSchema,
   }),
   defineOdtTool("odt_set_task_artifact", ODT_TOOL_SCHEMAS.odt_set_task_artifact, {
     description:
-      "Save an artifact by code. Set mediaType for a free artifact's format; workflow artifacts use Markdown. qaReport requires verdict.",
+      "Save an artifact by code from odt_read_task. Workflow artifacts use Markdown, and a review artifact requires one of its verdicts. Set mediaType for a free artifact's format.",
     execute: (store, input, meta) => store.setTaskArtifact(input, meta),
   }),
   defineOdtTool("odt_delete_task_artifact", ODT_TOOL_SCHEMAS.odt_delete_task_artifact, {
@@ -344,7 +344,7 @@ const ODT_TOOL_DEFINITIONS = [
   }),
   defineOdtTool("odt_update_task", ODT_TOOL_SCHEMAS.odt_update_task, {
     description:
-      "Update fields of one task that is not an epic. Omitted fields stay. An empty description or labels clears it. It never changes status or artifacts.",
+      "Update fields of one task. Omitted fields stay. An empty description or labels clears it. It never changes status or artifacts.",
     execute: (store, input) => store.updateTask(input),
   }),
   defineOdtTool("odt_build_blocked", ODT_TOOL_SCHEMAS.odt_build_blocked, {
@@ -356,7 +356,8 @@ const ODT_TOOL_DEFINITIONS = [
     execute: (store, input) => store.buildResumed(input),
   }),
   defineOdtTool("odt_build_completed", ODT_TOOL_SCHEMAS.odt_build_completed, {
-    description: "Move an in_progress task to ai_review or human_review, as qaRequired sets.",
+    description:
+      "Move an in_progress task to ai_review, or to human_review when the latest QA report is approved.",
     execute: (store, input) => store.buildCompleted(input),
   }),
   defineOdtTool("odt_set_pull_request", ODT_TOOL_SCHEMAS.odt_set_pull_request, {

@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -59,6 +60,7 @@ describe("SQLite Workspace Session store", () => {
       },
     });
     const manager = createSqliteTaskRepositoryContextManager({
+      taskWorkflows: builtinTaskWorkflows,
       configDir: harness.configDir,
       processEnv: {},
       openConnection: openSqliteTaskStoreTestConnection,
@@ -176,7 +178,8 @@ describe("SQLite Workspace Session store", () => {
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
-        task: { title: "Owner", issueType: "task", priority: 2, aiReviewEnabled: false },
+        status: "open",
+        task: { title: "Owner", issueType: "task", priority: 2 },
       }),
     );
     const attempts = await Promise.allSettled([
@@ -254,6 +257,7 @@ describe("SQLite Workspace Session store", () => {
       if (draft) session.externalSessionId = null;
       await Effect.runPromise(store().create({ ...scope(), session }));
       const reopened = createSqliteTaskRepositoryContextManager({
+        taskWorkflows: builtinTaskWorkflows,
         assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
         processEnv: {},
         resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),

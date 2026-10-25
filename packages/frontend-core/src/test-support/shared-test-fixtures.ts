@@ -5,7 +5,6 @@ import {
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_KANBAN_SETTINGS,
-  DEFAULT_NOTIFICATION_SETTINGS,
   GITHUB_PROVIDER_DESCRIPTOR,
   type HostMcpBridgeStatus,
   type HostRuntimeStatus,
@@ -15,7 +14,6 @@ import {
   settingsRepoConfigSchema,
   type SettingsRepoConfig,
   type SettingsSnapshot,
-  type TaskCard,
   type TaskStoreCheck,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -42,6 +40,10 @@ import type {
 } from "../types/agent-orchestrator";
 import type { HostRuntimeStatusMap, ObservedCheck } from "../types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "../types/session-slices";
+import {
+  type BuiltinTaskCard as TaskCard,
+  createBuiltinNotificationSettings,
+} from "@openducktor/workflows";
 
 export type RuntimeCatalogFixtureSurfaces = {
   models?: AgentModelCatalog;
@@ -111,21 +113,18 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  parentId: undefined,
-  subtaskIds: [],
   pullRequest: undefined,
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-02-22T08:00:00.000Z",
@@ -260,10 +259,10 @@ export const createSettingsSnapshotFixture = (
       rules: [],
     },
     notifications: {
-      ...DEFAULT_NOTIFICATION_SETTINGS,
+      ...createBuiltinNotificationSettings(),
       ...notifications,
       kinds: {
-        ...DEFAULT_NOTIFICATION_SETTINGS.kinds,
+        ...createBuiltinNotificationSettings().kinds,
         ...notifications?.kinds,
       },
     },
@@ -336,21 +335,6 @@ export const createTaskCardFixture = (
       ...BASE_TASK_CARD_FIXTURE.artifactSummary,
       ...defaults.artifactSummary,
       ...overrides.artifactSummary,
-      spec: {
-        ...BASE_TASK_CARD_FIXTURE.artifactSummary.spec,
-        ...defaults.artifactSummary?.spec,
-        ...overrides.artifactSummary?.spec,
-      },
-      plan: {
-        ...BASE_TASK_CARD_FIXTURE.artifactSummary.plan,
-        ...defaults.artifactSummary?.plan,
-        ...overrides.artifactSummary?.plan,
-      },
-      qaReport: {
-        ...BASE_TASK_CARD_FIXTURE.artifactSummary.qaReport,
-        ...defaults.artifactSummary?.qaReport,
-        ...overrides.artifactSummary?.qaReport,
-      },
     },
     agentWorkflows: {
       ...BASE_TASK_CARD_FIXTURE.agentWorkflows,
@@ -366,10 +350,10 @@ export const createTaskCardFixture = (
         ...defaults.agentWorkflows?.planner,
         ...overrides.agentWorkflows?.planner,
       },
-      builder: {
-        ...BASE_TASK_CARD_FIXTURE.agentWorkflows.builder,
-        ...defaults.agentWorkflows?.builder,
-        ...overrides.agentWorkflows?.builder,
+      build: {
+        ...BASE_TASK_CARD_FIXTURE.agentWorkflows.build,
+        ...defaults.agentWorkflows?.build,
+        ...overrides.agentWorkflows?.build,
       },
       qa: {
         ...BASE_TASK_CARD_FIXTURE.agentWorkflows.qa,

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { BUILTIN_ROLE_LABELS, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   AgentFileSearchResult,
   AgentModelSelection,
@@ -7,7 +7,6 @@ import type {
 import { createRef } from "react";
 import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type { AgentRoleOption } from "../agent-studio-header.types";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import type {
@@ -24,21 +23,18 @@ const baseTask: TaskCard = {
   description: "",
   status: "open",
   priority: 2,
-  issueType: "epic",
-  aiReviewEnabled: true,
+  issueType: "feature",
   availableActions: ["set_spec"],
   labels: [],
-  parentId: undefined,
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: true, canSkip: false, available: true, completed: false },
     planner: { required: true, canSkip: false, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: true, canSkip: false, available: false, completed: false },
   },
   createdAt: "2026-02-20T10:00:00.000Z",
@@ -46,10 +42,10 @@ const baseTask: TaskCard = {
 };
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [
-  { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: AGENT_ROLE_ICONS.spec },
-  { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: AGENT_ROLE_ICONS.planner },
-  { role: "build", label: AGENT_ROLE_LABELS.build, icon: AGENT_ROLE_ICONS.build },
-  { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: AGENT_ROLE_ICONS.qa },
+  { role: "spec", label: BUILTIN_ROLE_LABELS.spec, icon: AGENT_ROLE_ICONS.spec },
+  { role: "planner", label: BUILTIN_ROLE_LABELS.planner, icon: AGENT_ROLE_ICONS.planner },
+  { role: "build", label: BUILTIN_ROLE_LABELS.build, icon: AGENT_ROLE_ICONS.build },
+  { role: "qa", label: BUILTIN_ROLE_LABELS.qa, icon: AGENT_ROLE_ICONS.qa },
 ];
 
 export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({

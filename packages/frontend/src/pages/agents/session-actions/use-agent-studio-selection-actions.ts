@@ -1,13 +1,13 @@
-import type { AgentRole } from "@openducktor/core";
+import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useCallback } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   type SelectAgentStudioSelection,
   toAgentStudioSessionlessRoleSelection,
   toAgentStudioSessionSelection,
 } from "../shell/agent-studio-selection-state";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
 

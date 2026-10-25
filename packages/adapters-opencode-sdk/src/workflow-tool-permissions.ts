@@ -4,12 +4,7 @@ import {
   type RuntimeDescriptor,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
-import {
-  AGENT_ROLE_TOOL_POLICY,
-  type AgentRole,
-  isReadOnlyAgentRole,
-  ODT_WORKFLOW_TOOL_NAMES,
-} from "@openducktor/core";
+import { ODT_WORKFLOW_TOOL_NAMES, type WorkflowRolePolicy } from "@openducktor/core";
 
 type PermissionAction = "allow" | "deny" | "ask";
 
@@ -20,7 +15,7 @@ export type OpencodePermissionRule = {
 };
 
 export const buildRoleScopedPermissionRules = (input: {
-  role: AgentRole;
+  rolePolicy: WorkflowRolePolicy;
   runtimeDescriptor: RuntimeDescriptor;
 }): OpencodePermissionRule[] => buildScopePermissionRules(input);
 
@@ -28,19 +23,19 @@ export const buildRepositoryScopedPermissionRules = (
   runtimeDescriptor: RuntimeDescriptor,
 ): OpencodePermissionRule[] =>
   buildScopePermissionRules({
-    role: null,
+    rolePolicy: null,
     runtimeDescriptor,
   });
 
 const buildScopePermissionRules = (input: {
-  role: AgentRole | null;
+  rolePolicy: WorkflowRolePolicy | null;
   runtimeDescriptor: RuntimeDescriptor;
 }): OpencodePermissionRule[] => {
-  const { role, runtimeDescriptor } = input;
-  const allowedTools = new Set(role ? AGENT_ROLE_TOOL_POLICY[role] : []);
+  const { rolePolicy, runtimeDescriptor } = input;
+  const allowedTools = new Set<string>(rolePolicy?.tools ?? []);
   const rules: OpencodePermissionRule[] = [];
 
-  if (role && isReadOnlyAgentRole(role)) {
+  if (rolePolicy?.readOnly) {
     for (const toolId of new Set(["edit", ...runtimeDescriptor.readOnlyRoleBlockedTools])) {
       rules.push({
         permission: toolId,
@@ -50,7 +45,7 @@ const buildScopePermissionRules = (input: {
     }
   }
 
-  rules.push(...buildToolRules(runtimeDescriptor, role));
+  rules.push(...buildToolRules(runtimeDescriptor, rolePolicy === null));
 
   for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
     if (!allowedTools.has(toolName)) {
@@ -71,16 +66,17 @@ const buildScopePermissionRules = (input: {
   return rules;
 };
 
+/** A repository session allows every ODT tool. A workflow session allows only the tools of its role. */
 const buildToolRules = (
   runtimeDescriptor: RuntimeDescriptor,
-  role: AgentRole | null,
+  repositoryScope: boolean,
 ): OpencodePermissionRule[] => {
   const actions = new Map<string, PermissionAction>();
   actions.set("odt_*", "deny");
   for (const prefix of OPENCODE_ODT_TOOL_ID_PREFIXES) {
     actions.set(`${prefix}*`, "deny");
   }
-  const action = role === null ? "allow" : "deny";
+  const action = repositoryScope ? "allow" : "deny";
   for (const toolName of ODT_MCP_TOOL_NAMES) {
     for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
       actions.set(permission, action);

@@ -3,13 +3,16 @@ import {
   ODT_BROWSER_TOOL_NAMES,
   ODT_MCP_TOOL_NAMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  agentRoleValues,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
 import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
 } from "./workflow-tool-permissions";
+import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
+import { testWorkflowRolePolicy } from "./opencode-v2.test-support";
+
+const rolePolicy = (role: string) => testWorkflowRolePolicy({ repoPath: "/repo", role });
 
 type PermissionRule = ReturnType<typeof buildRoleScopedPermissionRules>[number];
 
@@ -61,9 +64,9 @@ describe("workflow-tool-permissions", () => {
   });
 
   test("keeps approval prompts out of every workflow role policy", () => {
-    for (const role of agentRoleValues) {
+    for (const role of BUILTIN_ROLE_IDS) {
       const rules = buildRoleScopedPermissionRules({
-        role,
+        rolePolicy: rolePolicy(role),
         runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       });
 
@@ -73,8 +76,11 @@ describe("workflow-tool-permissions", () => {
 
   test("allows every browser tool, with its aliases, for every role and repository scope", () => {
     const scopes = [
-      ...agentRoleValues.map((role) =>
-        buildRoleScopedPermissionRules({ role, runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR }),
+      ...BUILTIN_ROLE_IDS.map((role) =>
+        buildRoleScopedPermissionRules({
+          rolePolicy: rolePolicy(role),
+          runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }),
       ),
       buildRepositoryScopedPermissionRules(OPENCODE_RUNTIME_DESCRIPTOR),
     ];
@@ -88,9 +94,9 @@ describe("workflow-tool-permissions", () => {
   });
 
   test("allows task search and create, with their aliases, for every workflow role", () => {
-    for (const role of agentRoleValues) {
+    for (const role of BUILTIN_ROLE_IDS) {
       const rules = buildRoleScopedPermissionRules({
-        role,
+        rolePolicy: rolePolicy(role),
         runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       });
 
@@ -110,7 +116,7 @@ describe("workflow-tool-permissions", () => {
 
   test("builds runtime-provided read-only permission rules plus allow-specific odt permissions for spec role", () => {
     const rules = buildRoleScopedPermissionRules({
-      role: "spec",
+      rolePolicy: rolePolicy("spec"),
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
@@ -221,7 +227,7 @@ describe("workflow-tool-permissions", () => {
 
   test("does not inject read-only native tool denies for build role", () => {
     const rules = buildRoleScopedPermissionRules({
-      role: "build",
+      rolePolicy: rolePolicy("build"),
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
@@ -272,7 +278,10 @@ test.each([
   (role, eligible) => {
     const rules: PermissionRule[] = [
       { permission: "*", pattern: "*", action: "allow" },
-      ...buildRoleScopedPermissionRules({ role, runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR }),
+      ...buildRoleScopedPermissionRules({
+        rolePolicy: rolePolicy(role),
+        runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      }),
     ];
     for (const prefix of ["", "openducktor_", "functions.openducktor_"]) {
       expect(effectiveAction(rules, `${prefix}odt_future_tool`)).toBe("deny");

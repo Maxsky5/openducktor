@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionScope } from "@openducktor/contracts";
@@ -43,6 +44,7 @@ describe("live runtime registration lifecycle", () => {
       const native = createRuntimeHarness();
       const prepared = await Effect.runPromise(
         createOpenCodeLiveSessionAdapterPreparer({
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           liveSessionLifecycle: service,
           prepareRuntime: async (input) => {
             const preparedNative = await native.prepareRuntime(input);

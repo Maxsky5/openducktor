@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
@@ -141,6 +142,7 @@ const fixture = (
   };
   const mutationGate = createSerialGate();
   const service = createIssueImportService({
+    taskWorkflows: builtinTaskWorkflows,
     resolver,
     store,
     workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(currentRepoConfig) },

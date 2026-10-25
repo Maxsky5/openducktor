@@ -1,8 +1,5 @@
-import {
-  type AgentSessionRecord,
-  DEFAULT_KANBAN_SETTINGS,
-  type TaskCard,
-} from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type AgentSessionRecord, DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { TasksStateContext, useRequiredContext } from "../../app-state/app-state-contexts";

@@ -1,5 +1,6 @@
-import type { KanbanEmptyColumnDisplay, TaskCard } from "@openducktor/contracts";
-import type { KanbanColumn, KanbanColumnId } from "@openducktor/core";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { KanbanEmptyColumnDisplay } from "@openducktor/contracts";
+import type { KanbanColumn, KanbanColumnId } from "@openducktor/workflows";
 
 /**
  * The short name of each lane in the phone lane rail, where a lane has about 44 points. The lane

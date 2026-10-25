@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
-  createDefaultNotificationSettings,
-  NOTIFICATION_KIND_VALUES,
+  AGENT_NOTIFICATION_KIND_VALUES,
   type NotificationSettings,
   type NotificationOsCapability,
 } from "@openducktor/contracts";
@@ -14,6 +13,10 @@ import {
 } from "@/state/notifications/notification-context";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
 import { createCuelumeNotificationSoundAdapter } from "@/features/notifications/notification-delivery";
+import {
+  createBuiltinNotificationSettings,
+  BUILTIN_NOTIFICATION_KINDS,
+} from "@openducktor/workflows";
 
 afterEach(cleanup);
 
@@ -46,7 +49,7 @@ const createNotificationContext = (
 });
 
 function NotificationsHarness({ context }: { context: NotificationContextValue }): ReactElement {
-  const [settings, setSettings] = useState(createDefaultNotificationSettings);
+  const [settings, setSettings] = useState(createBuiltinNotificationSettings);
   return (
     <QueryProvider>
       <NotificationContext.Provider value={context}>
@@ -80,7 +83,7 @@ describe("SettingsNotificationsSection", () => {
     ["scan", "Select"],
     ["arrival", "Navigate"],
   ] as const)("shows saved %s as %s without rewriting it", async (cue, label) => {
-    const notifications = createDefaultNotificationSettings();
+    const notifications = createBuiltinNotificationSettings();
     notifications.globalCue = cue;
     notifications.kinds["agent.permission_requested"].sound = cue;
     const onUpdate = mock(
@@ -314,7 +317,9 @@ describe("SettingsNotificationsSection", () => {
       sectionText.indexOf("Sound and focus"),
     );
 
-    expect(screen.getAllByRole("switch")).toHaveLength(NOTIFICATION_KIND_VALUES.length);
+    expect(screen.getAllByRole("switch")).toHaveLength(
+      AGENT_NOTIFICATION_KIND_VALUES.length + BUILTIN_NOTIFICATION_KINDS.length,
+    );
     const delivery = screen.getByRole("radiogroup", {
       name: "Delivery for Permission Prompt",
     });

@@ -15,20 +15,17 @@ import { buildTaskDeleteConfirmCopy } from "@openducktor/frontend-core/tasks/det
 import { TaskConfirmCopyLines } from "./task-confirm-copy-lines";
 import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
 
-type TaskDeleteConfirmDialogProps = TaskConfirmDialogProps & { subtasksCount: number };
-
 export function TaskDeleteConfirmDialog({
   open,
   onOpenChange,
   onCancel,
   onConfirm,
   task,
-  subtasksCount,
   impact,
   operation,
   onCloseAutoFocus,
-}: TaskDeleteConfirmDialogProps): ReactElement {
-  const copy = buildTaskDeleteConfirmCopy(task, impact, subtasksCount);
+}: TaskConfirmDialogProps): ReactElement {
+  const copy = buildTaskDeleteConfirmCopy(task, impact);
   const confirmButton = confirmButtonState(impact, operation, copy.confirmLabel);
 
   return (

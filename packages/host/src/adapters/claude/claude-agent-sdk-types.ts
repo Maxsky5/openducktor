@@ -16,6 +16,7 @@ import type {
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   StartAgentSessionInput,
+  WorkflowRolePolicyResolver,
 } from "@openducktor/core";
 import type { Effect, Fiber } from "effect";
 
@@ -52,6 +53,8 @@ export type CreateClaudeAgentSdkServiceInput = {
   processEnv?: NodeJS.ProcessEnv;
   historyStorage?: "memory" | "disk";
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
+  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;
   toolDiscovery: ToolDiscoveryPort;

@@ -1,9 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type NotificationOccurrence,
-} from "@openducktor/contracts";
+import { type NotificationOccurrence } from "@openducktor/contracts";
 import { createNotificationPolicy } from "./notification-policy";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 const occurrence: NotificationOccurrence = {
   occurrenceId: "agent.permission_requested:/repo:session-1:permission-1",
@@ -29,7 +27,7 @@ const occurrence: NotificationOccurrence = {
 };
 
 const createHarness = (target: "in_app" | "os" | "both", enabled = true) => {
-  const settings = createDefaultNotificationSettings();
+  const settings = createBuiltinNotificationSettings();
   settings.kinds[occurrence.kind] = { enabled, target, sound: "inherit" };
   const inApp = mock(async () => {});
   const os = mock(async () => ({ status: "shown" as const }));

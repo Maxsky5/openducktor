@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { type RuntimeKind, resolveCodexEffectivePolicy } from "@openducktor/contracts";
+import { resolveCodexEffectivePolicy, type RuntimeKind } from "@openducktor/contracts";
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import {
   createRuntimeOrchestrator,
   describeRuntimeStatusChange,
@@ -28,7 +29,7 @@ import {
   loadGlobalConfig,
   type WorkspaceSettingsService,
 } from "../../application/workspaces/workspace-settings-model";
-import type { HostOperationErrorAggregate } from "../../effect/host-errors";
+import { toHostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -50,6 +51,7 @@ export const createNodeHostRuntimeComposition = ({
   liveState,
   onBackgroundFailure,
   resolveBridge,
+  resolveWorkflowRolePolicy,
   runtimeAdmissionGate,
   runtimeDefinitionsService,
   settingsConfig,
@@ -65,6 +67,7 @@ export const createNodeHostRuntimeComposition = ({
   liveState: AgentSessionLiveStateService;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   resolveBridge: () => McpHostBridgeServer | undefined;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   runtimeAdmissionGate: RuntimeAdmissionGate;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   settingsConfig: SettingsConfigPort;
@@ -104,6 +107,7 @@ export const createNodeHostRuntimeComposition = ({
     workingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>
       resolveClaudeMcpBridgeConnection(resolveBridge(), repoPath),
+    resolveWorkflowRolePolicy,
   });
   const codexStarterInput: Parameters<typeof createCodexRuntimeStarter>[0] = {
     toolDiscovery,
@@ -116,12 +120,23 @@ export const createNodeHostRuntimeComposition = ({
       codexAppServer,
       onBackgroundFailure,
       resolveMcpServerConfig: mcpServerConfigFor("codex"),
-      resolveRuntimePolicy: (scope) =>
+      resolveRuntimePolicy: ({ repoPath, sessionScope }) =>
         loadGlobalConfig(settingsConfig).pipe(
-          Effect.map(({ agentRuntimes: { codex } }) =>
-            resolveCodexEffectivePolicy(codex, scope.kind === "workflow" ? scope.role : null),
+          Effect.flatMap(({ agentRuntimes: { codex } }) =>
+            Effect.try({
+              try: () =>
+                sessionScope.kind === "workflow"
+                  ? resolveCodexEffectivePolicy(
+                      codex,
+                      sessionScope.role,
+                      !resolveWorkflowRolePolicy({ repoPath, role: sessionScope.role }).readOnly,
+                    )
+                  : resolveCodexEffectivePolicy(codex, null, false),
+              catch: (cause) => toHostOperationError(cause, "codex.resolve-runtime-policy"),
+            }),
           ),
         ),
+      resolveWorkflowRolePolicy,
     }),
     readEnv,
   };
@@ -131,6 +146,7 @@ export const createNodeHostRuntimeComposition = ({
     liveSessionLifecycle: liveState,
     readEnv,
     resolveMcpServerConfig: mcpServerConfigFor("opencode"),
+    resolveWorkflowRolePolicy,
     settingsConfig,
     taskSessionLifecycleCoordinator,
     toolDiscovery,

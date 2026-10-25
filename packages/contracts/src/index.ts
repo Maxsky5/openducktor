@@ -8,6 +8,7 @@ export * from "./agent-session-event-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./workflow-operation-schemas";
 export {
+  workflowIdSchema,
   workflowValueSchema,
   workflowFactDefinitionSchema,
   workflowConditionSchema,
@@ -19,7 +20,6 @@ export type {
 } from "./workflow-condition-schemas";
 export * from "./workflow-definition-schemas";
 export type * from "./workflow-evaluation";
-export type * from "./workflow-presentation";
 export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
@@ -109,7 +109,6 @@ export * from "./session-schemas";
 export * from "./session-todo-parsing";
 export * from "./skill-schemas";
 export * from "./slash-command-schemas";
-export * from "./spec-template";
 export { withMaxUtf16Length } from "./string-schemas";
 export * from "./workspace-identity-schemas";
 export * from "./subagent-schemas";

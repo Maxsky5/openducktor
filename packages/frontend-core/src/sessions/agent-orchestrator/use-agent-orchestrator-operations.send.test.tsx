@@ -54,9 +54,7 @@ describe("use-agent-orchestrator-operations send", () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalSendUserMessage = AgentRuntimeTestAdapter.prototype.sendUserMessage;
     const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
@@ -64,9 +62,7 @@ describe("use-agent-orchestrator-operations send", () => {
     const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     host.taskWorktreeGet = async () => ({
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
@@ -124,9 +120,7 @@ describe("use-agent-orchestrator-operations send", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       AgentRuntimeTestAdapter.prototype.sendUserMessage = originalSendUserMessage;
       AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
@@ -190,9 +184,7 @@ describe("use-agent-orchestrator-operations send", () => {
     let sendCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalSpecGet = host.specGet;
-    const originalPlanGet = host.planGet;
-    const originalQaGetReport = host.qaGetReport;
+    const originalWorkflowArtifactGet = host.workflowArtifactGet;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalSendUserMessage = AgentRuntimeTestAdapter.prototype.sendUserMessage;
     const originalLoadRuntimeCatalog = AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog;
@@ -200,9 +192,7 @@ describe("use-agent-orchestrator-operations send", () => {
     const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
 
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
-    host.specGet = async () => ({ markdown: "", updatedAt: null });
-    host.planGet = async () => ({ markdown: "", updatedAt: null });
-    host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+    host.workflowArtifactGet = async () => ({ markdown: "", updatedAt: null });
     host.taskWorktreeGet = async () => ({
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
@@ -258,9 +248,7 @@ describe("use-agent-orchestrator-operations send", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      host.specGet = originalSpecGet;
-      host.planGet = originalPlanGet;
-      host.qaGetReport = originalQaGetReport;
+      host.workflowArtifactGet = originalWorkflowArtifactGet;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       AgentRuntimeTestAdapter.prototype.sendUserMessage = originalSendUserMessage;
       AgentRuntimeTestAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;

@@ -34,7 +34,6 @@ const createTaskFixture = () =>
     status: "in_progress",
     priority: 1,
     issueType: "task",
-    aiReviewEnabled: true,
     updatedAt: "2026-06-12T08:00:00.000Z",
     createdAt: "2026-06-12T08:00:00.000Z",
   });

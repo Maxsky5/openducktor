@@ -70,7 +70,6 @@ Iterate through the codebase finding by finding. For **EACH** distinct improveme
         - `priority`: Map the severity to OpenDucktor numeric priority.
           `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
         - `labels`: Only `audit` and `code-quality` are allowed for this command. Every task must include both labels. Do not add any other labels.
-        - `aiReviewEnabled`: `true`
         - `description`: Use the following Markdown structure:
             ```markdown
             ### Context

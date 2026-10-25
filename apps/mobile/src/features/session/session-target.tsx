@@ -1,10 +1,10 @@
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type {
   AgentSessionAssociation,
   AgentSessionScope,
   WorkspaceRecord,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import type { RuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { createContext, type PropsWithChildren, type ReactElement, use, useMemo } from "react";

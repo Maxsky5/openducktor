@@ -1,13 +1,13 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { act, render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import {
   ActiveWorkspaceContext,
-  SpecStateContext,
+  DocumentStateContext,
   TasksStateContext,
 } from "../../app-state/app-state-contexts";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
@@ -15,7 +15,7 @@ import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import type { ActiveWorkspace } from "../../types/session-slices";
-import type { SpecStateContextValue, TasksStateContextValue } from "../../types/state-slices";
+import type { DocumentStateContextValue, TasksStateContextValue } from "../../types/state-slices";
 import {
   type TaskCreateDestination,
   useTaskCreateModalController,
@@ -29,16 +29,14 @@ const activeWorkspace: ActiveWorkspace = {
   repoPath: "/repo",
 };
 
-const createSpecState = (
-  overrides: Partial<SpecStateContextValue> = {},
-): SpecStateContextValue => ({
-  loadSpec: async () => "",
-  loadSpecDocument: async () => ({ markdown: "# Spec", updatedAt: "2026-07-25T10:00:00.000Z" }),
-  loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
-  loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
-  saveSpec: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  saveSpecArtifact: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  savePlanArtifact: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
+const createDocumentState = (
+  overrides: Partial<DocumentStateContextValue> = {},
+): DocumentStateContextValue => ({
+  loadDocument: async (_taskId, code) =>
+    code === "spec"
+      ? { markdown: "# Spec", updatedAt: "2026-07-25T10:00:00.000Z" }
+      : { markdown: "", updatedAt: null },
+  saveDocument: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
   ...overrides,
 });
 
@@ -78,9 +76,9 @@ const revokePreviewUrl = (_url: string): void => {};
 const collectAssetIds = (_markdown: string): Set<string> => new Set();
 
 const specSavedAt = (updatedAt: string): TaskCard["artifactSummary"] => ({
-  spec: { has: true, updatedAt },
-  plan: { has: false },
-  qaReport: { has: false, verdict: "not_reviewed" },
+  spec: { present: true, updatedAt },
+  plan: { present: false },
+  qaReport: { present: false },
 });
 
 type Controller = ReturnType<typeof useTaskCreateModalController<TestImage>>;
@@ -91,7 +89,7 @@ type RenderOptions = {
   createTask?: TasksStateContextValue["createTask"];
   destination?: TaskCreateDestination | null;
   initialTitle?: string;
-  specState?: SpecStateContextValue;
+  documentState?: DocumentStateContextValue;
   client?: Partial<HostClient>;
 };
 
@@ -101,7 +99,7 @@ const renderController = ({
   createTask = async () => {},
   destination = null,
   initialTitle = "",
-  specState = createSpecState(),
+  documentState = createDocumentState(),
   client = {},
 }: RenderOptions = {}) => {
   let latest: Controller | null = null;
@@ -128,7 +126,9 @@ const renderController = ({
     <ClientConnectionProvider connection={connection}>
       <ActiveWorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace: () => {} }}>
         <TasksStateContext.Provider value={createTasksState(updateTask, createTask)}>
-          <SpecStateContext.Provider value={specState}>{children}</SpecStateContext.Provider>
+          <DocumentStateContext.Provider value={documentState}>
+            {children}
+          </DocumentStateContext.Provider>
         </TasksStateContext.Provider>
       </ActiveWorkspaceContext.Provider>
     </ClientConnectionProvider>
@@ -376,12 +376,15 @@ describe("useTaskCreateModalController", () => {
   });
 
   test("blocks a document save when the live task reports a newer document", async () => {
-    const saveSpecArtifact = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
+    const saveDocument = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
     const task = createTaskCardFixture({
       id: "task-1",
       artifactSummary: specSavedAt("2026-07-25T10:00:00.000Z"),
     });
-    const harness = renderController({ task, specState: createSpecState({ saveSpecArtifact }) });
+    const harness = renderController({
+      task,
+      documentState: createDocumentState({ saveDocument }),
+    });
     try {
       act(() => harness.getController().requestSectionChange("spec"));
       await act(async () => {
@@ -399,7 +402,7 @@ describe("useTaskCreateModalController", () => {
         await harness.getController().saveActiveDocument();
       });
 
-      expect(saveSpecArtifact).not.toHaveBeenCalled();
+      expect(saveDocument).not.toHaveBeenCalled();
       expect(harness.getController().activeDraft).toBe("# Local spec");
       expect(harness.getController().footerError).toBe(
         "This document changed on the host while you were editing. Your edits are kept. Copy what you need, then close and reopen the task to load the latest version.",
@@ -411,13 +414,13 @@ describe("useTaskCreateModalController", () => {
   });
 
   test("saves a document again while the task card still shows the version before its save", async () => {
-    const saveSpecArtifact = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
+    const saveDocument = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
     const harness = renderController({
       task: createTaskCardFixture({
         id: "task-1",
         artifactSummary: specSavedAt("2026-07-25T10:00:00.000Z"),
       }),
-      specState: createSpecState({ saveSpecArtifact }),
+      documentState: createDocumentState({ saveDocument }),
     });
     try {
       act(() => harness.getController().requestSectionChange("spec"));
@@ -431,7 +434,7 @@ describe("useTaskCreateModalController", () => {
         });
       }
 
-      expect(saveSpecArtifact).toHaveBeenCalledTimes(2);
+      expect(saveDocument).toHaveBeenCalledTimes(2);
       expect(harness.getController().footerError).toBeNull();
     } finally {
       harness.unmount();

@@ -1,11 +1,16 @@
-import type { AgentRole, TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
+import {
+  taskHasSessionPage,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 
 export const pruneAgentStudioTaskIds = (
   taskIds: readonly string[],
   tasks: readonly TaskCard[],
 ): string[] => {
-  const openIds = new Set(tasks.flatMap((task) => (task.status === "closed" ? [] : [task.id])));
+  const openIds = new Set(tasks.flatMap((task) => (!taskHasSessionPage(task) ? [] : [task.id])));
   const seenIds = new Set<string>();
   return taskIds.filter((taskId) => {
     if (!openIds.has(taskId) || seenIds.has(taskId)) {
@@ -30,7 +35,7 @@ export const buildAgentStudioReadState = ({
   const openTaskIds = pruneAgentStudioTaskIds(state.openTaskIds, tasks);
   const activeTask = state.activeTask;
   const task = activeTask
-    ? tasks.find((entry) => entry.id === activeTask.taskId && entry.status !== "closed")
+    ? tasks.find((entry) => entry.id === activeTask.taskId && taskHasSessionPage(entry))
     : undefined;
   if (!activeTask || !task) {
     return { openTaskIds };

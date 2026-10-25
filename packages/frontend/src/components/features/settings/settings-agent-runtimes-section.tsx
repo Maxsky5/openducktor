@@ -1,3 +1,10 @@
+import {
+  BUILTIN_ROLE_LABELS,
+  BUILTIN_ROLE_IDS,
+  isCodexSandboxModeSelectableForRole,
+  resolveCodexRolePolicy,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import { ClaudePolicySection } from "./settings-claude-policy-section";
 import {
   RuntimePolicyCard,
@@ -16,9 +23,7 @@ import {
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeDescriptor,
   type RuntimeKind,
-  resolveCodexEffectivePolicy,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -31,7 +36,6 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import type { RuntimeExecutableValidationState } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { OpenCodePermissionsSettings } from "./settings-opencode-permissions";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
@@ -71,8 +75,6 @@ type PolicyValueDisplay = {
   label: string;
   description: string;
 };
-
-const AGENT_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 
 const POLICY_LABELS = {
   sandboxMode: "Sandbox mode",
@@ -197,7 +199,7 @@ const policyValueFromOption = <T extends string | boolean>(
 };
 
 const hasRoleOverrideForField = (config: CodexRuntimeConfig, field: CodexPolicyField): boolean =>
-  AGENT_ROLE_ORDER.some((role) => config.roleOverrides[role]?.[field] !== undefined);
+  BUILTIN_ROLE_IDS.some((role) => config.roleOverrides[role]?.[field] !== undefined);
 
 function PolicyValueDropdown<T extends string | boolean>({
   value,
@@ -300,7 +302,7 @@ function CodexSettings({
     onUpdate((current) => {
       const nextRoleOverrides = { ...current.roleOverrides };
 
-      for (const role of AGENT_ROLE_ORDER) {
+      for (const role of BUILTIN_ROLE_IDS) {
         const draftRoleOverride = { ...nextRoleOverrides[role] };
         delete draftRoleOverride[field];
 
@@ -491,7 +493,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
 }): ReactElement {
   return (
     <div className="divide-y divide-border rounded-md border border-border">
-      {AGENT_ROLE_ORDER.map((role) => {
+      {BUILTIN_ROLE_IDS.map((role) => {
         const roleLabelId = `codex-${field}-${role}-override-label`;
         const roleOverride = config.roleOverrides[role];
 
@@ -501,7 +503,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
             className="grid gap-2 px-3 py-2.5 @min-[28rem]:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] @min-[28rem]:items-center"
           >
             <Label id={roleLabelId} className="text-sm font-medium text-foreground">
-              {AGENT_ROLE_LABELS[role]}
+              {BUILTIN_ROLE_LABELS[role]}
             </Label>
             <RoleOverrideDropdown
               field={field}
@@ -578,7 +580,7 @@ function valuesForRole<Field extends CodexPolicyField>(
 ): readonly CodexPolicyFields[Field][] {
   const values = defaultValuesForField(field);
   if (field === "sandboxMode") {
-    if (role === "build") return values.filter((value) => value !== "read-only");
+    return values.filter((value) => isCodexSandboxModeSelectableForRole(role, value));
   }
   return values;
 }
@@ -588,14 +590,14 @@ const effectivePolicyNotes = (config: CodexRuntimeConfig, field: CodexPolicyFiel
   const errors: string[] = [];
   let reviewerIsInactive = false;
 
-  for (const role of AGENT_ROLE_ORDER) {
+  for (const role of BUILTIN_ROLE_IDS) {
     try {
-      const effective = resolveCodexEffectivePolicy(config, role);
+      const effective = resolveCodexRolePolicy(config, role);
       const effectiveValue = effective[field] ?? false;
 
       if (field === "sandboxMode" && effective.adjustmentReason) {
         notes.push(
-          `Effective for ${AGENT_ROLE_LABELS[role]}: ${policyValueDisplay(effectiveValue).label}. ${effective.adjustmentReason}`,
+          `Effective for ${BUILTIN_ROLE_LABELS[role]}: ${policyValueDisplay(effectiveValue).label}. ${effective.adjustmentReason}`,
         );
       }
       if (field === "approvalsReviewer" && !effective.approvalsReviewerApplies) {
@@ -603,7 +605,7 @@ const effectivePolicyNotes = (config: CodexRuntimeConfig, field: CodexPolicyFiel
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${AGENT_ROLE_LABELS[role]}: ${message}`);
+      errors.push(`${BUILTIN_ROLE_LABELS[role]}: ${message}`);
     }
   }
 

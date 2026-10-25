@@ -1,5 +1,4 @@
 import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { useState } from "react";
 import type { SetURLSearchParams } from "react-router";
 import {
@@ -13,6 +12,7 @@ import {
 } from "./agent-studio-navigation";
 import { taskRouteStateSchema, readTaskRouteIntent } from "./task-route-intent";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 type UseAgentStudioQuerySyncArgs = {
   activeWorkspaceId: string | null;

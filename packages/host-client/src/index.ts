@@ -11,7 +11,6 @@ import {
   type NotificationOccurrence,
   type SelectedNotification,
 } from "@openducktor/contracts";
-import type { PlannerTools } from "@openducktor/core";
 
 export {
   createAgentSessionLiveAttachment,
@@ -62,7 +61,7 @@ type HostClientApi = {
   PublicMethods<HostAgentRuntimeQueryClient> &
   PublicMethods<HostGitClient>;
 
-export type HostClient = HostClientApi & PlannerTools;
+export type HostClient = HostClientApi;
 
 const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const workspaceClient = new HostWorkspaceClient(invokeFn);
@@ -239,17 +238,10 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     taskResetImplementation: taskClient.taskResetImplementation.bind(taskClient),
     taskReset: taskClient.taskReset.bind(taskClient),
     taskTransition: taskClient.taskTransition.bind(taskClient),
-    specGet: taskClient.specGet.bind(taskClient),
-    setSpec: taskClient.setSpec.bind(taskClient),
-    saveSpecArtifact: taskClient.saveSpecArtifact.bind(taskClient),
-    setPlan: taskClient.setPlan.bind(taskClient),
-    savePlanArtifact: taskClient.savePlanArtifact.bind(taskClient),
-    planGet: taskClient.planGet.bind(taskClient),
+    taskApplyEvent: taskClient.taskApplyEvent.bind(taskClient),
     taskMetadataGet: taskClient.taskMetadataGet.bind(taskClient),
-    taskWorkflowArtifactGet: taskClient.taskWorkflowArtifactGet.bind(taskClient),
-    qaGetReport: taskClient.qaGetReport.bind(taskClient),
-    qaApproved: taskClient.qaApproved.bind(taskClient),
-    qaRejected: taskClient.qaRejected.bind(taskClient),
+    workflowArtifactGet: taskClient.workflowArtifactGet.bind(taskClient),
+    workflowArtifactSave: taskClient.workflowArtifactSave.bind(taskClient),
     agentSessionsList: taskClient.agentSessionsList.bind(taskClient),
     agentSessionDelete: taskClient.agentSessionDelete.bind(taskClient),
     agentSessionsListForTasks: taskClient.agentSessionsListForTasks.bind(taskClient),

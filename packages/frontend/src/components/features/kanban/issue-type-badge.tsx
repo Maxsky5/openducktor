@@ -1,7 +1,7 @@
-import type { IssueType } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ISSUE_TYPE_STYLES } from "./kanban-task-badge-model";
+import type { BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 
 export const IssueTypeBadge = memo(function IssueTypeBadge({
   issueType,

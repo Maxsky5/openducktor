@@ -168,7 +168,6 @@ try {
     title: "Check the mobile client",
     issueType: "task",
     priority: 2,
-    aiReviewEnabled: true,
   });
   const taskData = await connection.queryClient.fetchQuery(
     repoTaskDataQueryOptions(workspace.repoPath),

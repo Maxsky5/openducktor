@@ -1,10 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskArtifactCollection } from "@openducktor/contracts";
 import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
-import {
-  documentQueryKeyForSection,
-  type TaskDocumentSection,
-} from "@openducktor/frontend-core/queries/documents";
+import { documentQueryKeys } from "@openducktor/frontend-core/queries/documents";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, useLayoutEffect } from "react";
@@ -78,7 +75,7 @@ describe("useAgentStudioSelectionState", () => {
       updatedAt: null,
     }));
     const connection = createTestClientConnection({
-      client: { taskArtifactsList: list, taskWorkflowArtifactGet: read },
+      client: { taskArtifactsList: list, workflowArtifactGet: read },
     });
     const h = createSharedHookHarness(
       useAgentStudioSelectionState,
@@ -90,7 +87,7 @@ describe("useAgentStudioSelectionState", () => {
       await waitFor(() =>
         expect(
           connection.queryClient.getQueryData(
-            documentQueryKeyForSection("/repo", "task-1", "spec"),
+            documentQueryKeys.document("/repo", "task-1", "spec"),
           ),
         ).toEqual({ markdown: "hello", updatedAt: null }),
       );
@@ -106,20 +103,18 @@ describe("useAgentStudioSelectionState", () => {
     ["spec", "spec"],
     ["planner", "plan"],
     ["build", "plan"],
-    ["qa", "qa"],
+    ["qa", "qaReport"],
   ] as const)(
     "loads the selected %s workflow before its session route and artifact collection render",
     async (role, section) => {
       const pendingList = Promise.withResolvers<TaskArtifactCollection>();
       const list = mock(() => pendingList.promise);
-      const read = mock(
-        async (_repoPath: string, _taskId: string, _section: TaskDocumentSection) => ({
-          markdown: "hello",
-          updatedAt: null,
-        }),
-      );
+      const read = mock(async (_repoPath: string, _taskId: string, _code: string) => ({
+        markdown: "hello",
+        updatedAt: null,
+      }));
       const connection = createTestClientConnection({
-        client: { taskArtifactsList: list, taskWorkflowArtifactGet: read },
+        client: { taskArtifactsList: list, workflowArtifactGet: read },
       });
       let apply: (() => void) | undefined;
       let readStartedBeforeRoute = false;
@@ -152,7 +147,7 @@ describe("useAgentStudioSelectionState", () => {
         await waitFor(() =>
           expect(
             connection.queryClient.getQueryData(
-              documentQueryKeyForSection("/repo", "task-2", section),
+              documentQueryKeys.document("/repo", "task-2", section),
             ),
           ).toEqual({ markdown: "hello", updatedAt: null }),
         );

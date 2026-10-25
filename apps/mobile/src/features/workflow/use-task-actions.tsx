@@ -1,11 +1,14 @@
-import type { TaskCard, WorkspaceRecord } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,
   useRequiredContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import {
+  type TaskWorkflowAction,
+  type BuiltinTaskCard as TaskCard,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useTaskResetFlow } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
 import { useRouter } from "expo-router";

@@ -2,7 +2,6 @@ import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
   type AgentModelSelection,
-  type AgentRole,
   type AgentRuntimeCatalog,
   coerceVisibleSelectionToCatalog,
   type RuntimeWorkingDirectoryRef,
@@ -21,6 +20,7 @@ import {
   unavailableSessionDefaultModelError,
 } from "../lib/session-start-errors";
 import type { RepoSettingsInput } from "../types/session-slices";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 const toAgentModelSelection = (value: RepoAgentDefaultDraft): RuntimeBoundModelSelection | null => {
   if (!value.providerId || !value.modelId || !value.runtimeKind) {

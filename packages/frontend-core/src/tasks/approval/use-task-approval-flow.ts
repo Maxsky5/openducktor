@@ -1,5 +1,5 @@
 import type { GitConflictAssistanceResult } from "../../git/conflicts/conflict-assistance";
-import type { PullRequest, RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
+import type { PullRequest, RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type { GitConflict } from "../../git/contracts";
@@ -34,6 +34,7 @@ import {
 } from "./task-approval-transition-resolver";
 import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
 import { useClientConnection, useHostClient } from "../../connection/client-connection-react";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;

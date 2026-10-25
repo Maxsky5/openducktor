@@ -1,8 +1,8 @@
 import type {
-  AgentRole,
   KanbanColumn as KanbanColumnData,
   KanbanColumnId,
-} from "@openducktor/core";
+  BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useMemo, useRef } from "react";

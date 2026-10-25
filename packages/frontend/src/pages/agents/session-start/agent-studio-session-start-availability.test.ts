@@ -10,7 +10,7 @@ const availableTask = () =>
     agentWorkflows: {
       spec: { required: false, canSkip: true, available: true, completed: false },
       planner: { required: false, canSkip: true, available: true, completed: false },
-      builder: { required: true, canSkip: false, available: true, completed: false },
+      build: { required: true, canSkip: false, available: true, completed: false },
       qa: { required: false, canSkip: true, available: false, completed: false },
     },
   });

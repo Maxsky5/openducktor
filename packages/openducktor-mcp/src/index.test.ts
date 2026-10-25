@@ -179,38 +179,6 @@ describe("MCP server tool results", () => {
     }
   });
 
-  test("odt_create_task rejects epic input before reaching the host", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
-      const result = await client.callTool({
-        name: "odt_create_task",
-        arguments: {
-          title: "Epic work",
-          issueType: "epic",
-          priority: 2,
-        },
-      });
-
-      expect(result.isError).toBe(true);
-      const textBlock = result.content.find((block) => block.type === "text");
-      if (!textBlock || textBlock.type !== "text") {
-        throw new Error("Expected an MCP text error result.");
-      }
-      expect(textBlock.text).toContain(
-        "Epic creation is not supported by the public MCP create tool.",
-      );
-      expect(bridge.requests).not.toContainEqual(
-        expect.objectContaining({ url: "/invoke/odt_create_task" }),
-      );
-    } finally {
-      await client.close();
-    }
-  });
-
   test("odt_create_task sends the create input to the host bridge", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });
@@ -270,37 +238,6 @@ describe("MCP server tool results", () => {
           labels: [],
         },
       });
-    } finally {
-      await client.close();
-    }
-  });
-
-  test("odt_update_task rejects epic conversions before reaching the host", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
-      const result = await client.callTool({
-        name: "odt_update_task",
-        arguments: {
-          taskId: "task-1",
-          issueType: "epic",
-        },
-      });
-
-      expect(result.isError).toBe(true);
-      const textBlock = result.content.find((block) => block.type === "text");
-      if (!textBlock || textBlock.type !== "text") {
-        throw new Error("Expected an MCP text error result.");
-      }
-      expect(textBlock.text).toContain(
-        "Epic updates are not supported by the public MCP update tool.",
-      );
-      expect(bridge.requests).not.toContainEqual(
-        expect.objectContaining({ url: "/invoke/odt_update_task" }),
-      );
     } finally {
       await client.close();
     }

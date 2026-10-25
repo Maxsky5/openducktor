@@ -19,19 +19,17 @@ const closedTask = (): TaskCard => ({
   status: "closed",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: false, completed: false },
     planner: { required: false, canSkip: true, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: true, canSkip: false, available: false, completed: false },
   },
   updatedAt: "2026-01-02T03:04:05Z",
@@ -66,6 +64,7 @@ test("keeps cleanup resources acquired until the task is closed", async () => {
         cleanup,
         operation: "close task",
         repoPath: "/repo",
+        decision: { kind: "transition", from: "human_review", to: "closed", cause: {} },
         taskId: "task-1",
         taskStore,
       }),
@@ -96,6 +95,7 @@ test("does not close the task when cleanup fails", async () => {
         cleanup,
         operation: "close task",
         repoPath: "/repo",
+        decision: { kind: "transition", from: "human_review", to: "closed", cause: {} },
         taskId: "task-1",
         taskStore,
       }),
@@ -131,6 +131,7 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
       },
       operation: "close task",
       repoPath: "/repo-link",
+      decision: { kind: "transition", from: "human_review", to: "closed", cause: {} },
       taskId: "task-1",
       taskSessionLifecycleCoordinator,
       taskStore,
@@ -178,6 +179,7 @@ test("does not begin cleanup while another task lifecycle operation is active", 
         },
         operation: "close task",
         repoPath: "/repo-link",
+        decision: { kind: "transition", from: "human_review", to: "closed", cause: {} },
         taskId: "task-1",
         taskSessionLifecycleCoordinator,
         taskStore,
@@ -188,4 +190,37 @@ test("does not begin cleanup while another task lifecycle operation is active", 
   await Effect.runPromise(Fiber.join(holder));
   expect(cleanupStarted).toBe(false);
   expect(transitioned).toBe(false);
+});
+
+test("commits the signal and source role of the closing event", async () => {
+  const transitions: unknown[] = [];
+  const taskStore: Pick<TaskStorePort, "transitionTask"> = {
+    transitionTask: (input) => Effect.sync(() => (transitions.push(input), closedTask())),
+  };
+
+  await Effect.runPromise(
+    completeTaskClosure({
+      ...closureDependencies(),
+      cleanup: Effect.void,
+      operation: "close task",
+      repoPath: "/repo",
+      decision: {
+        kind: "transition",
+        from: "approval",
+        to: "published",
+        cause: { signal: "taskPublished", sourceRole: "editor" },
+      },
+      taskId: "task-1",
+      taskStore,
+    }),
+  );
+
+  expect(transitions).toEqual([
+    {
+      repoPath: "/repo",
+      taskId: "task-1",
+      status: "published",
+      cause: { signal: "taskPublished", sourceRole: "editor" },
+    },
+  ]);
 });

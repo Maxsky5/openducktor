@@ -8,265 +8,6 @@ import {
 } from "./test-support/task-asset-aware-task-store";
 
 describe("asset-aware task store lifecycle", () => {
-  test("rejects child creation when another task store deletes its validated parent", async () => {
-    const harness = await createHarness();
-    const parent = await Effect.runPromise(
-      harness.store.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Parent",
-          issueType: "epic",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: "",
-        },
-      }),
-    );
-    let releaseParentSnapshot: (() => void) | undefined;
-    let reportParentSnapshotRead: (() => void) | undefined;
-    const parentSnapshotRead = new Promise<void>((resolve) => {
-      reportParentSnapshotRead = resolve;
-    });
-    const parentSnapshotRelease = new Promise<void>((resolve) => {
-      releaseParentSnapshot = resolve;
-    });
-    const staged = await Effect.runPromise(
-      harness.staging.stage({
-        workspaceId: "fairnest",
-        scope: "description",
-        originalName: "late-child.png",
-        declaredMediaType: "image/png",
-        bytesBase64: PNG_BASE64,
-      }),
-    );
-    const childStore = createTaskAssetAwareTaskStore({
-      inner: {
-        ...harness.innerStore,
-        listTasks: (input) =>
-          Effect.gen(function* () {
-            const tasks = yield* harness.innerStore.listTasks(input);
-            reportParentSnapshotRead?.();
-            yield* Effect.promise(() => parentSnapshotRelease);
-            return tasks;
-          }),
-      },
-      filePort: harness.filePort,
-      registry: harness.registry,
-      persistence: harness.registry,
-      staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
-    });
-
-    const creation = Effect.runPromise(
-      childStore.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Late child",
-          issueType: "task",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: `![Late child](odt-asset:${staged.assetId})`,
-          parentId: parent.id,
-        },
-        descriptionAssets: { stagedAssetIds: [staged.assetId] },
-      }),
-    );
-    await parentSnapshotRead;
-    await Effect.runPromise(
-      harness.store.deleteTask({
-        repoPath: harness.repoPath,
-        taskId: parent.id,
-        deleteSubtasks: true,
-      }),
-    );
-    releaseParentSnapshot?.();
-
-    await expect(creation).rejects.toThrow(
-      "Failed to create the task with its description assets.",
-    );
-    expect(
-      await Effect.runPromise(harness.store.listTasks({ repoPath: harness.repoPath })),
-    ).toEqual([]);
-  });
-
-  test("serializes descendant creation with recursive deletion", async () => {
-    const harness = await createHarness();
-    const parent = await Effect.runPromise(
-      harness.store.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Parent",
-          issueType: "epic",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: "",
-        },
-      }),
-    );
-    let releaseQuarantine: (() => void) | undefined;
-    let reportQuarantineStarted: (() => void) | undefined;
-    const quarantineStarted = new Promise<void>((resolve) => {
-      reportQuarantineStarted = resolve;
-    });
-    const quarantineRelease = new Promise<void>((resolve) => {
-      releaseQuarantine = resolve;
-    });
-    const filePort = {
-      ...harness.filePort,
-      quarantineTaskDirectory: (
-        input: Parameters<typeof harness.filePort.quarantineTaskDirectory>[0],
-      ) =>
-        Effect.gen(function* () {
-          reportQuarantineStarted?.();
-          yield* Effect.promise(() => quarantineRelease);
-          return yield* harness.filePort.quarantineTaskDirectory(input);
-        }),
-    };
-    const store = createTaskAssetAwareTaskStore({
-      inner: harness.innerStore,
-      filePort,
-      registry: harness.registry,
-      persistence: harness.registry,
-      staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
-    });
-
-    const deletion = Effect.runPromise(
-      store.deleteTask({ repoPath: harness.repoPath, taskId: parent.id, deleteSubtasks: true }),
-    );
-    await quarantineStarted;
-    let creationSettled = false;
-    const creation = Effect.runPromise(
-      store.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Late child",
-          issueType: "task",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: "",
-          parentId: parent.id,
-        },
-      }),
-    ).finally(() => {
-      creationSettled = true;
-    });
-    await Promise.resolve();
-    expect(creationSettled).toBe(false);
-
-    releaseQuarantine?.();
-    await deletion;
-    await expect(creation).rejects.toThrow(`Task not found: ${parent.id}`);
-    expect(await Effect.runPromise(store.listTasks({ repoPath: harness.repoPath }))).toEqual([]);
-  });
-
-  test("restores quarantined assets when another store reparents a delete target", async () => {
-    const harness = await createHarness();
-    const parent = await Effect.runPromise(
-      harness.store.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Parent",
-          issueType: "epic",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: "",
-        },
-      }),
-    );
-    const staged = await Effect.runPromise(
-      harness.staging.stage({
-        workspaceId: "fairnest",
-        scope: "description",
-        originalName: "child.png",
-        declaredMediaType: "image/png",
-        bytesBase64: PNG_BASE64,
-      }),
-    );
-    const child = await Effect.runPromise(
-      harness.store.createTask({
-        repoPath: harness.repoPath,
-        task: {
-          title: "Child",
-          issueType: "task",
-          aiReviewEnabled: true,
-          priority: 2,
-          description: `![Child](odt-asset:${staged.assetId})`,
-          parentId: parent.id,
-        },
-        descriptionAssets: { stagedAssetIds: [staged.assetId] },
-      }),
-    );
-    let reportDeleteStarted: (() => void) | undefined;
-    let releaseDelete: (() => void) | undefined;
-    const deleteStarted = new Promise<void>((resolve) => {
-      reportDeleteStarted = resolve;
-    });
-    const deleteRelease = new Promise<void>((resolve) => {
-      releaseDelete = resolve;
-    });
-    const deletingStore = createTaskAssetAwareTaskStore({
-      inner: {
-        ...harness.innerStore,
-        deleteTask: (input) =>
-          Effect.gen(function* () {
-            reportDeleteStarted?.();
-            yield* Effect.promise(() => deleteRelease);
-            return yield* harness.innerStore.deleteTask(input);
-          }),
-      },
-      filePort: harness.filePort,
-      registry: harness.registry,
-      persistence: harness.registry,
-      staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
-    });
-
-    const deletion = Effect.runPromise(
-      deletingStore.deleteTask({
-        repoPath: harness.repoPath,
-        taskId: parent.id,
-        deleteSubtasks: true,
-      }),
-    );
-    await deleteStarted;
-    await Effect.runPromise(
-      harness.innerStore.updateTask({
-        repoPath: harness.repoPath,
-        taskId: child.id,
-        patch: { parentId: "" },
-      }),
-    );
-    releaseDelete?.();
-
-    await expect(deletion).rejects.toThrow();
-    expect(
-      await Effect.runPromise(
-        harness.innerStore.getTask({
-          repoPath: harness.repoPath,
-          taskId: parent.id,
-        }),
-      ),
-    ).toMatchObject({ id: parent.id });
-    expect(
-      await Effect.runPromise(
-        harness.innerStore.getTask({
-          repoPath: harness.repoPath,
-          taskId: child.id,
-        }),
-      ),
-    ).toMatchObject({ id: child.id, parentId: undefined });
-    expect(
-      await Effect.runPromise(
-        harness.filePort.readDurable({
-          workspaceId: "fairnest",
-          taskId: child.id,
-          assetId: staged.assetId,
-        }),
-      ),
-    ).not.toBeNull();
-  });
-
   test("promotes staged assets on create and removes obsolete assets only after update", async () => {
     const { filePort, registry, repoPath, staging, store } = await createHarness();
     const staged = await Effect.runPromise(
@@ -282,10 +23,10 @@ describe("asset-aware task store lifecycle", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "With image",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description,
         },
@@ -339,10 +80,10 @@ describe("asset-aware task store lifecycle", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Referenced image",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![Architecture](odt-asset:${staged.assetId})`,
         },
@@ -389,10 +130,10 @@ describe("asset-aware task store lifecycle", () => {
       Effect.runPromise(
         store.createTask({
           repoPath,
+          status: "open",
           task: {
             title: "Forged",
             issueType: "task",
-            aiReviewEnabled: true,
             priority: 2,
             description: `![x](odt-asset:${forged})`,
           },
@@ -412,10 +153,10 @@ describe("asset-aware task store lifecycle", () => {
     const owner = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Owner",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![owned](odt-asset:${staged.assetId})`,
         },
@@ -425,10 +166,10 @@ describe("asset-aware task store lifecycle", () => {
     const other = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Other",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "No image",
         },
@@ -463,10 +204,10 @@ describe("asset-aware task store lifecycle", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        status: "open",
         task: {
           title: "Lifecycle",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -481,7 +222,7 @@ describe("asset-aware task store lifecycle", () => {
       ),
     ).not.toBeNull();
 
-    await Effect.runPromise(store.deleteTask({ repoPath, taskId: task.id, deleteSubtasks: false }));
+    await Effect.runPromise(store.deleteTask({ repoPath, taskId: task.id }));
     expect(
       await Effect.runPromise(
         filePort.readDurable({ workspaceId: "fairnest", taskId: task.id, assetId: staged.assetId }),
@@ -499,7 +240,8 @@ describe("asset-aware task store lifecycle", () => {
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
-        task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+        status: "open",
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const events: string[] = [];
@@ -533,9 +275,7 @@ describe("asset-aware task store lifecycle", () => {
         store.updateTask({ repoPath: harness.repoPath, taskId: task.id, patch: { title } }),
       );
     const remove = () =>
-      Effect.runFork(
-        store.deleteTask({ repoPath: harness.repoPath, taskId: task.id, deleteSubtasks: false }),
-      );
+      Effect.runFork(store.deleteTask({ repoPath: harness.repoPath, taskId: task.id }));
 
     const first = update("first");
     const second = update("second");
@@ -594,7 +334,7 @@ describe("asset-aware task store lifecycle", () => {
     });
 
     const deletion = Effect.runFork(
-      store.deleteTask({ repoPath: harness.repoPath, taskId: task.id, deleteSubtasks: false }),
+      store.deleteTask({ repoPath: harness.repoPath, taskId: task.id }),
     );
     await Effect.runPromise(Deferred.await(quarantined));
     deletion.interruptUnsafe();
@@ -610,7 +350,8 @@ describe("asset-aware task store lifecycle", () => {
     await Effect.runPromise(
       store.createTask({
         repoPath: harness.repoPath,
-        task: { title: "Next", issueType: "task", aiReviewEnabled: true, priority: 2 },
+        status: "open",
+        task: { title: "Next", issueType: "task", priority: 2 },
       }),
     );
   });
@@ -627,7 +368,8 @@ describe("asset-aware task store lifecycle", () => {
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
-        task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+        status: "open",
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const store = createTaskAssetAwareTaskStore({
@@ -651,7 +393,6 @@ describe("asset-aware task store lifecycle", () => {
             store.deleteTask({
               repoPath: harness.repoPath,
               taskId: task.id,
-              deleteSubtasks: false,
             }),
           ),
           Effect.provideService(Scheduler.MaxOpsBeforeYield, YIELD_BUDGET),

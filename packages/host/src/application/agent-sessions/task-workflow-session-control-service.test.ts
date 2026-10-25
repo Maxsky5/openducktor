@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
@@ -7,7 +8,6 @@ import type {
   AgentSessionRecord,
   AgentWorkflowSessionStartInput,
   AgentSessionControlForkInput,
-  AgentRole,
   TaskCard,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Exit, Fiber } from "effect";
@@ -42,6 +42,7 @@ type TestControlServiceInput = Omit<
   | "turnPreparation"
   | "readSessionRootRefs"
   | "approvalPolicy"
+  | "taskWorkflows"
 > & {
   runtime: Omit<
     ControlServiceInput["runtime"],
@@ -56,8 +57,8 @@ type TestControlServiceInput = Omit<
   > &
     Partial<Pick<ControlServiceInput["runtime"], "read">>;
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
-  tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
-    Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
+  tasks: Omit<ControlServiceInput["tasks"], "applyStartEvent"> &
+    Partial<Pick<ControlServiceInput["tasks"], "applyStartEvent">>;
   recordAcceptedMessage?: ControlServiceInput["repositoryPolicy"]["recordAcceptedMessage"];
   pauseForStop?: ControlServiceInput["pauseForStop"];
 };
@@ -68,6 +69,7 @@ const createAgentSessionCommandService = ({
   ...input
 }: TestControlServiceInput) =>
   createControlService({
+    taskWorkflows: builtinTaskWorkflows,
     pauseForStop,
     turnPreparation: {
       context: () => Effect.succeed("Current host context"),
@@ -142,7 +144,7 @@ const createAgentSessionCommandService = ({
         Effect.map((updated) => ({ updated, publish: Effect.void })),
       ),
     tasks: {
-      transitionTask: () => Effect.die(new Error("unexpected task transition")),
+      applyStartEvent: () => Effect.die(new Error("unexpected task transition")),
       ...input.tasks,
     },
   });
@@ -183,14 +185,12 @@ const task = (status: TaskCard["status"]): TaskCard => ({
   status,
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: {
@@ -205,7 +205,7 @@ const task = (status: TaskCard["status"]): TaskCard => ({
       available: false,
       completed: false,
     },
-    builder: {
+    build: {
       required: true,
       canSkip: false,
       available: false,
@@ -290,7 +290,7 @@ const createModelUpdateService = ({
   });
 
 const createReplyForkHarness = (
-  role: AgentRole,
+  role: string,
   failure?: "save" | "save_clean" | "save_defect" | "stop_defect" | "publish" | "publish_defect",
 ) => {
   const calls: string[] = [];
@@ -350,10 +350,15 @@ const createReplyForkHarness = (
     agentSessionsList: () => Effect.succeed([source]),
     agentSessionUpsert: unexpectedSend,
     agentSessionUpdateModel: unexpectedSend,
-    transitionTask: unexpectedSend,
+    applyStartEvent: unexpectedSend,
   };
-  const commands = createAgentSessionCommandService({ ...deps, runtime, tasks });
+  const commands = createAgentSessionCommandService({
+    ...deps,
+    runtime,
+    tasks,
+  });
   const sessions = createTaskSessionOperations({
+    taskWorkflows: builtinTaskWorkflows,
     ...deps,
     tasks,
     runtime: { ...runtime, ...commands.prepareSessionCreation },
@@ -375,7 +380,7 @@ const createReplyForkHarness = (
                   : Effect.void,
           });
         }),
-      transitionTask: unexpectedSend,
+      applyStartEvent: unexpectedSend,
     },
   });
   return {
@@ -650,13 +655,13 @@ describe("createAgentSessionCommandService", () => {
               workingDirectory: "/repo/worktree",
             };
           }),
-        complete: (_prepared, transitionTask) =>
+        complete: (_prepared, applyStartEvent) =>
           Effect.gen(function* () {
             calls.push("complete");
-            yield* transitionTask({
+            yield* applyStartEvent({
               repoPath: "/repo",
               taskId: "task-1",
-              status: "in_progress",
+              eventId: "start-builder",
             });
             return undefined;
           }),
@@ -688,7 +693,7 @@ describe("createAgentSessionCommandService", () => {
             return true;
           }),
         agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
-        transitionTask: () =>
+        applyStartEvent: () =>
           Effect.sync(() => {
             calls.push("transition");
             return task("in_progress");
@@ -876,6 +881,7 @@ describe("createAgentSessionCommandService", () => {
       taskReader,
       taskLifecycle,
       taskSessionStart: createTaskSessionStartPreparationService({
+        taskWorkflows: builtinTaskWorkflows,
         taskStore: createTaskStoreTestDouble({
           getTask: () => Effect.succeed(harnessTask({ status: "ready_for_dev" })),
         }),
@@ -1005,61 +1011,96 @@ describe("createAgentSessionCommandService", () => {
     expect(calls).toEqual(["stop-runtime"]);
   });
 
-  test("keeps the stored session and worktree when Builder completion fails", async () => {
-    const calls: string[] = [];
-    const preparedTask = task("ready_for_dev");
-    const service = createAgentSessionCommandService({
-      ...createControlDeps(),
-      taskSessionStart: {
-        prepare: () =>
-          Effect.succeed({
-            canonicalRepoPath: "/repo",
-            rollback: () =>
-              Effect.sync(() => {
-                calls.push("cleanup-worktree");
-                return "";
-              }),
-            preparedStatus: preparedTask.status,
-            role: "build" as const,
-            runtimeKind: "opencode" as const,
-            task: preparedTask,
-            workingDirectory: "/repo/worktree",
-          }),
-        complete: () =>
-          Effect.fail(
-            new HostOperationError({ operation: "test.complete", message: "task changed" }),
-          ),
-      },
+  test("stops Builder and publishes ownership when the issue type changes during startup", async () => {
+    const calls: unknown[] = [];
+    const events: string[] = [];
+    const records: AgentSessionRecord[] = [];
+    let currentTask = harnessTask({ status: "open", issueType: "bug" });
+    const taskStore = createTaskStoreTestDouble({
+      getTask: () => Effect.succeed(currentTask),
+    });
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
+    const sessions = createTaskSessionOperations({
+      taskWorkflows: builtinTaskWorkflows,
+      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader: taskStore,
+      taskLifecycle,
+      taskSessionStart: createTaskSessionStartPreparationService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskStore,
+        gitPort: createBuildStartGitPort({ calls }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        worktreeActions: createBuildWorktreeActions(calls),
+        worktreeFiles: createBuildStartWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { postComplete: [] },
+        }),
+        runtimeDefinitionsService: createRuntimeDefinitionsService(),
+        runtimeRegistry: createBuildStartRuntimeRegistry(calls),
+        taskSessionLifecycleCoordinator: taskLifecycle,
+      }),
       runtime: {
-        startSession: () => Effect.succeed(summary),
+        startSession: () =>
+          Effect.sync(() => {
+            currentTask = { ...currentTask, issueType: "feature" };
+            return { ...summary, workingDirectory: "/worktrees/repo/task-1" };
+          }),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
-        continueInterruptedTurn: () =>
-          Effect.die(new Error("unexpected continue interrupted turn")),
         forkSession: () => Effect.die(new Error("unexpected fork")),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
-        stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
         agentSessionsList: () => Effect.die(new Error("unexpected list")),
-        agentSessionUpsert: () => Effect.succeed(true),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
+      },
+      writes: {
+        saveSession: ({ session }) =>
+          Effect.sync(() => {
+            records.push(session);
+            events.push("store-session");
+            return {
+              publish: Effect.sync(() => {
+                events.push("publish-ownership");
+              }),
+            };
+          }),
+        applyStartEvent: () => Effect.die(new Error("unexpected task transition")),
       },
     });
 
-    await expect(
-      Effect.runPromise(
-        service.startWorkflowSession({
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          systemPrompt: workflowStart.systemPrompt,
-          model: workflowStart.model!,
-        }),
+    const result = await Effect.runPromiseExit(
+      Effect.result(
+        sessions.start(
+          {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            sessionScope: workflowStart.sessionScope,
+            systemPrompt: workflowStart.systemPrompt,
+            model: workflowStart.model!,
+          },
+          {
+            checkCanceled: () => Effect.void,
+            created: () => Effect.void,
+            saved: () => {},
+            stop: () =>
+              Effect.sync(() => {
+                events.push("stop-runtime");
+              }),
+          },
+        ),
       ),
-    ).rejects.toThrow("task changed");
-    expect(calls).toEqual(["stop-runtime"]);
+    );
+    expect(result).toMatchObject({
+      _tag: "Success",
+      value: {
+        _tag: "Failure",
+        failure: { _tag: "TaskPolicyError", code: "TASK_TRANSITION_NOT_ALLOWED" },
+      },
+    });
+    expect(records).toMatchObject([{ externalSessionId: summary.externalSessionId }]);
+    expect(events).toEqual(["store-session", "stop-runtime", "publish-ownership"]);
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
   test("does not store a repository session", async () => {

@@ -1,11 +1,15 @@
+import {
+  resolveAgentStudioDefaultRoleForTask,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 export {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
 } from "@openducktor/core";
 
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
   agentSessionIdentityKey,
@@ -13,7 +17,6 @@ import {
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@openducktor/frontend-core/lib/agent-session-options";
-import { buildRoleWorkflowMapForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
 import {
   type AgentSessionSummary,
   toAgentSessionSummary,
@@ -24,7 +27,6 @@ import type {
   AgentSessionState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
-import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export { toRightPanelStorageKey } from "./query-sync/agent-studio-navigation";
 
@@ -77,43 +79,6 @@ export const emptyDraftSelections = () =>
     build: null,
     qa: null,
   }) satisfies Record<AgentRole, AgentModelSelection | null>;
-
-export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
-  if (!task) {
-    return null;
-  }
-
-  if (task.status === "open") {
-    const roleWorkflowMap = buildRoleWorkflowMapForTask(task);
-    for (const role of AGENT_ROLE_ORDER) {
-      const workflow = roleWorkflowMap[role];
-      if (workflow.required && workflow.available) {
-        return role;
-      }
-    }
-    return null;
-  }
-
-  if (task.status === "spec_ready") {
-    return "spec";
-  }
-
-  if (task.status === "ready_for_dev") {
-    return "planner";
-  }
-
-  if (
-    task.status === "in_progress" ||
-    task.status === "ai_review" ||
-    task.status === "human_review" ||
-    task.status === "blocked" ||
-    task.status === "closed"
-  ) {
-    return "build";
-  }
-
-  return null;
-};
 
 type AgentStudioSessionSelectionInput = {
   sessionsForTask: AgentSessionSummary[];

@@ -1,5 +1,6 @@
+import { builtinRoleId, resolveCodexRolePolicy } from "@openducktor/workflows";
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
+
 import type {
   AgentSessionRuntimePolicy,
   AgentSessionScope,
@@ -69,10 +70,10 @@ export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
   if (runtimeKind !== "codex") {
     throw new Error(`Unsupported runtime kind '${runtimeKind}' for session runtime policy.`);
   }
-  const role = sessionScope?.kind === "workflow" ? sessionScope.role : null;
+  const role = sessionScope?.kind === "workflow" ? builtinRoleId(sessionScope.role) : null;
   return {
     kind: "codex",
-    policy: resolveCodexEffectivePolicy(snapshot.agentRuntimes.codex, role),
+    policy: resolveCodexRolePolicy(snapshot.agentRuntimes.codex, role),
   };
 };
 

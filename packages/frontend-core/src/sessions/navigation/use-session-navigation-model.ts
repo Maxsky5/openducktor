@@ -1,7 +1,7 @@
+import { taskHasSessionPage, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   AgentSessionRecord,
   SidebarSessionGrouping,
-  TaskCard,
   WorkspaceSession,
 } from "@openducktor/contracts";
 import {
@@ -226,7 +226,7 @@ const combineTaskReads = (
 ): SessionNavigationRead<TaskCard[]>[] =>
   toSessionNavigationReads(results).map((read) =>
     read.status === "ready"
-      ? { ...read, data: read.data.tasks.filter((task) => task.status !== "closed") }
+      ? { ...read, data: read.data.tasks.filter((task) => taskHasSessionPage(task)) }
       : read,
   );
 

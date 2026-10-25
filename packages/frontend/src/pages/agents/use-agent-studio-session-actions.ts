@@ -1,3 +1,4 @@
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentChatSend } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
@@ -11,13 +12,18 @@ import type {
   ReusablePrompt,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
-  TaskCard,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
-import { isRoleAvailableForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
+import {
+  getSessionLaunchAction,
+  isRoleAvailableForTask,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { useInterruptedTurnResume } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-actions";
@@ -27,8 +33,6 @@ import type {
   SessionStartLaunchRequest,
 } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
-import { LAUNCH_ACTION_LABELS } from "@openducktor/frontend-core/sessions/start/session-start-prompts";
-import { type SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type {
   AgentApprovalRequest,
@@ -36,7 +40,6 @@ import type {
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 import { deriveAgentStudioSessionActionState } from "./session-actions/agent-studio-session-action-state";
@@ -280,7 +283,7 @@ export function useAgentStudioSessionActions({
     canStartSession: canStartRole(role),
     launchActionId,
   });
-  const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
+  const kickoffLabel = getSessionLaunchAction(launchActionId).label;
   const canStopSession =
     selectedSessionIdentity !== null &&
     isAgentSessionActivityWorking(

@@ -1,8 +1,8 @@
-import { deriveAgentWorkflows } from "../../../domain/task";
 import { Effect } from "effect";
 import { HostDependencyError, HostInvariantError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
 import {
+  enrichTask,
   enrichTasks,
   validateAgentSessionWorkingDirectory,
 } from "../support/task-workflow-helpers";
@@ -10,6 +10,7 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskQueryUseCases = ({
   taskStore,
+  taskWorkflows,
   settingsConfig,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<
@@ -26,17 +27,19 @@ export const createTaskQueryUseCases = ({
   | "agentSessionsListForTasks"
   | "agentSessionUpsert"
 > => ({
-  findTask: (input) => taskStore.findTask(input),
+  findTask: (input) =>
+    taskStore
+      .findTask(input)
+      .pipe(
+        Effect.map((task) =>
+          task === null ? null : enrichTask(taskWorkflows.forRepo(input.repoPath), task),
+        ),
+      ),
   listTaskReferences: (input) => taskStore.listTaskReferences(input),
-  listTasks(input) {
-    return Effect.gen(function* () {
-      const tasks = yield* taskStore.listTasks(input);
-
-      return input.taskIds
-        ? tasks.map((task) => ({ ...task, agentWorkflows: deriveAgentWorkflows(task) }))
-        : enrichTasks(tasks);
-    });
-  },
+  listTasks: (input) =>
+    taskStore
+      .listTasks(input)
+      .pipe(Effect.map((tasks) => enrichTasks(taskWorkflows.forRepo(input.repoPath), tasks))),
 
   listKanbanTasks(input) {
     return Effect.gen(function* () {
@@ -55,7 +58,7 @@ export const createTaskQueryUseCases = ({
         doneVisibleDays: settings.kanban.doneVisibleDays,
       });
 
-      return enrichTasks(tasks);
+      return enrichTasks(taskWorkflows.forRepo(input.repoPath), tasks);
     });
   },
 

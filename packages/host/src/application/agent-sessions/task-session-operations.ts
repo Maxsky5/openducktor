@@ -1,4 +1,4 @@
-import type { AgentSessionControlSummary, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionControlSummary } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import {
   causeMessage,
@@ -8,7 +8,8 @@ import {
 } from "../../effect/host-errors";
 import { resumeAndSaveSession } from "./session-resume";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { TaskStorePort, TaskRecord } from "../../ports/task-repository-ports";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -49,9 +50,9 @@ export type TaskSessionWrites = {
   saveSession: (
     input: Parameters<TaskService["agentSessionUpsert"]>[0],
   ) => Effect.Effect<{ publish: Effect.Effect<void, TaskServiceError> }, TaskServiceError>;
-  transitionTask: (input: Parameters<TaskService["transitionTask"]>[0]) => Effect.Effect<
+  applyStartEvent: (input: Parameters<TaskService["applyStartEvent"]>[0]) => Effect.Effect<
     {
-      task: TaskCard;
+      task: TaskRecord;
       publish: Effect.Effect<void, TaskServiceError>;
     },
     TaskServiceError
@@ -64,6 +65,7 @@ export type TaskSessionOperationDependencies = {
     "startSession" | "forkSession" | "resumeSession" | "releaseSession"
   >;
   taskReader: Pick<TaskStorePort, "getTask">;
+  taskWorkflows: TaskWorkflowResolver;
   tasks: Pick<TaskService, "agentSessionsList">;
   taskLifecycle: TaskLifecycle;
   taskSessionStart: Pick<TaskSessionStartPreparationService, "prepare" | "complete">;
@@ -72,7 +74,8 @@ export type TaskSessionOperationDependencies = {
 
 /** Creates native sessions and saves ownership before returning publication work. */
 export const createTaskSessionOperations = (deps: TaskSessionOperationDependencies) => {
-  const { canonicalizeRepoPath, runtime, taskReader, tasks, taskLifecycle, writes } = deps;
+  const { canonicalizeRepoPath, runtime, taskReader, taskWorkflows, tasks, taskLifecycle, writes } =
+    deps;
   return {
     start: createStartTaskWorkflowSession(deps),
     resume: (
@@ -135,7 +138,12 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
             ),
           );
           if (!input.forkPoint)
-            yield* validateTaskSessionWorkflowAvailable(task, scope.role, repoPath);
+            yield* validateTaskSessionWorkflowAvailable(
+              taskWorkflows.forRepo(repoPath),
+              task,
+              scope.role,
+              repoPath,
+            );
           const parent = yield* readStoredWorkflowSession(
             tasks,
             {

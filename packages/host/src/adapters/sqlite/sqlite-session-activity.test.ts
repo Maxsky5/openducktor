@@ -60,7 +60,8 @@ test("task activity survives stale upserts and does not edit the task", async ()
   const task = await Effect.runPromise(
     harness.store.createTask({
       repoPath,
-      task: { title: "Activity", issueType: "task", priority: 2, aiReviewEnabled: false },
+      status: "open",
+      task: { title: "Activity", issueType: "task", priority: 2 },
     }),
   );
   const session = createAgentSessionRecord({
@@ -116,7 +117,8 @@ test.each([
   const task = await Effect.runPromise(
     harness.store.createTask({
       repoPath,
-      task: { title: "Path activity", issueType: "task", priority: 2, aiReviewEnabled: false },
+      status: "open",
+      task: { title: "Path activity", issueType: "task", priority: 2 },
     }),
   );
   const session = createAgentSessionRecord({ workingDirectory: savedPath });
@@ -145,7 +147,8 @@ test("task activity picks the full identity among tasks sharing a runtime sessio
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath,
-        task: { title: workingDirectory, issueType: "task", priority: 2, aiReviewEnabled: false },
+        status: "open",
+        task: { title: workingDirectory, issueType: "task", priority: 2 },
       }),
     );
     const session = createAgentSessionRecord({ workingDirectory });
@@ -189,7 +192,8 @@ test("task activity rejects duplicate owners after matching their paths", async 
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath,
-        task: { title: workingDirectory, issueType: "task", priority: 2, aiReviewEnabled: false },
+        status: "open",
+        task: { title: workingDirectory, issueType: "task", priority: 2 },
       }),
     );
     const session = createAgentSessionRecord({ workingDirectory });

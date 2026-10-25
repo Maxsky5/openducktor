@@ -1,7 +1,7 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   DEFAULT_KANBAN_SETTINGS,
   type AgentSessionRecord,
-  type TaskCard,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import {

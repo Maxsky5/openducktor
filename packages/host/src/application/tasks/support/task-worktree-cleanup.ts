@@ -1,11 +1,10 @@
+import type { TaskWorkflow, TaskWorkflowRole } from "@openducktor/workflows";
 import type {
-  AgentRole,
   AgentSessionRecord,
   DirectMergeRecord,
   GitTargetBranch,
-  TaskCard,
 } from "@openducktor/contracts";
-import { runtimeRequiredScopesByRole } from "@openducktor/contracts";
+
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
@@ -13,7 +12,7 @@ import { HostDependencyError, HostValidationError } from "../../../effect/host-e
 import type { GitPort, GitPortError } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
-import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import type { TaskStorePort, TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
@@ -43,6 +42,8 @@ export const findLatestCleanupTarget = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
+    /** The workflow roles whose sessions run in the task worktree. */
+    worktreeRoles: readonly string[];
   },
   taskStore: TaskStorePort,
   repoPath: string,
@@ -67,7 +68,7 @@ export const findLatestCleanupTarget = (
     const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
     candidates.push(
       ...metadata.agentSessions
-        .filter((session) => session.role.trim() === "build")
+        .filter((session) => dependencies.worktreeRoles.includes(session.role))
         .map((session) => ({
           workingDirectory: session.workingDirectory,
           startedAt: session.startedAt,
@@ -110,6 +111,8 @@ type MergedTaskCleanupServices = {
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
   worktreeFiles?: WorktreeFilePort;
+  /** The task workflow of the repository. Its roles own the sessions and worktrees to clean. */
+  workflow: TaskWorkflow;
 };
 /**
  * A live session keeps its working directory, so a later runtime read of a removed worktree
@@ -118,12 +121,13 @@ type MergedTaskCleanupServices = {
  */
 const releaseMergedTaskSessions = (
   taskActivityGuard: TaskActivityGuardPort | undefined,
+  workflow: TaskWorkflow,
   repoPath: string,
   taskId: string,
   sessions: AgentSessionRecord[],
 ) =>
   Effect.gen(function* () {
-    const workflowSessions = selectWorkflowCleanupSessionRecords(sessions);
+    const workflowSessions = selectWorkflowCleanupSessionRecords(workflow, sessions);
     if (workflowSessions.length === 0) {
       return;
     }
@@ -132,7 +136,7 @@ const releaseMergedTaskSessions = (
         dependency: "taskActivityGuard",
         operation: "merged task cleanup",
         message:
-          "Merged task cleanup requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+          "Merged task cleanup requires runtime session activity checks for tasks with workflow role sessions.",
         details: { repoPath, taskId },
       });
     }
@@ -158,7 +162,7 @@ export const cleanupMergedTaskState = (
       terminalService: dependencies.terminalService,
     });
     const cleanupTarget = yield* findLatestCleanupTarget(
-      dependencies,
+      { ...dependencies, worktreeRoles: dependencies.workflow.worktreeRoles },
       taskStore,
       repoPath,
       taskId,
@@ -172,6 +176,7 @@ export const cleanupMergedTaskState = (
     const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
     yield* releaseMergedTaskSessions(
       dependencies.taskActivityGuard,
+      dependencies.workflow,
       canonicalRepoPath,
       taskId,
       metadata.agentSessions,
@@ -227,7 +232,7 @@ export const cleanupDirectMergeTaskState = (
   );
 export const effectiveTargetBranchForTask = (
   workspaceSettingsService: WorkspaceSettingsService,
-  task: TaskCard,
+  task: TaskRecord,
   repoPath: string,
 ) =>
   Effect.gen(function* () {
@@ -290,9 +295,10 @@ export const resolveBuildStartPoint = (
 export const resolveRuntimeDescriptorForTaskSession = (
   runtimeDefinitionsService: RuntimeDefinitionsService,
   runtimeKind: string,
-  role: AgentRole,
+  workflowRole: TaskWorkflowRole,
 ) =>
   Effect.gen(function* () {
+    const role = workflowRole.id;
     const descriptor = runtimeDefinitionsService
       .listRuntimeDefinitions()
       .find((definition) => definition.kind === runtimeKind);
@@ -314,7 +320,7 @@ export const resolveRuntimeDescriptorForTaskSession = (
         }),
       );
     }
-    const requiredScopes = runtimeRequiredScopesByRole[role];
+    const requiredScopes = workflowRole.runtimeScopes;
     const supportedScopes = descriptor.capabilities.workflow.supportedScopes;
     const missingScopes = requiredScopes.filter((scope) => !supportedScopes.includes(scope));
     if (missingScopes.length > 0) {
@@ -334,7 +340,7 @@ export const loadTaskBranchCleanup = (
     taskWorktreeService: TaskWorktreeService;
     workspaceSettingsService: WorkspaceSettingsService;
   },
-  task: TaskCard,
+  task: TaskRecord,
   repoPath: string,
   taskId: string,
   operationLabel: string,

@@ -3,13 +3,11 @@ import {
   type McpArtifactDeleteResult,
   type SetTaskArtifactInput,
   type TaskArtifact,
-  type TaskMetadataArtifact,
-  type WorkflowArtifactKind,
+  freeArtifactCodeSchema,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   odtBrowserCallerSchema,
 } from "@openducktor/contracts";
-import { AGENT_ROLE_WORKFLOW_CODES } from "@openducktor/core";
 import { Effect } from "effect";
 import { type JSONType, z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
@@ -18,7 +16,6 @@ import { decodeArtifactInput } from "../tasks/support/artifact-content";
 import type { TaskService } from "../tasks/task-service";
 import {
   findFreeTaskArtifact,
-  isWorkflowArtifactCode,
   missingFreeTaskArtifact,
   parseResponse,
   parseToolInput,
@@ -27,51 +24,6 @@ import {
 import type { OdtMcpBridgeError, OdtMcpToolContext } from "./odt-mcp-bridge-tool-context";
 
 const artifactBridgeBodySchema = z.record(z.string(), z.json());
-
-type WorkflowWriteContext = {
-  context: OdtMcpToolContext;
-  input: SetTaskArtifactInput;
-  repoPath: string;
-  taskId: string;
-  markdown: string;
-};
-type WorkflowArtifactWriter = (
-  write: WorkflowWriteContext,
-) => Effect.Effect<TaskMetadataArtifact, OdtMcpBridgeError>;
-
-const WORKFLOW_ARTIFACT_NAMES = {
-  spec: "Specification",
-  plan: "Implementation Plan",
-  qaReport: "QA Report",
-} satisfies Record<WorkflowArtifactKind, string>;
-
-const WORKFLOW_ARTIFACT_WRITERS = {
-  spec: ({ context, repoPath, taskId, markdown }) =>
-    context.taskService.setSpec({ repoPath, taskId, markdown }),
-  plan: ({ context, repoPath, taskId, markdown }) =>
-    context.taskService
-      .setPlan({
-        repoPath,
-        taskId,
-        markdown,
-        subtasks: [],
-        hasExplicitSubtasks: false,
-      })
-      .pipe(Effect.map((result) => result.artifact)),
-  qaReport: ({ context, input, repoPath, taskId, markdown }) => {
-    const request = { repoPath, taskId, markdown };
-    if (input.verdict === "approved")
-      return context.taskService.qaApproved(request).pipe(Effect.map((result) => result.artifact));
-    if (input.verdict === "rejected")
-      return context.taskService.qaRejected(request).pipe(Effect.map((result) => result.artifact));
-    return Effect.fail(
-      new HostValidationError({
-        field: "verdict",
-        message: "A QA report requires an approved or rejected verdict.",
-      }),
-    );
-  },
-} satisfies Record<WorkflowArtifactKind, WorkflowArtifactWriter>;
 
 export const executeSetTaskArtifact = (
   context: OdtMcpToolContext,
@@ -97,41 +49,53 @@ export const executeSetTaskArtifact = (
       workspaceId,
       task.id,
     );
-    if (owner?.kind === "task" && isWorkflowArtifactCode(input.code)) {
-      const permissions: Readonly<Record<string, readonly WorkflowArtifactKind[]>> =
-        AGENT_ROLE_WORKFLOW_CODES;
-      if (!permissions[owner.role]?.includes(input.code)) {
-        return yield* new HostValidationError({
-          field: "code",
-          message: `The ${owner.role} role cannot write the ${input.code} workflow artifact.`,
-        });
-      }
-    }
-    if (isWorkflowArtifactCode(input.code)) {
+    const workflow = context.taskWorkflows.forRepo(repoPath);
+    const declared = workflow.artifact(input.code);
+    if (declared) {
+      yield* rejectFreeArtifactFields(input);
       const markdown = yield* workflowMarkdown(input);
-      const saved = yield* WORKFLOW_ARTIFACT_WRITERS[input.code]({
-        context,
-        input,
+      const saveInput: Parameters<OdtMcpToolContext["taskService"]["workflowArtifactSave"]>[0] = {
         repoPath,
         taskId: task.id,
+        code: input.code,
         markdown,
-      });
+        submit: true,
+        sourceTool: "odt_set_task_artifact",
+        updatedBy: owner?.kind === "task" ? owner.role : "user",
+      };
+      if (input.verdict !== undefined) saveInput.verdict = input.verdict;
+      const saved = yield* context.taskService.workflowArtifactSave(saveInput);
+      const artifact = {
+        taskId: task.id,
+        code: input.code,
+        name: declared.label,
+        classification: "workflow",
+        mediaType: "text/markdown",
+        revision: saved.artifact.revision,
+        updatedAt: saved.artifact.updatedAt,
+      };
       return yield* parseResponse(
         "odt_set_task_artifact",
         ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_task_artifact,
         {
-          artifact: {
-            taskId: task.id,
-            code: input.code,
-            name: WORKFLOW_ARTIFACT_NAMES[input.code],
-            classification: "workflow",
-            mediaType: "text/markdown",
-            revision: saved.revision,
-            updatedAt: saved.updatedAt,
-            verdict: input.verdict,
-          },
+          artifact:
+            input.verdict === undefined ? artifact : { ...artifact, verdict: input.verdict },
         },
       );
+    }
+    if (input.verdict !== undefined) {
+      return yield* new HostValidationError({
+        field: "verdict",
+        message: "verdict applies only to a review artifact of the workflow.",
+      });
+    }
+    const freeCode = freeArtifactCodeSchema.safeParse(input.code);
+    if (!freeCode.success) {
+      return yield* new HostValidationError({
+        field: "code",
+        message:
+          `${input.code} is not a workflow artifact code. ${freeCode.error.issues[0]?.message ?? ""}`.trim(),
+      });
     }
     const artifact = toMcpTaskArtifact(yield* writeFreeArtifact(context, input, repoPath, task.id));
     return yield* parseResponse(
@@ -234,6 +198,13 @@ export const executeDeleteTaskArtifact = (
       ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
       toolBody,
     );
+    const workspaceRepoPath = yield* context.repoPathForWorkspace(parsed.workspaceId ?? "");
+    if (context.taskWorkflows.forRepo(workspaceRepoPath).artifact(parsed.code)) {
+      return yield* new HostValidationError({
+        field: "code",
+        message: `${parsed.code} is a workflow artifact. Only free artifacts can be deleted.`,
+      });
+    }
     const { repoPath, task } = yield* context.taskScopeForWorkspace(
       parsed.workspaceId ?? "",
       parsed.taskId,
@@ -279,6 +250,20 @@ const resolveArtifactWriter = (
     }
     return owner;
   });
+
+/** Workflow artifacts take their name, file name, and media type from the workflow. */
+const rejectFreeArtifactFields = (
+  input: SetTaskArtifactInput,
+): Effect.Effect<void, HostValidationError> => {
+  for (const field of ["name", "fileName", "mediaType"] as const) {
+    if (input[field] !== undefined) {
+      return Effect.fail(
+        new HostValidationError({ field, message: `${field} applies only to free artifacts.` }),
+      );
+    }
+  }
+  return Effect.void;
+};
 
 const artifactContentBase64 = (
   input: Pick<SetTaskArtifactInput, "content" | "dataBase64">,

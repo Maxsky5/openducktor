@@ -71,7 +71,7 @@ describe("buildAgentsPageDiffModel", () => {
       agentWorkflows: {
         spec: { required: false, canSkip: true, available: true, completed: true },
         planner: { required: false, canSkip: true, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: false, canSkip: true, available: false, completed: true },
       },
     }),

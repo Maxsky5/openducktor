@@ -1,4 +1,4 @@
-// Data of the prompts tile. The built-in prompts copy packages/core/src/services/agent-system-prompts.ts.
+// Prompt samples from packages/workflows/src/builtin/agent-prompts.ts.
 // The line that the visitor adds is a sample. Sources: settings-prompt-overrides-section.tsx,
 // settings-modal-prompt-components.tsx, and settings-modal-constants.ts in
 // packages/frontend/src/components/features/settings.

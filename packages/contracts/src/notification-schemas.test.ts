@@ -1,28 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
-  DEFAULT_NOTIFICATION_SETTINGS,
+  AGENT_NOTIFICATION_KIND_VALUES,
   NOTIFICATION_CUE_VALUES,
-  NOTIFICATION_KIND_VALUES,
+  createDefaultNotificationSettings,
   notificationOccurrenceSchema,
   notificationNavigationTargetSchema,
   notificationOsDeliveryRequestSchema,
   notificationSettingsSchema,
 } from "./notification-schemas";
-
-const expectedKinds = [
-  "agent.permission_requested",
-  "agent.question_asked",
-  "agent.session_error",
-  "agent.session_started",
-  "agent.session_idle",
-  "workflow.spec_ready",
-  "workflow.ready_for_dev",
-  "workflow.in_progress",
-  "workflow.blocked",
-  "workflow.ai_review",
-  "workflow.human_review",
-  "workflow.closed",
-] as const;
 
 describe("notification contracts", () => {
   test.each(["permission", "question"] as const)(
@@ -43,28 +28,52 @@ describe("notification contracts", () => {
     },
   );
 
-  test("ships the exact v1 catalogue and defaults", () => {
-    const bloomKinds = new Set([
+  test("ships the agent catalogue and defaults", () => {
+    const settings = createDefaultNotificationSettings();
+
+    expect(AGENT_NOTIFICATION_KIND_VALUES).toEqual([
       "agent.permission_requested",
       "agent.question_asked",
-      "workflow.blocked",
+      "agent.session_error",
+      "agent.session_started",
+      "agent.session_idle",
     ]);
-    const inAppKinds = new Set(["agent.session_started", "workflow.closed"]);
+    expect(Object.keys(settings.kinds)).toEqual([...AGENT_NOTIFICATION_KIND_VALUES]);
+    expect(settings).toMatchObject({
+      globalCue: "chime",
+      volumePercent: 30,
+      osFocus: "suppress_if_focused",
+      soundFocus: "mute_while_focused",
+    });
+    expect(settings.kinds).toEqual({
+      "agent.permission_requested": { enabled: true, target: "both", sound: "bloom" },
+      "agent.question_asked": { enabled: true, target: "both", sound: "bloom" },
+      "agent.session_error": { enabled: true, target: "both", sound: "inherit" },
+      "agent.session_started": { enabled: true, target: "in_app", sound: "inherit" },
+      "agent.session_idle": { enabled: false, target: "both", sound: "inherit" },
+    });
+  });
 
-    expect(NOTIFICATION_KIND_VALUES).toEqual(expectedKinds);
-    expect(Object.keys(DEFAULT_NOTIFICATION_SETTINGS.kinds)).toEqual(expectedKinds);
-    expect(DEFAULT_NOTIFICATION_SETTINGS.globalCue).toBe("chime");
-    expect(DEFAULT_NOTIFICATION_SETTINGS.volumePercent).toBe(30);
-    expect(DEFAULT_NOTIFICATION_SETTINGS.osFocus).toBe("suppress_if_focused");
-    expect(DEFAULT_NOTIFICATION_SETTINGS.soundFocus).toBe("mute_while_focused");
+  test("adds the workflow kinds that the caller supplies", () => {
+    const blocked = { enabled: true, target: "both", sound: "bloom" } as const;
+    const settings = createDefaultNotificationSettings({ "workflow.blocked": blocked });
 
-    for (const kind of expectedKinds) {
-      const setting = DEFAULT_NOTIFICATION_SETTINGS.kinds[kind];
-      expect(setting.sound).toBe(bloomKinds.has(kind) ? "bloom" : "inherit");
-      expect(setting.target).toBe(inAppKinds.has(kind) ? "in_app" : "both");
-      expect(setting.enabled).toBe(kind !== "agent.session_idle");
-    }
-    expect(new Set<string>(NOTIFICATION_KIND_VALUES).has("workflow.open")).toBe(false);
+    expect(settings.kinds["workflow.blocked"]).toEqual(blocked);
+    expect(notificationSettingsSchema.parse(settings)).toEqual(settings);
+  });
+
+  test("requires every agent kind and rejects kinds outside both catalogues", () => {
+    const settings = createDefaultNotificationSettings();
+    const { "agent.session_idle": _removed, ...kinds } = settings.kinds;
+    const setting = { enabled: true, target: "both", sound: "inherit" };
+
+    expect(notificationSettingsSchema.safeParse({ ...settings, kinds }).success).toBe(false);
+    expect(
+      notificationSettingsSchema.safeParse({
+        ...settings,
+        kinds: { ...settings.kinds, "release.draft": setting },
+      }).success,
+    ).toBe(false);
   });
 
   test("exposes all 17 Cuelume cues", () => {
@@ -94,7 +103,7 @@ describe("notification contracts", () => {
     const second = notificationSettingsSchema.parse(undefined);
 
     first.kinds["agent.session_idle"].enabled = true;
-    expect(second).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+    expect(second).toEqual(createDefaultNotificationSettings());
   });
 
   test("rejects unsafe occurrence fields and runtime routes", () => {

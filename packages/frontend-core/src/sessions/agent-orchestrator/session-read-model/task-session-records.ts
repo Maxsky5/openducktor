@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   agentSessionQueryKeys,
@@ -7,6 +7,7 @@ import {
 } from "../../../queries/agent-sessions";
 import type { PersistedTaskSessionRecord } from "../support/persistence";
 import type { LoadedWorkflowSessionRecords } from "./agent-session-workflow-records";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskSessionRecords = {
   taskIds: string[];

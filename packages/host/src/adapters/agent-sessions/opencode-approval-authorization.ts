@@ -4,11 +4,7 @@ import {
   type RuntimeApprovalReplyOutcome,
   type AgentSessionLiveRef,
 } from "@openducktor/contracts";
-import {
-  AGENT_ROLE_TOOL_POLICY,
-  isReadOnlyAgentRole,
-  normalizeOdtWorkflowToolName,
-} from "@openducktor/core";
+import { normalizeOdtWorkflowToolName, type WorkflowRolePolicyResolver } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import type { OpenCodePendingRoute } from "./opencode-pending-request-router";
 import type { OpenCodeSessionRefIndex } from "./opencode-live-session-ref-index";
@@ -24,12 +20,14 @@ export const assertApprovalAllowed = ({
   sessionsByRef,
   refsByExternalSessionId,
   runtimeId,
+  resolveWorkflowRolePolicy,
 }: {
   route: OpenCodePendingRoute;
   outcome: RuntimeApprovalReplyOutcome;
   sessionsByRef: ReadonlyMap<string, OpenCodeLiveSession>;
   refsByExternalSessionId: OpenCodeSessionRefIndex;
   runtimeId: string;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
 }): void => {
   const requireSession = (ref: AgentSessionLiveRef): OpenCodeLiveSession =>
     requireOpenCodeLiveSession(sessionsByRef, runtimeId, ref);
@@ -64,6 +62,7 @@ export const assertApprovalAllowed = ({
   }
   const scope = session.sessionScope;
   if (scope?.kind !== "workflow") return;
+  const rolePolicy = resolveWorkflowRolePolicy({ repoPath: route.ref.repoPath, role: scope.role });
   const descriptor = OPENCODE_RUNTIME_DESCRIPTOR;
   const names = [request.action?.name, request.tool?.name].filter(
     (name): name is string => name !== undefined,
@@ -83,15 +82,14 @@ export const assertApprovalAllowed = ({
       name.startsWith("odt_") ||
       OPENCODE_ODT_TOOL_ID_PREFIXES.some((prefix) => name.startsWith(prefix))
     ) {
-      if (!canonical || !AGENT_ROLE_TOOL_POLICY[scope.role].some((tool) => tool === canonical))
-        forbid();
+      if (!canonical || !rolePolicy.tools.some((tool) => tool === canonical)) forbid();
       allowedOdt = true;
     }
     if (
-      isReadOnlyAgentRole(scope.role) &&
+      rolePolicy.readOnly &&
       (name === "edit" || descriptor.readOnlyRoleBlockedTools.some((tool) => tool === name))
     )
       forbid();
   }
-  if (!allowedOdt && isReadOnlyAgentRole(scope.role) && request.mutation === "mutating") forbid();
+  if (!allowedOdt && rolePolicy.readOnly && request.mutation === "mutating") forbid();
 };

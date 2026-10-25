@@ -3,7 +3,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
-import { getTaskCard } from "./sqlite-task-card-read-model";
+import { getTaskRecord } from "./sqlite-task-card-read-model";
 import { taskInsertFromCreateInput } from "./sqlite-task-create";
 import {
   firstTaskIdHashLength,
@@ -190,7 +190,7 @@ export const createSqliteIssueImportStore = ({
     return withDatabase(
       input.repoPath,
       "sqliteIssueImportStore.createImportedTask",
-      ({ session, workspaceId }) =>
+      ({ session, workspaceId, workflow }) =>
         session.transaction("sqliteIssueImportStore.createImportedTask", (transaction) =>
           Effect.gen(function* () {
             const existing = yield* linkedTask(transaction, input.sourceIssue);
@@ -207,7 +207,7 @@ export const createSqliteIssueImportStore = ({
             });
             for (const taskId of candidates) {
               const row = {
-                ...taskInsertFromCreateInput(input.task, taskId, createdAt),
+                ...taskInsertFromCreateInput(input.task, input.status, taskId, createdAt),
                 sourceProviderId: input.sourceIssue.providerId,
                 sourceScope: input.sourceIssue.scope,
                 sourceId: input.sourceIssue.sourceId,
@@ -225,7 +225,7 @@ export const createSqliteIssueImportStore = ({
                 { taskId },
               );
               if (inserted.length > 0) {
-                const task = yield* getTaskCard(transaction, taskId, input.repoPath);
+                const task = yield* getTaskRecord(transaction, taskId, input.repoPath, workflow);
                 return { outcome: "created" as const, task };
               }
               const concurrent = yield* linkedTask(transaction, input.sourceIssue);

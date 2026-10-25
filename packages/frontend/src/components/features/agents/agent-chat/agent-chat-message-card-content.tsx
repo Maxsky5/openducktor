@@ -10,7 +10,7 @@ import {
 } from "@openducktor/frontend-core/sessions/session-view/subagent-activity";
 import { AgentChatAssistantMessage } from "./agent-chat-assistant-message";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { Brain, Cpu, FileX, Hammer, LoaderCircle } from "lucide-react";
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
@@ -46,6 +46,7 @@ import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcr
 import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 import { buildToolSummary } from "@openducktor/frontend-core/sessions/messages/tool-summary";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 type MessageHeaderProps = {
   message: AgentChatMessage;

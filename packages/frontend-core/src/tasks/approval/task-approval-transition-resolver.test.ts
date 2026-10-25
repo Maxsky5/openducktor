@@ -1,22 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { type TaskAction, type TaskApprovalContext, type TaskCard } from "@openducktor/contracts";
+import type { TaskApprovalContext } from "@openducktor/contracts";
 import { createGitProviderContextFixture } from "../../test-support/shared-test-fixtures";
 import type { TaskApprovalFlowState } from "./task-approval-flow-state";
 import {
   resolveCurrentTaskApprovalMode,
   resolveTaskApprovalOpenMode,
   resolveTaskApprovalSubmissionRoute,
-  resolveTaskApprovalWorkflowTransition,
 } from "./task-approval-transition-resolver";
-
-type TransitionTask = Pick<TaskCard, "availableActions" | "pullRequest" | "status">;
-type TransitionTaskOverrides = Pick<TransitionTask, "availableActions" | "status"> &
-  Partial<Pick<TransitionTask, "pullRequest">>;
-
-const task = (overrides: TransitionTaskOverrides): TransitionTask => ({
-  pullRequest: undefined,
-  ...overrides,
-});
 
 const approvalContext = (overrides: Partial<TaskApprovalContext> = {}): TaskApprovalContext => ({
   taskId: "TASK-1",
@@ -53,141 +43,6 @@ const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "op
     workspaceIdentity: { workspaceId: "workspace-repo", repoPath: "/repo" },
     ...overrides,
   }) satisfies TaskApprovalFlowState;
-
-describe("resolveTaskApprovalWorkflowTransition", () => {
-  test.each([
-    {
-      name: "approves an AI review task through the direct-merge path",
-      command: "approve" as const,
-      status: "ai_review" as const,
-      availableActions: ["human_approve", "human_request_changes"] satisfies TaskAction[],
-      expected: {
-        kind: "approved",
-        action: "human_approve",
-        fromStatus: "ai_review",
-        toStatus: "closed",
-        completionPath: "direct_merge",
-      },
-    },
-    {
-      name: "rejects human review output back into the build loop",
-      command: "request_changes" as const,
-      status: "human_review" as const,
-      availableActions: ["human_approve", "human_request_changes"] satisfies TaskAction[],
-      expected: {
-        kind: "changes_requested",
-        action: "human_request_changes",
-        fromStatus: "human_review",
-        toStatus: "in_progress",
-      },
-    },
-    {
-      name: "rejects AI review output back into the build loop",
-      command: "request_changes" as const,
-      status: "ai_review" as const,
-      availableActions: ["human_approve", "human_request_changes"] satisfies TaskAction[],
-      expected: {
-        kind: "changes_requested",
-        action: "human_request_changes",
-        fromStatus: "ai_review",
-        toStatus: "in_progress",
-      },
-    },
-    {
-      name: "does not approve blocked builder work",
-      command: "approve" as const,
-      status: "blocked" as const,
-      availableActions: ["open_builder", "reset_implementation"] satisfies TaskAction[],
-      expected: {
-        kind: "unavailable",
-        status: "blocked",
-        reason: "not_reviewable_status",
-        requiredAction: "human_approve",
-      },
-    },
-    {
-      name: "does not request changes for blocked builder work",
-      command: "request_changes" as const,
-      status: "blocked" as const,
-      availableActions: ["open_builder", "reset_implementation"] satisfies TaskAction[],
-      expected: {
-        kind: "unavailable",
-        status: "blocked",
-        reason: "not_reviewable_status",
-        requiredAction: "human_request_changes",
-      },
-    },
-    {
-      name: "does not approve resumed rework that is back in progress",
-      command: "approve" as const,
-      status: "in_progress" as const,
-      availableActions: ["open_builder", "build_start"] satisfies TaskAction[],
-      expected: {
-        kind: "unavailable",
-        status: "in_progress",
-        reason: "not_reviewable_status",
-        requiredAction: "human_approve",
-      },
-    },
-    {
-      name: "does not approve review tasks when the required action is unavailable",
-      command: "approve" as const,
-      status: "human_review" as const,
-      availableActions: ["human_request_changes"] satisfies TaskAction[],
-      expected: {
-        kind: "unavailable",
-        status: "human_review",
-        reason: "action_unavailable",
-        requiredAction: "human_approve",
-      },
-    },
-    {
-      name: "approves a human review task through the direct-merge path",
-      command: "approve" as const,
-      status: "human_review" as const,
-      availableActions: ["human_approve"] satisfies TaskAction[],
-      expected: {
-        kind: "approved",
-        action: "human_approve",
-        fromStatus: "human_review",
-        toStatus: "closed",
-        completionPath: "direct_merge",
-      },
-    },
-    {
-      name: "approves a PR-linked human review task through the pull-request path",
-      command: "approve" as const,
-      status: "human_review" as const,
-      availableActions: ["human_approve"] satisfies TaskAction[],
-      pullRequest: {
-        providerId: "github",
-        number: 42,
-        url: "https://github.com/openai/openducktor/pull/42",
-        state: "open",
-        createdAt: "2026-05-28T12:00:00.000Z",
-        updatedAt: "2026-05-28T12:00:00.000Z",
-      } satisfies NonNullable<TaskCard["pullRequest"]>,
-      expected: {
-        kind: "approved",
-        action: "human_approve",
-        fromStatus: "human_review",
-        toStatus: "closed",
-        completionPath: "pull_request",
-      },
-    },
-  ])("$name", ({ command, status, availableActions, expected, pullRequest }) => {
-    expect(
-      resolveTaskApprovalWorkflowTransition(
-        task({
-          status,
-          availableActions,
-          pullRequest,
-        }),
-        command,
-      ),
-    ).toEqual(expected);
-  });
-});
 
 describe("resolveTaskApprovalOpenMode", () => {
   test.each([

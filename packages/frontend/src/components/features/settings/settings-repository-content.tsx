@@ -1,3 +1,4 @@
+import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
 import {
   gitRepositoryKey,
   type GitProviderRepository,
@@ -11,7 +12,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
-import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
+import type { RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
 import { buildInheritedPromptPreview } from "./settings-prompt-inheritance";
 import { PromptOverridesSection } from "./settings-prompt-overrides-section";
@@ -24,14 +25,14 @@ import type { GitProviderState } from "./use-repository-git-section-model";
 
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
-  repoPromptRoleTab: PromptRoleTabId;
+  repoPromptRoleTab: BuiltinPromptRoleTabId;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   globalPromptOverrides: NonNullable<
     SettingsModalController["snapshotDraft"]
   >["globalPromptOverrides"];
   onRepositorySectionChange: (next: RepositorySectionId) => void;
-  onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
+  onRepoPromptRoleTabChange: (next: BuiltinPromptRoleTabId) => void;
   contentFocusRequest?: SettingsContentFocusRequest | null | undefined;
   onContentFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
 };

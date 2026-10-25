@@ -4,8 +4,6 @@ import type {
   RepoPromptOverrides,
 } from "@openducktor/contracts";
 import {
-  buildAgentSystemPrompt,
-  mergePromptOverrides,
   resolveSavedSessionModel,
   isSameSelection,
   resolveModelSelectionPolicy,
@@ -16,6 +14,7 @@ import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 
 type PreparationTarget = Omit<AgentMessageTarget, "externalSessionId">;
@@ -24,6 +23,7 @@ export const createSessionTurnPreparation = (deps: {
   settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath" | "getSettingsSnapshot">;
   queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   taskReader: Pick<TaskStorePort, "getTask">;
+  taskWorkflows: TaskWorkflowResolver;
 }) => {
   const catalogFor = (target: PreparationTarget) =>
     Effect.gen(function* () {
@@ -39,7 +39,7 @@ export const createSessionTurnPreparation = (deps: {
     Effect.gen(function* () {
       const config = yield* deps.settings.getRepoConfigByRepoPath(target.repoPath);
       const settings = yield* deps.settings.getSettingsSnapshot();
-      return mergePromptOverrides({
+      return deps.taskWorkflows.forRepo(target.repoPath).prompts.mergeOverrides({
         globalOverrides: settings.globalPromptOverrides,
         repoOverrides: config.promptOverrides,
       });
@@ -54,23 +54,30 @@ export const createSessionTurnPreparation = (deps: {
     context: (target: PreparationTarget) =>
       Effect.gen(function* () {
         if (target.sessionScope.kind === "repository") return undefined;
+        const workflow = deps.taskWorkflows.forRepo(target.repoPath);
         const overrides = yield* settingsFor(target);
+        const overrideProblem = workflow.prompts.findOverrideProblem(overrides);
+        if (overrideProblem !== undefined) {
+          return yield* new HostValidationError({
+            field: "promptOverrides",
+            message: overrideProblem,
+          });
+        }
         const task = yield* deps.taskReader.getTask({
           repoPath: target.repoPath,
           taskId: target.sessionScope.taskId,
         });
-        return buildAgentSystemPrompt({
+        return workflow.prompts.systemPrompt({
           role: target.sessionScope.role,
           task: {
             taskId: task.id,
             title: task.title,
             issueType: task.issueType,
             status: task.status,
-            qaRequired: task.aiReviewEnabled,
             description: task.description,
           },
           overrides,
-        });
+        }).prompt;
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context"))),
     model: (
       target: PreparationTarget,

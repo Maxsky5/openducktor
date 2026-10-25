@@ -1,4 +1,4 @@
-import type { IssueType } from "@openducktor/contracts";
+import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { View } from "react-native";

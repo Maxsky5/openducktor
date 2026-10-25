@@ -98,7 +98,6 @@ Iterate through the codebase. For **EACH** distinct vulnerability found:
     *   **priority**: Map the severity table to OpenDucktor numeric priority.
       `0` = Critical, `1` = High, `2` = Medium, `3` = Low.
     *   **labels**: Only `audit` and `security` are allowed for this command. Every task must include both labels. Do not add any other labels.
-    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Vulnerability Type

@@ -3,7 +3,10 @@ import type {
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
 } from "@openducktor/contracts";
-import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type {
+  KanbanColumn as KanbanColumnData,
+  BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { ComponentProps } from "react";
 import type { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import type {

@@ -1,8 +1,8 @@
-import type { AgentSessionStartMode } from "@openducktor/core";
 import {
   getSessionLaunchAction,
-  type SessionLaunchActionId,
-} from "../../lib/session-launch-actions";
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+} from "@openducktor/workflows";
+import type { AgentSessionStartMode } from "@openducktor/core";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 export const resolveLaunchStartMode = ({
@@ -15,7 +15,7 @@ export const resolveLaunchStartMode = ({
   const launchAction = getSessionLaunchAction(launchActionId);
   const preferredStartMode = launchAction.defaultStartMode;
   const hasExistingSession = existingSessionOptions.length > 0;
-  const canStartFresh = launchAction.allowedStartModes.includes("fresh");
+  const canStartFresh = launchAction.startModes.includes("fresh");
 
   switch (preferredStartMode) {
     case "fresh":

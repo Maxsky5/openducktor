@@ -42,8 +42,7 @@ const controllerMock: ReturnType<
   setStep: (_step: "type" | "details") => {},
   editSection: "spec",
   isTaskDraftDirty: false,
-  isSpecDirty: false,
-  isPlanDirty: false,
+  dirtyDocuments: { spec: false, plan: false },
   requestSectionChange: (_section: "details" | "spec" | "plan") => {},
   isTypeStepVisible: false,
   selectedCreateIssueType: "task",
@@ -66,7 +65,6 @@ const controllerMock: ReturnType<
   loadDocumentSection: async (_section: "spec" | "plan", _force?: boolean) => {},
   state: {
     issueType: "task",
-    aiReviewEnabled: false,
     title: "Task",
     priority: 2,
     description: "",

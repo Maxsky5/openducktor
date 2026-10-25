@@ -334,23 +334,22 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       panels.startBlockedReason,
     ],
   );
+  const { workflowSteps, selectedRole, agentStudioReady, onWorkflowStepSelect } = chatHeaderModel;
   const workflowContent = useMemo(
     () => (
       <div className="@container/workflow min-w-0 shrink-0 overflow-x-auto border-b border-border bg-card px-4 py-2">
         <WorkflowRail
-          steps={chatHeaderModel.workflowSteps}
-          selectedRole={chatHeaderModel.selectedRole}
-          agentStudioReady={chatHeaderModel.agentStudioReady}
-          onStepSelect={chatHeaderModel.onWorkflowStepSelect}
+          steps={workflowSteps}
+          selectedStepId={workflowSteps.find((step) => step.role === selectedRole)?.id ?? null}
+          disabled={!agentStudioReady}
+          onStepSelect={(stepId) => {
+            const step = workflowSteps.find((entry) => entry.id === stepId);
+            if (step) onWorkflowStepSelect(step.role, step.sessionValue);
+          }}
         />
       </div>
     ),
-    [
-      chatHeaderModel.workflowSteps,
-      chatHeaderModel.selectedRole,
-      chatHeaderModel.agentStudioReady,
-      chatHeaderModel.onWorkflowStepSelect,
-    ],
+    [workflowSteps, selectedRole, agentStudioReady, onWorkflowStepSelect],
   );
   const chatContent = useMemo(
     () => (

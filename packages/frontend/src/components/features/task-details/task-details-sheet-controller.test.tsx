@@ -5,7 +5,6 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import type { TaskCard } from "@openducktor/contracts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
@@ -15,13 +14,10 @@ import {
   type TaskWorkflowActions,
 } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { RECENT_ITEMS_STORAGE_KEY } from "@/features/command-palette/constants";
-import {
-  collectDeleteImpactTaskIds,
-  toSubtasks,
-} from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 import { QueryProvider } from "@/test-utils/query-provider";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 const render = (element: ReactElement) =>
   renderUi(element, {
     wrapper: ({ children }) => createElement(QueryProvider, null, children),
@@ -113,7 +109,7 @@ describe("TaskDetailsSheetController", () => {
         if (!onDelete) throw new Error("Expected task delete action.");
         let deletion: Promise<void> = Promise.resolve();
         await act(async () => {
-          deletion = onDelete(task.id, { deleteSubtasks: true });
+          deletion = onDelete(task.id);
           rendered.rerender(controller([]));
         });
         expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
@@ -191,7 +187,7 @@ describe("TaskDetailsSheetController", () => {
         if (!onDelete) throw new Error("Expected task delete action.");
         let deletion: Promise<void> = Promise.resolve();
         await act(async () => {
-          deletion = onDelete(task.id, { deleteSubtasks: true });
+          deletion = onDelete(task.id);
           client.setQueryData(queryKey, { tasks: [] });
           rendered.rerender(controller([]));
         });
@@ -286,19 +282,9 @@ describe("TaskDetailsSheetController", () => {
   );
   test("opens a closed task outside the board and clears selection on workspace switch", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
-    const child = createTaskCardFixture({
-      id: "closed-child",
-      status: "closed",
-      parentId: "closed-task",
-    });
-    const task = createTaskCardFixture({
-      id: "closed-task",
-      status: "closed",
-      issueType: "epic",
-      subtaskIds: [child.id],
-    });
+    const task = createTaskCardFixture({ id: "closed-task", status: "closed" });
     const connection = createTestClientConnection({
-      client: { tasksList: async () => [], tasksListAll: async () => [task, child] },
+      client: { tasksList: async () => [], tasksListAll: async () => [task] },
     });
     const client = connection.queryClient;
     client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [] });
@@ -315,14 +301,9 @@ describe("TaskDetailsSheetController", () => {
     await act(async () => ref.current?.openTask(task.id));
     await waitFor(() => {
       expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ task, open: true, allTasks: [task, child] }),
+        expect.objectContaining({ task, open: true }),
       );
     });
-    const sheet = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0];
-    if (!sheet) throw new Error("Expected task sheet props.");
-    const taskById = new Map(sheet.allTasks.map((entry) => [entry.id, entry]));
-    expect(toSubtasks(sheet.task, taskById)).toEqual([child]);
-    expect(collectDeleteImpactTaskIds(sheet.task, taskById)).toEqual([task.id, child.id]);
     await act(async () => rendered.rerender(controller("/repo-b")));
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ task: null, open: false }),
@@ -376,7 +357,6 @@ describe("TaskDetailsSheetController", () => {
       expect.objectContaining({
         task: null,
         activeWorkspace,
-        allTasks: [task],
         open: false,
       }),
     );
@@ -390,7 +370,6 @@ describe("TaskDetailsSheetController", () => {
       expect.objectContaining({
         task,
         activeWorkspace,
-        allTasks: [task],
         open: true,
       }),
     );

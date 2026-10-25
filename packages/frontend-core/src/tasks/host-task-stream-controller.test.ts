@@ -1,5 +1,5 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import type { TaskStreamFrame } from "../connection/host-connection";
 import { type RepoTaskData, taskQueryKeys } from "../queries/tasks";
 import {

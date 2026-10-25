@@ -173,18 +173,13 @@ describe("TaskDetailsSheet", () => {
               }
             : undefined,
       });
-      task.agentWorkflows.builder.completed = true;
+      task.agentWorkflows.build.completed = true;
       const sheet = (taskId: string) => {
         const shownTask = { ...task, id: taskId };
         return (
           <IsolatedProviders>
             <TaskWorkflowActionsContext.Provider value={actions}>
-              <TaskDetailsSheet
-                task={shownTask}
-                allTasks={[shownTask]}
-                open
-                onOpenChange={() => {}}
-              />
+              <TaskDetailsSheet task={shownTask} open onOpenChange={() => {}} />
             </TaskWorkflowActionsContext.Provider>
           </IsolatedProviders>
         );
@@ -208,24 +203,13 @@ describe("TaskDetailsSheet", () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
 
-    const childTask = createTaskCardFixture({
-      id: "TASK-2",
-      title: "Task 2",
-      artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
-      },
-    });
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Task 1",
-      issueType: "epic",
-      subtaskIds: ["TASK-2"],
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: false, updatedAt: undefined },
       },
     });
 
@@ -238,7 +222,6 @@ describe("TaskDetailsSheet", () => {
         repoPath: "/repo-a",
       },
       task,
-      allTasks: [task, childTask],
       open: true,
       onOpenChange: () => {},
       onPlan: undefined,
@@ -259,7 +242,7 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], false);
+      expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1"], false);
       expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], false);
     } finally {
       await harness.unmount();
@@ -286,7 +269,6 @@ describe("TaskDetailsSheet", () => {
         repoPath: "/repo-a",
       },
       task,
-      allTasks: [task],
       open: true,
       onOpenChange: () => {},
       onPlan: undefined,
@@ -342,7 +324,6 @@ describe("TaskDetailsSheet", () => {
         repoPath: "/repo-a",
       },
       task,
-      allTasks: [task],
       open: true,
       onOpenChange: () => {},
       onPlan: undefined,
@@ -382,13 +363,7 @@ describe("TaskDetailsSheet", () => {
   test("loads cleanup impact only for an available action's open confirmation", async () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
-    const childTask = createTaskCardFixture({ id: "TASK-2", title: "Task 2" });
-    const task = createTaskCardFixture({
-      id: "TASK-1",
-      title: "Task 1",
-      issueType: "epic",
-      subtaskIds: ["TASK-2"],
-    });
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
@@ -397,7 +372,6 @@ describe("TaskDetailsSheet", () => {
         repoPath: "/repo-a",
       },
       task,
-      allTasks: [task, childTask],
       open: true,
       onOpenChange: () => {},
       onPlan: undefined,
@@ -421,14 +395,14 @@ describe("TaskDetailsSheet", () => {
     try {
       await harness.mount();
       expect(latestImpactCalls()).toEqual([
-        [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], false],
         [["TASK-1"], false],
         [["TASK-1"], false],
       ]);
 
       await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
       expect(latestImpactCalls()).toEqual([
-        [["TASK-1", "TASK-2"], true],
+        [["TASK-1"], true],
         [["TASK-1"], false],
         [["TASK-1"], false],
       ]);
@@ -436,7 +410,7 @@ describe("TaskDetailsSheet", () => {
       await harness.run((viewModel) => viewModel.deleteConfirm.dialog.onCancel());
       await harness.run((viewModel) => viewModel.resetConfirm.openDialog());
       expect(latestImpactCalls()).toEqual([
-        [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], false],
         [["TASK-1"], true],
         [["TASK-1"], false],
       ]);
@@ -444,7 +418,7 @@ describe("TaskDetailsSheet", () => {
       await harness.run((viewModel) => viewModel.resetConfirm.dialog.onCancel());
       await harness.run((viewModel) => viewModel.closeConfirm.openDialog());
       expect(latestImpactCalls()).toEqual([
-        [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], false],
         [["TASK-1"], false],
         [["TASK-1"], true],
       ]);
@@ -463,7 +437,6 @@ describe("TaskDetailsSheet", () => {
     const onOpenChange = mock((_open: boolean) => {});
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       task,
-      allTasks: [task],
       open: true,
       onOpenChange,
       onOpenSession: mock(() => {}),
@@ -501,7 +474,6 @@ describe("TaskDetailsSheet", () => {
         repoPath: "/repo-a",
       },
       task,
-      allTasks: [task],
       open: true,
       onOpenChange,
       onPlan: undefined,
@@ -552,7 +524,6 @@ describe("TaskDetailsSheet", () => {
         repoPath: "/repo-a",
       },
       task,
-      allTasks: [task],
       open: true,
       onOpenChange: () => {},
       onPlan: undefined,
@@ -590,9 +561,9 @@ describe("TaskDetailsSheet", () => {
       id: "TASK-1",
       title: "Task 1",
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: false, updatedAt: undefined },
       },
     });
 
@@ -607,7 +578,6 @@ describe("TaskDetailsSheet", () => {
             repoPath: "/repo-a",
           },
           task,
-          allTasks: [task],
           open: true,
           onOpenChange: () => {},
         }),
@@ -627,7 +597,6 @@ describe("TaskDetailsSheet", () => {
         null,
         createElement(TaskDetailsSheet, {
           task: open ? task : null,
-          allTasks: [task],
           open,
           onOpenChange: () => {},
         }),
@@ -664,7 +633,6 @@ describe("TaskDetailsSheet", () => {
         null,
         createElement(TaskDetailsSheet, {
           task: open ? task : null,
-          allTasks: [task],
           open,
           onOpenChange: () => {},
         }),
@@ -698,7 +666,7 @@ describe("TaskDetailsSheet", () => {
         createElement(
           TaskWorkflowActionsContext.Provider,
           { value: createTaskWorkflowActionsValue() },
-          createElement(TaskDetailsSheet, { task, allTasks: [task], open: true, onOpenChange }),
+          createElement(TaskDetailsSheet, { task, open: true, onOpenChange }),
         ),
       ),
     );
@@ -726,7 +694,7 @@ describe("TaskDetailsSheet", () => {
       createElement(
         IsolatedProviders,
         null,
-        createElement(TaskDetailsSheet, { task, allTasks: [task], open: true, onOpenChange }),
+        createElement(TaskDetailsSheet, { task, open: true, onOpenChange }),
         createElement(
           Dialog,
           { open: editorOpen },
@@ -756,7 +724,6 @@ describe("TaskDetailsSheet", () => {
         null,
         createElement(TaskDetailsSheet, {
           task,
-          allTasks: [task],
           open: true,
           onOpenChange: () => {},
         }),
@@ -784,9 +751,9 @@ describe("TaskDetailsSheet", () => {
       status: "ready_for_dev",
       availableActions: ["build_start"],
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: false, updatedAt: undefined },
       },
     });
     const actions = createTaskWorkflowActionsValue();
@@ -814,7 +781,6 @@ describe("TaskDetailsSheet", () => {
                   repoPath: "/repo-a",
                 },
                 task,
-                allTasks: [task],
                 open: true,
                 onOpenChange: () => {},
               }),

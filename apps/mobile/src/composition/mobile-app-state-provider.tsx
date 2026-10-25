@@ -2,7 +2,7 @@ import { AgentStudioStateProvider } from "@openducktor/frontend-core/app-state/p
 import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/providers/app-runtime-provider";
 import { DelegationStateProvider } from "@openducktor/frontend-core/app-state/providers/delegation-state-provider";
 import { HostRuntimeStatusProvider } from "@openducktor/frontend-core/app-state/providers/host-runtime-status-provider";
-import { SpecStateProvider } from "@openducktor/frontend-core/app-state/providers/spec-state-provider";
+import { DocumentStateProvider } from "@openducktor/frontend-core/app-state/providers/document-state-provider";
 import { TasksStateProvider } from "@openducktor/frontend-core/app-state/providers/tasks-state-provider";
 import { WorkspaceActivityProvider } from "@openducktor/frontend-core/app-state/providers/workspace-activity-provider";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -45,7 +45,7 @@ export function MobileAppStateProvider({ children }: PropsWithChildren): ReactEl
       loadRepoRuntimeCatalog={runtimeCatalogOperations.loadRuntimeCatalog}
       loadRepoRuntimeFileSearch={runtimeCatalogOperations.loadRepoRuntimeFileSearch}
     >
-      <SpecStateProvider>
+      <DocumentStateProvider>
         <HostRuntimeStatusProvider>
           <TasksStateProvider>
             <WorkspaceSelectionProvider>
@@ -69,7 +69,7 @@ export function MobileAppStateProvider({ children }: PropsWithChildren): ReactEl
             </WorkspaceSelectionProvider>
           </TasksStateProvider>
         </HostRuntimeStatusProvider>
-      </SpecStateProvider>
+      </DocumentStateProvider>
     </AppRuntimeProvider>
   );
 }

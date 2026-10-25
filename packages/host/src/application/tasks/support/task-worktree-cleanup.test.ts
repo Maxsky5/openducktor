@@ -1,6 +1,6 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
-  type AgentRole,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeSupportedScope,
@@ -41,10 +41,11 @@ const taskStoreWithTasks = (
     renameArtifact: () => Effect.die(new Error("unexpected renameArtifact")),
     replaceArtifact: () => Effect.die(new Error("unexpected replaceArtifact")),
     deleteArtifact: () => Effect.die(new Error("unexpected deleteArtifact")),
+    clearWorkflowArtifacts: () => Effect.die(new Error("unexpected clearWorkflowArtifacts")),
+    saveWorkflowArtifact: () => Effect.die(new Error("unexpected saveWorkflowArtifact")),
     recordAgentSessionActivity: () =>
       Effect.die(new Error("unexpected recordAgentSessionActivity")),
     clearAgentSessionsByRoles: () => Effect.die(new Error("unexpected clearAgentSessionsByRoles")),
-    clearQaReports: () => Effect.die(new Error("unexpected clearQaReports")),
     clearTaskArtifacts: () => Effect.die(new Error("unexpected clearTaskArtifacts")),
     createTask: () => Effect.die(new Error("unexpected createTask")),
     deleteAgentSession: () => Effect.die(new Error("unexpected deleteAgentSession")),
@@ -55,8 +56,7 @@ const taskStoreWithTasks = (
     getTask: () => Effect.die(new Error("unexpected getTask")),
     getTaskMetadata: ({ taskId }) =>
       Effect.succeed({
-        spec: { markdown: "" },
-        plan: { markdown: "" },
+        artifacts: {},
         agentSessions: sessionsByTaskId[taskId] ?? [],
       }),
     listPullRequestSyncCandidates: () =>
@@ -64,11 +64,8 @@ const taskStoreWithTasks = (
     listAgentSessionsForTasks: () => Effect.die(new Error("unexpected listAgentSessionsForTasks")),
     listTaskIds: () => Effect.die(new Error("unexpected listTaskIds")),
     listTasks: () => Effect.succeed(tasks),
-    recordQaOutcome: () => Effect.die(new Error("unexpected recordQaOutcome")),
     setDirectMerge: () => Effect.die(new Error("unexpected setDirectMerge")),
-    setPlanArtifact: () => Effect.die(new Error("unexpected setPlanArtifact")),
     setPullRequest: () => Effect.die(new Error("unexpected setPullRequest")),
-    setSpecArtifact: () => Effect.die(new Error("unexpected setSpecArtifact")),
     transitionTask: () => Effect.die(new Error("unexpected transitionTask")),
     updateTask: () => Effect.die(new Error("unexpected updateTask")),
     updateAgentSessionModel: () => Effect.die(new Error("unexpected updateAgentSessionModel")),
@@ -117,7 +114,7 @@ describe("task worktree cleanup", () => {
     ["planner", ["workspace"]],
     ["qa", ["task"]],
     ["build", ["build", "workspace"]],
-  ] satisfies Array<[AgentRole, RuntimeSupportedScope[]]>)(
+  ] satisfies Array<[string, RuntimeSupportedScope[]]>)(
     "accepts the shared %s runtime scope contract",
     async (role, supportedScopes) => {
       await expect(
@@ -125,7 +122,7 @@ describe("task worktree cleanup", () => {
           resolveRuntimeDescriptorForTaskSession(
             runtimeDefinitionsWithScopes(supportedScopes),
             "opencode",
-            role,
+            builtinTaskWorkflow.role(role),
           ),
         ),
       ).resolves.toMatchObject({ kind: "opencode" });
@@ -137,6 +134,7 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
+          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -173,6 +171,7 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
+          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set()),
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
@@ -201,11 +200,46 @@ describe("task worktree cleanup", () => {
     expect(calls).toEqual([]);
   });
 
+  test("reads candidates only from the worktree roles of the task workflow", async () => {
+    const cleanupTarget = await Effect.runPromise(
+      findLatestCleanupTarget(
+        {
+          worktreeRoles: ["writer"],
+          gitPort: createDirectMergeGitPort({ calls: [] }),
+          settingsConfig: createBuildSettingsConfig(new Set()),
+          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+        },
+        taskStoreWithTasks([task()], {
+          "task-1": [
+            createAgentSessionRecord({
+              externalSessionId: "writer-session",
+              role: "writer",
+              startedAt: "2026-05-10T10:00:00.000Z",
+              workingDirectory: "/worktrees/repo/writer",
+            }),
+            createAgentSessionRecord({
+              externalSessionId: "editor-session",
+              role: "editor",
+              startedAt: "2026-05-10T11:00:00.000Z",
+              workingDirectory: "/worktrees/repo/editor",
+            }),
+          ],
+        }),
+        "/repo",
+        "task-1",
+        "odt/task-1",
+      ),
+    );
+
+    expect(cleanupTarget).toBe("/worktrees/repo/writer");
+  });
+
   test("skips repository-root cleanup candidates at the source", async () => {
     const calls: unknown[] = [];
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
+          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -247,6 +281,7 @@ describe("task worktree cleanup", () => {
       const cleanupTarget = await Effect.runPromise(
         findLatestCleanupTarget(
           {
+            worktreeRoles: ["build"],
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -281,6 +316,7 @@ describe("task worktree cleanup", () => {
     const cleanupTarget = await Effect.runPromise(
       findLatestCleanupTarget(
         {
+          worktreeRoles: ["build"],
           gitPort: createDirectMergeGitPort({
             calls,
             currentBranches: {
@@ -332,6 +368,7 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
+            workflow: builtinTaskWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -409,6 +446,7 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
+            workflow: builtinTaskWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -472,6 +510,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
+              workflow: builtinTaskWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -504,6 +543,7 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
+            workflow: builtinTaskWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               canonicalPaths: {
@@ -564,6 +604,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
+              workflow: builtinTaskWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 canonicalPaths: {
@@ -628,6 +669,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
+              workflow: builtinTaskWorkflow,
               gitPort: extendGitPort(baseGitPort, {
                 removeWorktree(repoPath, targetWorktreePath, force) {
                   return baseGitPort.removeWorktree(repoPath, targetWorktreePath, force).pipe(
@@ -671,6 +713,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
+              workflow: builtinTaskWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {

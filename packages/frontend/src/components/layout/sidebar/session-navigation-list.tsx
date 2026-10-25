@@ -1,8 +1,8 @@
+import { BUILTIN_STATUS_SHORT_LABELS } from "@openducktor/workflows";
 import { ChevronDown, LoaderCircle } from "lucide-react";
 import { memo, type ReactElement, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeClassName } from "@/lib/task-status-presentation";
-import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import { sessionEntryTitleTone } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
@@ -203,7 +203,7 @@ const SessionRow = memo(function SessionRow({
                 statusBadgeClassName(task.status),
               )}
             >
-              {task.status === "blocked" ? "Blocked" : statusLabel(task.status)}
+              {BUILTIN_STATUS_SHORT_LABELS[task.status]}
             </Badge>
           )}
           <SessionRowMetadata entry={entry} now={now} />

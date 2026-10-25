@@ -5,19 +5,12 @@ import { agentRoleSchema } from "./agent-workflow-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
 import { agentSessionLivePendingApprovalRequestSchema } from "./agent-session-live-schemas";
 
-export const NOTIFICATION_KIND_VALUES = [
+export const AGENT_NOTIFICATION_KIND_VALUES = [
   "agent.permission_requested",
   "agent.question_asked",
   "agent.session_error",
   "agent.session_started",
   "agent.session_idle",
-  "workflow.spec_ready",
-  "workflow.ready_for_dev",
-  "workflow.in_progress",
-  "workflow.blocked",
-  "workflow.ai_review",
-  "workflow.human_review",
-  "workflow.closed",
 ] as const;
 
 export const NOTIFICATION_CUE_VALUES = [
@@ -44,7 +37,13 @@ export const NOTIFICATION_TARGET_VALUES = ["in_app", "os", "both"] as const;
 export const NOTIFICATION_OS_FOCUS_VALUES = ["suppress_if_focused", "always_send"] as const;
 export const NOTIFICATION_SOUND_FOCUS_VALUES = ["mute_while_focused", "always_play"] as const;
 
-export const notificationKindSchema = z.enum(NOTIFICATION_KIND_VALUES);
+export const agentNotificationKindSchema = z.enum(AGENT_NOTIFICATION_KIND_VALUES);
+/** The notification of a workflow state. The workflow of the task names it. */
+export const workflowNotificationKindSchema = z.templateLiteral(["workflow.", z.string().min(1)]);
+export const notificationKindSchema = z.union([
+  agentNotificationKindSchema,
+  workflowNotificationKindSchema,
+]);
 export const notificationCueSchema = z.enum(NOTIFICATION_CUE_VALUES);
 export const notificationTargetSchema = z.enum(NOTIFICATION_TARGET_VALUES);
 export const notificationSoundSchema = z.union([
@@ -55,6 +54,8 @@ export const notificationSoundSchema = z.union([
 export const notificationOsFocusSchema = z.enum(NOTIFICATION_OS_FOCUS_VALUES);
 export const notificationSoundFocusSchema = z.enum(NOTIFICATION_SOUND_FOCUS_VALUES);
 
+export type AgentNotificationKind = z.infer<typeof agentNotificationKindSchema>;
+export type WorkflowNotificationKind = z.infer<typeof workflowNotificationKindSchema>;
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
 export type NotificationCue = z.infer<typeof notificationCueSchema>;
 export type NotificationTarget = z.infer<typeof notificationTargetSchema>;
@@ -69,20 +70,23 @@ export const notificationKindSettingSchema = z.strictObject({
 });
 export type NotificationKindSetting = z.infer<typeof notificationKindSettingSchema>;
 
-const DEFAULT_NOTIFICATION_KIND_SETTINGS = {
+const DEFAULT_AGENT_NOTIFICATION_KIND_SETTINGS = {
   "agent.permission_requested": { enabled: true, target: "both", sound: "bloom" },
   "agent.question_asked": { enabled: true, target: "both", sound: "bloom" },
   "agent.session_error": { enabled: true, target: "both", sound: "inherit" },
   "agent.session_started": { enabled: true, target: "in_app", sound: "inherit" },
   "agent.session_idle": { enabled: false, target: "both", sound: "inherit" },
-  "workflow.spec_ready": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.ready_for_dev": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.in_progress": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.blocked": { enabled: true, target: "both", sound: "bloom" },
-  "workflow.ai_review": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.human_review": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.closed": { enabled: true, target: "in_app", sound: "inherit" },
-} satisfies Record<NotificationKind, NotificationKindSetting>;
+} satisfies Record<AgentNotificationKind, NotificationKindSetting>;
+
+/** The host adds the workflow kinds of the workflow and rejects other workflow kinds. */
+const notificationKindSettingsSchema = z
+  .record(notificationKindSchema, notificationKindSettingSchema)
+  .superRefine((kinds, context) => {
+    for (const kind of AGENT_NOTIFICATION_KIND_VALUES) {
+      if (kinds[kind]) continue;
+      context.addIssue({ code: "custom", path: [kind], message: `Add the ${kind} setting.` });
+    }
+  });
 
 export const notificationSettingsSchema = z
   .strictObject({
@@ -90,31 +94,26 @@ export const notificationSettingsSchema = z
     volumePercent: z.number().int().min(0).max(100),
     osFocus: notificationOsFocusSchema,
     soundFocus: notificationSoundFocusSchema,
-    kinds: z.record(notificationKindSchema, notificationKindSettingSchema),
+    kinds: notificationKindSettingsSchema,
   })
   .default(() => createDefaultNotificationSettings());
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;
 
-export function createDefaultNotificationSettings(): NotificationSettings {
+/** The workflow supplies the default setting of each workflow kind. */
+export function createDefaultNotificationSettings(
+  workflowKinds: Readonly<Partial<Record<WorkflowNotificationKind, NotificationKindSetting>>> = {},
+): NotificationSettings {
   return {
     globalCue: "chime",
     volumePercent: 30,
     osFocus: "suppress_if_focused",
     soundFocus: "mute_while_focused",
-    kinds: z
-      .record(notificationKindSchema, notificationKindSettingSchema)
-      .parse(
-        Object.fromEntries(
-          NOTIFICATION_KIND_VALUES.map((kind) => [
-            kind,
-            { ...DEFAULT_NOTIFICATION_KIND_SETTINGS[kind] },
-          ]),
-        ),
-      ),
+    kinds: notificationKindSettingsSchema.parse({
+      ...DEFAULT_AGENT_NOTIFICATION_KIND_SETTINGS,
+      ...workflowKinds,
+    }),
   };
 }
-
-export const DEFAULT_NOTIFICATION_SETTINGS = createDefaultNotificationSettings();
 
 const notificationRepoTargetFields = {
   repoPath: agentSessionLiveRefSchema.shape.repoPath,

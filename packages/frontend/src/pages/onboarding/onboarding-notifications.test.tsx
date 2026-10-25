@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
-  NOTIFICATION_KIND_VALUES,
+  AGENT_NOTIFICATION_KIND_VALUES,
   type SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -13,6 +13,7 @@ import {
   enterRuntimeStage,
 } from "./onboarding-page.test-support";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+import { BUILTIN_NOTIFICATION_KINDS } from "@openducktor/workflows";
 
 const { cleanup, renderOnboarding } = createOnboardingTestHarness();
 afterEach(cleanup);
@@ -45,7 +46,7 @@ describe("onboarding notifications", () => {
 
     expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
     expect(screen.getAllByRole("switch", { name: /^Enable / })).toHaveLength(
-      NOTIFICATION_KIND_VALUES.length,
+      AGENT_NOTIFICATION_KIND_VALUES.length + BUILTIN_NOTIFICATION_KINDS.length,
     );
     expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "Delivery for Permission Prompt" })).toBeTruthy();

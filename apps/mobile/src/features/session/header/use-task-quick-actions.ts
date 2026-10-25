@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";

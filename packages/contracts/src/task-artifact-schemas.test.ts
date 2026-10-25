@@ -135,7 +135,6 @@ describe("task artifact transport contracts", () => {
       {},
       { codes: [] },
       { codes: ["spec", "spec"] },
-      { codes: ["Invalid Code"] },
       { artifactIds: ["free-1"] },
       { maxBytes: 4 },
       { byteOffset: 0 },

@@ -1,4 +1,4 @@
-import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type { KanbanColumn as KanbanColumnData } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import {
   KANBAN_COLLAPSED_LANE_WIDTH_CLASS,

@@ -1,6 +1,6 @@
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+
 import {
   fireEvent,
   render as renderWithoutConnection,
@@ -15,6 +15,7 @@ import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/provide
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { SessionStartModal } from "./session-start-modal";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 
 enableReactActEnvironment();
 

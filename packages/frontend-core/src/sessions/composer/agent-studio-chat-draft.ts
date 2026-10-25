@@ -1,4 +1,3 @@
-import type { AgentRole } from "@openducktor/core";
 import type { AgentChatDraftPersistence } from "../send/agent-chat-draft-scope";
 import {
   type AgentChatDraftSessionIdentity,
@@ -7,6 +6,7 @@ import {
 import type { AgentChatDraftStore } from "../../drafts/agent-chat-draft-store";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export type AgentStudioChatDraftScope = {
   taskId: string;

@@ -1,4 +1,4 @@
-import type { ManagedMcpServerResolver } from "@openducktor/core";
+import type { ManagedMcpServerResolver, WorkflowRolePolicyResolver } from "@openducktor/core";
 import type { CodexImageGenerationPreparer } from "./codex-image-generation";
 import type {
   AgentSessionLiveRef,
@@ -214,6 +214,8 @@ type CodexAppServerAdapterBaseOptions = {
   runtime: BoundRuntimeRoute;
   /** Resolves the managed MCP server sent with every thread start, resume, and fork. */
   resolveManagedMcpServer: ManagedMcpServerResolver;
+  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   transportFactory: CodexJsonRpcTransportFactory;
   respondServerRequest?: CodexServerRequestResponder;
   onLiveSessionMutation?: (mutation: CodexLiveSessionMutation) => void | Promise<void>;

@@ -1,4 +1,5 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/contracts";
+
 import type { AgentModelCatalog, AgentModelSelection } from "../types/agent-orchestrator";
 import {
   coerceVisibleSelectionToCatalog,
@@ -15,6 +16,7 @@ import {
   withSpeed,
 } from "./model-catalog-selection";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
+
 type SendBlockReason = "model" | "profile";
 type RepairChoice =
   | { selection: AgentModelSelection; blockedReason: null }

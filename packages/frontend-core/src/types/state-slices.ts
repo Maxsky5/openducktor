@@ -1,11 +1,13 @@
 import type {
   GitTargetBranch,
   TaskAssetDescriptionMutation,
-  TaskCard,
   TaskCreateInput,
-  TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
+import type {
+  BuiltinStateId as TaskStatus,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import type { TaskPullRequestOperations } from "./task-pull-request";
 
 export type TasksStateContextValue = TaskPullRequestOperations & {
@@ -22,7 +24,7 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
     assets?: TaskAssetDescriptionMutation,
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
   closeTask: (taskId: string) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
@@ -35,12 +37,11 @@ export type DelegationStateContextValue = {
   delegateTask: (taskId: string) => Promise<void>;
 };
 
-export type SpecStateContextValue = {
-  loadSpec: (taskId: string) => Promise<string>;
-  loadSpecDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
-  loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
-  loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
-  saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
-  saveSpecArtifact: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
-  savePlanArtifact: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+/** Reads and saves the workflow documents of the active workspace by artifact code. */
+export type DocumentStateContextValue = {
+  loadDocument: (
+    taskId: string,
+    code: string,
+  ) => Promise<{ markdown: string; updatedAt: string | null }>;
+  saveDocument: (taskId: string, code: string, markdown: string) => Promise<{ updatedAt: string }>;
 };

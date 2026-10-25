@@ -1,6 +1,6 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { taskDocumentQueryOptions } from "@openducktor/frontend-core/queries/documents";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 /** Keep workflow reads active for the task, independent of its transcript and shown panel. */
 export function useAgentStudioArtifacts(repoPath: string | null, task: TaskCard | null): void {
@@ -8,15 +8,10 @@ export function useAgentStudioArtifacts(repoPath: string | null, task: TaskCard 
   useQueries({
     queries:
       repoPath && task
-        ? (["spec", "plan", "qaReport"] as const)
-            .filter((kind) => task.artifactSummary[kind].has)
-            .map((kind) => ({
-              ...taskDocumentQueryOptions(
-                queryClient,
-                repoPath,
-                task.id,
-                kind === "qaReport" ? "qa" : kind,
-              ),
+        ? Object.entries(task.artifactSummary)
+            .filter(([, state]) => state.present)
+            .map(([code]) => ({
+              ...taskDocumentQueryOptions(queryClient, repoPath, task.id, code),
               // The preview observes results; this owner only keeps their reads active.
               notifyOnChangeProps: [],
             }))

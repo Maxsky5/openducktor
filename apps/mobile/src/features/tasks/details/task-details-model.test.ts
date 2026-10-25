@@ -151,9 +151,9 @@ describe("taskDocumentsSummary", () => {
     const base = createTaskCardFixture({}).artifactSummary;
     return {
       ...base,
-      spec: { ...base.spec, has: spec },
-      plan: { ...base.plan, has: plan },
-      qaReport: { ...base.qaReport, has: qa },
+      spec: { present: spec },
+      plan: { present: plan },
+      qaReport: { present: qa },
     };
   };
 

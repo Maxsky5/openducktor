@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Effect } from "effect";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -76,9 +77,11 @@ export const createNodeTaskAssetServices = ({
   isWorkspaceBlocked,
   onBackgroundFailure,
   processEnv,
+  taskWorkflows,
   workspaceSettingsService,
 }: {
   configDir: OpenDucktorConfigDir;
+  taskWorkflows: TaskWorkflowResolver;
   assertWorkspaceAdmitted?: (input: {
     operation: string;
     repoPath: string;
@@ -123,6 +126,7 @@ export const createNodeTaskAssetServices = ({
     onBackgroundFailure,
     processEnv,
     resolveWorkspaceIdForRepoPath,
+    taskWorkflows,
     assertWorkspaceOwnershipReadAdmitted: (scope) =>
       Effect.gen(function* () {
         const config = yield* workspaceSettingsService.getRepoConfig(scope.workspaceId);

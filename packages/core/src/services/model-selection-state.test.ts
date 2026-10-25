@@ -1,5 +1,6 @@
+import { CLAUDE_RUNTIME_CAPABILITIES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "../types/agent-orchestrator";
 import { resolveSavedModelAlias } from "./model-catalog-selection";
 import { coerceVisibleSelectionToCatalog, isSameSelection } from "./model-selection-state";
@@ -14,7 +15,15 @@ const model = (modelId: string): AgentModelCatalog["models"][number] => ({
 });
 
 const catalog: AgentModelCatalog = {
-  runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+  runtime: {
+    kind: "claude",
+    label: "Claude",
+    description: "Claude model catalog",
+    readOnlyRoleBlockedTools: [],
+    workflowToolAliasesByCanonical: {},
+    capabilities: CLAUDE_RUNTIME_CAPABILITIES,
+    capabilityLimits: [],
+  },
   models: [
     { ...model("claude-opus-5-5"), aliases: ["opus", "claude-opus-5"] },
     model("claude-opus-5"),

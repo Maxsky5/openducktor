@@ -51,6 +51,7 @@
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/remote-host": "workspace:*",
+    "@openducktor/workflows": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.4",
     "@testing-library/react": "^16.3.3",

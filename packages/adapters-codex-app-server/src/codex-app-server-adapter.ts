@@ -292,6 +292,7 @@ export class CodexAppServerAdapter
     > = {
       prepareImageGenerations: options.prepareImageGenerations,
       respondServerRequest: options.respondServerRequest,
+      resolveWorkflowRolePolicy: options.resolveWorkflowRolePolicy,
       sessions: {
         get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
         values: () => this.localSessions.values(),
@@ -361,6 +362,7 @@ export class CodexAppServerAdapter
       prepareRuntime: (runtimeId) => this.prepareRuntime(runtimeId),
       threadConfig: (repoPath, sessionPolicy) => this.threadConfig(repoPath, sessionPolicy),
       clearThreadInventory: (runtimeId) => this.clearThreadInventory(runtimeId),
+      resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
     });
   }
 
@@ -464,9 +466,9 @@ export class CodexAppServerAdapter
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "start Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "start Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
@@ -520,9 +522,9 @@ export class CodexAppServerAdapter
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "resume Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "resume Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const current = this.localSessions.get(input.externalSessionId);
     if (current) {
@@ -681,9 +683,9 @@ export class CodexAppServerAdapter
   ): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "continue Codex turn");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "continue Codex turn",
+      this.options.resolveWorkflowRolePolicy,
     );
     const current = this.localSessions.get(input.externalSessionId);
     if (current) {
@@ -840,9 +842,9 @@ export class CodexAppServerAdapter
     }
     assertCodexRuntimePolicyBinding(input, "fork Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "fork Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
@@ -946,9 +948,9 @@ export class CodexAppServerAdapter
   ): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
     const scopePolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "send Codex user message",
+      this.options.resolveWorkflowRolePolicy,
     );
     const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
     if (systemInvocation.kind === "not_system") {
@@ -1303,9 +1305,9 @@ export class CodexAppServerAdapter
     const metadata = await getCodexSessionMetadata(client, input);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "open existing Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
     assertAgentWorkStartCurrent(input);
@@ -1415,9 +1417,9 @@ export class CodexAppServerAdapter
     }
 
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "ensure Codex session state",
+      this.options.resolveWorkflowRolePolicy,
     );
     const policy = sessionPolicy.runtimePolicy;
     const config = await this.threadConfig(input.repoPath, sessionPolicy);

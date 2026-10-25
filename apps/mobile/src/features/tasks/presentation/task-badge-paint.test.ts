@@ -10,7 +10,6 @@ describe("task badge paint", () => {
   test("uses the desktop colors and icons for the issue types", () => {
     expect(issueTypePaint("feature")).toEqual({ label: "Feature", tone: "info", icon: "sparkles" });
     expect(issueTypePaint("bug")).toEqual({ label: "Bug", tone: "destructive", icon: "bug" });
-    expect(issueTypePaint("epic").tone).toBe("pending");
     expect(issueTypePaint("task").tone).toBe("neutral");
   });
 

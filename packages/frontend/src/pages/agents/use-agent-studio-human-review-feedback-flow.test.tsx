@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
@@ -9,6 +8,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioHumanReviewFeedbackFlow } from "./use-agent-studio-human-review-feedback-flow";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 

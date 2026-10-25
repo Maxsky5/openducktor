@@ -1,4 +1,8 @@
-import { type IssueType, issueTypeSchema, type TaskPriority } from "@openducktor/contracts";
+import type { TaskPriority } from "@openducktor/contracts";
+import {
+  BUILTIN_ISSUE_TYPE_IDS,
+  type BuiltinIssueTypeId as IssueType,
+} from "@openducktor/workflows";
 import {
   ISSUE_TYPE_LABELS,
   PRIORITY_LABELS,
@@ -22,7 +26,7 @@ export const filtersControlLabel = (filter: KanbanBoardFilter): string => {
 
 /** The issue types in the order of the desktop Type menu. */
 export const ISSUE_TYPE_FILTER_OPTIONS: readonly { value: IssueType; label: string }[] =
-  issueTypeSchema.options.map((value) => ({ value, label: ISSUE_TYPE_LABELS[value] }));
+  BUILTIN_ISSUE_TYPE_IDS.map((value) => ({ value, label: ISSUE_TYPE_LABELS[value] }));
 
 /** The priorities with the words of the desktop Priority menu, such as "P0 Critical". */
 export const PRIORITY_FILTER_OPTIONS: readonly {

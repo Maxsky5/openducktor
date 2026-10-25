@@ -1,13 +1,12 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
-import {
-  validateExistingTaskWorktreeCandidate,
-  workflowCleanupSessionRoles,
-} from "./task-cleanup-support";
+import type { TaskWorkflow } from "@openducktor/workflows";
+import { validateExistingTaskWorktreeCandidate } from "./task-cleanup-support";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type CloseWorktreeCandidate = {
   path: string;
@@ -15,10 +14,11 @@ type CloseWorktreeCandidate = {
 };
 
 const collectCloseManagedSessionWorktreePaths = (
+  workflow: TaskWorkflow,
   sessions: AgentSessionRecord[],
 ): CloseWorktreeCandidate[] =>
   sessions.reduce<CloseWorktreeCandidate[]>((candidates, session) => {
-    if (!workflowCleanupSessionRoles.has(session.role.trim())) {
+    if (!workflow.hasRole(session.role.trim())) {
       return candidates;
     }
 
@@ -35,7 +35,8 @@ export const collectCloseWorktreePaths = (
     taskWorktreeService?: TaskWorktreeService;
   },
   repoPath: string,
-  task: TaskCard,
+  workflow: TaskWorkflow,
+  task: TaskRecord,
   sessions: AgentSessionRecord[],
 ) =>
   Effect.gen(function* () {
@@ -50,7 +51,7 @@ export const collectCloseWorktreePaths = (
       ...(taskWorktree
         ? [{ path: taskWorktree.workingDirectory, source: "task_worktree" as const }]
         : []),
-      ...collectCloseManagedSessionWorktreePaths(sessions),
+      ...collectCloseManagedSessionWorktreePaths(workflow, sessions),
     ];
     const seen = new Set<string>();
     const paths: string[] = [];

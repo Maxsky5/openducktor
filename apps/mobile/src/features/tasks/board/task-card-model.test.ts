@@ -1,5 +1,6 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import type { KanbanTaskSession } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import { buildTaskCardModel } from "./task-card-model";
@@ -141,7 +142,6 @@ describe("buildTaskCardModel", () => {
         status: "closed",
         availableActions: ["reset_task"],
         labels: ["api", "ui", "docs", "mobile", "perf"],
-        subtaskIds: ["TASK-2"],
       }),
       taskSessions: [],
       historicalSessions: [],

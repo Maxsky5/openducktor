@@ -1,3 +1,4 @@
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import {
   type StyleProp,
@@ -11,7 +12,6 @@ import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { type AppTheme, radius, verticalTouchSlop } from "@/theme/tokens";
-import type { AgentRole } from "@openducktor/core";
 import { RoleIcon } from "./brand-icons";
 import { Icon, type IconName } from "./icon";
 import { LoaderSpinner } from "./loader-spinner";

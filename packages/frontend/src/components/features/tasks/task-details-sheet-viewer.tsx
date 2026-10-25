@@ -24,8 +24,7 @@ export default function TaskDetailsSheetViewer({
     enabled: Boolean(activeWorkspace) && !contextTask && !isLoadingTasks,
     retry: false,
   });
-  const allTasks = contextTask ? tasks : (taskQuery.data?.tasks ?? tasks);
-  const task = contextTask ?? allTasks.find((entry) => entry.id === taskId);
+  const task = contextTask ?? taskQuery.data?.tasks.find((entry) => entry.id === taskId);
 
   if (!task) {
     let error: string | undefined;
@@ -42,7 +41,6 @@ export default function TaskDetailsSheetViewer({
     <TaskDetailsSheetContent
       activeWorkspace={activeWorkspace}
       task={task}
-      allTasks={allTasks}
       onOpenChange={onOpenChange}
     />
   );

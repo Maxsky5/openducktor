@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

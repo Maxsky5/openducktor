@@ -1,8 +1,9 @@
+import { CLAUDE_RUNTIME_CAPABILITIES, CODEX_RUNTIME_CAPABILITIES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+
 import { resolveRuntimeSteeringAvailability } from "./agent-message-delivery";
 
-const claude = RUNTIME_DESCRIPTORS_BY_KIND.claude;
+const claude = { label: "Claude", capabilities: CLAUDE_RUNTIME_CAPABILITIES };
 
 const withoutSteering = {
   label: "Runtime",
@@ -21,7 +22,10 @@ describe("resolveRuntimeSteeringAvailability", () => {
       available: true,
     });
     expect(
-      resolveRuntimeSteeringAvailability(RUNTIME_DESCRIPTORS_BY_KIND.codex, "codex-cli 0.106.0"),
+      resolveRuntimeSteeringAvailability(
+        { label: "Codex", capabilities: CODEX_RUNTIME_CAPABILITIES },
+        "codex-cli 0.106.0",
+      ),
     ).toEqual({ available: true });
   });
 

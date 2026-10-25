@@ -1,4 +1,5 @@
-import type { PullRequest, TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { PullRequest } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 
 import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";

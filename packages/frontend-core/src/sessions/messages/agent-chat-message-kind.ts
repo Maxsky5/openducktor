@@ -1,4 +1,5 @@
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX, type AgentRole } from "@openducktor/core";
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "../send/agent-chat.types";
 import { assistantRoleFromMessage, formatTime, SYSTEM_PROMPT_PREFIX } from "./message-formatting";

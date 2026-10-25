@@ -1,3 +1,4 @@
+import { claudeTestRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import { parseClaudeHistoryMessages } from "./claude-agent-sdk-history-messages";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
@@ -25,8 +26,10 @@ describe("Claude SDK ingress", () => {
   });
 
   test("rejects malformed pre-tool input before authorization", async () => {
+    const session = createClaudeSession();
     const hook = createClaudePreToolUseHook({
-      session: createClaudeSession(),
+      session,
+      rolePolicy: claudeTestRolePolicy(session),
     });
     const malformedInput: Parameters<typeof hook>[0] = {
       cwd: "/repo",

@@ -882,7 +882,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
             agentWorkflows: {
               spec: { required: true, canSkip: false, available: true, completed: false },
               planner: { required: true, canSkip: false, available: false, completed: false },
-              builder: { required: true, canSkip: false, available: false, completed: false },
+              build: { required: true, canSkip: false, available: false, completed: false },
               qa: { required: true, canSkip: false, available: false, completed: false },
             },
           }),

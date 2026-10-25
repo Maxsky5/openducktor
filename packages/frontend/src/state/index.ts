@@ -3,7 +3,7 @@ export {
   useAgentOperations,
   useAgentSessionReadModelState,
   useChecksState,
-  useSpecState,
+  useDocumentState,
   useTasksState,
   useWorkspaceState,
 } from "./app-state-provider";

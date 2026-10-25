@@ -11,13 +11,12 @@ import {
   taskArtifactFileNameSchema,
   taskArtifactMediaTypeSchema,
   taskArtifactNameSchema,
-  workflowArtifactKindSchema,
   workflowTaskArtifactSchema,
   freeTaskArtifactSchema,
   freeArtifactCodeSchema,
   taskArtifactCodeSchema,
 } from "./task-artifact-schemas";
-import { qaReportVerdictSchema } from "./task-schemas";
+import { workflowIdSchema } from "./workflow-condition-schemas";
 
 const taskArtifactScopeInputSchema = z.strictObject({
   workspaceId: odtToolWorkspaceIdSchema,
@@ -31,7 +30,7 @@ export const ReadTaskArtifactsInputSchema = taskArtifactScopeInputSchema
       .min(1)
       .refine((codes) => new Set(codes).size === codes.length, "Artifact codes must be distinct.")
       .describe(
-        "Use spec, plan, or qaReport for workflow artifacts. Use free-artifact codes from odt_read_task. Returns content in this order.",
+        "Workflow and free artifact codes from odt_read_task. Returns content in this order.",
       ),
     byteOffset: z
       .number()
@@ -82,9 +81,7 @@ export const ReadTaskArtifactsInputSchema = taskArtifactScopeInputSchema
 export type ReadTaskArtifactsInput = z.infer<typeof ReadTaskArtifactsInputSchema>;
 
 export const mcpTaskArtifactSchema = z.discriminatedUnion("classification", [
-  workflowTaskArtifactSchema.omit({ artifactId: true, workflowKind: true }).extend({
-    code: workflowArtifactKindSchema,
-  }),
+  workflowTaskArtifactSchema.omit({ artifactId: true }),
   freeTaskArtifactSchema.omit({ artifactId: true }),
 ]);
 export type McpTaskArtifact = z.infer<typeof mcpTaskArtifactSchema>;
@@ -131,7 +128,7 @@ const artifactTextSchema = z
 export const SetTaskArtifactInputSchema = taskArtifactScopeInputSchema
   .extend({
     code: taskArtifactCodeSchema.describe(
-      "Artifact to save. Workflow codes are spec, plan, and qaReport. Choose a stable lowercase code for a new free artifact.",
+      "Artifact to save. Use a workflow artifact code from odt_read_task, or choose a stable lowercase code for a new free artifact.",
     ),
     name: taskArtifactNameSchema
       .optional()
@@ -156,9 +153,11 @@ export const SetTaskArtifactInputSchema = taskArtifactScopeInputSchema
       .describe(
         "Exact file bytes as padded base64. Use instead of content for binary files. Limit: 10 MiB decoded.",
       ),
-    verdict: qaReportVerdictSchema
+    verdict: workflowIdSchema
       .optional()
-      .describe("Required only for qaReport. Saves the report and applies this QA outcome."),
+      .describe(
+        "Required only for a review artifact. Use one of the verdicts that the workflow declares for it; the role instructions name them. Saves the review and applies its outcome.",
+      ),
   })
   .superRefine((input, context) => {
     if (input.content !== undefined && input.dataBase64 !== undefined) {
@@ -166,39 +165,6 @@ export const SetTaskArtifactInputSchema = taskArtifactScopeInputSchema
         code: "custom",
         path: ["content"],
         message: "Supply content for text or dataBase64 for bytes, not both.",
-      });
-    }
-    if (workflowArtifactKindSchema.safeParse(input.code).success) {
-      if (input.content === undefined && input.dataBase64 === undefined) {
-        context.addIssue({
-          code: "custom",
-          path: ["content"],
-          message: "Supply the complete workflow Markdown in content.",
-        });
-      }
-      for (const field of ["name", "fileName", "mediaType"] as const) {
-        if (input[field] !== undefined) {
-          context.addIssue({
-            code: "custom",
-            path: [field],
-            message: `${field} applies only to free artifacts.`,
-          });
-        }
-      }
-    }
-    if (input.code === "qaReport") {
-      if (input.verdict === undefined) {
-        context.addIssue({
-          code: "custom",
-          path: ["verdict"],
-          message: "Supply an approved or rejected verdict for qaReport.",
-        });
-      }
-    } else if (input.verdict !== undefined) {
-      context.addIssue({
-        code: "custom",
-        path: ["verdict"],
-        message: "verdict applies only to qaReport.",
       });
     }
   });

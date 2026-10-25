@@ -1,9 +1,5 @@
-import type {
-  AgentSessionRecord,
-  TaskCard,
-  WorkspaceRecord,
-  WorkspaceSession,
-} from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { AgentSessionRecord, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import {
   type AgentSessionIdentityLike,

@@ -51,12 +51,20 @@ import {
 export const createOpenCodeLiveSessionState = ({
   runtime,
   nextOccurrenceId,
+  resolveWorkflowRolePolicy,
 }: {
   readonly runtime: OpenCodeRuntimeInstance;
   readonly nextOccurrenceId: () => string;
+  readonly resolveWorkflowRolePolicy: import("@openducktor/core").WorkflowRolePolicyResolver;
 }) => {
   const sessionsByRef = new Map<string, OpenCodeLiveSession>();
   const refsByExternalSessionId = new OpenCodeSessionRefIndex(runtime.runtimeId);
+  const approvalContext = {
+    sessionsByRef,
+    refsByExternalSessionId,
+    runtimeId: runtime.runtimeId,
+    resolveWorkflowRolePolicy,
+  };
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const versions = new OpenCodeSessionVersions();
   const pendingRequests = createOpenCodePendingRequestRouter({
@@ -453,17 +461,8 @@ export const createOpenCodeLiveSessionState = ({
       }),
     applyEvent,
     requirePendingRoute,
-    assertApprovalAllowed: (
-      route: OpenCodePendingRoute,
-      outcome: RuntimeApprovalReplyOutcome,
-    ): void =>
-      assertApprovalAllowed({
-        route,
-        outcome,
-        sessionsByRef,
-        refsByExternalSessionId,
-        runtimeId: runtime.runtimeId,
-      }),
+    assertApprovalAllowed: (route: OpenCodePendingRoute, outcome: RuntimeApprovalReplyOutcome) =>
+      assertApprovalAllowed({ ...approvalContext, route, outcome }),
     completePendingReply,
     removeSession,
     applySessionSignal: (

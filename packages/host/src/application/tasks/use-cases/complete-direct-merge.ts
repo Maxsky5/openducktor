@@ -4,12 +4,13 @@ import {
   requireDependencies,
   requireMergedTaskCleanupDependencies,
 } from "../support/required-task-dependencies";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
-import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+import { requireEffectEvent, taskEventPolicyError } from "../support/task-workflow-events";
+import { enrichTask } from "../support/task-workflow-helpers";
 import { closeMergedTask } from "../support/close-merged-task";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskCompleteDirectMergeUseCase = ({
+  taskWorkflows,
   gitPort,
   taskStore,
   taskActivityGuard,
@@ -35,7 +36,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
         [taskId],
         "complete direct merge",
       );
-      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const merge = metadata.directMerge;
       if (!merge)
@@ -45,12 +46,15 @@ export const createTaskCompleteDirectMergeUseCase = ({
           details: { repoPath, taskId },
         });
       const state = completionState.ensure(repoPath, taskId);
-      if (current.status === "closed") {
+      const workflow = taskWorkflows.forRepo(repoPath);
+      const completeEvent = yield* requireEffectEvent(workflow, "direct_merge.completed");
+      const decision = workflow.decide(completeEvent, current);
+      if (decision.kind === "unchanged") {
         delete state.observation.failure;
         state.observation.taskClosed = true;
         state.observation.phase = "settled";
         yield* completionState.publish(state);
-        return enrichTask(current, currentTasks);
+        return enrichTask(workflow, current);
       }
       if (metadata.agentSessions.length) {
         if (!taskActivityGuard)
@@ -71,7 +75,9 @@ export const createTaskCompleteDirectMergeUseCase = ({
             details: { repoPath, taskId },
           });
       }
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
+      if (decision.kind === "denied") {
+        return yield* taskEventPolicyError(completeEvent, current, decision);
+      }
       return yield* closeMergedTask(
         {
           ...dependencies,
@@ -79,11 +85,12 @@ export const createTaskCompleteDirectMergeUseCase = ({
           completionState,
           taskActivityGuard,
           taskSessionLifecycleCoordinator,
+          taskWorkflows,
         },
         { ...input, repoPath },
         merge,
-        currentTasks,
         state,
+        decision,
         "complete-direct-merge",
       );
     }).pipe(Effect.scoped);

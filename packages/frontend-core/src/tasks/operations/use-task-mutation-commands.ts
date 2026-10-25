@@ -1,9 +1,7 @@
 import type {
   GitTargetBranch,
   TaskAssetDescriptionMutation,
-  TaskCard,
   TaskCreateInput,
-  TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -20,7 +18,6 @@ import {
   createProductionTaskChatDraftCleanup,
   type TaskChatDraftCleanup,
 } from "./task-chat-draft-cleanup";
-import { collectTaskDeletionIds } from "./task-deletion-ids";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
   requireActiveRepo,
@@ -29,11 +26,14 @@ import {
 } from "./task-operations-model";
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { HostClient } from "@openducktor/host-client";
+import type {
+  BuiltinStateId as TaskStatus,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 type UseTaskMutationCommandsArgs = {
   activeRepoPath: string | null;
   activeWorkspaceId: string | null;
-  tasks: TaskCard[];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
   agentSessionReadPort: AgentSessionReadPort;
 };
@@ -46,7 +46,7 @@ export type TaskMutationCommands = {
     assets?: TaskAssetDescriptionMutation,
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
   closeTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
@@ -65,7 +65,7 @@ export type TaskMutationCommandHostPort = {
     patch: TaskUpdatePatch,
     assets?: TaskAssetDescriptionMutation,
   ) => Promise<TaskCard>;
-  taskDelete: (repoPath: string, taskId: string, deleteSubtasks: boolean) => Promise<void>;
+  taskDelete: (repoPath: string, taskId: string) => Promise<void>;
   taskClose: (repoPath: string, taskId: string) => Promise<void>;
   taskTransition: (
     repoPath: string,
@@ -100,7 +100,7 @@ const createHostTaskMutationPort = (host: HostClient): TaskMutationCommandHostPo
 });
 
 export type TaskMutationCommandCacheImpact = {
-  removeDeletedTaskCaches: (repoPath: string, taskIds: string[]) => Promise<void>;
+  removeDeletedTaskCaches: (repoPath: string, taskId: string) => Promise<void>;
   invalidateTaskStopImpact: (repoPath: string) => Promise<void>;
   invalidateTaskWorktree: (repoPath: string, taskId: string) => Promise<void>;
 };
@@ -108,7 +108,6 @@ export type TaskMutationCommandCacheImpact = {
 type CreateTaskMutationCommandsArgs = {
   activeRepoPath: string | null;
   activeWorkspaceId: string | null;
-  tasks: TaskCard[];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
   hostPort: TaskMutationCommandHostPort;
   queryClient: QueryClient;
@@ -119,7 +118,6 @@ type CreateTaskMutationCommandsArgs = {
 export const createTaskMutationCommands = ({
   activeRepoPath,
   activeWorkspaceId,
-  tasks,
   runTaskMutation,
   hostPort,
   queryClient,
@@ -172,18 +170,17 @@ export const createTaskMutationCommands = ({
     });
   };
 
-  const deleteTask = async (taskId: string, deleteSubtasks = false): Promise<void> => {
-    const taskIdsToRemove = collectTaskDeletionIds(tasks, taskId, deleteSubtasks);
+  const deleteTask = async (taskId: string): Promise<void> => {
     await runTaskMutation({
       run: async (repoPath) => {
         await taskChatDraftCleanup.runMutation({
           queryClient,
           repoPath,
           workspaceId: activeWorkspaceId,
-          taskIds: taskIdsToRemove,
+          taskIds: [taskId],
           mutation: async () => {
             try {
-              await hostPort.taskDelete(repoPath, taskId, deleteSubtasks);
+              await hostPort.taskDelete(repoPath, taskId);
             } finally {
               await cacheImpact.invalidateTaskStopImpact(repoPath);
             }
@@ -197,10 +194,8 @@ export const createTaskMutationCommands = ({
     const repoPath = requireActiveRepo(activeRepoPath);
     await Promise.all([
       invalidateRepoIssueItemsQueries(queryClient, repoPath),
-      cacheImpact.removeDeletedTaskCaches(repoPath, taskIdsToRemove),
-      ...taskIdsToRemove.map((deletedTaskId) =>
-        cacheImpact.invalidateTaskWorktree(repoPath, deletedTaskId),
-      ),
+      cacheImpact.removeDeletedTaskCaches(repoPath, taskId),
+      cacheImpact.invalidateTaskWorktree(repoPath, taskId),
     ]);
   };
 
@@ -301,7 +296,6 @@ export const createTaskMutationCommands = ({
 export function useTaskMutationCommands({
   activeRepoPath,
   activeWorkspaceId,
-  tasks,
   runTaskMutation,
   agentSessionReadPort,
 }: UseTaskMutationCommandsArgs): TaskMutationCommands {
@@ -315,8 +309,8 @@ export function useTaskMutationCommands({
   );
   const cacheImpact = useMemo<TaskMutationCommandCacheImpact>(
     () => ({
-      removeDeletedTaskCaches: (repoPath, taskIds) =>
-        removeAgentSessionListQueries(queryClient, repoPath, taskIds),
+      removeDeletedTaskCaches: (repoPath, taskId) =>
+        removeAgentSessionListQueries(queryClient, repoPath, [taskId]),
       invalidateTaskStopImpact: (repoPath) =>
         queryClient.invalidateQueries({ queryKey: taskStopImpactQueryKeys.repo(repoPath) }),
       invalidateTaskWorktree: (repoPath, taskId) =>
@@ -332,7 +326,6 @@ export function useTaskMutationCommands({
       createTaskMutationCommands({
         activeRepoPath,
         activeWorkspaceId,
-        tasks,
         runTaskMutation,
         hostPort,
         queryClient,
@@ -346,7 +339,6 @@ export function useTaskMutationCommands({
       hostPort,
       runTaskMutation,
       taskChatDraftCleanup,
-      tasks,
       queryClient,
     ],
   );

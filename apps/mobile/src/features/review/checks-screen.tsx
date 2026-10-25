@@ -1,4 +1,5 @@
-import type { PullRequestReviewActivity, TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { repositoryGitProviderContextQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/git-provider-context";
 import {

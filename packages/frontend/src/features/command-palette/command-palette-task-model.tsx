@@ -1,5 +1,14 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  SESSION_VIEW_ACTIONS,
+  type TaskWorkflowAction,
+  taskHasSessionPage,
+  taskActionLabel,
+  BUILTIN_ROLE_LABELS,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+  builtinRoleId,
+} from "@openducktor/workflows";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Copy, History, PanelRightOpen, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import {
   type KanbanTaskSession,
@@ -10,14 +19,9 @@ import {
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import {
-  SESSION_VIEW_ACTIONS,
-  type TaskWorkflowAction,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
-import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
-import { taskActionLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { TASK_ACTION_ICON } from "@/components/features/kanban/task-action-ui";
 import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
@@ -27,7 +31,6 @@ import {
   type SessionNavigationRead,
   sessionLiveFactsOf,
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { PaletteRowAction } from "./command-palette-types";
 
@@ -84,7 +87,7 @@ export const buildPaletteTaskView = ({
   }
 
   // A closed task has no session page, so it opens its details and lists no session actions.
-  const records = task.status === "closed" ? [] : sessions.data;
+  const records = !taskHasSessionPage(task) ? [] : sessions.data;
   const liveSessions = liveTaskSessions(records, live);
   const footer = getTaskFooter({
     task,
@@ -125,7 +128,7 @@ export const buildPaletteTaskView = ({
         {
           key: "latest",
           label: "Open latest session",
-          detail: AGENT_ROLE_LABELS[latest.role],
+          detail: BUILTIN_ROLE_LABELS[latest.role],
           keywords: ["session", "resume", "continue"],
           icon: <History />,
           destructive: false,
@@ -139,7 +142,7 @@ export const buildPaletteTaskView = ({
     open: latest ? { kind: "open_session", session: latest } : { kind: "details" },
     sessionsNote: null,
     nextStep:
-      task.status !== "closed" && primaryAction && !disabledActions.has(primaryAction)
+      taskHasSessionPage(task) && primaryAction && !disabledActions.has(primaryAction)
         ? primaryAction
         : null,
     actions: destructiveLast([
@@ -169,7 +172,7 @@ const liveTaskSessions = (
       return [
         {
           ...toAgentSessionIdentity(record),
-          role: record.role,
+          role: builtinRoleId(record.role),
           startedAt: record.startedAt,
           activityState: facts.activityState,
         },
@@ -197,7 +200,7 @@ const latestTaskSession = (
     if (!latestRecord || record.startedAt > latestRecord.startedAt) latestRecord = record;
   }
   return latestRecord
-    ? { role: latestRecord.role, identity: toAgentSessionIdentity(latestRecord) }
+    ? { role: builtinRoleId(latestRecord.role), identity: toAgentSessionIdentity(latestRecord) }
     : null;
 };
 

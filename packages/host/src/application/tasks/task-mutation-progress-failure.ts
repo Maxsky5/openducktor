@@ -16,8 +16,6 @@ export class TaskMutationProgressFailure extends Data.TaggedError("TaskMutationP
     | "link-merged-pull-request"
     | "reset-implementation"
     | "reset-task"
-    | "set-plan"
-    | "set-spec"
     | "update-task"
     | "repo-pull-request-sync";
   readonly changes: TaskChangeSet;

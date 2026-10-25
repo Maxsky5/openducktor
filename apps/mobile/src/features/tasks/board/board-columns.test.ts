@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
-import { mapToKanbanColumns } from "@openducktor/core";
+import { mapToKanbanColumns, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { buildBoardColumns, columnChoiceLabel, resolveSelectedColumnId } from "./board-columns";
 

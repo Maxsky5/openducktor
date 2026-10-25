@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import {
   createPrepareOpencodeSessionRuntime,
@@ -97,6 +98,7 @@ describe("OpenCode subagent ownership", () => {
         },
       });
       const prepareRuntime = createPrepareOpencodeSessionRuntime({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         resolveCreationSettings: async () => ({ defaults: [], role: [] }),
         resolveMcpServerConfig: async () => ({ command: ["test-bridge"], environment: {} }),
         readDirectory: async (_directory, read) => read(),
@@ -108,6 +110,7 @@ describe("OpenCode subagent ownership", () => {
       try {
         prepared = await Effect.runPromise(
           createTestOpenCodeLiveSessionAdapterPreparer({
+            resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
             liveSessionLifecycle: createLifecycle(changes),
             prepareRuntime: async (input) => {
               const native = await prepareRuntime(input);

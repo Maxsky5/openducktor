@@ -9,11 +9,12 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { KanbanTaskCard } from "./kanban-task-card";
+import { type BuiltinRoleId } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 
 const noop = (): void => {};
-const session = (role: AgentSessionRecord["role"]): AgentSessionRecord => ({
+const session = (role: BuiltinRoleId): AgentSessionRecord & { role: BuiltinRoleId } => ({
   externalSessionId: `${role}-session`,
   runtimeKind: "codex",
   workingDirectory: `/repo/${role}`,
@@ -352,7 +353,7 @@ describe("Kanban card session shortcuts", () => {
         availableActions: ["build_start" as const],
         artifactSummary: {
           ...props.task.artifactSummary,
-          qaReport: { has: true, updatedAt: undefined, verdict: "rejected" as const },
+          qaReport: { present: true, updatedAt: undefined, verdict: "rejected" as const },
         },
       };
       view.rerender(<Card {...props} task={rejectedTask} taskCardView="compact" />);

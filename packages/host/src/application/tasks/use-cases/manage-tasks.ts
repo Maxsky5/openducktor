@@ -2,12 +2,9 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { TaskAssetError, TaskCreatedAssetError } from "../../../effect/task-asset-error";
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
-import {
-  validateParentRelationshipsForCreateEffect,
-  validateParentRelationshipsForUpdateEffect,
-  validateTaskTransitionEffect,
-} from "../support/task-validation-effects";
-import { enrichTask } from "../support/task-workflow-helpers";
+import { TaskPolicyError } from "../../../domain/task";
+import { requireTaskEvent, requireWorkflowIssueType } from "../support/task-workflow-events";
+import { applyTaskEvent, enrichTask } from "../support/task-workflow-helpers";
 import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
@@ -39,21 +36,18 @@ const preserveCommittedAssetMutation = (
 
 export const createTaskCrudUseCases = ({
   taskStore,
+  taskWorkflows,
 }: CreateTaskServiceInput): Pick<TaskServiceWithMutationProgress, "createTask" | "updateTask"> &
-  Pick<TaskService, "transitionTask"> => ({
+  Pick<TaskService, "transitionTask" | "applyTaskEvent" | "applyStartEvent"> => ({
   createTask(input) {
     return Effect.gen(function* () {
       const { repoPath, task, descriptionAssets } = input;
-      const parentId = task.parentId?.trim() || undefined;
-      const normalizedTask = { ...task, parentId };
-      const needsParentValidation = Boolean(parentId);
-      const currentTasks = needsParentValidation ? yield* taskStore.listTasks({ repoPath }) : [];
-      if (needsParentValidation) {
-        yield* validateParentRelationshipsForCreateEffect(currentTasks, normalizedTask);
-      }
+      const workflow = taskWorkflows.forRepo(repoPath);
+      yield* requireWorkflowIssueType(workflow, task.issueType);
       const createInput: Parameters<typeof taskStore.createTask>[0] = {
         repoPath,
-        task: normalizedTask,
+        task,
+        status: workflow.initialState,
       };
       if (descriptionAssets) {
         createInput.descriptionAssets = descriptionAssets;
@@ -68,25 +62,15 @@ export const createTaskCrudUseCases = ({
           ),
         );
 
-      return enrichTask(created, [...currentTasks, created]);
+      return enrichTask(workflow, created);
     });
   },
 
   updateTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, patch, descriptionAssets } = input;
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
-      yield* validateParentRelationshipsForUpdateEffect(currentTasks, current, patch);
+      const workflow = taskWorkflows.forRepo(repoPath);
+      if (patch.issueType !== undefined) yield* requireWorkflowIssueType(workflow, patch.issueType);
       const updateInput: Parameters<typeof taskStore.updateTask>[0] = { repoPath, taskId, patch };
       if (descriptionAssets) {
         updateInput.descriptionAssets = descriptionAssets;
@@ -96,46 +80,82 @@ export const createTaskCrudUseCases = ({
         .pipe(
           Effect.mapError((error) => preserveCommittedAssetMutation("update-task", taskId, error)),
         );
-      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-      return enrichTask(updated, nextTasks);
+      return enrichTask(workflow, updated);
     });
   },
 
   transitionTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, status } = input;
-      if (status === "closed") {
+      const workflow = taskWorkflows.forRepo(repoPath);
+      const eventId = workflow.statusEvent(status);
+      if (eventId === undefined) {
         return yield* Effect.fail(
           new HostValidationError({
             field: "status",
-            message:
-              "task_transition cannot close tasks. Use task_close or an explicit delivery completion command.",
+            message: `task_transition cannot move tasks to ${status}. Use task_close or an explicit delivery completion command.`,
             details: { repoPath, taskId, status },
           }),
         );
       }
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
+      return yield* applyTaskEvent(taskStore, workflow, { repoPath, taskId }, eventId);
+    });
+  },
+
+  applyTaskEvent(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, eventId } = input;
+      const workflow = taskWorkflows.forRepo(repoPath);
+      const event = workflow.definition.events.find(({ id }) => id === eventId);
+      const actionIds = workflow.definition.actions.flatMap((action) =>
+        action.kind === "event" && action.eventId === eventId ? [action.id] : [],
+      );
+      if (!event || actionIds.length === 0) {
+        return yield* new HostValidationError({
+          field: "eventId",
+          message: `Event ${eventId} is not sent by an event action of task workflow "${workflow.definition.id}".`,
+          details: { repoPath, taskId, eventId },
+        });
+      }
+      if (event.effect !== undefined) {
+        return yield* new HostValidationError({
+          field: "eventId",
+          message: `Event ${eventId} runs the ${event.effect} host effect. Use the command of that effect.`,
+          details: { repoPath, taskId, eventId },
+        });
+      }
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const decision = yield* requireTaskEvent(workflow, eventId, current);
+      const available = workflow.project(current).availableActions;
+      if (!actionIds.some((actionId) => available.includes(actionId))) {
         return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
+          TaskPolicyError.policy(
+            `No action that sends ${eventId} is available for task ${taskId} in ${current.status}.`,
+          ),
         );
       }
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, status);
-
-      if (current.status === status) {
-        return enrichTask(current, currentTasks);
-      }
-
-      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status });
-      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-      return enrichTask(updated, nextTasks);
+      if (decision.kind === "unchanged") return enrichTask(workflow, current);
+      const updated = yield* taskStore.transitionTask({
+        repoPath,
+        taskId,
+        status: decision.to,
+        cause: decision.cause,
+      });
+      return enrichTask(workflow, updated);
     });
+  },
+
+  applyStartEvent({ repoPath, taskId, eventId }) {
+    const workflow = taskWorkflows.forRepo(repoPath);
+    if (workflow.startEventRole(eventId) === undefined) {
+      return Effect.fail(
+        new HostValidationError({
+          field: "eventId",
+          message: `Event ${eventId} starts no step of task workflow "${workflow.definition.id}".`,
+          details: { repoPath, taskId, eventId },
+        }),
+      );
+    }
+    return applyTaskEvent(taskStore, workflow, { repoPath, taskId }, eventId);
   },
 });

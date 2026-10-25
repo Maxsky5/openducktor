@@ -30,13 +30,11 @@ import {
   runtimeExecutableCheckInputSchema,
   runtimeExecutableCheckSchema,
   type TaskApprovalContextLoadResult,
-  type TaskCard,
   type TaskDirectMergeInput,
   type TaskDirectMergeResult,
   type TaskStoreCheck,
   type TaskWorktreeSummary,
   taskApprovalContextLoadResultSchema,
-  taskCardSchema,
   taskDirectMergeInputSchema,
   taskDirectMergeResultSchema,
   taskPullRequestDetectResultSchema,
@@ -45,6 +43,7 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
+import { type BuiltinTaskCard as TaskCard, builtinTaskCardSchema } from "@openducktor/workflows";
 
 const taskStoreCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskStoreCheck> => {
   return invokeFn("task_store_check", { repoPath }, taskStoreCheckSchema);
@@ -108,7 +107,7 @@ const buildBlocked = async (
   taskId: string,
   reason: string,
 ): Promise<TaskCard> => {
-  return invokeFn("build_blocked", { repoPath, taskId, reason }, taskCardSchema);
+  return invokeFn("build_blocked", { repoPath, taskId, reason }, builtinTaskCardSchema);
 };
 
 const buildResumed = async (
@@ -116,7 +115,7 @@ const buildResumed = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  return invokeFn("build_resumed", { repoPath, taskId }, taskCardSchema);
+  return invokeFn("build_resumed", { repoPath, taskId }, builtinTaskCardSchema);
 };
 
 const buildCompleted = async (
@@ -125,7 +124,11 @@ const buildCompleted = async (
   taskId: string,
   summary?: string,
 ): Promise<TaskCard> => {
-  return invokeFn("build_completed", { repoPath, taskId, input: { summary } }, taskCardSchema);
+  return invokeFn(
+    "build_completed",
+    { repoPath, taskId, input: { summary } },
+    builtinTaskCardSchema,
+  );
 };
 
 const humanRequestChanges = async (
@@ -134,7 +137,7 @@ const humanRequestChanges = async (
   taskId: string,
   note?: string,
 ): Promise<TaskCard> => {
-  return invokeFn("human_request_changes", { repoPath, taskId, note }, taskCardSchema);
+  return invokeFn("human_request_changes", { repoPath, taskId, note }, builtinTaskCardSchema);
 };
 
 const humanApprove = async (
@@ -142,7 +145,7 @@ const humanApprove = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  return invokeFn("human_approve", { repoPath, taskId }, taskCardSchema);
+  return invokeFn("human_approve", { repoPath, taskId }, builtinTaskCardSchema);
 };
 
 const taskApprovalContextGet = async (
@@ -180,7 +183,7 @@ const taskDirectMergeComplete = async (
   return invokeFn(
     "task_direct_merge_complete",
     taskDirectMergeCompleteIntentSchema.parse({ repoPath, taskId, publicationConsent }),
-    taskCardSchema,
+    builtinTaskCardSchema,
   );
 };
 
@@ -228,7 +231,7 @@ const taskPullRequestLinkMerged = async (
   return invokeFn(
     "task_pull_request_link_merged",
     { repoPath, taskId, pullRequest },
-    taskCardSchema,
+    builtinTaskCardSchema,
   );
 };
 

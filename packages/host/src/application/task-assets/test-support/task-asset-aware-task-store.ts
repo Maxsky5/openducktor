@@ -81,10 +81,10 @@ export const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof cre
   const task = await Effect.runPromise(
     harness.store.createTask({
       repoPath: harness.repoPath,
+      status: "open",
       task: {
         title: "Asset owner",
         issueType: "task",
-        aiReviewEnabled: true,
         priority: 2,
         description,
       },

@@ -1,17 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  countPromptErrorsByRoleTab,
-  REPOSITORY_SECTIONS,
-  resolvePromptRoleTab,
-} from "./settings-modal-constants";
+import { countPromptErrorsByRoleTab, REPOSITORY_SECTIONS } from "./settings-modal-constants";
 
 describe("settings-modal-constants", () => {
-  test("maps template ids to prompt role tabs", () => {
-    expect(resolvePromptRoleTab("system.role.spec.base")).toBe("spec");
-    expect(resolvePromptRoleTab("kickoff.build_after_qa_rejected")).toBe("build");
-    expect(resolvePromptRoleTab("system.shared.workflow_guards")).toBe("shared");
-  });
-
   test("counts validation errors per prompt role tab", () => {
     const counts = countPromptErrorsByRoleTab({
       "system.shared.workflow_guards": "bad",

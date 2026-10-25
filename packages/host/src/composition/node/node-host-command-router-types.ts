@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { BrowserService } from "../../application/browser/browser-service-types";
 import type { Effect } from "effect";
 import type { McpBridgeDiscoveryMode } from "../../adapters/mcp/mcp-bridge-discovery-file";
@@ -26,6 +27,8 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   /** Replaces the native runtime starters, for example in tests. */
   runtimeStarter?: RuntimeStarterPort;
   taskStore?: TaskStorePort;
+  /** Replaces the built-in task workflow, for example in tests. */
+  taskWorkflows?: TaskWorkflowResolver;
 };
 
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {

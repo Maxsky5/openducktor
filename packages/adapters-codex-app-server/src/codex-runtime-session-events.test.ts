@@ -1,3 +1,4 @@
+import { testWorkflowRolePolicy } from "./codex-app-server-adapter.test-harness";
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
@@ -53,6 +54,7 @@ const createRuntimeEvents = (
   const deps = {
     subscribeEvents: undefined,
     respondServerRequest: async () => undefined,
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     sessions: new Map(),
     activeTurnsBySessionId: new Map(),
     sessionEvents: new CodexSessionEventBus(),

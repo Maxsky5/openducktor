@@ -1,6 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
-  agentPromptTemplateIdValues,
   DEFAULT_AGENT_RUNTIMES,
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
@@ -41,6 +40,7 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
+import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows";
 
 /**
  * The host of every harness in this file. Its commands fail until a test sets them. Each harness
@@ -1648,7 +1648,7 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecord,
     });
     const globalPromptOverrides = Object.fromEntries(
-      agentPromptTemplateIdValues.map((templateId) => [
+      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId) => [
         templateId,
         {
           template: `global ${templateId}`,
@@ -1658,7 +1658,7 @@ describe("use-repo-settings-operations", () => {
       ]),
     );
     const repoPromptOverrides = Object.fromEntries(
-      agentPromptTemplateIdValues.map((templateId) => [
+      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId) => [
         templateId,
         {
           template: `repo ${templateId}`,
@@ -1696,10 +1696,10 @@ describe("use-repo-settings-operations", () => {
         throw new Error("Expected settings snapshot to be forwarded.");
       }
       expect(Object.keys(savedSnapshot.globalPromptOverrides).sort()).toEqual(
-        agentPromptTemplateIdValues.toSorted(),
+        BUILTIN_PROMPT_TEMPLATE_IDS.toSorted(),
       );
       expect(Object.keys(savedSnapshot.workspaces["repo-a"]?.promptOverrides ?? {}).sort()).toEqual(
-        agentPromptTemplateIdValues.toSorted(),
+        BUILTIN_PROMPT_TEMPLATE_IDS.toSorted(),
       );
     } finally {
       await harness.unmount();

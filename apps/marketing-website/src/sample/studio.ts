@@ -167,7 +167,7 @@ export function byPath(files: GitFile[]): GitFile[] {
 
 export const TASK_ID = taskId("k3x9");
 
-/** Kickoff prompts copied from packages/core/src/services/agent-system-prompts.ts. */
+/** Kickoff prompt samples from packages/workflows/src/builtin/agent-prompts.ts. */
 export const KICKOFF = {
   spec: `Write the specification for this task and save it with odt_set_task_artifact and code spec. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   planner: `Write the implementation plan for this task and save it with odt_set_task_artifact and code plan. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,

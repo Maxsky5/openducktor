@@ -1,85 +1,52 @@
 import { Effect } from "effect";
-import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError } from "../../../effect/host-errors";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
-import { enrichTask, recordQaOutcome, taskListWithCurrent } from "../support/task-workflow-helpers";
+import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
+import { requireEffect } from "../support/task-workflow-events";
+import { applyEffect, enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskReviewUseCases = ({
   gitPort,
   taskStore,
+  taskWorkflows,
   taskSessionLifecycleCoordinator,
   terminalService,
 }: CreateTaskServiceInput): Pick<
   TaskServiceWithMutationProgress,
-  "qaApproved" | "qaRejected" | "humanRequestChanges" | "humanApprove"
+  "humanRequestChanges" | "humanApprove"
 > => ({
-  qaApproved(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, markdown } = input;
-
-      return yield* recordQaOutcome(taskStore, {
-        repoPath,
-        taskId,
-        markdown,
-        verdict: "approved",
-        targetStatus: "human_review",
-      });
-    });
-  },
-
-  qaRejected(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, markdown } = input;
-
-      return yield* recordQaOutcome(taskStore, {
-        repoPath,
-        taskId,
-        markdown,
-        verdict: "rejected",
-        targetStatus: "in_progress",
-      });
-    });
-  },
-
   humanRequestChanges(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      if (metadata.directMerge !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Cannot request changes after a local direct merge has already been applied for task ${taskId}. Push and complete the direct merge workflow first, or manually revert the local merge before reopening the task.`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
+      yield* ensureNoDirectMergeEffect({
+        operation: "human_request_changes",
+        repoPath,
+        taskId,
+        directMerge: metadata.directMerge,
+      });
 
-      const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* validateTaskTransitionEffect(current, [current], current.status, "in_progress");
-
-      if (current.status === "in_progress") {
-        return enrichTask(current, [current]);
-      }
-
-      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "in_progress" });
-      return enrichTask(updated, [updated]);
+      return yield* applyEffect(
+        taskStore,
+        taskWorkflows.forRepo(repoPath),
+        { repoPath, taskId },
+        "review.request_changes",
+      );
     });
   },
 
   humanApprove(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-
-      if (current.status === "closed") {
-        return enrichTask(current, currentTasks);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forRepo(repoPath);
+      const decision = yield* requireEffect(workflow, "review.approve", current);
+      if (decision.kind === "unchanged") {
+        return enrichTask(workflow, current);
       }
-
       if (!terminalService) {
         return yield* Effect.fail(
           new HostDependencyError({
@@ -90,21 +57,15 @@ export const createTaskReviewUseCases = ({
       }
       const updated = yield* completeTaskClosure({
         cleanup: Effect.gen(function* () {
-          const latest = yield* taskListWithCurrent(taskStore, repoPath, taskId);
-          yield* validateTaskTransitionEffect(
-            latest.current,
-            latest.currentTasks,
-            latest.current.status,
-            "closed",
-          );
+          const latest = yield* taskStore.getTask({ repoPath, taskId });
+          yield* requireEffect(workflow, "review.approve", latest);
           const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-          if (metadata.directMerge !== undefined) {
-            return yield* new HostValidationError({
-              field: "taskId",
-              message: `Cannot approve task ${taskId} while a direct merge is pending. Use task_direct_merge_complete to complete the direct merge workflow.`,
-              details: { repoPath, taskId },
-            });
-          }
+          yield* ensureNoDirectMergeEffect({
+            operation: "human_approve",
+            repoPath,
+            taskId,
+            directMerge: metadata.directMerge,
+          });
           yield* runTaskRuntimeCleanup({
             progress: createTaskCleanupProgressState(),
             repoPath,
@@ -115,13 +76,13 @@ export const createTaskReviewUseCases = ({
         gitPort,
         operation: "approve task",
         repoPath,
+        decision,
         taskId,
         taskSessionLifecycleCoordinator,
         taskStore,
       });
-      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
 
-      return enrichTask(updated, nextTasks);
+      return enrichTask(workflow, updated);
     });
   },
 });

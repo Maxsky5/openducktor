@@ -65,12 +65,12 @@ export const requireTaskCloseWorktreeService = (
 export const requireImplementationResetStoreDependencies = (taskStore: TaskStorePort) =>
   ({
     clearAgentSessionsByRoles: taskStore.clearAgentSessionsByRoles.bind(taskStore),
-    clearQaReports: taskStore.clearQaReports.bind(taskStore),
+    clearWorkflowArtifacts: taskStore.clearWorkflowArtifacts.bind(taskStore),
     setDirectMerge: taskStore.setDirectMerge.bind(taskStore),
     setPullRequest: taskStore.setPullRequest.bind(taskStore),
   }) satisfies {
     clearAgentSessionsByRoles: TaskStorePort["clearAgentSessionsByRoles"];
-    clearQaReports: TaskStorePort["clearQaReports"];
+    clearWorkflowArtifacts: TaskStorePort["clearWorkflowArtifacts"];
     setDirectMerge: TaskStorePort["setDirectMerge"];
     setPullRequest: TaskStorePort["setPullRequest"];
   };

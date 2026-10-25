@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentRoleSchema,
-  agentRoleValues,
   agentSessionStartModeSchema,
   agentSessionStartModeValues,
   agentToolNameSchema,
@@ -9,9 +8,9 @@ import {
 } from "./agent-workflow-schemas";
 
 describe("agent-workflow-schemas", () => {
-  test("exports the canonical agent roles", () => {
-    expect(agentRoleValues).toEqual(["spec", "planner", "build", "qa"]);
-    expect(agentRoleSchema.parse("build")).toBe("build");
+  test("accepts any non-blank role ID", () => {
+    expect(agentRoleSchema.parse("reviewer")).toBe("reviewer");
+    expect(agentRoleSchema.safeParse(" ").success).toBe(false);
   });
 
   test("exports the canonical start modes", () => {

@@ -1,8 +1,14 @@
-import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  BUILTIN_ROLE_LABELS,
+  BUILTIN_ROLE_IDS,
+  recordBy,
+  resolveSessionContinuationLaunchAction,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { AgentWorkflowState } from "@openducktor/contracts";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { firstLaunchAction } from "@openducktor/frontend-core/sessions/start/session-start-prompts";
-import { type SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type AgentSessionOptionSummary,
@@ -14,9 +20,10 @@ import {
 import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type {
-  AgentWorkflowStepLiveSession,
-  AgentWorkflowStepState,
+  WorkflowStepLiveSession,
+  WorkflowStepPresentation,
 } from "@openducktor/frontend-core/types/agent-workflow";
+import { SESSION_BUSY_REASON } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 
 export type SessionCreateOption = {
   id: string;
@@ -39,15 +46,8 @@ const isWorkflowSessionSummary = (
   session: AgentSessionWorkflowSummary | null | undefined,
 ): session is WorkflowSessionSummary => session?.role !== null;
 
-const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
-
 const createRoleRecord = <Value>(build: (role: AgentRole) => Value) =>
-  ({
-    spec: build("spec"),
-    planner: build("planner"),
-    build: build("build"),
-    qa: build("qa"),
-  }) satisfies Record<AgentRole, Value>;
+  recordBy(BUILTIN_ROLE_IDS, build);
 
 const buildSessionsByRole = (
   sessionsForTask: AgentSessionWorkflowSummary[],
@@ -80,8 +80,8 @@ export const buildLatestSessionByTaskMap = (
 export const buildWorkflowStateByRole = (params: {
   task: TaskCard | null;
   roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
-  liveSessionByRole: Record<AgentRole, AgentWorkflowStepLiveSession>;
-}): Record<AgentRole, AgentWorkflowStepState> =>
+  liveSessionByRole: Record<AgentRole, WorkflowStepLiveSession>;
+}): Record<AgentRole, WorkflowStepPresentation> =>
   createRoleRecord((role) =>
     buildRoleWorkflowState({
       task: params.task,
@@ -100,7 +100,7 @@ export const buildLatestSessionByRoleMap = (
 
 export const buildLiveSessionByRoleMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],
-): Record<AgentRole, AgentWorkflowStepLiveSession> => {
+): Record<AgentRole, WorkflowStepLiveSession> => {
   const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
 
   return createRoleRecord((role) => {
@@ -123,7 +123,7 @@ export const buildSessionSelectorGroups = (params: {
   const groups: ComboboxGroup[] = [];
   const sessionsByRole = buildSessionsByRole(params.sessionsForTask);
 
-  for (const role of ALL_AGENT_ROLES) {
+  for (const role of BUILTIN_ROLE_IDS) {
     const roleSessions = sessionsByRole[role];
     if (roleSessions.length === 0) {
       continue;
@@ -152,73 +152,23 @@ export const buildSessionSelectorGroups = (params: {
 };
 
 export const buildSessionCreateOptions = (params: {
+  task: TaskCard | null;
   roleEnabledByTask: Record<AgentRole, boolean>;
-  hasQaRejection: boolean;
-  hasHumanFeedback: boolean;
   createSessionDisabled: boolean;
   roleLabelByRole: Record<AgentRole, string>;
-}): SessionCreateOption[] => {
-  const options: SessionCreateOption[] = [];
-
-  const resolveBuildLaunchAction = (): SessionLaunchActionId => {
-    if (params.hasHumanFeedback) {
-      return "build_after_human_request_changes";
-    }
-    if (params.hasQaRejection) {
-      return "build_after_qa_rejected";
-    }
-    return "build_implementation_start";
-  };
-
-  const addMessageFirstOption = (
-    role: AgentRole,
-    launchActionId: SessionLaunchActionId,
-    description: string,
-  ) => {
+}): SessionCreateOption[] =>
+  BUILTIN_ROLE_IDS.filter((role) => params.roleEnabledByTask[role]).map((role) => {
+    const launchActionId = resolveSessionContinuationLaunchAction(role, params.task);
     const option: SessionCreateOption = {
       id: `${role}:${launchActionId}:message_first`,
       role,
       launchActionId,
       label: `Prepare ${params.roleLabelByRole[role]} session`,
-      description,
+      description: `Open a ${BUILTIN_ROLE_LABELS[role]} composer without sending a kickoff.`,
       disabled: params.createSessionDisabled,
     };
     if (params.createSessionDisabled) {
-      option.disabledReason = "Wait for the current session to finish.";
+      option.disabledReason = SESSION_BUSY_REASON;
     }
-    options.push(option);
-  };
-
-  if (params.roleEnabledByTask.spec) {
-    const launchActionId = firstLaunchAction("spec");
-    addMessageFirstOption(
-      "spec",
-      launchActionId,
-      "Open a Spec composer without sending a kickoff.",
-    );
-  }
-
-  if (params.roleEnabledByTask.planner) {
-    const launchActionId = firstLaunchAction("planner");
-    addMessageFirstOption(
-      "planner",
-      launchActionId,
-      "Open a Planner composer without sending a kickoff.",
-    );
-  }
-
-  if (params.roleEnabledByTask.build) {
-    addMessageFirstOption(
-      "build",
-      resolveBuildLaunchAction(),
-      "Open a Builder composer without sending a kickoff.",
-    );
-  }
-
-  if (params.roleEnabledByTask.qa) {
-    const launchActionId = firstLaunchAction("qa");
-    addMessageFirstOption("qa", launchActionId, "Open a QA composer without sending a kickoff.");
-  }
-
-  return options;
-};
+    return option;
+  });

@@ -3,26 +3,23 @@ import {
   type ArtifactDeleteResult,
   type TaskMetadataArtifact,
   type TaskEventCursor,
-  type WorkflowArtifactKind,
   type TaskChangeSet,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { workflowArtifactChange } from "./artifact-changes";
-import type { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
-import type { TaskMutationOperation } from "./task-mutation-operation";
 import type { createMutationPublisher } from "./task-mutation-publisher";
 import type {
   TaskService,
   TaskServiceWithMutationProgress,
   TaskServiceError,
-  TaskSetPlanResult,
 } from "./task-service";
+import type { WorkflowArtifactSaveResult } from "./use-cases/manage-workflow-artifacts";
 
 type PublishedWorkflowArtifact = TaskMetadataArtifact & { cursor: TaskEventCursor };
 
 export type ArtifactPublishingMethods = Pick<
   TaskService,
-  "specGet" | "planGet" | "qaGetReport" | "listTaskArtifacts" | "readTaskArtifact"
+  "workflowArtifactGet" | "listTaskArtifacts" | "readTaskArtifact"
 > & {
   createTaskArtifact(
     input: Parameters<TaskService["createTaskArtifact"]>[0],
@@ -36,34 +33,18 @@ export type ArtifactPublishingMethods = Pick<
   deleteTaskArtifact(
     input: Parameters<TaskService["deleteTaskArtifact"]>[0],
   ): Effect.Effect<ArtifactDeleteResult, TaskServiceError>;
-  setPlan(
-    input: Parameters<TaskService["setPlan"]>[0],
-  ): Effect.Effect<TaskSetPlanResult & { artifact: PublishedWorkflowArtifact }, TaskServiceError>;
-  setSpec(
-    input: Parameters<TaskService["setSpec"]>[0],
-  ): Effect.Effect<PublishedWorkflowArtifact, TaskServiceError>;
-  saveSpecArtifact(
-    input: Parameters<TaskService["saveSpecArtifact"]>[0],
-  ): Effect.Effect<PublishedWorkflowArtifact, TaskServiceError>;
-  savePlanArtifact(
-    input: Parameters<TaskService["savePlanArtifact"]>[0],
-  ): Effect.Effect<PublishedWorkflowArtifact, TaskServiceError>;
+  workflowArtifactSave(
+    input: Parameters<TaskService["workflowArtifactSave"]>[0],
+  ): Effect.Effect<
+    WorkflowArtifactSaveResult & { artifact: PublishedWorkflowArtifact },
+    TaskServiceError
+  >;
 };
 
 export const createArtifactPublishingMethods = (
   taskService: TaskServiceWithMutationProgress,
   publishMutation: ReturnType<typeof createMutationPublisher>,
 ): ArtifactPublishingMethods => {
-  const publishWorkflowArtifact = <A extends TaskMetadataArtifact>(
-    operation: TaskMutationOperation,
-    input: { repoPath: string; taskId: string },
-    kind: WorkflowArtifactKind,
-    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
-  ): Effect.Effect<A & { cursor: TaskEventCursor }, TaskServiceError> =>
-    publishMutation(operation, input.repoPath, changeForTask(input.taskId), mutation, {
-      artifactChanges: () => [workflowArtifactChange(input.taskId, kind)],
-    }).pipe(Effect.map(({ value, cursor }) => ({ ...value, cursor })));
-
   const publishArtifactSave = (
     operation: "create-artifact" | "rename-artifact" | "replace-artifact",
     input: { repoPath: string; taskId: string },
@@ -106,43 +87,20 @@ export const createArtifactPublishingMethods = (
           ],
         },
       ).pipe(Effect.map(({ value, cursor }) => ({ ...value, cursor }))),
-    specGet: (input) => taskService.specGet(input),
-    setSpec: (input) =>
-      publishWorkflowArtifact(
-        "set-spec",
-        input,
-        "spec",
-        Effect.suspend(() => taskService.setSpec(input)),
-      ),
-    saveSpecArtifact: (input) =>
-      publishWorkflowArtifact(
-        "save-spec-artifact",
-        input,
-        "spec",
-        taskService.saveSpecArtifact(input),
-      ),
-    planGet: (input) => taskService.planGet(input),
-    setPlan: (input) =>
+    workflowArtifactGet: (input) => taskService.workflowArtifactGet(input),
+    workflowArtifactSave: (input) =>
       publishMutation(
-        "set-plan",
+        "save-workflow-artifact",
         input.repoPath,
         changeForTask(input.taskId),
-        Effect.suspend(() => taskService.setPlan(input)),
+        Effect.suspend(() => taskService.workflowArtifactSave(input)),
         {
           changes: (result) => result.changes,
-          artifactChanges: () => [workflowArtifactChange(input.taskId, "plan")],
+          artifactChanges: () => [workflowArtifactChange(input.taskId, input.code)],
         },
       ).pipe(
         Effect.map(({ value, cursor }) => ({ ...value, artifact: { ...value.artifact, cursor } })),
       ),
-    savePlanArtifact: (input) =>
-      publishWorkflowArtifact(
-        "save-plan-artifact",
-        input,
-        "plan",
-        taskService.savePlanArtifact(input),
-      ),
-    qaGetReport: (input) => taskService.qaGetReport(input),
   };
 };
 

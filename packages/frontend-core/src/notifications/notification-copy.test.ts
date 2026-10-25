@@ -47,6 +47,7 @@ describe("notification copy", () => {
         taskId: "task-1",
         taskTitle: "Build notifications",
         role: "build",
+        roleLabel: "Builder",
         launchAttemptId: "launch-1",
       },
       message,

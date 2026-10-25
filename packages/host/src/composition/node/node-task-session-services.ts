@@ -53,7 +53,10 @@ export const createNodeTaskSessionServices = ({
   readSessionRootRefs: readSavedRoots,
 }: {
   taskServiceInput: TaskServiceInput;
-  eventServiceInput: Omit<Parameters<typeof createNodeTaskEventServices>[0], "baseTaskService">;
+  eventServiceInput: Omit<
+    Parameters<typeof createNodeTaskEventServices>[0],
+    "baseTaskService" | "taskWorkflows"
+  >;
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtimeAdmission: import("../../ports/runtime-admission-port").RuntimeAdmissionPort;
@@ -97,6 +100,7 @@ export const createNodeTaskSessionServices = ({
   });
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
+    taskWorkflows: taskServiceInput.taskWorkflows,
     baseTaskService,
   });
   const completionWorkers = createHostOperationWorkers();
@@ -130,11 +134,13 @@ export const createNodeTaskSessionServices = ({
     settings: taskServiceInput.workspaceSettingsService,
     queries: agentRuntimeQueries,
     taskReader: taskServiceInput.taskStore,
+    taskWorkflows: taskServiceInput.taskWorkflows,
   });
   const approvalPolicy = createHostApprovalPolicy({
     live: agentSessionLiveStateService,
     readRoots: readSessionRootRefs,
     definitions: taskServiceInput.runtimeDefinitionsService,
+    taskWorkflows: taskServiceInput.taskWorkflows,
     preparation: turnPreparation,
     reportFailure: (error) =>
       eventServiceInput.onBackgroundFailure(toHostOperationError(error, "approval-policy.observe")),
@@ -150,6 +156,7 @@ export const createNodeTaskSessionServices = ({
     turnPreparation,
     approvalPolicy,
     taskReader: taskServiceInput.taskStore,
+    taskWorkflows: taskServiceInput.taskWorkflows,
     persistTaskModel: (input) =>
       eventServices.taskService.agentSessionUpdateModelDeferredPublication(input).pipe(
         Effect.mapError((cause) =>
@@ -183,11 +190,12 @@ export const createNodeTaskSessionServices = ({
     },
     tasks: eventServices.taskService,
     taskReader: taskServiceInput.taskStore,
+    taskWorkflows: taskServiceInput.taskWorkflows,
     taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
     taskSessionStart,
     writes: {
       saveSession: eventServices.taskService.agentSessionUpsertDeferredPublication,
-      transitionTask: eventServices.taskService.transitionTaskDeferredPublication,
+      applyStartEvent: eventServices.taskService.applyStartEventDeferredPublication,
     },
   });
   const forkWorkflowSession = createTaskWorkflowSessionFork({
@@ -203,6 +211,7 @@ export const createNodeTaskSessionServices = ({
     settings: taskServiceInput.workspaceSettingsService,
     tasks: eventServices.taskService,
     taskReader: taskServiceInput.taskStore,
+    taskWorkflows: taskServiceInput.taskWorkflows,
     worktrees: taskServiceInput.taskWorktreeService,
     git: taskServiceInput.gitPort,
     definitions: taskServiceInput.runtimeDefinitionsService,

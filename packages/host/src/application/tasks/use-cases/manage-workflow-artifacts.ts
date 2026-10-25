@@ -1,137 +1,120 @@
-import type { TaskMetadataArtifact } from "@openducktor/contracts";
+import type { TaskChangeSet, TaskMetadataArtifact } from "@openducktor/contracts";
+import type { TaskWorkflow, TaskWorkflowArtifact } from "@openducktor/workflows";
 import { Effect } from "effect";
-import { canSetSpecFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import { workflowArtifactChange } from "../artifact-changes";
-import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type {
-  CreateTaskServiceInput,
-  TaskService,
-  TaskServiceError,
-  TaskSetPlanResult,
-} from "../task-service";
-import { createSetPlanUseCase } from "./set-plan";
+import { requireTaskEventInput } from "../support/task-workflow-events";
+import type { WorkflowArtifactWrite } from "../../../ports/task-repository-ports";
+import type { WorkflowArtifactInput, WorkflowArtifactSaveInput } from "../task-inputs";
+import type { CreateTaskServiceInput, TaskServiceError } from "../task-service";
 
-type WorkflowArtifactUseCases = Pick<
-  TaskService,
-  "specGet" | "saveSpecArtifact" | "planGet" | "savePlanArtifact" | "qaGetReport"
-> & {
-  setSpec(
-    input: Parameters<TaskService["setSpec"]>[0],
-  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError | TaskMutationProgressFailure>;
-  setPlan(
-    input: Parameters<TaskService["setPlan"]>[0],
-  ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
+export type WorkflowArtifactSaveResult = {
+  artifact: TaskMetadataArtifact;
+  changes: TaskChangeSet;
 };
+
+/** The workflow artifact with this code, or an error that lists the workflow codes. */
+export const requireWorkflowArtifact = (workflow: TaskWorkflow, code: string) => {
+  const artifact = workflow.artifact(code);
+  return artifact
+    ? Effect.succeed(artifact)
+    : Effect.fail(
+        new HostValidationError({
+          field: "code",
+          message: `Unknown workflow artifact ${code}. Use one of ${workflow.definition.artifacts.map(({ id }) => id).join(", ")}.`,
+          details: { code },
+        }),
+      );
+};
+
+const requireVerdict = (
+  artifact: TaskWorkflowArtifact,
+  verdict: string | undefined,
+  submit: boolean,
+) => {
+  if (artifact.kind !== "review") {
+    return verdict === undefined
+      ? Effect.succeed(undefined)
+      : Effect.fail(
+          new HostValidationError({
+            field: "verdict",
+            message: `${artifact.label} has no verdicts. Save it without a verdict.`,
+          }),
+        );
+  }
+  const declared = artifact.verdicts.find((candidate) => candidate.id === verdict);
+  return declared && submit
+    ? Effect.succeed(declared)
+    : Effect.fail(
+        new HostValidationError({
+          field: "verdict",
+          message: `Submit the ${artifact.label} with one verdict: ${artifact.verdicts.map(({ id }) => id).join(" or ")}.`,
+        }),
+      );
+};
+
+/** A session saves only the workflow artifacts that its role writes. A person saves any of them. */
+const requireRoleWrites = (workflow: TaskWorkflow, code: string, updatedBy: string) =>
+  updatedBy === "user" ||
+  (workflow.hasRole(updatedBy) && workflow.role(updatedBy).writes.includes(code))
+    ? Effect.void
+    : Effect.fail(
+        new HostValidationError({
+          field: "code",
+          message: `The ${updatedBy} role cannot write the ${code} workflow artifact.`,
+        }),
+      );
 
 export const createWorkflowArtifactUseCases = ({
   taskStore,
-}: CreateTaskServiceInput): WorkflowArtifactUseCases => ({
-  specGet(input) {
+  taskWorkflows,
+}: CreateTaskServiceInput) => ({
+  workflowArtifactGet(
+    input: WorkflowArtifactInput,
+  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError> {
     return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
+      const { repoPath, taskId, code } = input;
+      yield* requireWorkflowArtifact(taskWorkflows.forRepo(repoPath), code);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-
-      return metadata.spec;
+      return metadata.artifacts[code] ?? { markdown: "" };
     });
   },
 
-  setSpec(input) {
+  /** An artifact and the transition of its event commit together. A draft sends no event. */
+  workflowArtifactSave(
+    input: WorkflowArtifactSaveInput,
+  ): Effect.Effect<WorkflowArtifactSaveResult, TaskServiceError> {
     return Effect.gen(function* () {
-      const { repoPath, taskId, markdown } = input;
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
+      const { repoPath, taskId, code, markdown, submit, sourceTool, updatedBy } = input;
+      const workflow = taskWorkflows.forRepo(repoPath);
+      const artifact = yield* requireWorkflowArtifact(workflow, code);
+      yield* requireRoleWrites(workflow, code, updatedBy);
+      const verdict = yield* requireVerdict(artifact, input.verdict, submit);
+      const save: WorkflowArtifactWrite = {
+        repoPath,
+        taskId,
+        code,
+        markdown,
+        sourceTool,
+        updatedBy,
+      };
+      const eventId = submit ? workflow.artifactSubmitEvent(code, verdict?.id) : undefined;
+      if (eventId !== undefined) {
+        const current = yield* taskStore.getTask({ repoPath, taskId });
+        const decision = yield* requireTaskEventInput(
+          `Saving the ${artifact.label} is`,
+          workflow,
+          eventId,
+          current,
+          { repoPath, taskId, code, issueType: current.issueType, status: current.status },
         );
-      }
-      if (!canSetSpecFromStatus(current.status)) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: ${current.status})`,
-            details: { repoPath, taskId, status: current.status },
-          }),
-        );
-      }
-
-      const artifact = yield* taskStore.setSpecArtifact({ repoPath, taskId, markdown });
-      if (current.status === "open") {
-        const transition = yield* Effect.result(
-          taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" }),
-        );
-        if (transition._tag === "Failure") {
-          return yield* Effect.fail(
-            new TaskMutationProgressFailure({
-              operation: "set-spec",
-              artifactChanges: [workflowArtifactChange(taskId, "spec")],
-              changes: { taskIds: [taskId], removedTaskIds: [] },
-              failure: transition.failure,
-            }),
-          );
+        if (verdict) save.verdict = verdict.id;
+        if (decision.kind === "transition") {
+          save.status = decision.to;
+          save.cause = decision.cause;
         }
       }
-
-      return artifact;
-    });
-  },
-
-  saveSpecArtifact(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, markdown } = input;
-      yield* taskStore.getTask({ repoPath, taskId });
-
-      return yield* taskStore.setSpecArtifact({ repoPath, taskId, markdown });
-    });
-  },
-
-  planGet(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-
-      return metadata.plan;
-    });
-  },
-
-  setPlan: createSetPlanUseCase(taskStore),
-
-  savePlanArtifact(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, markdown } = input;
-      yield* taskStore.getTask({ repoPath, taskId });
-
-      return yield* taskStore.setPlanArtifact({ repoPath, taskId, markdown });
-    });
-  },
-
-  qaGetReport(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-
-      if (!metadata.qaReport) {
-        return { markdown: "" };
-      }
-
-      const result: TaskMetadataArtifact = {
-        markdown: metadata.qaReport.markdown,
-      };
-      if (metadata.qaReport.updatedAt !== undefined) {
-        result.updatedAt = metadata.qaReport.updatedAt;
-      }
-      if (metadata.qaReport.revision !== undefined) {
-        result.revision = metadata.qaReport.revision;
-      }
-      if (metadata.qaReport.error !== undefined) {
-        result.error = metadata.qaReport.error;
-      }
-      return result;
+      const saved = yield* taskStore.saveWorkflowArtifact(save);
+      return { artifact: saved.artifact, changes: { taskIds: [taskId], removedTaskIds: [] } };
     });
   },
 });

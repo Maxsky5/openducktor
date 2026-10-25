@@ -166,6 +166,7 @@
         "zod": "^4.6.7",
       },
       "devDependencies": {
+        "@openducktor/workflows": "workspace:*",
         "@types/node": "^26.6.4",
       },
     },
@@ -178,6 +179,9 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@openducktor/workflows": "workspace:*",
       },
     },
     "packages/build-tools": {
@@ -216,6 +220,7 @@
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@pierre/diffs": "1.5.2",
         "@pierre/trees": "1.0.0-beta.6",
         "@radix-ui/react-checkbox": "^1.4.1",
@@ -300,6 +305,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@tanstack/react-query": "^5.104.4",
         "react": "^19.3.1",
         "zod": "^4.6.7",
@@ -329,6 +335,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "@openducktor/runtime-orchestration": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@xterm/addon-serialize": "0.14.0",
         "@xterm/headless": "6.0.0",
         "diff": "9.0.0",
@@ -358,6 +365,7 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "zod": "^4.6.7",
       },
     },
@@ -375,6 +383,7 @@
         "@openducktor/build-tools": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "bun-types": "^1.4.2",
       },
     },
@@ -400,6 +409,7 @@
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/remote-host": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@tailwindcss/vite": "^4.3.3",
         "@tanstack/react-query": "^5.104.4",
         "@testing-library/react": "^16.3.3",
@@ -458,7 +468,7 @@
     },
     "packages/workflows": {
       "name": "@openducktor/workflows",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "zod": "^4.6.7",

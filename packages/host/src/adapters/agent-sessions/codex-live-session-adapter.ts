@@ -63,6 +63,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
   codexAppServer,
   onBackgroundFailure,
   resolveRuntimePolicy,
+  resolveWorkflowRolePolicy,
   resolveMcpServerConfig,
   prepareImageGenerations,
   createController = defaultCreateController,
@@ -83,6 +84,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           createController({
             questionHistory,
             prepareImageGenerations,
+            resolveWorkflowRolePolicy,
             runtime,
             // Effect.runPromise rejects with the typed failure.
             resolveManagedMcpServer: (repoPath) =>
@@ -251,7 +253,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
                       }),
                     );
                   }
-                  const policy = yield* resolveRuntimePolicy(sessionScope);
+                  const policy = yield* resolveRuntimePolicy({ ...input, sessionScope });
                   return yield* Effect.tryPromise({
                     try: () =>
                       controller.loadSessionContextUsage({
@@ -456,7 +458,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         updateSessionModel: (input) =>
           Effect.tryPromise({
             try: async () => {
-              const policy = await Effect.runPromise(resolveRuntimePolicy(input.sessionScope));
+              const policy = await Effect.runPromise(resolveRuntimePolicy(input));
               return controller.updateSessionModel(input, {
                 repoPath: input.repoPath,
                 runtimeKind: "codex",

@@ -1,5 +1,5 @@
 import { resolveTaskSessionStartTarget } from "./task-session-start-target";
-import type { AgentRole, RuntimeKind, TaskCard, TaskStatus } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
@@ -7,7 +7,8 @@ import { HostOperationError, HostValidationError } from "../../../effect/host-er
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import type { TaskStorePort, TaskRecord } from "../../../ports/task-repository-ports";
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { WorktreeActionRunner } from "../../actions/worktree-action-runner";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
@@ -17,7 +18,7 @@ import {
   requireDependencies,
 } from "../support/required-task-dependencies";
 import { validateTaskSessionWorkflowAvailable } from "../support/task-session-workflow-validation";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
+import { requireTaskEvent, requireWorkflowRole } from "../support/task-workflow-events";
 import { resolveRuntimeDescriptorForTaskSession } from "../support/task-worktree-cleanup";
 import { failOperationAfterRollback } from "../support/task-worktree-rollback";
 import {
@@ -31,17 +32,17 @@ import type { TaskSessionLifecycleCoordinator } from "./task-session-lifecycle-c
 export type PreparedTaskSessionStart = {
   canonicalRepoPath: string;
   rollback: PreparedTaskWorktree["rollback"];
-  preparedStatus: TaskStatus;
-  role: AgentRole;
+  preparedStatus: string;
+  role: string;
   runtimeKind: RuntimeKind;
-  task: TaskCard;
+  task: TaskRecord;
   workingDirectory: string;
 };
 
 export type TaskSessionStartPreparationInput = {
   canonicalRepoPath: string;
   taskId: string;
-  role: AgentRole;
+  role: string;
   runtimeKind: string;
   targetWorkingDirectory?: string;
 };
@@ -53,6 +54,7 @@ export type TaskSessionStartPreparationService = ReturnType<
 export type TaskSessionStartPreparationDependencies = {
   gitPort?: GitPort;
   taskStore: TaskStorePort;
+  taskWorkflows: TaskWorkflowResolver;
   settingsConfig?: SettingsConfigPort;
   worktreeActions?: WorktreeActionRunner;
   workspaceSettingsService?: WorkspaceSettingsService;
@@ -62,12 +64,10 @@ export type TaskSessionStartPreparationDependencies = {
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
 };
 
-const shouldTransitionBuilderStart = (status: TaskStatus): boolean =>
-  status === "open" || status === "spec_ready" || status === "ready_for_dev";
-
 export const createTaskSessionStartPreparationService = ({
   gitPort,
   taskStore,
+  taskWorkflows,
   settingsConfig,
   worktreeActions,
   workspaceSettingsService,
@@ -124,7 +124,7 @@ export const createTaskSessionStartPreparationService = ({
         const descriptor = yield* resolveRuntimeDescriptorForTaskSession(
           dependencies.runtimeDefinitionsService,
           runtimeKind,
-          role,
+          yield* requireWorkflowRole(taskWorkflows.forRepo(canonicalInputRepoPath), role),
         );
         // Fail before worktree setup when the shared runtime of this kind cannot accept work.
         yield* dependencies.runtimeRegistry.requireReady(descriptor.kind);
@@ -169,10 +169,10 @@ export const createTaskSessionStartPreparationService = ({
         const prepared = yield* Effect.result(
           Effect.gen(function* () {
             const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-            yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
-            if (role === "build" && shouldTransitionBuilderStart(task.status)) {
-              yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
-            }
+            const workflow = taskWorkflows.forRepo(canonicalRepoPath);
+            yield* validateTaskSessionWorkflowAvailable(workflow, task, role, canonicalRepoPath);
+            const startEvent = workflow.roleStartEvent(role);
+            if (startEvent !== undefined) yield* requireTaskEvent(workflow, startEvent, task);
             yield* Effect.scoped(
               Effect.gen(function* () {
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
@@ -226,17 +226,23 @@ export const createTaskSessionStartPreparationService = ({
     },
     complete(
       prepared: PreparedTaskSessionStart,
-      transitionTask: (
-        input: Parameters<TaskStorePort["transitionTask"]>[0],
-      ) => Effect.Effect<unknown, TaskServiceError>,
+      /** Commits the start event inside the task mutation that publishes it. */
+      applyStartEvent: (input: {
+        repoPath: string;
+        taskId: string;
+        eventId: string;
+      }) => Effect.Effect<unknown, TaskServiceError>,
     ) {
       return Effect.gen(function* () {
         const task = yield* taskStore.getTask({
           repoPath: prepared.canonicalRepoPath,
           taskId: prepared.task.id,
         });
-        if (prepared.role !== "build") {
+        const workflow = taskWorkflows.forRepo(prepared.canonicalRepoPath);
+        const startEvent = workflow.roleStartEvent(prepared.role);
+        if (startEvent === undefined) {
           yield* validateTaskSessionWorkflowAvailable(
+            workflow,
             task,
             prepared.role,
             prepared.canonicalRepoPath,
@@ -247,17 +253,17 @@ export const createTaskSessionStartPreparationService = ({
           return yield* Effect.fail(
             new HostOperationError({
               operation: "task.session_start.complete",
-              message: `Task ${task.id} changed from ${prepared.preparedStatus} to ${task.status} while Builder startup was in progress.`,
+              message: `Task ${task.id} changed from ${prepared.preparedStatus} to ${task.status} while ${workflow.role(prepared.role).label} startup was in progress.`,
               details: { repoPath: prepared.canonicalRepoPath, taskId: task.id },
             }),
           );
         }
-        if (shouldTransitionBuilderStart(task.status)) {
-          yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
-          yield* transitionTask({
+        const decision = yield* requireTaskEvent(workflow, startEvent, task);
+        if (decision.kind === "transition") {
+          yield* applyStartEvent({
             repoPath: prepared.canonicalRepoPath,
             taskId: task.id,
-            status: "in_progress",
+            eventId: startEvent,
           });
         }
       });

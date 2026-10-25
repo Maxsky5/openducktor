@@ -698,6 +698,8 @@ export const createPrepareOpencodeSessionRuntime =
               client,
               detail,
               scope: parent.scope,
+              repoPath: ref.repoPath,
+              resolveWorkflowRolePolicy: options.resolveWorkflowRolePolicy,
             }),
           );
           if (!isCurrent()) return;

@@ -1,5 +1,5 @@
 import { pullRequestSchema } from "@openducktor/contracts";
-import { and, asc, desc, isNotNull, ne } from "drizzle-orm";
+import { and, asc, desc, isNotNull, notInArray } from "drizzle-orm";
 import { Effect } from "effect";
 import type { PullRequestSyncCandidate } from "../../ports/task-repository-ports";
 import { decodeWithSchema, parseJsonColumnValue } from "./sqlite-json-codecs";
@@ -35,6 +35,7 @@ const isCandidate = (
 
 export const listPullRequestSyncCandidatesInDatabase = (
   session: TaskStoreSession,
+  terminalStates: readonly string[],
 ): Effect.Effect<PullRequestSyncCandidate[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -46,7 +47,9 @@ export const listPullRequestSyncCandidatesInDatabase = (
             status: tasks.status,
           })
           .from(tasks)
-          .where(and(ne(tasks.status, "closed"), isNotNull(tasks.pullRequestJson)))
+          .where(
+            and(notInArray(tasks.status, [...terminalStates]), isNotNull(tasks.pullRequestJson)),
+          )
           .orderBy(desc(tasks.updatedAt), asc(tasks.id)),
       "sqliteTaskStore.listPullRequestSyncCandidates.selectTasks",
     );

@@ -1,7 +1,8 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import { loadSessionPromptContext } from "../support/session-prompt";
+import { builtinRoleId, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type LoadSessionHistorySystemPromptContext = (
   session: AgentSessionState,
@@ -39,7 +40,7 @@ export const createWorkflowSessionHistoryPromptPolicy = ({
 
     const { systemPrompt } = await loadSessionPromptContext({
       workspaceId,
-      role,
+      role: builtinRoleId(role),
       task,
       loadRepoPromptOverrides,
     });

@@ -1,10 +1,8 @@
 import {
   type AgentModelSelection,
-  type AgentRole,
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
 } from "@openducktor/core";
-import type { TaskCard } from "@openducktor/contracts";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { useEffect, useMemo, useRef } from "react";
 import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
@@ -14,7 +12,6 @@ import {
   type RunSessionStartWorkflow,
 } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
-import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useAsyncActivityTracker } from "@openducktor/frontend-core/lib/use-async-activity-tracker";
@@ -25,6 +22,11 @@ import {
   buildAgentStudioSelectionQueryUpdate,
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "../query-sync/agent-studio-navigation";
+import type {
+  BuiltinLaunchActionId as SessionLaunchActionId,
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 type UseAgentStudioSendTargetArgs = {
   workspaceId: string | null;

@@ -1,4 +1,4 @@
-import type { AgentPromptTemplateId } from "@openducktor/contracts";
+import type { BuiltinPromptTemplateId as AgentPromptTemplateId } from "@openducktor/workflows";
 
 export type PromptValidationState = {
   globalErrors: Partial<Record<AgentPromptTemplateId, string>>;

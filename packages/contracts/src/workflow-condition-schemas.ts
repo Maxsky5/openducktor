@@ -5,11 +5,14 @@ export const workflowIdSchema = z
   .min(1)
   .refine((value) => value.trim().length > 0, "Use a non-blank workflow identifier.");
 
-// Setting facts.__proto__ replaces the object prototype instead of adding a fact.
-const workflowFactIdSchema = workflowIdSchema.refine(
-  (value) => value !== "__proto__",
-  'Fact ID "__proto__" is reserved. Use another fact ID.',
-);
+// Setting record.__proto__ replaces the object prototype instead of adding an entry.
+const workflowRecordKeySchema = (kind: string) =>
+  workflowIdSchema.refine(
+    (value) => value !== "__proto__",
+    `${kind} ID "__proto__" is reserved. Use another ${kind.toLowerCase()} ID.`,
+  );
+const workflowFactIdSchema = workflowRecordKeySchema("Fact");
+export const workflowArtifactIdSchema = workflowRecordKeySchema("Artifact");
 
 export const workflowValueSchema = z.union([
   z.string(),
@@ -33,6 +36,8 @@ export const workflowConditionSchema = z.union([
   z.boolean(),
   z.strictObject({ fact: workflowFactIdSchema, equals: workflowValueSchema }),
   z.strictObject({ stateIn: z.array(workflowIdSchema) }),
+  z.strictObject({ artifact: workflowArtifactIdSchema, present: z.boolean() }),
+  z.strictObject({ artifact: workflowArtifactIdSchema, verdict: workflowIdSchema }),
   z.strictObject({
     get all(): z.ZodArray<typeof workflowConditionSchema> {
       return z.array(workflowConditionSchema);

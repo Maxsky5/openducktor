@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "../../agent-sessions-store";
@@ -6,6 +5,7 @@ import type { SessionHistoryFreshnessTracker } from "../../../queries/agent-sess
 import { normalizeWorkingDirectory } from "../../../lib/working-directory";
 import { markSessionHistoriesUnverified } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseOrchestratorSessionStateArgs = {
   workspaceRepoPath: string | null;

@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import {
@@ -49,6 +50,7 @@ const setup = (
   });
   const taskReader = { getTask: () => Effect.succeed(task({ status: "in_progress" })) };
   const commands = createAgentSessionCommandService({
+    taskWorkflows: builtinTaskWorkflows,
     canonicalizeRepoPath: Effect.succeed,
     taskReader,
     taskLifecycle: createTaskSessionLifecycleCoordinator(),
@@ -58,6 +60,7 @@ const setup = (
     approvalPolicy: { reply: unexpected },
     readSessionRootRefs: () => Effect.succeed([root]),
     turnPreparation: createSessionTurnPreparation({
+      taskWorkflows: builtinTaskWorkflows,
       taskReader,
       settings: {
         getRepoConfigByRepoPath: () =>
@@ -145,7 +148,7 @@ const setup = (
         ]),
       agentSessionUpsert: unexpected,
       agentSessionUpdateModel: unexpected,
-      transitionTask: unexpected,
+      applyStartEvent: unexpected,
     },
     repositoryPolicy: {
       run: (_ref, _op, work) => work,

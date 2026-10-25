@@ -1,11 +1,7 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import {
-  CLAUDE_RUNTIME_DESCRIPTOR,
-  CODEX_RUNTIME_DESCRIPTOR,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-} from "@openducktor/contracts";
+
 import type {
   AgentModelCatalog,
   AgentRuntimeCatalog,
@@ -27,6 +23,11 @@ import {
   createRuntimeHookHarness as createSharedHookHarness,
 } from "../../test-support/runtime-hook-harness";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 
 type HookArgs = Parameters<typeof useSessionStartModalState>[0];
 type HookHarnessArgs = HookArgs & {

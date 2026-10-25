@@ -144,16 +144,12 @@ Input fields:
 - `priority`
 - `description?`
 - `labels?`
-- `aiReviewEnabled?`
 
 When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
-
-`issueType=epic` is rejected by the MCP schema.
 
 ## `odt_search_tasks`
 
 Searches active tasks only. Closed tasks are excluded.
-Active epics may appear in search results.
 
 Optional filters:
 
@@ -169,7 +165,7 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
 
 ## `odt_update_task`
 
-Updates an existing non-epic task.
+Updates an existing task.
 
 Input fields:
 
@@ -180,9 +176,8 @@ Input fields:
 - `priority?`
 - `labels?`
 - `issueType?`
-- `aiReviewEnabled?`
 
-Omitted fields keep their stored values. The tool trims `title` and `description`. An empty `description` clears the description. An empty `labels` array clears all labels. `issueType=epic` is rejected. The tool rejects epic targets. `updatedAt` changes only when a value changes.
+Omitted fields keep their stored values. The tool trims `title` and `description`. An empty `description` clears the description. An empty `labels` array clears all labels. `updatedAt` changes only when a value changes.
 
 When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
 
@@ -199,7 +194,6 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
     "status": "open",
     "priority": 2,
     "issueType": "task",
-    "aiReviewEnabled": true,
     "labels": ["docs"],
     "targetBranch": {
       "remote": "origin",
@@ -207,17 +201,16 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
     },
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
-    "qaVerdict": "not_reviewed",
-    "artifacts": {
-      "hasSpec": false,
-      "hasPlan": false,
-      "hasQaReport": false
+    "workflowArtifacts": {
+      "spec": { "present": false },
+      "plan": { "present": false },
+      "qaReport": { "present": false }
     }
   }
 }
 ```
 
-Use `odt_read_task` first to load the task fields, optional `targetBranch`, and `qaVerdict`. Its `task.artifacts` is an array of metadata for all current workflow and free artifacts instead of presence flags. Each entry has a stable `code`, display `name`, and `classification`. It contains no artifact content, internal artifact IDs, or `workflowKind`. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
+Use `odt_read_task` first to load the task fields, optional `targetBranch`, and `workflowArtifacts`. Its `task.artifacts` is an array of metadata for all current workflow and free artifacts. Each entry has a stable `code`, display `name`, and `classification`. It contains no artifact content, internal artifact IDs, or `workflowKind`. `workflowArtifacts` lists every artifact that the workflow declares. An absent artifact has `present: false`. A present review also has its `verdict`.
 
 `odt_read_task` input:
 

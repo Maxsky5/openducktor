@@ -1,3 +1,4 @@
+import { claudeTestRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import {
@@ -11,6 +12,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("build");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -53,6 +55,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("build");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -84,6 +87,7 @@ describe("Claude permission request lifecycle", () => {
     const publicationError = new Error("Claude live-session adapter was released.");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: () => {
@@ -113,6 +117,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("qa");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -151,6 +156,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("planner");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -180,6 +186,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("qa");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       canonicalizePath: async (path) =>
         path === "/repo/link/secret.txt" ? "/outside/secret.txt" : path,
       now: () => "2026-06-25T12:00:00.000Z",
@@ -211,6 +218,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("spec");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -247,6 +255,7 @@ describe("Claude permission request lifecycle", () => {
     const session = createSession("spec");
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
-  AGENT_ROLE_TOOL_POLICY,
   AgentSessionMessageRefusedError,
   type ContinueInterruptedAgentTurnInput,
   workflowAgentSessionScope,
 } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
 import {
   codexSessionRuntimeRef,
   codexThreadFixture,
@@ -14,6 +14,7 @@ import {
   expectedThreadConfig,
   makeRuntimeSummary,
   testManagedMcpServer,
+  testWorkflowRolePolicy,
 } from "./codex-app-server-adapter.test-harness";
 import { CodexAppServerAdapter } from "./index";
 import type {
@@ -70,6 +71,7 @@ const createContinuationAdapter = ({
   const calls: RecordedCall[] = [];
   let resumeCount = 0;
   const adapter = new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
     runtime: makeRuntimeSummary("runtime-live"),
     transportFactory: (): CodexJsonRpcTransport => ({
@@ -394,6 +396,7 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
   test("reports a missing thread as session_not_found without starting a turn", async () => {
     const calls: RecordedCall[] = [];
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: (): CodexJsonRpcTransport => ({
@@ -433,6 +436,7 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
   test("reports a failed probe without starting a turn", async () => {
     const calls: RecordedCall[] = [];
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: (): CodexJsonRpcTransport => ({

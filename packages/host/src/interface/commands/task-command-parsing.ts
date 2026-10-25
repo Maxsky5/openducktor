@@ -1,12 +1,10 @@
 import {
   type AgentSessionIdentity,
   agentSessionRecordSchema,
-  type PlanSubtaskInput,
   type PullRequest,
   type TaskCreateInput,
   type TaskDirectMergeInput,
   type TaskAssetDescriptionMutation,
-  type TaskStatus,
   type TaskUpdatePatch,
 } from "@openducktor/contracts";
 import { z } from "zod";
@@ -65,7 +63,7 @@ export const parseDescriptionAssets = (
   throw invalidInput(`descriptionAssets is invalid: ${result.error.message}`, "descriptionAssets");
 };
 
-export const parseTransitionStatus = (result: z.ZodSafeParseResult<TaskStatus>): TaskStatus => {
+export const parseTransitionStatus = (result: z.ZodSafeParseResult<string>): string => {
   if (result.success) {
     return result.data;
   }
@@ -114,19 +112,6 @@ export const parseOptionalNote = (
 
   const trimmed = result.data.trim();
   return trimmed ? trimmed : undefined;
-};
-
-export const parsePlanSubtasks = (
-  result: z.ZodSafeParseResult<PlanSubtaskInput[] | undefined>,
-): PlanSubtaskInput[] => {
-  if (result.success) {
-    return result.data ?? [];
-  }
-
-  throw invalidInput(
-    `set_plan input.input.subtasks is invalid: ${result.error.message}`,
-    "input.input.subtasks",
-  );
 };
 
 const agentSessionStringKeys = [

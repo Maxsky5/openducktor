@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { createClaudeServiceFixture as createService } from "./claude-agent-sdk-service.test-support";
 import * as todos from "./claude-agent-sdk-todos";
 import * as sessionFactory from "./claude-agent-sdk-session-factory";
@@ -581,6 +582,7 @@ describe("createClaudeAgentSdkService", () => {
     const service = createClaudeAgentSdkService(
       {
         claudeExecutablePath: "/usr/local/bin/claude",
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         now: () => "2026-06-25T20:00:00.000Z",
         launchPolicy: {
           resolve: () => Effect.succeed({}),

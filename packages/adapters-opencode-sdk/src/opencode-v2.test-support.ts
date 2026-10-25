@@ -10,6 +10,14 @@ import { z, type JSONType } from "zod";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import { projectMessages } from "./opencode-message-projection";
 import type { OpenCodeRuntimeConnection } from "./types";
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
+/** The role policy of the built-in task workflow. */
+export const testWorkflowRolePolicy: WorkflowRolePolicyResolver = ({ role }) => {
+  const workflowRole = builtinTaskWorkflow.role(role);
+  return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
+};
 
 export const connection: OpenCodeRuntimeConnection = {
   runtimeId: "runtime-1",
@@ -98,6 +106,7 @@ export const createController = (
     {
       createClient: () => client,
       resolveCreationSettings: async (_scope: AgentSessionScope) => settings,
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     },
     {
       readDirectory: async (_directory, read) => read(),

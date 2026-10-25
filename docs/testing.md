@@ -7,6 +7,7 @@ Read this guide before you change behavior or tests.
 - Test each changed behavior in its owning package.
 - Add deep tests for changed behavior in `packages/host`, `packages/core`, adapters, and MCP.
 - Add frontend tests for changed frontend behavior.
+- When host code reads a task workflow, also test it with `createReviewTaskWorkflow` from `@openducktor/workflows/test-support`. Its IDs differ from the built-in IDs, so the test finds built-in names in host code.
 - Do not change a production API, constructor, option, or exported type only to make a test easier or faster.
 - Use a narrow test helper, a local fake around an existing boundary, or a production refactor that improves the design.
 

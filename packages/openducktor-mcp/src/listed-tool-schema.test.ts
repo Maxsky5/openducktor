@@ -19,6 +19,28 @@ describe("listed MCP tool input schema", () => {
     expect(requiredOf(schema)).not.toContain("workspaceId");
   });
 
+  test("lists the issue types and active states of the built-in task workflow as a hint", () => {
+    const create = propertiesOf(
+      getListedToolInputSchema("odt_create_task", { hideWorkspaceId: true }),
+    );
+    const search = propertiesOf(
+      getListedToolInputSchema("odt_search_tasks", { hideWorkspaceId: true }),
+    );
+
+    expect(create.issueType).toMatchObject({ enum: ["task", "feature", "bug"] });
+    expect(search.status).toMatchObject({
+      enum: [
+        "open",
+        "spec_ready",
+        "ready_for_dev",
+        "in_progress",
+        "blocked",
+        "ai_review",
+        "human_review",
+      ],
+    });
+  });
+
   test("keeps workspaceId in listed tools for external MCP clients", () => {
     const properties = propertiesOf(
       getListedToolInputSchema("odt_read_task", { hideWorkspaceId: false }),

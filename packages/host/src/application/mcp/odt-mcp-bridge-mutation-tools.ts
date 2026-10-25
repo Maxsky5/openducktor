@@ -5,7 +5,6 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
-import { HostValidationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
 import { executeSetTaskArtifact, executeDeleteTaskArtifact } from "./odt-mcp-artifact-tools";
 import {
@@ -56,7 +55,6 @@ const executeCreateTask: OdtMcpMutationHandler = (context, input) =>
         priority: parsed.priority,
         description: parsed.description,
         labels: parsed.labels,
-        aiReviewEnabled: parsed.aiReviewEnabled ?? true,
       },
     });
     return yield* parseResponse(
@@ -76,13 +74,6 @@ const executeUpdateTask: OdtMcpMutationHandler = (context, input) =>
     );
     const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
     const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    if (task.issueType === "epic") {
-      return yield* new HostValidationError({
-        field: "taskId",
-        message: "Epic tasks cannot be updated by the public MCP update tool.",
-        details: { taskId: task.id },
-      });
-    }
     const patch = buildTaskUpdatePatch(task, parsed);
     if (Object.keys(patch).length === 0) {
       return yield* parseResponse(

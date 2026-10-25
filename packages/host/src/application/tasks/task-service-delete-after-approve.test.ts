@@ -158,8 +158,7 @@ const createHarness = () => {
       getTaskMetadata: () =>
         Effect.sync(() => {
           const metadata: TaskMetadataPayload = {
-            spec: { markdown: "" },
-            plan: { markdown: "" },
+            artifacts: {},
             agentSessions: [buildSession],
           };
           if (directMerge) metadata.directMerge = directMerge;

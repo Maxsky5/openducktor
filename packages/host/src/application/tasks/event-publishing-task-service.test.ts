@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
@@ -20,19 +21,17 @@ const taskCard = (): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: false, completed: false },
     planner: { required: false, canSkip: true, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   createdAt: "2026-01-01T00:00:00.000Z",
@@ -71,6 +70,7 @@ describe("createEventPublishingTaskService", () => {
   test("passes the captured workspace to the gated sync and preserves its skip result", async () => {
     const calls: unknown[] = [];
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({}),
       taskSyncService: {
         ...sync([]),
@@ -95,44 +95,16 @@ describe("createEventPublishingTaskService", () => {
     expect(calls).toEqual([input]);
   });
 
-  test("publishes a successful set-spec once and returns its artifact", async () => {
-    const artifact = { markdown: "# Spec" };
-    const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
-      [];
-    const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({ setSpec: () => Effect.succeed(artifact) }),
-      taskSyncService: {
-        ...sync([]),
-        publishTasksUpdated: (_repoPath, changes, operation) =>
-          Effect.sync(() => {
-            publications.push({ operation, ...changes });
-            return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
-          }),
-      },
-    });
-
-    const result = await Effect.runPromise(
-      service.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
-    );
-
-    expect(result).toEqual({
-      ...artifact,
-      cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 },
-    });
-    expect(publications).toEqual([
-      { operation: "set-spec", taskIds: ["task-1"], removedTaskIds: [] },
-    ]);
-  });
-
-  test("publishes a successful set-plan once with its result changes", async () => {
+  test("publishes a successful workflow artifact save once with its result changes", async () => {
     const plan = {
       artifact: { markdown: "# Plan" },
-      changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["old-child"] },
+      changes: { taskIds: ["task-1"], removedTaskIds: [] },
     };
     const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
       [];
     const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({ setPlan: () => Effect.succeed(plan) }),
+      taskWorkflows: builtinTaskWorkflows,
+      taskService: fakeTaskService({ workflowArtifactSave: () => Effect.succeed(plan) }),
       taskSyncService: {
         ...sync([]),
         publishTasksUpdated: (_repoPath, changes, operation) =>
@@ -144,12 +116,14 @@ describe("createEventPublishingTaskService", () => {
     });
 
     const result = await Effect.runPromise(
-      service.setPlan({
+      service.workflowArtifactSave({
+        sourceTool: "workflow_artifact_save",
+        updatedBy: "user",
         repoPath: "/repo",
-        taskId: "epic-1",
+        taskId: "task-1",
         markdown: "# Plan",
-        subtasks: [],
-        hasExplicitSubtasks: true,
+        code: "plan",
+        submit: true,
       }),
     );
 
@@ -161,49 +135,18 @@ describe("createEventPublishingTaskService", () => {
       },
     });
     expect(publications).toEqual([
-      { operation: "set-plan", taskIds: ["epic-1", "child-1"], removedTaskIds: ["old-child"] },
+      { operation: "save-workflow-artifact", taskIds: ["task-1"], removedTaskIds: [] },
     ]);
   });
 
-  test("defers each set-spec service call until execution inside the mutation gate", async () => {
+  test("defers each workflow artifact save until execution inside the mutation gate", async () => {
     let gateActive = false;
     const calls: boolean[] = [];
     const taskSyncService = sync([]);
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
-        setSpec: () => {
-          calls.push(gateActive);
-          return Effect.succeed({ markdown: "# Spec" });
-        },
-      }),
-      taskSyncService: {
-        ...taskSyncService,
-        runStatusMutation: (_repoPath, _operation, mutation, afterCommit) =>
-          Effect.gen(function* () {
-            gateActive = true;
-            const result = yield* collectTaskStatusChanges(mutation).pipe(
-              Effect.flatMap(afterCommit),
-            );
-            gateActive = false;
-            return result;
-          }),
-      },
-    });
-    const mutation = service.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" });
-
-    expect(calls).toEqual([]);
-    await Effect.runPromise(mutation);
-    await Effect.runPromise(mutation);
-    expect(calls).toEqual([true, true]);
-  });
-
-  test("defers each set-plan service call until execution inside the mutation gate", async () => {
-    let gateActive = false;
-    const calls: boolean[] = [];
-    const taskSyncService = sync([]);
-    const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({
-        setPlan: () => {
+        workflowArtifactSave: () => {
           calls.push(gateActive);
           return Effect.succeed({
             artifact: { markdown: "# Plan" },
@@ -224,12 +167,14 @@ describe("createEventPublishingTaskService", () => {
           }),
       },
     });
-    const mutation = service.setPlan({
+    const mutation = service.workflowArtifactSave({
+      sourceTool: "workflow_artifact_save",
+      updatedBy: "user",
       repoPath: "/repo",
       taskId: "task-1",
       markdown: "# Plan",
-      subtasks: [],
-      hasExplicitSubtasks: true,
+      code: "plan",
+      submit: true,
     });
 
     expect(calls).toEqual([]);
@@ -242,6 +187,7 @@ describe("createEventPublishingTaskService", () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     let saves = 0;
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         agentSessionUpdateModel: () =>
           Effect.sync(() => {
@@ -279,6 +225,7 @@ describe("createEventPublishingTaskService", () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({ operation: "model-save", message: "Save failed" });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({ agentSessionUpdateModel: () => Effect.fail(failure) }),
       taskSyncService: sync(events),
     });
@@ -300,7 +247,7 @@ describe("createEventPublishingTaskService", () => {
     expect(events).toEqual([]);
   });
 
-  test.each(["updateTask", "directMerge", "setPlan", "setSpec"] as const)(
+  test.each(["updateTask", "directMerge", "workflowArtifactSave"] as const)(
     "preserves the %s failure when snapshot publication also fails",
     async (method) => {
       const mutationFailure = new HostOperationError({
@@ -319,8 +266,7 @@ describe("createEventPublishingTaskService", () => {
       const base = fakeTaskService({
         updateTask: () => Effect.fail(progress),
         directMerge: () => Effect.fail(progress),
-        setPlan: () => Effect.fail(progress),
-        setSpec: () => Effect.fail(progress),
+        workflowArtifactSave: () => Effect.fail(progress),
         listTasks: () => Effect.fail(snapshotFailure),
       });
       const taskSyncService = createTaskSyncService({
@@ -343,7 +289,11 @@ describe("createEventPublishingTaskService", () => {
           getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },
       });
-      const service = createEventPublishingTaskService({ taskService: base, taskSyncService });
+      const service = createEventPublishingTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskService: base,
+        taskSyncService,
+      });
       const calls = {
         updateTask: service
           .updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} })
@@ -362,17 +312,16 @@ describe("createEventPublishingTaskService", () => {
             },
           })
           .pipe(Effect.asVoid),
-        setPlan: service
-          .setPlan({
+        workflowArtifactSave: service
+          .workflowArtifactSave({
+            sourceTool: "workflow_artifact_save",
+            updatedBy: "user",
             repoPath: "/repo",
             taskId: "task-1",
+            code: "plan",
             markdown: "Plan",
-            subtasks: [],
-            hasExplicitSubtasks: false,
+            submit: true,
           })
-          .pipe(Effect.asVoid),
-        setSpec: service
-          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "Spec" })
           .pipe(Effect.asVoid),
       };
       const failure = await Effect.runPromise(calls[method].pipe(Effect.flip));
@@ -405,6 +354,7 @@ describe("createEventPublishingTaskService", () => {
       syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
     };
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         createTask: () => Effect.succeed(taskCard()),
         updateTask: () => Effect.succeed(taskCard()),
@@ -415,7 +365,7 @@ describe("createEventPublishingTaskService", () => {
       Effect.runPromise(
         service.createTask({
           repoPath: "/repo",
-          task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+          task: { title: "Task", issueType: "task", priority: 2 },
         }),
       ),
     ).resolves.toEqual(taskCard());
@@ -431,6 +381,7 @@ describe("createEventPublishingTaskService", () => {
       message: "Asset cleanup failed.",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         createTask: () =>
           Effect.fail(
@@ -458,77 +409,12 @@ describe("createEventPublishingTaskService", () => {
         service
           .createTask({
             repoPath: "/repo",
-            task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+            task: { title: "Task", issueType: "task", priority: 2 },
           })
           .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);
     expect(publishedTaskIds).toEqual(["task-1"]);
-  });
-  test("publishes set-plan partial progress and preserves the original failure", async () => {
-    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
-    const failure = new HostOperationError({
-      operation: "set-plan",
-      message: "replacement failed",
-    });
-    const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({
-        setPlan: () =>
-          Effect.fail(
-            new TaskMutationProgressFailure({
-              operation: "set-plan",
-              changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["child-1"] },
-              failure,
-            }),
-          ),
-      }),
-      taskSyncService: sync(events),
-    });
-    await expect(
-      Effect.runPromise(
-        service
-          .setPlan({
-            repoPath: "/repo",
-            taskId: "epic-1",
-            markdown: "# Plan",
-            subtasks: [],
-            hasExplicitSubtasks: true,
-          })
-          .pipe(Effect.flip),
-      ),
-    ).resolves.toBe(failure);
-    expect(events).toEqual([
-      { changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["child-1"] } },
-    ]);
-  });
-  test("publishes set-spec partial progress and preserves the original failure", async () => {
-    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
-    const failure = new HostOperationError({
-      operation: "set-spec",
-      message: "transition failed",
-    });
-    const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({
-        setSpec: () =>
-          Effect.fail(
-            new TaskMutationProgressFailure({
-              operation: "set-spec",
-              changes: { taskIds: ["task-1"], removedTaskIds: [] },
-              failure,
-            }),
-          ),
-      }),
-      taskSyncService: sync(events),
-    });
-
-    await expect(
-      Effect.runPromise(
-        service
-          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })
-          .pipe(Effect.flip),
-      ),
-    ).resolves.toBe(failure);
-    expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: [] } }]);
   });
   test("publishes generic mutation partial progress and preserves the original failure", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
@@ -537,6 +423,7 @@ describe("createEventPublishingTaskService", () => {
       message: "closure failed",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         linkMergedPullRequest: () =>
           Effect.fail(
@@ -577,6 +464,7 @@ describe("createEventPublishingTaskService", () => {
       message: "closure failed",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         directMerge: () =>
           Effect.fail(
@@ -617,6 +505,7 @@ describe("createEventPublishingTaskService", () => {
       message: "Task task-1 not found",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         updateTask: () => Effect.fail(failure),
       }),
@@ -637,6 +526,7 @@ describe("createEventPublishingTaskService", () => {
       message: "Delete failed",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         deleteTask: () => Effect.fail(failure),
       }),
@@ -645,9 +535,7 @@ describe("createEventPublishingTaskService", () => {
 
     await expect(
       Effect.runPromise(
-        service
-          .deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false })
-          .pipe(Effect.flip),
+        service.deleteTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);
     expect(events).toEqual([]);
@@ -659,6 +547,7 @@ describe("createEventPublishingTaskService", () => {
       message: "Detection failed",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         detectPullRequest: () => Effect.fail(failure),
       }),
@@ -672,43 +561,16 @@ describe("createEventPublishingTaskService", () => {
     ).resolves.toBe(failure);
     expect(events).toEqual([]);
   });
-  test("does not publish ordinary set-plan failures", async () => {
+  test("does not publish ordinary workflow artifact save failures", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({
-      operation: "set-plan",
-      message: "Plan update failed",
-    });
-    const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({
-        setPlan: () => Effect.fail(failure),
-      }),
-      taskSyncService: sync(events),
-    });
-
-    await expect(
-      Effect.runPromise(
-        service
-          .setPlan({
-            repoPath: "/repo",
-            taskId: "task-1",
-            markdown: "# Plan",
-            subtasks: [],
-            hasExplicitSubtasks: true,
-          })
-          .pipe(Effect.flip),
-      ),
-    ).resolves.toBe(failure);
-    expect(events).toEqual([]);
-  });
-  test("does not publish ordinary pre-write set-spec failures", async () => {
-    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
-    const failure = new HostOperationError({
-      operation: "set-spec",
+      operation: "save-workflow-artifact",
       message: "Artifact write failed",
     });
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
-        setSpec: () => Effect.fail(failure),
+        workflowArtifactSave: () => Effect.fail(failure),
       }),
       taskSyncService: sync(events),
     });
@@ -716,7 +578,15 @@ describe("createEventPublishingTaskService", () => {
     await expect(
       Effect.runPromise(
         service
-          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" })
+          .workflowArtifactSave({
+            sourceTool: "workflow_artifact_save",
+            updatedBy: "user",
+            repoPath: "/repo",
+            taskId: "task-1",
+            markdown: "# Plan",
+            code: "plan",
+            submit: true,
+          })
           .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);
@@ -725,20 +595,17 @@ describe("createEventPublishingTaskService", () => {
   test("publishes deleted task ids as removed", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const service = createEventPublishingTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         deleteTask: () =>
           Effect.succeed({
             ok: true,
-            changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["epic-1", "child-1"] },
+            changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] },
           }),
       }),
       taskSyncService: sync(events),
     });
-    await Effect.runPromise(
-      service.deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true }),
-    );
-    expect(events).toEqual([
-      { changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["epic-1", "child-1"] } },
-    ]);
+    await Effect.runPromise(service.deleteTask({ repoPath: "/repo", taskId: "task-1" }));
+    expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } }]);
   });
 });

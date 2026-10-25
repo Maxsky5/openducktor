@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { expect, mock, test } from "bun:test";
 import {
   CodexAppServerAdapter,
@@ -310,6 +311,7 @@ const assertFreshWorkspaceQueries = async (method: "thread/read" | "thread/turns
     | undefined;
   const firstTurnCompleted = Promise.withResolvers<void>();
   const adapter = new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     runtime: {
       kind: "codex",
       runtimeId,

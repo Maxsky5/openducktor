@@ -1,23 +1,24 @@
-import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import { resolveTaskCardActions } from "../../tasks/board/kanban-task-workflow";
-import { taskActionLabel } from "../../tasks/board/task-action-presentation";
-import { buildReusableSessionOptions } from "./session-start-reuse-options";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
+import { type AgentSessionStartMode } from "@openducktor/core";
 import {
+  WORKFLOW_QUICK_ACTIONS,
+  assertAgentStudioWorkflowQuickAction,
+  canShowPullRequestWorkflowQuickAction,
+  orderAgentStudioQuickActions,
+  resolveTaskCardActions,
+  taskActionLabel,
   getSessionLaunchAction,
-  type SessionLaunchActionId,
-} from "../../lib/session-launch-actions";
-import { LAUNCH_ACTION_LABELS } from "./session-start-prompts";
-import { type SessionStartExistingSessionOption } from "./session-start-types";
-import { type SessionStartPostAction } from "./session-start-workflow";
-import {
   AGENT_STUDIO_SESSION_START_ACTIONS,
   type AgentStudioWorkflowQuickAction,
-  type TaskWorkflowAction,
-} from "../../tasks/workflow/task-workflow-actions";
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+  buildRoleWorkflowMapForTask,
+} from "@openducktor/workflows";
+import { buildReusableSessionOptions } from "./session-start-reuse-options";
+import { type SessionStartExistingSessionOption } from "./session-start-types";
+import { type SessionStartPostAction } from "./session-start-workflow";
 import { pullRequestHealthError } from "../../review/git-provider-health";
-import { isQaRejectedTask } from "../../lib/task-qa";
-import { buildRoleWorkflowMapForTask } from "../../lib/task-agent-workflows";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 
@@ -47,63 +48,28 @@ export type AgentStudioQuickActionOption = {
   requiresHumanFeedback?: boolean;
 };
 
-type WorkflowQuickActionDefinition = {
-  role: AgentRole;
-  resolveLaunchActionId: (task: TaskCard) => SessionLaunchActionId;
-  description: string;
-  requiresHumanFeedback?: true;
-};
-
-const WORKFLOW_QUICK_ACTIONS = {
-  set_spec: {
-    role: "spec",
-    resolveLaunchActionId: () => "spec_initial",
-    description: "Open the start-session flow for the Spec workflow.",
-  },
-  set_plan: {
-    role: "planner",
-    resolveLaunchActionId: () => "planner_initial",
-    description: "Open the start-session flow for the Planner workflow.",
-  },
-  build_start: {
+const AUXILIARY_QUICK_ACTIONS = {
+  build_pull_request_generation: {
     role: "build",
-    resolveLaunchActionId: (task) =>
-      isQaRejectedTask(task) ? "build_after_qa_rejected" : "build_implementation_start",
-    description: "Open the start-session flow for Builder implementation work.",
+    description: "Reuse or fork a Builder session to create or update a pull request.",
+    postStartAction: "kickoff",
   },
-  qa_start: {
-    role: "qa",
-    resolveLaunchActionId: () => "qa_review",
-    description: "Open the start-session flow for QA review.",
-  },
-  human_request_changes: {
+  build_rebase_conflict_resolution: {
     role: "build",
-    resolveLaunchActionId: () => "build_after_human_request_changes",
-    description: "Collect human feedback, then open the Builder rework flow.",
-    requiresHumanFeedback: true,
+    description: "Ask Builder to resolve the active git conflict.",
+    postStartAction: "send_message",
   },
-} satisfies Record<AgentStudioWorkflowQuickAction, WorkflowQuickActionDefinition>;
+} as const;
 
-const WORKFLOW_QUICK_ACTION_KEYS = new Set<string>(Object.keys(WORKFLOW_QUICK_ACTIONS));
+export const SESSION_BUSY_REASON = "Wait for the current session to finish.";
 
-const isAgentStudioWorkflowQuickAction = (
-  action: TaskWorkflowAction,
-): action is AgentStudioWorkflowQuickAction => WORKFLOW_QUICK_ACTION_KEYS.has(action);
-
-const assertAgentStudioWorkflowQuickAction = (
-  action: TaskWorkflowAction,
-): AgentStudioWorkflowQuickAction => {
-  if (isAgentStudioWorkflowQuickAction(action)) {
-    return action;
-  }
-  throw new Error(`Unsupported Agent Studio quick action workflow action: ${action}`);
-};
+export const selectPrimaryAgentStudioQuickAction = <Option extends { disabled: boolean }>(
+  options: Option[],
+): Option | null => options.find((option) => !option.disabled) ?? options[0] ?? null;
 
 const createQuickActionDisabledReason = (createSessionDisabled: boolean): string | null => {
-  return createSessionDisabled ? "Wait for the current session to finish." : null;
+  return createSessionDisabled ? SESSION_BUSY_REASON : null;
 };
-
-const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>(["human_review"]);
 
 const canShowPullRequestQuickAction = (
   task: TaskCard,
@@ -112,49 +78,10 @@ const canShowPullRequestQuickAction = (
 ): boolean => {
   const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
   return (
-    PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status) &&
+    canShowPullRequestWorkflowQuickAction(task) &&
     (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
       readFailedWithoutContext)
   );
-};
-
-const hasLinkedPullRequest = (task: TaskCard): boolean => {
-  return task.pullRequest !== undefined;
-};
-
-const quickActionIdForWorkflowAction = (
-  action: AgentStudioWorkflowQuickAction,
-  task: TaskCard,
-): SessionLaunchActionId => WORKFLOW_QUICK_ACTIONS[action].resolveLaunchActionId(task);
-
-const orderQuickActions = (
-  task: TaskCard,
-  options: AgentStudioQuickActionOption[],
-  workflowActionOrder: readonly AgentStudioWorkflowQuickAction[],
-): AgentStudioQuickActionOption[] => {
-  const orderedWorkflowLaunchActions = workflowActionOrder.map((action) =>
-    quickActionIdForWorkflowAction(action, task),
-  );
-
-  const launchActionPriority = new Map(
-    orderedWorkflowLaunchActions.map((launchActionId, index) => [launchActionId, index]),
-  );
-  if (task.status === "human_review") {
-    const primaryReviewLaunchAction = hasLinkedPullRequest(task)
-      ? "build_after_human_request_changes"
-      : "build_pull_request_generation";
-    launchActionPriority.set(primaryReviewLaunchAction, -1);
-  }
-  const fallbackPriority = launchActionPriority.size + 1;
-
-  return options.toSorted((left, right) => {
-    const leftPriority = launchActionPriority.get(left.launchActionId) ?? fallbackPriority;
-    const rightPriority = launchActionPriority.get(right.launchActionId) ?? fallbackPriority;
-    if (leftPriority !== rightPriority) {
-      return leftPriority - rightPriority;
-    }
-    return 0;
-  });
 };
 
 export const buildAgentStudioQuickActions = (params: {
@@ -228,11 +155,9 @@ export const buildAgentStudioQuickActions = (params: {
       (hasBuilderSource ? null : "Requires an existing Builder session.");
     const option: AgentStudioQuickActionOption = {
       id: "quick:build_pull_request_generation",
-      role: "build",
+      ...AUXILIARY_QUICK_ACTIONS.build_pull_request_generation,
       launchActionId: "build_pull_request_generation",
-      label: LAUNCH_ACTION_LABELS.build_pull_request_generation,
-      description: "Reuse or fork a Builder session to create or update a pull request.",
-      postStartAction: "kickoff",
+      label: getSessionLaunchAction("build_pull_request_generation").label,
       disabled: pullRequestDisabledReason !== null,
     };
     if (pullRequestDisabledReason) {
@@ -248,7 +173,7 @@ export const buildAgentStudioQuickActions = (params: {
     options.push(option);
   }
 
-  return orderQuickActions(task, options, workflowActionOrder);
+  return orderAgentStudioQuickActions(task, options, workflowActionOrder);
 };
 
 /**
@@ -266,11 +191,9 @@ export const buildGitConflictQuickAction = (params: {
   const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
   const option: AgentStudioQuickActionOption = {
     id: "quick:build_rebase_conflict_resolution",
-    role: "build",
+    ...AUXILIARY_QUICK_ACTIONS.build_rebase_conflict_resolution,
     launchActionId: "build_rebase_conflict_resolution",
-    label: LAUNCH_ACTION_LABELS.build_rebase_conflict_resolution,
-    description: "Ask Builder to resolve the active git conflict.",
-    postStartAction: "send_message",
+    label: getSessionLaunchAction("build_rebase_conflict_resolution").label,
     disabled: disabledReason !== null,
   };
   if (disabledReason) {
@@ -289,10 +212,4 @@ export const withGitConflictQuickAction = (
     quickActions: options,
     primaryQuickAction: selectPrimaryAgentStudioQuickAction(options),
   };
-};
-
-export const selectPrimaryAgentStudioQuickAction = (
-  options: AgentStudioQuickActionOption[],
-): AgentStudioQuickActionOption | null => {
-  return options.find((option) => !option.disabled) ?? options[0] ?? null;
 };
