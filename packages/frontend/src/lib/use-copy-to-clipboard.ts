@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getClipboardErrorMessage } from "@/lib/clipboard";
 
@@ -28,17 +28,15 @@ export function useCopyToClipboard({
   resetDelayMs = DEFAULT_RESET_DELAY_MS,
   errorLogContext,
 }: UseCopyToClipboardOptions = {}): UseCopyToClipboardResult {
-  const [copied, setCopied] = useState(false);
-  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Each copy increments the count, so a second copy restarts the reset delay. Zero is not copied.
+  const [copyCount, setCopyCount] = useState(0);
 
-  const clearResetTimeout = useCallback(() => {
-    if (resetTimeoutRef.current) {
-      clearTimeout(resetTimeoutRef.current);
-      resetTimeoutRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => clearResetTimeout, [clearResetTimeout]);
+  // The reset lives in an effect, so it starts again when a hidden `Activity` shows again.
+  useEffect(() => {
+    if (copyCount === 0) return;
+    const timeout = setTimeout(() => setCopyCount(0), resetDelayMs);
+    return () => clearTimeout(timeout);
+  }, [copyCount, resetDelayMs]);
 
   const copyToClipboard = useCallback(
     async (value: string | Blob): Promise<boolean> => {
@@ -48,12 +46,7 @@ export function useCopyToClipboard({
         } else {
           await navigator.clipboard.writeText(value);
         }
-        clearResetTimeout();
-        setCopied(true);
-        resetTimeoutRef.current = setTimeout(() => {
-          setCopied(false);
-          resetTimeoutRef.current = null;
-        }, resetDelayMs);
+        setCopyCount((count) => count + 1);
         const description = value instanceof Blob ? undefined : getSuccessDescription?.(value);
         if (description) {
           toast.success(successMessage, { description });
@@ -76,18 +69,16 @@ export function useCopyToClipboard({
       }
     },
     [
-      clearResetTimeout,
       copyFailedMessage,
       copyFailedDescription,
       errorLogContext,
       getSuccessDescription,
-      resetDelayMs,
       successMessage,
     ],
   );
 
   return {
-    copied,
+    copied: copyCount > 0,
     copyToClipboard,
   };
 }

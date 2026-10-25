@@ -8,6 +8,7 @@ type CollapsibleCardProps = {
   icon: ReactElement;
   /** Short text beside the title, such as a count or a date. */
   summary?: string | null;
+  /** Opens the card the first time it is true, until the user toggles the card. */
   defaultExpanded?: boolean;
   /** Controls at the end of the header. A click on them does not toggle the card. */
   headerAction?: ReactNode;
@@ -28,7 +29,10 @@ export function CollapsibleCard({
   children,
 }: CollapsibleCardProps): ReactElement {
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
-  const isExpanded = expandedOverride ?? defaultExpanded;
+  // A default can open the card later, such as when data arrives, but never closes it.
+  const [openedByDefault, setOpenedByDefault] = useState(defaultExpanded);
+  if (defaultExpanded && !openedByDefault) setOpenedByDefault(true);
+  const isExpanded = expandedOverride ?? openedByDefault;
 
   return (
     <Collapsible

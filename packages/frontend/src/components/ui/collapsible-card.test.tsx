@@ -51,4 +51,22 @@ describe("CollapsibleCard", () => {
     );
     view.unmount();
   });
+
+  test("stays open after its default turns false", () => {
+    const card = (defaultExpanded: boolean) => (
+      <CollapsibleCard title="Artifacts" icon={<span />} defaultExpanded={defaultExpanded}>
+        <p>Body</p>
+      </CollapsibleCard>
+    );
+    const view = render(card(false));
+    const header = screen.getByRole("button", { name: "Artifacts" });
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+
+    view.rerender(card(true));
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+
+    view.rerender(card(false));
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    view.unmount();
+  });
 });
