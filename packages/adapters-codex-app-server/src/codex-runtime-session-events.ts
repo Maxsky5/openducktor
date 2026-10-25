@@ -34,7 +34,7 @@ import {
   expectCodexUserMessageEcho,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
-import type { CodexThreadSnapshot, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
+import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import type { CodexAsyncQuestionState } from "./codex-async-questions";
@@ -53,7 +53,7 @@ import type { CodexRuntimeNotification } from "./codex-runtime-event-schema";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
-import type { CodexSubagentScope } from "./codex-subagent-metadata";
+import type { CodexSubagentScope } from "./codex-subagent-role";
 import {
   type CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -82,11 +82,11 @@ type CodexRuntimeSessionEventsDepsBase = {
   pendingInput: CodexPendingInputState;
   asyncQuestions: CodexAsyncQuestionState;
   subagents: CodexSubagentLinkState;
-  readSubagentThread(
+  readSubagentRole(
     runtimeId: string,
     childThreadId: string,
     scope: CodexSubagentScope,
-  ): Promise<CodexThreadSnapshot>;
+  ): Promise<string | undefined>;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
 };
 
@@ -195,9 +195,9 @@ export class CodexRuntimeSessionEvents {
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
   private readonly subagentLifecycle: CodexSubagentLifecycleProjector;
-  private readonly subagentMetadataReads = new WeakMap<
+  private readonly subagentRoleReads = new WeakMap<
     CodexSessionState,
-    Map<string, Promise<CodexThreadSnapshot>>
+    Map<string, Promise<string | undefined>>
   >();
   private readonly contextUsage: CodexContextUsageTracker;
 
@@ -877,24 +877,24 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  private loadDiscoveredSubagentThread(
+  private loadDiscoveredSubagentRole(
     owner: CodexRuntimeStreamEventSessionOwner,
     event: Extract<CodexRuntimeStreamEvent, { kind: "notification" }>,
-  ): Promise<CodexThreadSnapshot> | null {
-    if (event.message.method !== "item/completed") return null;
+  ): Promise<string | undefined> | undefined {
+    if (event.message.method !== "item/completed") return;
     const item = event.message.params.item;
-    if (item.type !== "subAgentActivity" || item.kind !== "started") return null;
+    if (item.type !== "subAgentActivity" || item.kind !== "started") return;
     const reads =
-      this.subagentMetadataReads.get(owner.retainedSession) ??
-      new Map<string, Promise<CodexThreadSnapshot>>();
+      this.subagentRoleReads.get(owner.retainedSession) ??
+      new Map<string, Promise<string | undefined>>();
     const existing = reads.get(item.agentThreadId);
     if (existing) return existing;
-    const read = this.deps.readSubagentThread(event.runtimeId, item.agentThreadId, {
+    const read = this.deps.readSubagentRole(event.runtimeId, item.agentThreadId, {
       parentThreadId: owner.targetSession.threadId,
       workingDirectory: owner.targetSession.workingDirectory,
     });
     reads.set(item.agentThreadId, read);
-    this.subagentMetadataReads.set(owner.retainedSession, reads);
+    this.subagentRoleReads.set(owner.retainedSession, reads);
     return read;
   }
 
@@ -907,8 +907,8 @@ export class CodexRuntimeSessionEvents {
     }
     if (event.kind === "notification") {
       const generation = this.runtimeEventGenerationByRuntimeId.get(event.runtimeId);
-      const subagentRead = this.loadDiscoveredSubagentThread(owner, event);
-      const subagentThread = subagentRead ? await subagentRead : null;
+      const subagentRead = this.loadDiscoveredSubagentRole(owner, event);
+      const subagentRole = subagentRead ? await subagentRead : undefined;
       if (
         this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation ||
         this.deps.sessions.get(owner.retainedSession.threadId) !== owner.retainedSession
@@ -927,7 +927,7 @@ export class CodexRuntimeSessionEvents {
       )
         return;
       const context = this.streamingContext(owner.targetSession);
-      if (subagentThread) context.subagentThread = subagentThread;
+      if (subagentRole) context.subagentRole = subagentRole;
       await handleCodexPendingNotifications(
         context,
         owner.targetSession,

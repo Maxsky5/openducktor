@@ -23,7 +23,6 @@ import {
   MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
 } from "./codex-app-server-shared";
 import {
-  type CodexThreadSnapshot,
   type CodexThreadStatusSnapshot,
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
@@ -81,7 +80,7 @@ export type CodexExpectedEcho = {
 };
 
 export type CodexStreamingContext = {
-  subagentThread?: CodexThreadSnapshot;
+  subagentRole?: string;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   syntheticUserMessageEchoesByThreadId: Map<string, CodexUserMessageEcho[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
@@ -528,7 +527,7 @@ const emitCompletedItem = (
         threadId: session.threadId,
         timestamp,
       };
-      if (context.subagentThread) mappingContext.subagentThread = context.subagentThread;
+      if (context.subagentRole) mappingContext.subagentRole = context.subagentRole;
       if (turnId) {
         mappingContext.turnId = turnId;
       }

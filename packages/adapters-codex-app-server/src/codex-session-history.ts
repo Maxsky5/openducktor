@@ -19,11 +19,7 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
-import {
-  codexSubagentDisplayDetails,
-  type CodexSubagentDisplayDetails,
-} from "./codex-app-server-threads";
-import { readCodexSubagentThread, type CodexSubagentScope } from "./codex-subagent-metadata";
+import { readCodexSubagentRole, type CodexSubagentScope } from "./codex-subagent-role";
 import type {
   CodexImageGenerationItem,
   CodexImageGenerationPreparer,
@@ -110,7 +106,8 @@ export const loadCodexSessionHistory = async ({
       }),
     );
   }
-  const history = toHistory({
+  const subagentRoles = await loadSubagentRoles(client, input, response, forkBoundary);
+  return toHistory({
     input,
     session,
     response,
@@ -118,25 +115,16 @@ export const loadCodexSessionHistory = async ({
     forkBoundary,
     preparedImages,
     readRunningTurnModel,
+    subagentRoles,
   });
-  const subagentDetails = await loadSubagentDetails(client, input, response, forkBoundary);
-  for (const message of history) {
-    for (const part of message.parts) {
-      if (part.kind !== "subagent" || !part.externalSessionId) continue;
-      const details = subagentDetails.get(part.externalSessionId);
-      if (!part.agent && details?.agent) part.agent = details.agent;
-      if (!part.description && details?.description) part.description = details.description;
-    }
-  }
-  return history;
 };
 
-const loadSubagentDetails = async (
+const loadSubagentRoles = async (
   client: CodexAppServerClient,
   input: LoadAgentSessionHistoryInput,
   response: CodexThreadHistoryReadResponse,
   forkBoundary: CodexForkBoundary | null,
-): Promise<Map<string, CodexSubagentDisplayDetails>> => {
+): Promise<Map<string, string | undefined>> => {
   const parentsByChild = new Map<string, string>();
   for (const { item, turnIndex } of codexTurnItemsFromThreadRead(response)) {
     if (item.type !== "subAgentActivity" || item.kind !== "started") continue;
@@ -153,8 +141,8 @@ const loadSubagentDetails = async (
       if (parentThreadId === input.externalSessionId) {
         scope.workingDirectory = input.workingDirectory;
       }
-      const thread = await readCodexSubagentThread(client, childThreadId, scope);
-      return [childThreadId, codexSubagentDisplayDetails(thread)] as const;
+      const role = await readCodexSubagentRole(client, childThreadId, scope);
+      return [childThreadId, role] as const;
     }),
   );
   return new Map(entries);
@@ -196,6 +184,7 @@ const toHistory = ({
   forkBoundary,
   preparedImages,
   readRunningTurnModel,
+  subagentRoles,
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
@@ -204,6 +193,7 @@ const toHistory = ({
   forkBoundary: CodexForkBoundary | null;
   preparedImages: ReadonlyMap<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
   readRunningTurnModel: CodexSessionHistoryInput["readRunningTurnModel"];
+  subagentRoles: ReadonlyMap<string, string | undefined>;
 }): AgentSessionHistoryMessage[] => {
   const eventMapperPipeline = createCodexEventMapperPipeline();
   let boundaryAdded = false;
@@ -242,6 +232,10 @@ const toHistory = ({
       };
       if (timestamp) {
         mappingContext.timestamp = timestamp;
+      }
+      if (item.type === "subAgentActivity") {
+        const role = subagentRoles.get(item.agentThreadId);
+        if (role) mappingContext.subagentRole = role;
       }
       const canonicalEvents = eventMapperPipeline.runThreadItem(threadItemInput, mappingContext);
       let history: AgentSessionHistoryMessage[];

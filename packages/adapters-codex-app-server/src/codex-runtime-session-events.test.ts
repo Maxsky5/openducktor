@@ -10,8 +10,6 @@ import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
-import { codexThreadSnapshot } from "./codex-app-server-threads";
-import { codexThreadFixture } from "./codex-app-server-adapter.test-harness";
 import { codex0144MultiAgentV2Replay } from "./test-fixtures/codex-0-144-multi-agent-v2";
 import {
   codexCommandExecutionItemFixture,
@@ -60,16 +58,7 @@ const createRuntimeEvents = (
     sessionEvents: new CodexSessionEventBus(),
     pendingInput: new CodexPendingInputState(),
     subagents: new CodexSubagentLinkState(),
-    readSubagentThread: async (_runtimeId, childThreadId, scope) =>
-      codexThreadSnapshot(
-        codexThreadFixture({
-          id: childThreadId,
-          parentThreadId: scope.parentThreadId,
-          cwd: scope.workingDirectory,
-          status: { type: "idle" },
-          preview: "",
-        }),
-      ),
+    readSubagentRole: async () => undefined,
     updateThreadStatus: () => undefined,
     ...rest,
   };

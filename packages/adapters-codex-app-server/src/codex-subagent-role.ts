@@ -1,5 +1,5 @@
 import { AgentRuntimeQueryError } from "@openducktor/core";
-import { codexThreadSnapshot, type CodexThreadSnapshot } from "./codex-app-server-threads";
+import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
 import type { CodexAppServerClient } from "./types";
 
 export type CodexSubagentScope = {
@@ -7,23 +7,23 @@ export type CodexSubagentScope = {
   workingDirectory?: string;
 };
 
-export const readCodexSubagentThread = async (
+export const readCodexSubagentRole = async (
   client: CodexAppServerClient,
   childThreadId: string,
   scope: CodexSubagentScope,
-): Promise<CodexThreadSnapshot> => {
-  const result = await client.threadRead({ threadId: childThreadId, includeTurns: false });
-  const thread = codexThreadSnapshot(result.thread);
+): Promise<string | undefined> => {
+  const { thread } = await client.threadRead({ threadId: childThreadId, includeTurns: false });
+  const source = codexSubAgentSourceMetadata(thread.source);
   if (
     thread.id !== childThreadId ||
     (scope.workingDirectory !== undefined && thread.cwd !== scope.workingDirectory) ||
-    thread.parentThreadId !== scope.parentThreadId ||
-    (thread.subAgentSource && thread.subAgentSource.parentThreadId !== scope.parentThreadId)
+    (thread.parentThreadId ?? source?.parentThreadId) !== scope.parentThreadId ||
+    (source && source.parentThreadId !== scope.parentThreadId)
   ) {
     throw new AgentRuntimeQueryError(
       "scope_mismatch",
       `Codex subagent metadata for '${childThreadId}' does not match its parent and working directory. Reload the matching session.`,
     );
   }
-  return thread;
+  return thread.agentRole ?? source?.agentRole ?? undefined;
 };

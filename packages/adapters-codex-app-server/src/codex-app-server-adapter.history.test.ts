@@ -531,10 +531,7 @@ describe("CodexAppServerAdapter history loading", () => {
                 status: { type: "idle" },
                 parentThreadId: childThreadId === "sibling-thread" ? "root-thread" : "child-thread",
                 cwd: childThreadId === "sibling-thread" ? "/repo" : "/fork-worktree",
-                preview:
-                  childThreadId === "sibling-thread"
-                    ? "Inspect root changes"
-                    : "Review child changes",
+                agentRole: childThreadId === "sibling-thread" ? "explorer" : "reviewer",
               }),
             };
           }
@@ -567,12 +564,12 @@ describe("CodexAppServerAdapter history loading", () => {
       expect.objectContaining({
         correlationKey: "codex-subagent:root-thread:sibling-thread",
         externalSessionId: "sibling-thread",
-        description: "Inspect root changes",
+        agent: "explorer",
       }),
       expect.objectContaining({
         correlationKey: "codex-subagent:child-thread:grandchild-thread",
         externalSessionId: "grandchild-thread",
-        description: "Review child changes",
+        agent: "reviewer",
       }),
     ]);
     expect(subagentParts).not.toContainEqual(
@@ -619,7 +616,6 @@ describe("CodexAppServerAdapter history loading", () => {
                 id: "grandchild-thread",
                 status: { type: "idle" },
                 parentThreadId: "child-thread",
-                preview: "Review child changes",
               }),
             };
           }

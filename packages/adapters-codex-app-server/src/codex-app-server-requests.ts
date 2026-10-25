@@ -1,7 +1,6 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerCommandExecutionApprovalDecision,
-  type CodexAppServerConsumedRuntimeNotification,
   type CodexAppServerJsonValue,
   type CodexAppServerRequestId,
   codexAppServerMcpServerElicitationRequestParamsSchema,
@@ -385,12 +384,8 @@ export const codexNotificationTurnId = (notification: CodexNotificationRecord): 
   }
 };
 
-export const codexNotificationThreadId = (
-  notification: CodexAppServerConsumedRuntimeNotification,
-): string | null => {
-  if (notification.method === "skills/changed") return null;
-  return notification.params.threadId;
-};
+export const codexNotificationThreadId = (notification: CodexNotificationRecord): string | null =>
+  notification.method === "skills/changed" ? null : notification.params.threadId;
 
 export const codexServerRequestTurnId = (request: CodexServerRequestRecord): string | null => {
   switch (request.method) {
