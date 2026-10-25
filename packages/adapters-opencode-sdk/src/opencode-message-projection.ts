@@ -22,6 +22,7 @@ import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
+import { deriveToolPreview } from "./tool-preview";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 
@@ -336,6 +337,7 @@ const projectAssistantContent = (
       },
     ];
   const state = content.state;
+  const metadata = "metadata" in state ? state.metadata : undefined;
   const resultContent =
     state.status === "completed" || state.status === "error"
       ? state.content?.map((result): AgentToolResultContent => {
@@ -369,6 +371,17 @@ const projectAssistantContent = (
   }
   if (content.time.ran !== undefined) tool.startedAtMs = content.time.ran;
   if (state.status !== "streaming") tool.input = state.input;
+  const previewInput = state.status === "streaming" ? tool.input : state.input;
+  let preview: string | undefined;
+  if (previewInput) {
+    const previewRequest: Parameters<typeof deriveToolPreview>[0] = {
+      tool: content.name,
+      rawInput: previewInput,
+    };
+    if (metadata) previewRequest.metadata = metadata;
+    preview = deriveToolPreview(previewRequest);
+  }
+  if (preview) tool.preview = preview;
   if (resultContent) {
     tool.resultContent = resultContent;
     tool.output = resultContent
@@ -377,7 +390,7 @@ const projectAssistantContent = (
       .join("\n");
   }
   if (state.status === "error") tool.error = state.error.message;
-  if ("metadata" in state && state.metadata) tool.metadata = state.metadata;
+  if (metadata) tool.metadata = metadata;
   if (
     tool.toolType === "file_edit" &&
     state.status === "completed" &&
@@ -402,7 +415,6 @@ const projectAssistantContent = (
       tool.fileContent = [{ file: input.data.path, content: input.data.content, type: "modified" }];
   }
   if (content.time.completed !== undefined) tool.endedAtMs = content.time.completed;
-  const metadata = "metadata" in state ? state.metadata : undefined;
   if (content.name !== "subagent") return [tool];
   const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
   // Native progress confirms ownership; tool input can name an unrelated session.

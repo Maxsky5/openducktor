@@ -529,7 +529,7 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).not.toContain(">$review<");
     expect(html).toContain("bg-purple-100");
     expect(html).toContain("mx-1");
-    expect(html).toContain("lucide-blocks");
+    expect(html).toContain("lucide-scroll-text");
     expect(html).toContain("please");
   });
 
@@ -747,7 +747,7 @@ describe("AgentChatMessageCard messages", () => {
     );
 
     expect(html).toContain(">thermo-nuclear-code-quality-review<");
-    expect(html).toContain("lucide-blocks");
+    expect(html).toContain("lucide-scroll-text");
     expect(html).not.toContain("$thermo-nuclear-code-quality-review");
   });
 

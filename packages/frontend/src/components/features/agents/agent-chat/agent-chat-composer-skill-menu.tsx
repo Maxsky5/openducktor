@@ -1,5 +1,5 @@
 import type { AgentSkillReference } from "@openducktor/core";
-import { Blocks, ChevronRight, LoaderCircle } from "lucide-react";
+import { ChevronRight, LoaderCircle, ScrollText } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,7 +79,7 @@ export function AgentChatComposerSkillMenu({
           onSelect={() => onSelectSkill(skill)}
         >
           <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-200">
-            <Blocks className="size-3.5" />
+            <ScrollText className="size-3.5" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">
