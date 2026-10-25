@@ -485,14 +485,11 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("keeps inherited and child-owned subagent activity with their fork owners", async () => {
-    const thread = {
-      id: "child-thread",
+  test.each(["direct", "nested"])("keeps subagent owners in a %s fork", async (kind) => {
+    const root: PaginatedThreadFixture = {
+      id: "root-thread",
       cwd: "/repo",
-      createdAt: 10,
-      status: { type: "idle" },
-      forkedFromId: "root-thread",
-      parentThreadId: "root-thread",
+      createdAt: 1,
       turns: [
         {
           id: "root-turn",
@@ -506,6 +503,37 @@ describe("CodexAppServerAdapter history loading", () => {
             }),
           ],
         },
+      ],
+    };
+    const middle: PaginatedThreadFixture = {
+      id: "middle-thread",
+      cwd: "/middle-worktree",
+      createdAt: 7,
+      forkedFromId: root.id,
+      turns: [
+        ...root.turns,
+        {
+          id: "middle-turn",
+          startedAt: 8,
+          status: "completed",
+          items: [
+            codexSubAgentActivityItemFixture({
+              id: "middle-started-agent",
+              agentThreadId: "middle-agent",
+              kind: "started",
+            }),
+          ],
+        },
+      ],
+    };
+    const source = kind === "nested" ? middle : root;
+    const thread: PaginatedThreadFixture = {
+      id: "child-thread",
+      cwd: "/fork-worktree",
+      createdAt: 10,
+      forkedFromId: source.id,
+      turns: [
+        ...source.turns,
         {
           id: "child-turn",
           startedAt: 11,
@@ -520,17 +548,52 @@ describe("CodexAppServerAdapter history loading", () => {
         },
       ],
     };
+    const threads = new Map<string, PaginatedThreadFixture>([
+      [root.id, root],
+      [middle.id, middle],
+      [thread.id, thread],
+      [
+        "sibling-thread",
+        {
+          id: "sibling-thread",
+          cwd: "/repo",
+          parentThreadId: root.id,
+          agentRole: "explorer",
+          turns: [],
+        },
+      ],
+      [
+        "middle-agent",
+        {
+          id: "middle-agent",
+          cwd: "/middle-worktree",
+          parentThreadId: middle.id,
+          agentRole: "auditor",
+          turns: [],
+        },
+      ],
+      [
+        "grandchild-thread",
+        {
+          id: "grandchild-thread",
+          cwd: "/fork-worktree",
+          parentThreadId: thread.id,
+          agentRole: "reviewer",
+          turns: [],
+        },
+      ],
+    ]);
+    const requests: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
+        requests.push(request);
+        const nativeThread = threads.get(requestThreadId(request.params));
+        if (!nativeThread) throw new Error("Unexpected native thread");
         if (request.method === "thread/read") {
-          return paginatedThreadReadResponse(thread);
+          return paginatedThreadReadResponse(nativeThread);
         }
         if (request.method === "thread/turns/list") {
-          const threadId = requestThreadId(request.params);
-          if (threadId === "root-thread") {
-            return paginatedTurnsResponse([{ id: "root-turn", items: [], status: "completed" }]);
-          }
-          return paginatedTurnsListResponse(thread);
+          return paginatedTurnsListResponse(nativeThread);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -540,7 +603,7 @@ describe("CodexAppServerAdapter history loading", () => {
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
       runtimeKind: "codex",
-      workingDirectory: "/repo",
+      workingDirectory: "/fork-worktree",
       externalSessionId: "child-thread",
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
@@ -552,17 +615,36 @@ describe("CodexAppServerAdapter history loading", () => {
       expect.objectContaining({
         correlationKey: "codex-subagent:root-thread:sibling-thread",
         externalSessionId: "sibling-thread",
+        agent: "explorer",
       }),
+      ...(kind === "nested"
+        ? [
+            expect.objectContaining({
+              correlationKey: "codex-subagent:middle-thread:middle-agent",
+              externalSessionId: "middle-agent",
+              agent: "auditor",
+            }),
+          ]
+        : []),
       expect.objectContaining({
         correlationKey: "codex-subagent:child-thread:grandchild-thread",
         externalSessionId: "grandchild-thread",
+        agent: "reviewer",
       }),
     ]);
-    expect(subagentParts).not.toContainEqual(
-      expect.objectContaining({
-        correlationKey: "codex-subagent:child-thread:sibling-thread",
-      }),
-    );
+    expect(
+      history.find((message) => message.notice?.reason === "session_forked")?.notice,
+    ).toMatchObject({ parentExternalSessionId: source.id });
+    for (const ancestor of kind === "nested" ? [root, middle] : [root]) {
+      for (const method of ["thread/read", "thread/turns/list"]) {
+        expect(
+          requests.filter(
+            (request) =>
+              request.method === method && requestThreadId(request.params) === ancestor.id,
+          ),
+        ).toHaveLength(1);
+      }
+    }
   });
 
   test("loads child-only fork history with completed subagent activity", async () => {
@@ -596,6 +678,15 @@ describe("CodexAppServerAdapter history loading", () => {
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
+          if (requestThreadId(request.params) === "grandchild-thread") {
+            return {
+              thread: codexThreadFixture({
+                id: "grandchild-thread",
+                status: { type: "idle" },
+                parentThreadId: "child-thread",
+              }),
+            };
+          }
           return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
@@ -782,29 +873,62 @@ describe("CodexAppServerAdapter history loading", () => {
     ).rejects.toThrow("parent turn lookup failed");
   });
 
-  test("rejects forked history with inherited turns when its parent is no longer readable", async () => {
+  test.each([
+    {
+      threadId: "parent-thread",
+      method: "thread/turns/list",
+      error: "thread not loaded: parent-thread",
+    },
+    {
+      threadId: "root-thread",
+      method: "thread/turns/list",
+      error: "thread not loaded: root-thread",
+    },
+    { threadId: "root-thread", method: "thread/read", error: "returned another thread" },
+  ])("rejects invalid fork ancestry at $threadId $method", async (failure) => {
+    const inheritedTurn: PaginatedTurnFixture = {
+      id: "inherited-turn",
+      startedAt: 5,
+      status: "completed",
+      items: [],
+    };
+    const threads = new Map<string, PaginatedThreadFixture>([
+      [
+        "child-thread",
+        {
+          id: "child-thread",
+          cwd: "/repo",
+          createdAt: 10,
+          forkedFromId: "parent-thread",
+          turns: [
+            inheritedTurn,
+            { id: "child-turn", startedAt: 11, status: "completed", items: [] },
+          ],
+        },
+      ],
+      [
+        "parent-thread",
+        {
+          id: "parent-thread",
+          createdAt: 7,
+          forkedFromId: "root-thread",
+          turns: [inheritedTurn],
+        },
+      ],
+      ["root-thread", { id: "root-thread", createdAt: 1, turns: [inheritedTurn] }],
+    ]);
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
+        const threadId = requestThreadId(request.params);
+        const thread = threads.get(threadId);
+        if (!thread) throw new Error("Unexpected native thread");
+        const fails = threadId === failure.threadId && request.method === failure.method;
         if (request.method === "thread/read") {
-          return paginatedThreadReadResponse({
-            id: "child-thread",
-            cwd: "/repo",
-            createdAt: 10,
-            status: { type: "idle" },
-            forkedFromId: "missing-parent",
-            parentThreadId: "missing-parent",
-            turns: [],
-          });
+          return paginatedThreadReadResponse(fails ? { ...thread, id: "another-thread" } : thread);
         }
         if (request.method === "thread/turns/list") {
-          const params: { threadId: string } = request.params;
-          if (params.threadId === "missing-parent") {
-            throw new Error("thread not loaded: missing-parent");
-          }
-          return paginatedTurnsResponse([
-            { id: "inherited-turn", startedAt: 5, status: "completed", items: [] },
-            { id: "child-turn", startedAt: 11, status: "completed", items: [] },
-          ]);
+          if (fails) throw new Error(failure.error);
+          return paginatedTurnsListResponse(thread);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -819,7 +943,7 @@ describe("CodexAppServerAdapter history loading", () => {
         externalSessionId: "child-thread",
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
-    ).rejects.toThrow("thread not loaded: missing-parent");
+    ).rejects.toThrow(failure.error);
   });
 
   test("keeps the runtime-owned system prompt after observing a live session ref", async () => {

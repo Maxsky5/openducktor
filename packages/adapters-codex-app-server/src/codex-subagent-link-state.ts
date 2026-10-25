@@ -176,13 +176,6 @@ const resolveStatus = (
     : existing.status;
 };
 
-const preferredAgentLabel = (thread: CodexThreadSnapshot): string | undefined =>
-  thread.agentNickname ??
-  thread.agentRole ??
-  thread.subAgentSource?.agentNickname ??
-  thread.subAgentSource?.agentRole ??
-  undefined;
-
 class CodexSubagentLinkError extends Error {
   constructor(message: string) {
     super(message);
@@ -263,7 +256,7 @@ export class CodexSubagentLinkState {
     if (!parentThreadId || parentThreadId === thread.id) {
       return;
     }
-    const agent = preferredAgentLabel(thread);
+    const agent = thread.agentRole ?? thread.subAgentSource?.agentRole;
     const existing = this.linkForChild(thread.id, runtimeId);
     const isActive = thread.status.classification !== "idle";
     let status: AgentSubagentStatus;
@@ -272,33 +265,29 @@ export class CodexSubagentLinkState {
     } else {
       status = existing?.status === "cancelled" ? "cancelled" : "completed";
     }
-    let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
-    if (thread.updatedAtMs !== null) {
-      timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
-    }
+    const codexThreadMetadata: NonNullable<CodexSubagentLinkMetadata["codexThread"]> = {
+      parentThreadId,
+      childThreadId: thread.id,
+    };
     const link: CodexSubagentLinkInput = {
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
       status,
       allowStatusRestart: isActive,
-      ...timing,
       metadata: {
-        codexThread: {
-          parentThreadId,
-          childThreadId: thread.id,
-        },
+        codexThread: codexThreadMetadata,
       },
     };
     if (runtimeId) {
       link.runtimeId = runtimeId;
     }
+    if (thread.updatedAtMs !== null) {
+      if (isActive) link.startedAtMs = thread.updatedAtMs;
+      else link.endedAtMs = thread.updatedAtMs;
+    }
     if (agent) {
       link.agent = agent;
-    }
-    const codexThreadMetadata = link.metadata?.codexThread;
-    if (!codexThreadMetadata) {
-      throw new CodexSubagentLinkError("Codex subagent link metadata is missing codexThread.");
     }
     if (thread.agentNickname) {
       codexThreadMetadata.agentNickname = thread.agentNickname;

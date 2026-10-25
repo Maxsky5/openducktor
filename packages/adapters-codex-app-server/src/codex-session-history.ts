@@ -1,6 +1,7 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
+  AgentRuntimeQueryError,
   type AgentSessionHistoryMessage,
   type AgentModelSelection,
   type LoadAgentSessionHistoryInput,
@@ -19,6 +20,7 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import { readCodexSubagentRole, type CodexSubagentScope } from "./codex-subagent-role";
 import type {
   CodexImageGenerationItem,
   CodexImageGenerationPreparer,
@@ -33,6 +35,11 @@ import type {
 type CodexSessionHistoryRuntime = {
   client: CodexAppServerClient;
   runtimeId: string;
+};
+
+type CodexHistoryOwnership = {
+  forkBoundary: CodexForkBoundary | null;
+  inheritedThreadIdsByTurnId: ReadonlyMap<string, string>;
 };
 
 type CodexSessionHistoryInput = {
@@ -59,17 +66,7 @@ export const loadCodexSessionHistory = async ({
   }
   const { client, runtimeId } = runtime;
   const response = await threadInventory.readThreadHistory(client, input);
-  const forkedFromThreadId = codexForkedFromThreadId(response);
-  const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
-    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((cause: unknown) => {
-        if (isCodexThreadNotLoadedError(cause) && codexForkHistoryIsChildOwned(response)) {
-          return null;
-        }
-        throw cause;
-      })
-    : Promise.resolve(null);
-  const parentTurnIds = await parentTurnIdsPromise;
-  const forkBoundary = parentTurnIds ? resolveCodexForkBoundary(response, parentTurnIds) : null;
+  const historyOwnership = await loadHistoryOwnership(client, threadInventory, response);
   let preparedImages: Map<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
   if (prepareImageGenerations) {
     const images = codexTurnItemsFromThreadRead(response).flatMap(({ item, turn }) =>
@@ -105,15 +102,86 @@ export const loadCodexSessionHistory = async ({
       }),
     );
   }
+  const subagentRoles = await loadSubagentRoles(
+    client,
+    input,
+    response,
+    historyOwnership.inheritedThreadIdsByTurnId,
+  );
   return toHistory({
     input,
     session,
     response,
     runtimeId,
-    forkBoundary,
+    historyOwnership,
     preparedImages,
     readRunningTurnModel,
+    subagentRoles,
   });
+};
+
+const loadHistoryOwnership = async (
+  client: CodexAppServerClient,
+  threadInventory: CodexSessionHistoryInput["threadInventory"],
+  response: CodexThreadHistoryReadResponse,
+): Promise<CodexHistoryOwnership> => {
+  const inheritedThreadIdsByTurnId = new Map<string, string>();
+  let forkBoundary: CodexForkBoundary | null = null;
+  let current = response;
+  while (true) {
+    const parentThreadId = codexForkedFromThreadId(current);
+    if (!parentThreadId) break;
+    const parentTurnIds = await threadInventory
+      .readThreadTurnIds(client, parentThreadId)
+      .catch((cause: unknown) => {
+        if (isCodexThreadNotLoadedError(cause) && codexForkHistoryIsChildOwned(current)) {
+          return null;
+        }
+        throw cause;
+      });
+    const boundary = parentTurnIds ? resolveCodexForkBoundary(current, parentTurnIds) : null;
+    forkBoundary ??= boundary;
+    if (!boundary || boundary.beforeTurnIndex === 0) break;
+    const inheritedTurns = current.thread.turns.slice(0, boundary.beforeTurnIndex);
+    for (const turn of inheritedTurns) {
+      inheritedThreadIdsByTurnId.set(turn.id, parentThreadId);
+    }
+    const parent = await client.threadRead({ threadId: parentThreadId, includeTurns: false });
+    if (parent.thread.id !== parentThreadId) {
+      throw new AgentRuntimeQueryError(
+        "scope_mismatch",
+        `Codex fork source '${parentThreadId}' returned another thread. Reload the matching session.`,
+      );
+    }
+    current = { ...parent, thread: { ...parent.thread, turns: inheritedTurns } };
+  }
+  return { forkBoundary, inheritedThreadIdsByTurnId };
+};
+
+const loadSubagentRoles = async (
+  client: CodexAppServerClient,
+  input: LoadAgentSessionHistoryInput,
+  response: CodexThreadHistoryReadResponse,
+  inheritedThreadIdsByTurnId: ReadonlyMap<string, string>,
+): Promise<Map<string, string | undefined>> => {
+  const parentsByChild = new Map<string, string>();
+  for (const { item, turn } of codexTurnItemsFromThreadRead(response)) {
+    if (item.type !== "subAgentActivity" || item.kind !== "started") continue;
+    const parentThreadId = inheritedThreadIdsByTurnId.get(turn.id) ?? input.externalSessionId;
+    parentsByChild.set(item.agentThreadId, parentThreadId);
+  }
+  const entries = await Promise.all(
+    [...parentsByChild].map(async ([childThreadId, parentThreadId]) => {
+      const scope: CodexSubagentScope = { parentThreadId };
+      // Inherited children keep their source directory when a fork uses another worktree.
+      if (parentThreadId === input.externalSessionId) {
+        scope.workingDirectory = input.workingDirectory;
+      }
+      const role = await readCodexSubagentRole(client, childThreadId, scope);
+      return [childThreadId, role] as const;
+    }),
+  );
+  return new Map(entries);
 };
 
 const systemPromptMessage = (
@@ -149,18 +217,21 @@ const toHistory = ({
   session,
   response,
   runtimeId,
-  forkBoundary,
+  historyOwnership,
   preparedImages,
   readRunningTurnModel,
+  subagentRoles,
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   response: CodexThreadHistoryReadResponse;
   runtimeId: string;
-  forkBoundary: CodexForkBoundary | null;
+  historyOwnership: CodexHistoryOwnership;
   preparedImages: ReadonlyMap<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
   readRunningTurnModel: CodexSessionHistoryInput["readRunningTurnModel"];
+  subagentRoles: ReadonlyMap<string, string | undefined>;
 }): AgentSessionHistoryMessage[] => {
+  const { forkBoundary, inheritedThreadIdsByTurnId } = historyOwnership;
   const eventMapperPipeline = createCodexEventMapperPipeline();
   let boundaryAdded = false;
   const projectedHistory = codexTurnItemsFromThreadRead(response).flatMap(
@@ -168,10 +239,7 @@ const toHistory = ({
       { item, turnIndex, turn, timestamp, timestampIsApproximate, isFinalAgentMessage, turnTiming },
       index,
     ) => {
-      const itemOwnerThreadId =
-        forkBoundary && turnIndex < forkBoundary.beforeTurnIndex
-          ? forkBoundary.parentThreadId
-          : input.externalSessionId;
+      const itemOwnerThreadId = inheritedThreadIdsByTurnId.get(turn.id) ?? input.externalSessionId;
       const model = readRunningTurnModel(itemOwnerThreadId, turn.id);
       const threadItemInput: CodexThreadItemInput = {
         item,
@@ -198,6 +266,10 @@ const toHistory = ({
       };
       if (timestamp) {
         mappingContext.timestamp = timestamp;
+      }
+      if (item.type === "subAgentActivity") {
+        const role = subagentRoles.get(item.agentThreadId);
+        if (role) mappingContext.subagentRole = role;
       }
       const canonicalEvents = eventMapperPipeline.runThreadItem(threadItemInput, mappingContext);
       let history: AgentSessionHistoryMessage[];

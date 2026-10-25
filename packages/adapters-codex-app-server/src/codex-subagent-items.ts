@@ -248,6 +248,7 @@ const subagentActivityParts = (
   if (runtimeId) {
     link.runtimeId = runtimeId;
   }
+  if (ctx.subagentRole) link.agent = ctx.subagentRole;
   return [linkState.upsertLink(link)];
 };
 

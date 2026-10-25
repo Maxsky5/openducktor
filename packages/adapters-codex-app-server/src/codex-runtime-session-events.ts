@@ -5,7 +5,6 @@ import {
 import { CodexLiveImagePreparation } from "./codex-live-image-preparation";
 import {
   agentSessionTranscriptEventSchema,
-  type AgentImageGenerationPart,
   type AgentSessionLiveRef,
   type AgentSessionTranscriptEvent,
   type CodexAppServerRequestId,
@@ -54,6 +53,7 @@ import type { CodexRuntimeNotification } from "./codex-runtime-event-schema";
 import type { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
+import type { CodexSubagentScope } from "./codex-subagent-role";
 import {
   type CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -82,6 +82,11 @@ type CodexRuntimeSessionEventsDepsBase = {
   pendingInput: CodexPendingInputState;
   asyncQuestions: CodexAsyncQuestionState;
   subagents: CodexSubagentLinkState;
+  readSubagentRole(
+    runtimeId: string,
+    childThreadId: string,
+    scope: CodexSubagentScope,
+  ): Promise<string | undefined>;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
 };
 
@@ -190,6 +195,10 @@ export class CodexRuntimeSessionEvents {
   private readonly eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
   private readonly subagentLifecycle: CodexSubagentLifecycleProjector;
+  private readonly subagentRoleReads = new WeakMap<
+    CodexSessionState,
+    Map<string, Promise<string | undefined>>
+  >();
   private readonly contextUsage: CodexContextUsageTracker;
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
@@ -868,6 +877,27 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
+  private loadDiscoveredSubagentRole(
+    owner: CodexRuntimeStreamEventSessionOwner,
+    event: Extract<CodexRuntimeStreamEvent, { kind: "notification" }>,
+  ): Promise<string | undefined> | undefined {
+    if (event.message.method !== "item/completed") return;
+    const item = event.message.params.item;
+    if (item.type !== "subAgentActivity" || item.kind !== "started") return;
+    const reads =
+      this.subagentRoleReads.get(owner.retainedSession) ??
+      new Map<string, Promise<string | undefined>>();
+    const existing = reads.get(item.agentThreadId);
+    if (existing) return existing;
+    const read = this.deps.readSubagentRole(event.runtimeId, item.agentThreadId, {
+      parentThreadId: owner.targetSession.threadId,
+      workingDirectory: owner.targetSession.workingDirectory,
+    });
+    reads.set(item.agentThreadId, read);
+    this.subagentRoleReads.set(owner.retainedSession, reads);
+    return read;
+  }
+
   private async processRuntimeStreamEventForSession(
     owner: CodexRuntimeStreamEventSessionOwner,
     event: CodexRuntimeStreamEvent,
@@ -877,6 +907,13 @@ export class CodexRuntimeSessionEvents {
     }
     if (event.kind === "notification") {
       const generation = this.runtimeEventGenerationByRuntimeId.get(event.runtimeId);
+      const subagentRead = this.loadDiscoveredSubagentRole(owner, event);
+      const subagentRole = subagentRead ? await subagentRead : undefined;
+      if (
+        this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation ||
+        this.deps.sessions.get(owner.retainedSession.threadId) !== owner.retainedSession
+      )
+        return;
       const preparedImage = await this.liveImages.prepare(
         event.runtimeId,
         owner.retainedSession.threadId,
@@ -889,7 +926,10 @@ export class CodexRuntimeSessionEvents {
           ?.retainedSession !== owner.retainedSession
       )
         return;
-      await this.handlePendingNotifications(
+      const context = this.streamingContext(owner.targetSession);
+      if (subagentRole) context.subagentRole = subagentRole;
+      await handleCodexPendingNotifications(
+        context,
         owner.targetSession,
         [{ ...event.message, receivedAt: event.receivedAt }],
         preparedImage,
@@ -979,19 +1019,6 @@ export class CodexRuntimeSessionEvents {
         )) || hasPendingInput;
     }
     return hasPendingInput;
-  }
-
-  private async handlePendingNotifications(
-    session: CodexSessionState,
-    notifications: CodexNotificationRecord[],
-    preparedImageGeneration?: AgentImageGenerationPart,
-  ): Promise<void> {
-    await handleCodexPendingNotifications(
-      this.streamingContext(session),
-      session,
-      notifications,
-      preparedImageGeneration,
-    );
   }
 
   private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {

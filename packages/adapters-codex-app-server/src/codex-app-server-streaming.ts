@@ -80,6 +80,7 @@ export type CodexExpectedEcho = {
 };
 
 export type CodexStreamingContext = {
+  subagentRole?: string;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   syntheticUserMessageEchoesByThreadId: Map<string, CodexUserMessageEcho[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
@@ -517,20 +518,19 @@ const emitCompletedItem = (
   }
 
   const completedItem = withRecordedStartedItemTimestamp(context, session, item);
+  const mappingContext: CodexMappingContext = {
+    source: "live",
+    runtimeId: session.runtimeId,
+    threadId: session.threadId,
+    timestamp,
+  };
+  if (context.subagentRole) mappingContext.subagentRole = context.subagentRole;
+  if (turnId) {
+    mappingContext.turnId = turnId;
+  }
   const canonicalEvents = context.eventMapperPipeline.runLive(
     { kind: "item_completed", item: completedItem, preparedImageGeneration },
-    (() => {
-      const mappingContext: CodexMappingContext = {
-        source: "live",
-        runtimeId: session.runtimeId,
-        threadId: session.threadId,
-        timestamp,
-      };
-      if (turnId) {
-        mappingContext.turnId = turnId;
-      }
-      return mappingContext;
-    })(),
+    mappingContext,
   );
   if (canonicalEvents.length > 0) {
     emitCanonicalEvents(context, withTurnModel(context, canonicalEvents, session, turnId));

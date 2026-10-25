@@ -103,6 +103,7 @@ export type CodexMappingContext = {
   threadId: string;
   turnId?: string;
   timestamp?: string;
+  subagentRole?: string;
 };
 
 export type CodexMappingResult = {

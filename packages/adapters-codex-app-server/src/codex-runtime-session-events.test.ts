@@ -58,6 +58,7 @@ const createRuntimeEvents = (
     sessionEvents: new CodexSessionEventBus(),
     pendingInput: new CodexPendingInputState(),
     subagents: new CodexSubagentLinkState(),
+    readSubagentRole: async () => undefined,
     updateThreadStatus: () => undefined,
     ...rest,
   };
