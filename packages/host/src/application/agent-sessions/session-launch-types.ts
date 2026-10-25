@@ -30,6 +30,8 @@ export type SessionLaunchContext<Request, Result extends SessionLaunchResult> = 
   /** The task or workspace already owns a reused session. */
   reusedSession: (repoPath: string, session: AgentSessionControlSummary) => void;
   ownershipSaved: () => void;
+  /** Keeps the first instruction when preparation fails before the send. */
+  keepInstruction: (instruction: AgentSessionUserMessagePart[]) => void;
   setResultFields: (fields: SessionLaunchResultFields<Result>) => void;
   skip: (reason: string) => void;
   checkCanceled: () => Effect.Effect<void, HostError>;
@@ -38,8 +40,8 @@ export type SessionLaunchContext<Request, Result extends SessionLaunchResult> = 
   /** Stops the session in launch cleanup, so settlement does not stop it again. */
   stopSession: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   /**
-   * Keep `instruction` before attachment lookup so a failed launch can return it for a safe
-   * retry. A queued launch completes without `acceptedMessage`.
+   * Uses `instruction` for a safe retry when delivery fails before dispatch or the runtime rejects
+   * it. A queued launch completes without `acceptedMessage`.
    */
   send: (
     input: AgentSessionControlSendInput,

@@ -54,6 +54,8 @@ export const createWorkflowLaunchService = (
       }
       yield* attempt.checkCanceled();
       const { decision, action, model, systemPrompt, parts } = prepared;
+      if (request.instruction.kind === "message")
+        attempt.keepInstruction(request.instruction.parts);
       attempt.setResultFields({ startMode: decision.startMode });
       if (model) attempt.setResultFields({ model });
       const sessionScope = {
