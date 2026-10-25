@@ -400,31 +400,66 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('aria-label="Preparing message" disabled');
   });
 
-  test.each([false, true])(
-    "uses foreground readiness for settings while aggregate Running stays visible: %s",
-    (foregroundTurnActive) => {
-      const html = renderToStaticMarkup(
-        createElement(AgentChatComposer, {
-          model: {
-            ...buildModel(),
-            isSessionWorking: true,
-            foregroundTurnActive,
-            canStopSession: true,
+  test.each<[string, Partial<AgentChatComposerModel>, boolean]>([
+    ["background work", { isSessionWorking: true, foregroundTurnActive: false }, false],
+    ["a foreground turn", { isSessionWorking: true, foregroundTurnActive: true }, false],
+    ["pending input", { isSessionWorking: true, isWaitingInput: true }, false],
+    ["starting", { isStarting: true }, true],
+    ["submitting", { isSending: true }, true],
+    ["loading the first catalog", { isModelSelectionPending: true }, true],
+    ["saving settings", { isSavingModel: true }, true],
+    ["read-only", { isReadOnly: true }, true],
+    ["unavailable", { isInteractionEnabled: false }, true],
+  ])("sets settings availability during %s", (_name, state, disabled) => {
+    const baseModel = buildModel();
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...baseModel,
+          ...state,
+          modelPicker: {
+            ...baseModel.modelPicker,
+            selectionPolicy: {
+              kind: "runtime_locked",
+              runtimeKind: "opencode",
+              reason: "An existing session cannot change runtime.",
+            },
           },
-        }),
-      );
-      const card = readComposerCard(html);
-      const profile = Array.from(card.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("Hephaestus (Deep Agent)"),
-      );
-      expect(profile).toBeDefined();
-      expect(profile?.hasAttribute("disabled")).toBe(foregroundTurnActive);
+          speed: {
+            key: "session",
+            choice: "standard",
+            levels: [{ id: "fast", label: "Fast" }],
+            blockedReason: undefined,
+            pending: false,
+            disabled: false,
+            error: null,
+            onChange: () => {},
+          },
+        },
+      }),
+    );
+    const card = readComposerCard(html);
+    const buttons = Array.from(card.querySelectorAll("button"));
+    const profile = buttons.find((button) =>
+      button.textContent?.includes("Hephaestus (Deep Agent)"),
+    );
+    const effort = buttons.find((button) => button.textContent === "high");
+    const speed = card.querySelector('[aria-label="Speed: Standard"]');
+    for (const control of [profile, effort, speed]) {
+      expect(control?.hasAttribute("disabled")).toBe(disabled);
+    }
+    expect(
+      card
+        .querySelector('[aria-label="Select model, OpenCode, GPT-5.3 Codex"]')
+        ?.getAttribute("aria-disabled"),
+    ).toBe(String(disabled));
+    if (state.isSessionWorking) {
       expect(card.querySelector('[aria-label="Stop session"]')?.hasAttribute("disabled")).toBe(
         false,
       );
-      expect(html).toContain('class="odt-border-ray"');
-    },
-  );
+      expect(card.querySelector(".odt-border-ray") !== null).toBe(!state.isWaitingInput);
+    }
+  });
 
   // The reference keys stay, so the composer still teaches them while the agent works.
   for (const steerMessagesByDefault of [false, true]) {

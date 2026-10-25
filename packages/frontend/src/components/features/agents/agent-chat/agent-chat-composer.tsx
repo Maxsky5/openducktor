@@ -179,9 +179,7 @@ export function AgentChatComposer({
   const modelPickerDisabled =
     isSendOrModelPending ||
     isReadOnly ||
-    (!isInteractionEnabled && model.modelPicker.selectionPolicy.kind === "runtime_locked") ||
-    model.foregroundTurnActive === true ||
-    model.isWaitingInput;
+    (!isInteractionEnabled && model.modelPicker.selectionPolicy.kind === "runtime_locked");
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
