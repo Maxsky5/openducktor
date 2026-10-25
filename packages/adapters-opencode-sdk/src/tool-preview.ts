@@ -269,7 +269,7 @@ const summarizeGenericInput = (input: OpenCodeProtocolObject | undefined): strin
 export const deriveToolPreview = (input: {
   tool: string;
   rawInput: OpenCodeProtocolObject;
-  metadata?: OpenCodeProtocolObject;
+  metadata?: OpenCodeProtocolObject | undefined;
 }): string | undefined => {
   const strategy = resolveOpencodeToolStrategy(input.tool);
   const tool = strategy.canonicalName;

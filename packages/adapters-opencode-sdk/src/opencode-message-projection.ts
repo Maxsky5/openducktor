@@ -372,15 +372,9 @@ const projectAssistantContent = (
   if (content.time.ran !== undefined) tool.startedAtMs = content.time.ran;
   if (state.status !== "streaming") tool.input = state.input;
   const previewInput = state.status === "streaming" ? tool.input : state.input;
-  let preview: string | undefined;
-  if (previewInput) {
-    const previewRequest: Parameters<typeof deriveToolPreview>[0] = {
-      tool: content.name,
-      rawInput: previewInput,
-    };
-    if (metadata) previewRequest.metadata = metadata;
-    preview = deriveToolPreview(previewRequest);
-  }
+  const preview = previewInput
+    ? deriveToolPreview({ tool: content.name, rawInput: previewInput, metadata })
+    : undefined;
   if (preview) tool.preview = preview;
   if (resultContent) {
     tool.resultContent = resultContent;
