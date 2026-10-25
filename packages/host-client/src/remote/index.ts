@@ -235,6 +235,9 @@ export const createRemoteHostClient = (
       };
     } catch (cause) {
       clearTimeout(timer);
+      // A native transport keeps a request until its body ends or its signal aborts, so a request
+      // that fails with an unread body, such as a redirect, aborts before its signal detaches.
+      setup.abort(cause);
       unlink();
       throw cause;
     }

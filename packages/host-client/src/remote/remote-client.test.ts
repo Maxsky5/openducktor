@@ -227,6 +227,31 @@ test("a canceled negotiation releases its admission without disturbing the next 
   }
 });
 
+test("a redirected request releases its transport request", async () => {
+  const f = fixture();
+  const signals: AbortSignal[] = [];
+  f.transport.request = async (_method, _url, _headers, signal) => {
+    signals.push(signal);
+    return {
+      status: 302,
+      headers: { location: "https://elsewhere.example" },
+      body: (async function* () {
+        yield encoder.encode("Moved");
+      })(),
+    };
+  };
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  try {
+    const failure = await remote.connect().catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({ failure: { code: "invalid_endpoint" } });
+    expect(signals.length).toBeGreaterThan(0);
+    // A native transport keeps a request until its body ends or its signal aborts.
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
 test("a file transfer can outlast its completed setup deadline", async () => {
   const f = fixture();
   const started = latch<void>();
