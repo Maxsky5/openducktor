@@ -35,7 +35,11 @@ const createGitService = (...args: Parameters<typeof createEffectGitService>) =>
 type FakeGitPortInput = {
   canonicalPaths?: Record<string, string>;
   gitRepositories?: string[];
-  sharedCommonDirectories?: string[];
+  /** Maps each linked worktree root to the repository that registered it. */
+  linkedWorktrees?: Record<string, string>;
+  /** Shared checkouts are registered worktrees unless listed here. */
+  unregisteredWorktrees?: string[];
+  repositoryRoots?: Record<string, string>;
   branches?: Record<string, GitBranch[]>;
   currentBranches?: Record<string, GitCurrentBranch>;
   remotes?: Record<string, GitRemote[]>;
@@ -59,7 +63,9 @@ type FakeGitPortInput = {
 const createFakeGitPort = ({
   canonicalPaths = {},
   gitRepositories = [],
-  sharedCommonDirectories = [],
+  linkedWorktrees = {},
+  unregisteredWorktrees = [],
+  repositoryRoots = {},
   branches = {},
   currentBranches = {},
   remotes = {},
@@ -89,7 +95,9 @@ const createFakeGitPort = ({
     canonicalizePath(path) {
       return Effect.tryPromise({
         try: async () => {
-          const canonicalPath = canonicalPaths[path];
+          const canonicalPath =
+            canonicalPaths[path] ??
+            (Object.values(canonicalPaths).includes(path) ? path : undefined);
           if (!canonicalPath) {
             throw new Error(`missing path fixture: ${path}`);
           }
@@ -117,23 +125,18 @@ const createFakeGitPort = ({
       });
     },
     getRepositoryRoot(path) {
-      return Effect.succeed(path);
+      return Effect.succeed(repositoryRoots[path] ?? path);
     },
-    shareGitCommonDirectory(repoPath, workingDir) {
-      return Effect.tryPromise({
-        try: async () => {
-          return sharedCommonDirectories.includes(`${repoPath}|${workingDir}`);
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
+    // A linked worktree shares the Git directory of its repository.
+    readCheckout(path) {
+      if (!gitRepositories.includes(path)) return Effect.succeed(null);
+      const root = repositoryRoots[path] ?? path;
+      return Effect.succeed({ root, commonDirectory: `${linkedWorktrees[root] ?? root}/.git` });
     },
-    isRegisteredWorktree() {
-      return Effect.succeed(false);
+    isRegisteredWorktree(repoPath, worktreePath) {
+      return Effect.succeed(
+        linkedWorktrees[worktreePath] === repoPath && !unregisteredWorktrees.includes(worktreePath),
+      );
     },
     listWorktrees() {
       return Effect.die(new Error("unexpected list worktrees"));
@@ -674,7 +677,7 @@ describe("createGitService", () => {
       createFakeGitPort({
         canonicalPaths: { "/repo": "/repo", "/worktree": "/worktree" },
         gitRepositories: ["/repo", "/worktree"],
-        sharedCommonDirectories: ["/repo|/worktree"],
+        linkedWorktrees: { "/worktree": "/repo" },
         currentBranches: {
           "/repo": { name: "main", detached: false, revision: "abc" },
           "/worktree": { name: "feature", detached: false, revision: "def" },
@@ -704,7 +707,7 @@ describe("createGitService", () => {
       createFakeGitPort({
         canonicalPaths: { "/repo": "/repo", "/worktree": "/worktree" },
         gitRepositories: ["/repo", "/worktree"],
-        sharedCommonDirectories: ["/repo|/worktree"],
+        linkedWorktrees: { "/worktree": "/repo" },
         currentBranches: { "/worktree": { name: "feature", detached: false, revision: "def" } },
         existingRefs: [],
       }),
@@ -740,7 +743,7 @@ describe("createGitService", () => {
       createFakeGitPort({
         canonicalPaths: { "/repo": "/repo", "/worktree": "/worktree" },
         gitRepositories: ["/repo", "/worktree"],
-        sharedCommonDirectories: ["/repo|/worktree"],
+        linkedWorktrees: { "/worktree": "/repo" },
         currentBranches: { "/worktree": { detached: true } },
         existingRefs: ["/worktree:refs/remotes/origin/main"],
         calls,
@@ -792,7 +795,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         currentBranches: {
           "/canonical/worktree": {
             name: "feature/electron",
@@ -844,6 +847,55 @@ describe("createGitService", () => {
       "working_dir is not within authorized repository or linked worktrees: /outside",
     );
   });
+  test("rejects a checkout that shares the repository but is no longer a registered worktree", async () => {
+    const service = createGitService(
+      createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo", "/stale": "/canonical/stale" },
+        gitRepositories: ["/canonical/repo", "/canonical/stale"],
+        linkedWorktrees: { "/canonical/stale": "/canonical/repo" },
+        unregisteredWorktrees: ["/canonical/stale"],
+        statuses: { "/canonical/stale": [] },
+      }),
+    );
+    await expect(
+      Effect.runPromise(service.getStatus({ repoPath: "/repo", workingDir: "/stale" })),
+    ).rejects.toThrow(
+      "working_dir is in a checkout that Git no longer lists as a worktree of the repository: /stale. If you moved this worktree, run git worktree repair in it and retry.",
+    );
+  });
+  test("reads a directory inside the repository checkout without worktree checks", async () => {
+    const statuses: FileStatus[] = [{ path: "a.ts", status: "modified", staged: false }];
+    const service = createGitService(
+      createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo", "/repo/src": "/canonical/repo/src" },
+        repositoryRoots: { "/canonical/repo/src": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo", "/canonical/repo/src"],
+        statuses: { "/canonical/repo/src": statuses },
+      }),
+    );
+    await expect(
+      Effect.runPromise(service.getStatus({ repoPath: "/repo", workingDir: "/repo/src" })),
+    ).resolves.toEqual(statuses);
+  });
+  test("reads a directory inside a registered worktree at the requested directory", async () => {
+    const statuses: FileStatus[] = [{ path: "src/a.ts", status: "modified", staged: false }];
+    const service = createGitService(
+      createFakeGitPort({
+        canonicalPaths: {
+          "/repo": "/canonical/repo",
+          "/worktree/src": "/canonical/worktree/src",
+          "/canonical/worktree": "/canonical/worktree",
+        },
+        repositoryRoots: { "/canonical/worktree/src": "/canonical/worktree" },
+        gitRepositories: ["/canonical/repo", "/canonical/worktree/src", "/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
+        statuses: { "/canonical/worktree/src": statuses },
+      }),
+    );
+    await expect(
+      Effect.runPromise(service.getStatus({ repoPath: "/repo", workingDir: "/worktree/src" })),
+    ).resolves.toEqual(statuses);
+  });
   test("returns commits ahead and behind from an authorized worktree", async () => {
     const service = createGitService(
       createFakeGitPort({
@@ -852,7 +904,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         aheadBehind: {
           "/canonical/worktree|origin/main": { ahead: 3, behind: 2 },
         },
@@ -930,7 +982,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         fetchResults: {
           "/canonical/worktree|origin/main": {
             outcome: "fetched",
@@ -960,7 +1012,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         pullResults: {
           "/canonical/worktree": {
             outcome: "pulled",
@@ -989,7 +1041,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         commitResults: {
           "/canonical/worktree|Ship Electron host": {
             outcome: "committed",
@@ -1021,7 +1073,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         pushResults: {
           "/canonical/worktree|feature/electron|origin|true|false": {
             outcome: "pushed",
@@ -1057,7 +1109,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         rebaseBranchResults: {
           "/canonical/worktree|origin/main": {
             outcome: "conflicts",
@@ -1089,7 +1141,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         rebaseAbortResults: {
           "/canonical/worktree": {
             outcome: "aborted",
@@ -1362,7 +1414,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         diffs: {
           "/canonical/worktree|origin/main": [
             {
@@ -1402,7 +1454,7 @@ describe("createGitService", () => {
           "/worktree": "/canonical/worktree",
         },
         gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
+        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
         worktreeStatuses: {
           "/canonical/worktree|origin/main|target": {
             currentBranch: {

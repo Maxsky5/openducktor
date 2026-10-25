@@ -456,10 +456,10 @@ const createBuildStartGitPort = ({
         return true;
       });
     },
-    shareGitCommonDirectory(repoPath, workingDir) {
+    readCheckout(path) {
       return Effect.sync(() => {
-        calls.push({ type: "shareGitCommonDirectory", repoPath, workingDir });
-        return true;
+        calls.push({ type: "readCheckout", path });
+        return { root: path, commonDirectory: "/shared/.git" };
       });
     },
     isRegisteredWorktree(repoPath, worktreePath) {
@@ -642,10 +642,8 @@ const createDirectMergeGitPort = ({
         return true;
       });
     },
-    shareGitCommonDirectory() {
-      return Effect.sync(() => {
-        return true;
-      });
+    readCheckout(path) {
+      return Effect.succeed({ root: path, commonDirectory: "/shared/.git" });
     },
     isRegisteredWorktree() {
       return Effect.succeed(true);

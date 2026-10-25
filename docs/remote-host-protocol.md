@@ -138,7 +138,7 @@ Native HTTP requests can omit Origin; browser headers do not identify a device.
 
 ## Compatibility
 
-Remote protocol `1` is independent of app release versions.
+Remote protocol `2` is independent of app release versions.
 Hosts and clients can use different app versions when they share a protocol version and the client receives all required capabilities.
 A breaking change to required behavior needs a new remote protocol version.
 An additive optional capability can keep protocol `1`.

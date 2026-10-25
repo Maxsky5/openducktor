@@ -1,4 +1,8 @@
-import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
+import type {
+  WorkspaceFileScope,
+  WorkspaceSessionRefInput,
+  WorkspaceTextFileReadResult,
+} from "@openducktor/contracts";
 import { type FileContents, getFiletypeFromFileName } from "@pierre/diffs";
 import type { EditorFocus } from "@/types/editor-focus";
 import { useQuery } from "@tanstack/react-query";
@@ -54,6 +58,8 @@ type TaskExecutionSelectedFilePreviewProps = {
   onFileSaved(): void;
   branch?: string | null;
   requireBranch?: boolean;
+  /** A chat sends its session with reads and saves under its directory. */
+  workspaceSession?: WorkspaceSessionRefInput | undefined;
 };
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
@@ -71,11 +77,17 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   onFileSaved,
   branch = null,
   requireBranch = false,
+  workspaceSession,
 }: TaskExecutionSelectedFilePreviewProps): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
   const editorRef = useRef<EditorFocus | null>(null);
+  const fileScope = useMemo((): WorkspaceFileScope | undefined => {
+    // An explicitly opened local file is outside the chat directory.
+    if (selectedFile?.access === "local") return { kind: "local" };
+    return workspaceSession ? { kind: "chat", session: workspaceSession } : undefined;
+  }, [selectedFile?.access, workspaceSession]);
   const {
     data: fileData,
     error: fileError,
@@ -86,7 +98,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     ...workspaceFilePreviewQueryOptions(
       selectedFile?.rootPath ?? "__inactive_file_preview__",
       selectedFile?.relativePath ?? "__inactive_file_preview__",
-      selectedFile?.access,
+      fileScope,
     ),
     enabled: selectedFile !== null,
   });
@@ -109,6 +121,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     readyResult: readyTextResult,
     branch: selectedFile?.access === "local" ? null : branch,
     requireBranch: selectedFile?.access === "local" ? false : requireBranch,
+    scope: fileScope,
     onFileSaved,
     onLeavePolicyChange,
   });

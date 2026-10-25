@@ -172,7 +172,8 @@ const setup = async () => {
           { worktreePath: "/tree", branch: "feature", head: "abc", detached: false },
         ]),
       isGitRepository: () => Effect.succeed(true),
-      shareGitCommonDirectory: () => Effect.succeed(true),
+      readCheckout: (path: string) =>
+        Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
       isRegisteredWorktree: (_repo, path) => Effect.succeed(path === "/tree"),
       getCurrentBranch: () =>
         Effect.succeed({ name: state.detached ? undefined : "feature", detached: state.detached }),

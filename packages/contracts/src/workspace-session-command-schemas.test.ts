@@ -61,6 +61,54 @@ describe("named chat worktree inputs", () => {
         .success,
     ).toBe(false);
   });
+  test("accepts only the fields of the chosen creation location", () => {
+    const fields = {
+      workspaceId: "repo",
+      runtimeKind: "codex",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: null,
+      targetBranch: { branch: "main" },
+    };
+    const existing = {
+      ...fields,
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory: "/worktrees/review" },
+    };
+    expect(workspaceSessionCreateInputSchema.parse(existing)).toEqual(existing);
+    for (const input of [
+      { ...existing, worktree: { mode: "from_name", name: "review", branchName: null } },
+      { ...existing, existingWorktree: { workingDirectory: "relative/review" } },
+      { ...existing, existingWorktree: undefined },
+      { ...fields, location: "local_repo_root", existingWorktree: existing.existingWorktree },
+      { ...fields, location: "local_worktree" },
+    ]) {
+      expect(workspaceSessionCreateInputSchema.safeParse(input).success).toBe(false);
+    }
+  });
+  test("allows Tracked upstream only for the current checkout", () => {
+    const upstream = { branch: "@{upstream}" };
+    const fields = {
+      workspaceId: "repo",
+      runtimeKind: "codex",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: null,
+      targetBranch: upstream,
+    };
+    expect(
+      workspaceSessionCreateInputSchema.safeParse({ ...fields, location: "local_repo_root" })
+        .success,
+    ).toBe(true);
+    expect(
+      workspaceSessionCreateInputSchema.safeParse({
+        ...fields,
+        location: "existing_worktree",
+        existingWorktree: { workingDirectory: "/worktrees/review" },
+      }).success,
+    ).toBe(false);
+    expect(effectiveWorkspaceSessionTargetBranch("existing_worktree", null, upstream)).toBeNull();
+  });
   test("requires explicit removal consent while omitted archive options keep Git resources", () => {
     const ref = { workspaceId: "repo", sessionId: "chat" };
     expect(workspaceSessionArchiveInputSchema.parse(ref)).toEqual({

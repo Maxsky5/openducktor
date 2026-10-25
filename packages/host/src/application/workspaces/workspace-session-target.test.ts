@@ -7,7 +7,7 @@ import { validateWorkspaceSessionTarget } from "./workspace-session-target";
 test("rejects a saved worktree target that resolves to the repository root", async () => {
   const git = createGitPortTestDouble({
     canonicalizePath: (path) => Effect.succeed(path),
-    isGitRepository: () => Effect.succeed(true),
+    readCheckout: (path) => Effect.succeed({ root: path, commonDirectory: "/repo/.git" }),
   });
 
   const error = await Effect.runPromise(
@@ -23,6 +23,6 @@ test("rejects a saved worktree target that resolves to the repository root", asy
 
   expect(error).toBeInstanceOf(HostValidationError);
   expect(error.message).toBe(
-    "Workspace Session worktree resolves to the Workspace repository root: /repo. Select a session that uses a worktree.",
+    "The worktree of this chat is now the repository checkout: /repo. Archive this chat, or start a Current checkout chat.",
   );
 });

@@ -27,7 +27,11 @@ import {
   type HostOperationErrorAggregate,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type {
+  TaskOwnershipReader,
+  TaskStoreError,
+  TaskStorePort,
+} from "../../ports/task-repository-ports";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { HostShutdownStep } from "../host-lifecycle";
 
@@ -50,6 +54,7 @@ const unsupportedIssueImportStore: IssueImportStorePort = {
 
 export type NodeTaskAssetServices = {
   workspaceSessionStore: WorkspaceSessionStorePort;
+  taskOwnership: TaskOwnershipReader;
   startupSweep: () => Effect.Effect<void, TaskStoreError>;
   taskAssetReadService: TaskAssetReadService;
   taskAssetStagingService: TaskAssetStagingService;
@@ -180,6 +185,9 @@ export const createNodeTaskAssetServices = ({
       contextProvider: contextManager.withDatabase,
       listForWorktreeOwnership: contextManager.listWorkspaceSessionsForWorktreeOwnership,
     }),
+    taskOwnership: {
+      listOpenTasksForWorktreeOwnership: contextManager.listOpenTasksForWorktreeOwnership,
+    },
     startupSweep: () =>
       taskAssetRecoveryService
         .startupSweep()

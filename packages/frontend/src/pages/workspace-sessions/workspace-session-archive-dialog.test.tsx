@@ -5,6 +5,9 @@ import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 
+// The dialog keeps its loader for at least 500 ms, then shows the final state.
+const SETTLED = { timeout: 1_500 };
+
 const record = (): WorkspaceSession => ({
   id: "chat",
   runtimeKind: "codex",
@@ -38,6 +41,8 @@ test.each([false, true])(
           }),
       },
     });
+    // The loader starts while the dialog renders.
+    const startedAt = performance.now();
     const view = render(
       <QueryProvider connection={connection}>
         <WorkspaceSessionArchiveDialog
@@ -52,18 +57,27 @@ test.each([false, true])(
       </QueryProvider>,
     );
     try {
-      const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
-      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      expect(view.getByText("Checking the worktree…")).toBeTruthy();
+      expect(view.queryByRole("switch")).toBeNull();
       const submit = view.getByRole("button", { name: "Archive chat" });
       expect(submit.hasAttribute("disabled")).toBe(true);
-      await waitFor(() => expect(finish).toBeDefined(), { timeout: 800 });
+      await waitFor(() => expect(finish).toBeDefined(), SETTLED);
       finish({
         branchName: "feature/chat",
         worktreeExists: true,
         hasUncommittedChanges: dirty,
         sharedWith: [],
+        taskOwners: [],
       });
-      await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+      const toggle = await view.findByRole(
+        "switch",
+        { name: "Remove worktree and branch" },
+        SETTLED,
+      );
+      // The final content and buttons appear together, after the minimum loader time.
+      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
+      expect(view.queryByText("Checking the worktree…")).toBeNull();
+      expect(submit.hasAttribute("disabled")).toBe(false);
       expect(toggle.getAttribute("aria-checked")).toBe("true");
       expect(view.queryByText(/This worktree has local changes/) !== null).toBe(dirty);
       expect(view.getByText(/Commits that exist only on this branch/).textContent).toContain(
@@ -93,6 +107,7 @@ test("saved chat history disables worktree removal and still allows archive", as
         sharedWith: [
           { workspaceId: "test", sessionId: "archived-child", title: "Archived child chat" },
         ],
+        taskOwners: [],
       }),
     },
   });
@@ -113,7 +128,7 @@ test("saved chat history disables worktree removal and still allows archive", as
     await view.findByText(
       "This worktree stays because these saved chats need it for files or history: Archived child chat.",
       {},
-      { timeout: 800 },
+      SETTLED,
     );
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.hasAttribute("disabled")).toBe(true);
@@ -121,6 +136,48 @@ test("saved chat history disables worktree removal and still allows archive", as
     const submit = view.getByRole("button", { name: "Archive chat" });
     expect(submit.hasAttribute("disabled")).toBe(false);
     fireEvent.click(submit);
+    expect(requests).toEqual([false]);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a task that needs the worktree disables its removal, names the task, and still allows archive", async () => {
+  const requests: boolean[] = [];
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionArchivePreview: async () => ({
+        branchName: "feature/chat",
+        worktreeExists: true,
+        hasUncommittedChanges: false,
+        sharedWith: [],
+        taskOwners: [{ workspaceId: "test", taskId: "task-7", title: "Fix login" }],
+      }),
+    },
+  });
+  const view = render(
+    <QueryProvider connection={connection}>
+      <WorkspaceSessionArchiveDialog
+        open
+        workspaceId="test"
+        record={record()}
+        isArchiving={false}
+        error={null}
+        onArchive={(remove) => requests.push(remove)}
+        onClose={() => {}}
+      />
+    </QueryProvider>,
+  );
+  try {
+    await view.findByText(
+      "This worktree stays because these tasks need it: Fix login (task-7).",
+      {},
+      SETTLED,
+    );
+    const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
+    expect(toggle.hasAttribute("disabled")).toBe(true);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
     expect(requests).toEqual([false]);
   } finally {
     view.unmount();
@@ -137,6 +194,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
         worktreeExists: true,
         hasUncommittedChanges: true,
         sharedWith: [],
+        taskOwners: [],
       }),
     },
   });
@@ -156,7 +214,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
     </QueryProvider>,
   );
   try {
-    await view.findByText(/This worktree has local changes/, {}, { timeout: 800 });
+    await view.findByText(/This worktree has local changes/, {}, SETTLED);
     expect(
       view.getByText(
         /Archiving stops this chat's terminals, development servers, and its running session/,
@@ -184,6 +242,7 @@ test("a missing detached worktree can be archived without removal", async () => 
         worktreeExists: false,
         hasUncommittedChanges: false,
         sharedWith: [],
+        taskOwners: [],
       }),
     },
   });
@@ -205,7 +264,7 @@ test("a missing detached worktree can be archived without removal", async () => 
     </QueryProvider>,
   );
   try {
-    await view.findByText(/No branch is attached/, {}, { timeout: 800 });
+    await view.findByText(/No branch is attached/, {}, SETTLED);
     const submit = view.getByRole("button", { name: "Archive chat" });
     expect(submit.hasAttribute("disabled")).toBe(true);
     fireEvent.click(view.getByRole("switch", { name: "Remove worktree and branch" }));
@@ -243,7 +302,7 @@ test("a failed saved history check blocks removal but allows keeping the worktre
     </QueryProvider>,
   );
   try {
-    await view.findByText("Cannot check saved chat history.", {}, { timeout: 800 });
+    await view.findByText("Cannot check saved chat history.", {}, SETTLED);
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(toggle.hasAttribute("disabled")).toBe(false);
@@ -270,6 +329,7 @@ test("archive locks the full form and keeps its error and removal choice visible
         worktreeExists: false,
         hasUncommittedChanges: false,
         sharedWith: [],
+        taskOwners: [],
       }),
     },
   });
@@ -287,7 +347,7 @@ test("archive locks the full form and keeps its error and removal choice visible
     </QueryProvider>,
   );
   try {
-    await view.findByText(/worktree is already missing/, {}, { timeout: 800 });
+    await view.findByText(/worktree is already missing/, {}, SETTLED);
     const toggle = view.getByRole("switch");
     expect(toggle.hasAttribute("disabled")).toBe(true);
     expect(view.getByRole("button", { name: "Cancel" }).closest("fieldset")?.disabled).toBe(true);

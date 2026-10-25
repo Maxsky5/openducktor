@@ -37,6 +37,10 @@ export const createWorkspaceSessionCommandHandlers = (
       parseInput(workspaceSessionRefInputSchema, args).pipe(Effect.flatMap(service.get)),
     workspace_session_archive_preview: (args) =>
       parseInput(workspaceSessionRefInputSchema, args).pipe(Effect.flatMap(service.archivePreview)),
+    workspace_session_worktrees_list: (args) =>
+      parseInput(workspaceSessionListInputSchema, args).pipe(
+        Effect.flatMap(({ workspaceId }) => service.listWorktrees(workspaceId)),
+      ),
     workspace_session_create: (args) =>
       parseInput(workspaceSessionCreateInputSchema, args).pipe(
         Effect.flatMap((input) =>

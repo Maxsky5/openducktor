@@ -1,4 +1,6 @@
 import type {
+  ChatFileScope,
+  WorkspaceFileScope,
   WorkspaceFileTreeContext,
   WorkspaceFileTreeCursor,
   WorkspaceFileTreeRefreshInput,
@@ -37,22 +39,29 @@ export const filesystemQueryKeys = {
       includeFiles,
     ] as const,
   treeRoot: (rootPath: string) => [...filesystemQueryKeys.all, "tree", rootPath] as const,
-  tree: (rootPath: string, targetBranch?: string | null, branchKey?: string) =>
+  tree: (
+    rootPath: string,
+    targetBranch?: string | null,
+    branchKey?: string,
+    scope?: ChatFileScope,
+  ) =>
     [
       ...filesystemQueryKeys.treeRoot(rootPath),
       targetBranch ?? NO_TARGET_BRANCH_QUERY_KEY,
       ...(branchKey === undefined ? [] : [branchKey]),
+      ...scopeKeyPart(scope),
     ] as const,
   textFileRoot: (rootPath: string) => [...filesystemQueryKeys.all, "text-file", rootPath] as const,
-  textFile: (rootPath: string, relativePath: string, access?: "local") =>
-    [
-      ...filesystemQueryKeys.textFileRoot(rootPath),
-      relativePath,
-      ...(access ? [access] : []),
-    ] as const,
-  image: (rootPath: string, relativePath: string, access?: "local") =>
-    [...filesystemQueryKeys.textFile(rootPath, relativePath, access), "image-preview"] as const,
+  textFile: (rootPath: string, relativePath: string, scope?: WorkspaceFileScope) =>
+    [...filesystemQueryKeys.textFileRoot(rootPath), relativePath, ...scopeKeyPart(scope)] as const,
+  image: (rootPath: string, relativePath: string, scope?: WorkspaceFileScope) =>
+    [...filesystemQueryKeys.textFile(rootPath, relativePath, scope), "image-preview"] as const,
 };
+
+/** A scoped read keeps its own entry, after the directory segments that refreshes invalidate. */
+function scopeKeyPart<Scope>(scope: Scope | undefined) {
+  return scope ? [scope] : [];
+}
 
 export const resolvedPathQueryOptions = (path: string) =>
   queryOptions({
@@ -106,7 +115,10 @@ export type WorkspaceFileTreeView = WorkspaceFileTree & {
   cursor?: WorkspaceFileTreeCursor;
   context?: WorkspaceFileTreeContext;
 };
-type RefreshFields = Pick<WorkspaceFileTreeRefreshInput, "rootPath" | "refreshId" | "targetBranch">;
+type RefreshFields = Pick<
+  WorkspaceFileTreeRefreshInput,
+  "rootPath" | "refreshId" | "targetBranch" | "scope"
+>;
 export const directoryListingQueryOptions = (path?: string, includeFiles = false) => {
   let listDirectoryInput: string | FilesystemListDirectoryInput | undefined = path;
   if (includeFiles) {
@@ -128,8 +140,9 @@ export const workspaceFileTreeQueryOptions = (
   rootPath: string,
   targetBranch?: string | null,
   branchKey?: string,
+  scope?: ChatFileScope,
 ) => {
-  const queryKey = filesystemQueryKeys.tree(rootPath, targetBranch, branchKey);
+  const queryKey = filesystemQueryKeys.tree(rootPath, targetBranch, branchKey, scope);
   return queryOptions({
     queryKey,
     queryFn: async ({ client, signal }): Promise<WorkspaceFileTreeView> => {
@@ -141,6 +154,7 @@ export const workspaceFileTreeQueryOptions = (
         refreshId,
       };
       if (targetBranch) common.targetBranch = targetBranch;
+      if (scope) common.scope = scope;
       const input: WorkspaceFileTreeRefreshInput =
         prior?.cursor && workspaceRefreshMode(client, rootPath) !== "full"
           ? { ...common, mode: "incremental", base: prior.cursor }
@@ -170,33 +184,33 @@ export const workspaceFileTreeQueryOptions = (
 export const workspaceTextFileQueryOptions = (
   rootPath: string,
   relativePath: string,
-  access?: "local",
+  scope?: WorkspaceFileScope,
 ) =>
   queryOptions({
-    queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
-    ...fileReadOptions(rootPath, relativePath, access),
+    queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, scope),
+    ...fileReadOptions(rootPath, relativePath, scope),
   });
 
 export const workspaceImageFileQueryOptions = (
   rootPath: string,
   relativePath: string,
-  access?: "local",
-) => queryOptions(imageReadOptions(rootPath, relativePath, access));
+  scope?: WorkspaceFileScope,
+) => queryOptions(imageReadOptions(rootPath, relativePath, scope));
 
 export const workspaceFilePreviewQueryOptions = (
   rootPath: string,
   relativePath: string,
-  access?: "local",
+  scope?: WorkspaceFileScope,
 ) => {
   const filename = relativePath.slice(relativePath.lastIndexOf("/") + 1);
   const dot = filename.lastIndexOf(".");
   const mime = dot > 0 ? imagePreviewMime(filename.slice(dot)) : undefined;
   return queryOptions<WorkspaceTextFileReadResult>({
     ...(mime
-      ? imageReadOptions(rootPath, relativePath, access)
+      ? imageReadOptions(rootPath, relativePath, scope)
       : {
-          queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, access),
-          ...fileReadOptions(rootPath, relativePath, access),
+          queryKey: filesystemQueryKeys.textFile(rootPath, relativePath, scope),
+          ...fileReadOptions(rootPath, relativePath, scope),
         }),
   });
 };
@@ -206,14 +220,13 @@ export const workspaceTextFileWriteMutationOptions = (queryClient: QueryClient) 
     mutationFn: (input: WorkspaceTextFileWriteInput): Promise<WorkspaceTextFileWriteResult> =>
       connectionHost(queryClient).filesystemWriteTextFile(input),
     onSuccess: async (result, input) => {
-      await queryClient.cancelQueries({
-        queryKey: filesystemQueryKeys.textFile(result.rootPath, result.relativePath, input.access),
-        exact: true,
-      });
-      queryClient.setQueryData(
-        filesystemQueryKeys.textFile(result.rootPath, result.relativePath, input.access),
-        result,
+      const textKey = filesystemQueryKeys.textFile(
+        result.rootPath,
+        result.relativePath,
+        input.scope,
       );
+      await queryClient.cancelQueries({ queryKey: textKey, exact: true });
+      queryClient.setQueryData(textKey, result);
       // Keep tree read errors in the explorer so a completed write still counts as saved.
       await queryClient.invalidateQueries({
         queryKey: filesystemQueryKeys.treeRoot(result.rootPath),
@@ -222,11 +235,11 @@ export const workspaceTextFileWriteMutationOptions = (queryClient: QueryClient) 
     },
   });
 
-const imageReadOptions = (rootPath: string, relativePath: string, access?: "local") => {
-  const read = fileReadOptions(rootPath, relativePath, access);
+const imageReadOptions = (rootPath: string, relativePath: string, scope?: WorkspaceFileScope) => {
+  const read = fileReadOptions(rootPath, relativePath, scope);
   return {
     ...read,
-    queryKey: filesystemQueryKeys.image(rootPath, relativePath, access),
+    queryKey: filesystemQueryKeys.image(rootPath, relativePath, scope),
     queryFn: (context: { client: QueryClient; signal: AbortSignal }) =>
       runImagePreview(context.signal, () => read.queryFn(context)),
     // Large image data must leave the cache when its last preview closes.
@@ -234,7 +247,7 @@ const imageReadOptions = (rootPath: string, relativePath: string, access?: "loca
   };
 };
 
-const fileReadOptions = (rootPath: string, relativePath: string, access?: "local") => ({
+const fileReadOptions = (rootPath: string, relativePath: string, scope?: WorkspaceFileScope) => ({
   queryFn: async ({
     client,
     signal,
@@ -243,7 +256,9 @@ const fileReadOptions = (rootPath: string, relativePath: string, access?: "local
     signal: AbortSignal;
   }): Promise<WorkspaceTextFileReadResult> => {
     const input: WorkspaceTextFileReadInput = { rootPath, relativePath };
-    if (access) input.access = access;
+    if (scope) input.scope = scope;
+    const readContext = workspaceReadContext(client, rootPath);
+    if (readContext) input.readContext = readContext;
     const result = await connectionHost(client).filesystemReadTextFile(input);
     signal.throwIfAborted();
     return result;

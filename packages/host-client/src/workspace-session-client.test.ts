@@ -106,6 +106,7 @@ test("reads archive impact and forwards explicit worktree removal through the ho
     worktreeExists: true,
     hasUncommittedChanges: true,
     sharedWith: [{ workspaceId: "workspace", sessionId: "fork", title: "Chat (fork)" }],
+    taskOwners: [{ workspaceId: "workspace", taskId: "task-1", title: "Build the feature" }],
   };
   const archived: WorkspaceSession = {
     id: "chat",
@@ -141,6 +142,24 @@ test("reads archive impact and forwards explicit worktree removal through the ho
       command: "workspace_session_archive",
       args: { ...ref, confirmStop: true, removeWorktree: true },
     },
+  ]);
+});
+
+test("lists the registered worktrees that a new chat can use", async () => {
+  const calls: Array<{ command: HostCommandName; args: unknown }> = [];
+  const result = {
+    worktrees: [
+      { workingDirectory: "/worktrees/review", branchName: "feature/review" },
+      { workingDirectory: "/worktrees/detached", branchName: null },
+    ],
+  };
+  const client = createHostClient(async (command, args, schema) => {
+    calls.push({ command, args });
+    return schema.parse(result);
+  });
+  expect(await client.workspaceSessionWorktreesList("workspace")).toEqual(result);
+  expect(calls).toEqual([
+    { command: "workspace_session_worktrees_list", args: { workspaceId: "workspace" } },
   ]);
 });
 

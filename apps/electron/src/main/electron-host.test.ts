@@ -186,7 +186,7 @@ const createGit = (): GitPort => ({
   releaseReadCaptures: () => Effect.void,
   canonicalizePath: (path) => Effect.succeed(path),
   isGitRepository: () => Effect.succeed(true),
-  shareGitCommonDirectory: () => Effect.succeed(true),
+  readCheckout: (directory) => Effect.succeed({ root: directory, commonDirectory: "/repo/.git" }),
   referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
   configureBranchUpstream: () =>
     Effect.succeed({

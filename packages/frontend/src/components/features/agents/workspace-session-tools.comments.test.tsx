@@ -31,8 +31,7 @@ function ToolsOwner({
   const { filesContent } = useWorkspaceSessionTools({
     isVisible,
     repoPath: "/repo",
-    workspaceId: commentOwner.workspaceId,
-    sessionId: commentOwner.sessionId,
+    workspaceSession: { workspaceId: commentOwner.workspaceId, sessionId: commentOwner.sessionId },
     workingDirectory,
     contextMode,
     branchKey: "feature",

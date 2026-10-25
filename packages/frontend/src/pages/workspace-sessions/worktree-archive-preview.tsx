@@ -13,11 +13,6 @@ export function WorktreeArchivePreview({
 }) {
   return (
     <>
-      {preview.isFetching && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Checking worktree changes…
-        </p>
-      )}
       {preview.error && (
         <div role="alert" className="flex flex-col items-start gap-2">
           <p className="text-sm text-destructive-muted">{errorMessage(preview.error)}</p>

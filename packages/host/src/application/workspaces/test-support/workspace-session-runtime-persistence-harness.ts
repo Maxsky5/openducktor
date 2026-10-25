@@ -237,7 +237,8 @@ export const createPersistenceHarness = async (
     git: createGitPortTestDouble({
       canonicalizePath: (value) => Effect.succeed(value),
       isGitRepository: () => Effect.succeed(true),
-      shareGitCommonDirectory: () => Effect.succeed(true),
+      readCheckout: (path: string) =>
+        Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
       isRegisteredWorktree: () => Effect.succeed(state.registered),
     }),
     publishUpdated: (workspaceId, session) =>
@@ -453,6 +454,7 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
+    taskOwnership: database,
     claudeSessionMetadata: {
       readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
     },
@@ -490,7 +492,8 @@ export const createPersistenceHarness = async (
     git: createGitPortTestDouble({
       canonicalizePath: (value) => Effect.succeed(value),
       isGitRepository: () => Effect.succeed(true),
-      shareGitCommonDirectory: () => Effect.succeed(true),
+      readCheckout: (path: string) =>
+        Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
       isRegisteredWorktree: () => Effect.succeed(state.registered),
     }),
     settingsConfig: createSettingsConfigTestDouble({}),

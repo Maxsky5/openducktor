@@ -1,6 +1,8 @@
 import {
+  type GitReadContext,
   imagePreviewMime,
   type WorkspaceTextFileReadResult,
+  type WorkspaceFileScope,
   type WorkspaceTextFileReadInput,
   type WorkspaceTextFileWriteFailure,
   type WorkspaceTextFileWriteFailureCode,
@@ -171,15 +173,19 @@ const unsupportedWrite = (
 
 const resolveAvailableWorkspaceFile = (
   filesystem: FilesystemPort,
-  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  gitPort: Pick<GitPort, "readCheckout" | "listFiles">,
   canonicalRoot: string,
   relativePath: string,
-  access?: "local",
+  scope: WorkspaceFileScope | undefined,
+  readContext?: GitReadContext,
 ) =>
   Effect.gen(function* () {
-    if (access === "local")
+    if (scope?.kind === "local")
       return yield* canonicalizeContainedWorkspaceFile(filesystem, canonicalRoot, relativePath);
-    const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot, relativePath);
+    const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot, {
+      relativePath,
+      readContext,
+    });
     if (!listedFilePaths.includes(relativePath)) {
       return yield* new WorkspaceFileAccessError({
         code: "unavailable_file",
@@ -202,12 +208,11 @@ const resolveAvailableWorkspaceFile = (
     if (filesystem.relative(requestedPath, canonicalPath) === "") {
       return canonicalPath;
     }
-    const targetPaths = yield* loadWorkspaceFilePaths(
-      gitPort,
-      canonicalRoot,
-      canonicalRelativePath,
-      { caseInsensitive: true },
-    );
+    const targetPaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot, {
+      relativePath: canonicalRelativePath,
+      options: { caseInsensitive: true },
+      readContext,
+    });
     const hasCanonicalTarget = targetPaths.some(
       (targetPath) =>
         filesystem.relative(filesystem.join(canonicalRoot, targetPath), canonicalPath) === "",
@@ -225,7 +230,7 @@ const resolveAvailableWorkspaceFile = (
 
 export const createWorkspaceTextFileService = (
   filesystem: FilesystemPort,
-  gitPort: Pick<GitPort, "isGitRepository" | "listFiles" | "getCurrentBranch">,
+  gitPort: Pick<GitPort, "readCheckout" | "listFiles" | "getCurrentBranch">,
 ): WorkspaceTextFileService => ({
   readTextFile(input) {
     return Effect.gen(function* () {
@@ -236,7 +241,8 @@ export const createWorkspaceTextFileService = (
         gitPort,
         canonicalRoot,
         relativePath,
-        input.access,
+        input.scope,
+        input.readContext,
       ).pipe(
         Effect.mapError((cause) =>
           cause._tag === "WorkspaceFileAccessError" ? mapReadAccessFailure(cause) : cause,
@@ -365,7 +371,7 @@ export const createWorkspaceTextFileService = (
         gitPort,
         canonicalRoot,
         relativePath,
-        input.access,
+        input.scope,
       ).pipe(
         Effect.mapError((cause) =>
           cause._tag === "WorkspaceFileAccessError"

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   hostInvokeFailureSchema,
+  workspaceTextFileReadInputSchema,
   workspaceTextFileReadResultSchema,
   workspaceTextFileWriteInputSchema,
   workspaceTextFileWriteResultSchema,
@@ -42,6 +43,18 @@ describe("workspace text file contracts", () => {
         revision: "revision-1",
         force: true,
       }).success,
+    ).toBe(false);
+  });
+
+  test("accepts a chat scope and rejects a local scope with a session", () => {
+    const fields = { rootPath: "/repo", relativePath: "README.md" };
+    const session = { workspaceId: "fairnest", sessionId: "chat-1" };
+    expect(
+      workspaceTextFileReadInputSchema.parse({ ...fields, scope: { kind: "chat", session } }),
+    ).toEqual({ ...fields, scope: { kind: "chat", session } });
+    expect(
+      workspaceTextFileReadInputSchema.safeParse({ ...fields, scope: { kind: "local", session } })
+        .success,
     ).toBe(false);
   });
 

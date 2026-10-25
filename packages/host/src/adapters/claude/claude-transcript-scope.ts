@@ -8,7 +8,7 @@ import {
   type GitCommandRunner,
   resolveGitCommonDirectory,
 } from "../../infrastructure/git/git-command-runner";
-import { listWorktrees } from "../../infrastructure/git/git-worktree";
+import { isListedWorktreePath, listWorktrees } from "../../infrastructure/git/git-worktree";
 
 export const verifyClaudeTranscriptScope = (input: {
   sessionId: string;
@@ -58,9 +58,10 @@ export const verifyClaudeTranscriptScope = (input: {
       );
       if (!pathsEqual(historicalCommon, currentCommon)) return false;
       const worktrees = yield* listWorktrees(runner, input.canonicalWorkingDirectory);
-      return [historicalPath, input.canonicalWorkingDirectory].every((directory) =>
-        worktrees.some((worktree) => pathsEqual(worktree.worktreePath, directory)),
-      );
+      for (const directory of [historicalPath, input.canonicalWorkingDirectory]) {
+        if (!(yield* isListedWorktreePath(worktrees, directory))) return false;
+      }
+      return true;
     }).pipe(
       Effect.mapError(
         (cause) =>

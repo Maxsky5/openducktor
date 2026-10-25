@@ -161,3 +161,12 @@ export const customAgentRolesQueryOptions = () =>
     gcTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
+
+/** Worktrees that New chat can use. Each open of the selector reads them again. */
+export const workspaceSessionWorktreesQueryOptions = (workspaceId: string) =>
+  queryOptions({
+    queryKey: ["workspace-session-worktrees", workspaceId] as const,
+    queryFn: ({ client }) => connectionHost(client).workspaceSessionWorktreesList(workspaceId),
+    staleTime: 0,
+    retry: false,
+  });

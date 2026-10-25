@@ -78,14 +78,14 @@ describe("createWorkspaceFilesCommandHandlers", () => {
 
   test("preserves significant whitespace in relative file paths", async () => {
     const receivedRelativePaths: string[] = [];
-    const receivedAccessModes: Array<"local" | undefined> = [];
+    const receivedScopes: unknown[] = [];
     const service: WorkspaceFilesService = {
       dispose: () => Effect.void,
       refreshTree: () => Effect.die("Unexpected refreshTree"),
       listTree: () => Effect.die("not used"),
       readTextFile: (input) => {
         receivedRelativePaths.push(input.relativePath);
-        receivedAccessModes.push(input.access);
+        receivedScopes.push(input.scope);
         return Effect.succeed({
           kind: "text",
           rootPath: input.rootPath,
@@ -106,17 +106,17 @@ describe("createWorkspaceFilesCommandHandlers", () => {
       router.invoke("filesystem_read_text_file", {
         rootPath: "/repo",
         relativePath: " padded.ts ",
-        access: "local",
+        scope: { kind: "local" },
       }),
     );
 
     expect(receivedRelativePaths).toEqual([" padded.ts "]);
-    expect(receivedAccessModes).toEqual(["local"]);
+    expect(receivedScopes).toEqual([{ kind: "local" }]);
     const invalid = await Effect.runPromiseExit(
       router.invoke("filesystem_read_text_file", {
         rootPath: "/repo",
         relativePath: "file.ts",
-        access: "unrestricted",
+        scope: { kind: "unrestricted" },
       }),
     );
     expect(invalid._tag).toBe("Failure");

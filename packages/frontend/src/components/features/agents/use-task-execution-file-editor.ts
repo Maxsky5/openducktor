@@ -1,4 +1,5 @@
 import type {
+  WorkspaceFileScope,
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteInput,
   WorkspaceTextFileWriteFailure,
@@ -226,6 +227,8 @@ type UseTaskExecutionFileEditorInput = {
   readyResult: TextFileResult | null;
   branch: string | null;
   requireBranch: boolean;
+  /** Sent with each read and save of the file. */
+  scope: WorkspaceFileScope | undefined;
   onFileSaved(): void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
 };
@@ -235,6 +238,7 @@ export const useTaskExecutionFileEditor = ({
   readyResult,
   branch,
   requireBranch,
+  scope,
   onFileSaved,
   onLeavePolicyChange,
 }: UseTaskExecutionFileEditorInput) => {
@@ -357,7 +361,7 @@ export const useTaskExecutionFileEditor = ({
         contents: contentsToSave,
         revision: baselineRevision,
       };
-      if (selectedFile?.access) input.access = selectedFile.access;
+      if (scope) input.scope = scope;
       if (session.branch) input.expectedBranch = session.branch;
       const saved: WorkspaceTextFileWriteResult = await mutation.mutateAsync(input);
       const activeSession = stateRef.current.session;
@@ -421,7 +425,7 @@ export const useTaskExecutionFileEditor = ({
     onFileSaved,
     onLeavePolicyChange,
     selectedFileId,
-    selectedFile?.access,
+    scope,
     state.isDirty,
     state.session,
   ]);
@@ -444,7 +448,7 @@ export const useTaskExecutionFileEditor = ({
         ...workspaceTextFileQueryOptions(
           session.baseline.rootPath,
           session.baseline.relativePath,
-          selectedFile?.access,
+          scope,
         ),
         staleTime: 0,
       });
@@ -477,7 +481,7 @@ export const useTaskExecutionFileEditor = ({
     hasStaleConflict,
     queryClient,
     requireBranch,
-    selectedFile?.access,
+    scope,
     state.isReviewingConflict,
     state.session,
   ]);

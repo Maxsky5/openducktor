@@ -371,12 +371,8 @@ describe("createTaskService build start worktree handling", () => {
     const baseGitPort = createBuildStartGitPort({ calls });
     const gitPort = {
       ...baseGitPort,
-      isGitRepository(path: string) {
-        return Effect.sync(() => {
-          calls.push({ type: "isGitRepository", path });
-          return path !== "/worktrees/repo/task-1";
-        });
-      },
+      readCheckout: (path: string) =>
+        path === "/worktrees/repo/task-1" ? Effect.succeed(null) : baseGitPort.readCheckout(path),
     };
     const dependencies = createDependencies(calls, {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),

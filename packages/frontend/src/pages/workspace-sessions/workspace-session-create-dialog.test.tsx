@@ -172,6 +172,10 @@ function renderCreation(
   return { ...view, queryClient };
 }
 
+function worktreeOf(input: WorkspaceSessionCreateInput | undefined) {
+  return input?.location === "local_worktree" ? input.worktree : undefined;
+}
+
 async function selectModel(view: ReturnType<typeof renderCreation>) {
   fireEvent.click(view.getByRole("button", { name: "Select model, Select a model" }));
   const choice = await view.findByRole(
@@ -536,7 +540,7 @@ test("creates a worktree chat with one request and no confirmation step", async 
     await waitFor(() => expect(created).toBe(1), { timeout: 800 });
     expect(requests).toHaveLength(1);
     expect(requests[0]).not.toHaveProperty("confirmUncommittedChanges");
-    expect(requests[0]?.worktree).toEqual({
+    expect(worktreeOf(requests[0])).toEqual({
       mode: "from_name",
       name: "my-feature",
       branchName: null,
@@ -573,7 +577,7 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
     fireEvent.change(branch, { target: { value: "feature/custom-ui" } });
     fireEvent.click(create);
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
-    expect(requests[0]?.worktree).toEqual({
+    expect(worktreeOf(requests[0])).toEqual({
       mode: "from_name",
       name: "review-ui",
       branchName: "feature/custom-ui",
@@ -624,7 +628,7 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
     expect(view.getByText("feat-add-facebook-login")).not.toBeNull();
     fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
-    expect(requests[0]?.worktree).toEqual({
+    expect(worktreeOf(requests[0])).toEqual({
       mode: "from_branch",
       name: "feat-add-facebook-login",
       branchName: "feature/existing",
@@ -729,8 +733,190 @@ test("returning to Current checkout omits all worktree options", async () => {
     fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.location).toBe("local_repo_root");
-    expect(requests[0]?.worktree).toBeUndefined();
+    expect(requests[0]).not.toHaveProperty("worktree");
   } finally {
     view.unmount();
   }
 });
+
+test("Existing worktree requires an explicit pick and sends only the selected directory", async () => {
+  const requests: WorkspaceSessionCreateInput[] = [];
+  let reads = 0;
+  const view = renderCreation(
+    async (input) => {
+      requests.push(input);
+      throw new Error("Keep form open");
+    },
+    () => {},
+    () => {
+      throw new Error("Unexpected successful creation");
+    },
+    {
+      workspaceSessionWorktreesList: async () => {
+        reads += 1;
+        return {
+          worktrees: [
+            { workingDirectory: "/worktrees/one", branchName: "feature/one" },
+            { workingDirectory: "/worktrees/two", branchName: null },
+          ],
+        };
+      },
+    },
+  );
+  try {
+    await selectModel(view);
+    await selectTarget(view, /^Tracked upstream/);
+    fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
+    fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "unused" } });
+    expect(reads).toBe(0);
+    fireEvent.click(view.getByRole("radio", { name: /Existing worktree/ }));
+    expect(view.getByText("Chats that use this worktree share its files and branch.")).toBeTruthy();
+    expect(view.queryByLabelText("Worktree name")).toBeNull();
+    inTargetOptions(view, () =>
+      expect(view.queryByRole("option", { name: /^Tracked upstream/ })).toBeNull(),
+    );
+    const selector = view.getByRole("button", { name: "Worktree" });
+    await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+    expect(reads).toBe(1);
+    const create = view.getByRole("button", { name: "Create chat" });
+    expect(create.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(selector);
+    expect(view.getByRole("option", { name: /\/worktrees\/one/ }).textContent).toContain(
+      "feature/one",
+    );
+    const detached = view.getByRole("option", { name: /\/worktrees\/two/ });
+    expect(detached.textContent).toContain("Detached HEAD");
+    fireEvent.click(detached);
+    expect(selector.textContent).toContain("/worktrees/two");
+    expect(create.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(create);
+    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
+    expect(requests[0]).toEqual({
+      workspaceId: "A",
+      runtimeKind: "opencode",
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "provider",
+        modelId: "model",
+        variant: "low",
+        profileId: "runtime-profile",
+      },
+      customAgentRoleId: null,
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory: "/worktrees/two" },
+      manualTitle: "",
+      targetBranch: { remote: "origin", branch: "main" },
+    });
+  } finally {
+    view.unmount();
+  }
+  // This flow renders the create dialog and waits for host reads.
+}, 2_500);
+
+test("Existing worktree shows the loading, failed, and empty states, and retries", async () => {
+  const reads: Array<{ resolve: (worktrees: string[]) => void; reject: (cause: Error) => void }> =
+    [];
+  const view = renderCreation(
+    async () => {
+      throw new Error("Unexpected creation");
+    },
+    () => {},
+    () => {
+      throw new Error("Unexpected successful creation");
+    },
+    {
+      workspaceSessionWorktreesList: () =>
+        new Promise((resolve, reject) => {
+          reads.push({
+            resolve: (paths) =>
+              resolve({
+                worktrees: paths.map((workingDirectory) => ({
+                  workingDirectory,
+                  branchName: null,
+                })),
+              }),
+            reject,
+          });
+        }),
+    },
+  );
+  try {
+    await selectModel(view);
+    fireEvent.click(view.getByRole("radio", { name: /Existing worktree/ }));
+    const selector = view.getByRole("button", { name: "Worktree" });
+    expect(selector.textContent).toContain("Loading worktrees…");
+    expect(selector.hasAttribute("disabled")).toBe(true);
+    await waitFor(() => expect(reads).toHaveLength(1), { timeout: 800 });
+    await act(async () => reads[0]?.reject(new Error("git worktree list failed")));
+    const alert = await view.findByRole("alert", {}, { timeout: 800 });
+    expect(alert.textContent).toContain("Could not load worktrees. git worktree list failed");
+    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(view.getByRole("button", { name: "Retry worktrees" }));
+    await waitFor(() => expect(reads).toHaveLength(2), { timeout: 800 });
+    await act(async () => reads[1]?.resolve([]));
+    await view.findByText(
+      "No other worktrees exist for this repository. Use New worktree to create one.",
+      {},
+      { timeout: 800 },
+    );
+    expect(view.queryByRole("alert")).toBeNull();
+    expect(selector.hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+  } finally {
+    view.unmount();
+  }
+  // This flow renders the create dialog and waits for host reads.
+}, 2_500);
+
+test("a failed creation reads the worktrees again and marks a removed choice as unavailable", async () => {
+  const requests: WorkspaceSessionCreateInput[] = [];
+  let reads = 0;
+  const view = renderCreation(
+    async (input) => {
+      requests.push(input);
+      throw new Error("The directory is not a registered worktree of this repository.");
+    },
+    () => {},
+    () => {
+      throw new Error("Unexpected successful creation");
+    },
+    {
+      workspaceSessionWorktreesList: async () => {
+        reads += 1;
+        return {
+          worktrees:
+            reads === 1 ? [{ workingDirectory: "/worktrees/one", branchName: "feature/one" }] : [],
+        };
+      },
+    },
+  );
+  try {
+    await selectModel(view);
+    fireEvent.change(view.getByLabelText("Name optional"), { target: { value: "Kept name" } });
+    fireEvent.click(view.getByRole("radio", { name: /Existing worktree/ }));
+    const selector = view.getByRole("button", { name: "Worktree" });
+    await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+    fireEvent.click(selector);
+    fireEvent.click(view.getByRole("option", { name: /\/worktrees\/one/ }));
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    await view.findByText(
+      "The selected worktree is no longer available. Select another worktree.",
+      {},
+      { timeout: 800 },
+    );
+    expect(requests).toHaveLength(1);
+    expect(reads).toBe(2);
+    expect(
+      view.getByText("The directory is not a registered worktree of this repository."),
+    ).toBeTruthy();
+    expect(view.getByDisplayValue("Kept name")).toBeTruthy();
+    expect(selector.textContent).toContain("/worktrees/one");
+    expect(
+      view.getByRole("radio", { name: /Existing worktree/ }).getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+  } finally {
+    view.unmount();
+  }
+  // This flow renders the create dialog and waits for host reads.
+}, 2_500);
