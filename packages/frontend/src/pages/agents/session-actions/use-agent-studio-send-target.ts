@@ -36,12 +36,13 @@ type UseAgentStudioSendTargetArgs = {
   runSessionStartWorkflow: RunSessionStartWorkflow;
   scheduleQueryUpdate: (updates: QueryUpdate) => void;
   selectedSessionIdentity: AgentSessionIdentity | null;
-  isSessionModelCatalogLoading: boolean;
+  isCatalogLoading: boolean;
   assertCanPrepareSession: (identity: AgentSessionIdentity) => void;
   agentStudioReady: boolean;
   isStarting: boolean;
 };
 
+/** The draft's first Send starts a session and sends through the start workflow. */
 export function useAgentStudioSendTarget({
   workspaceId,
   taskId,
@@ -53,7 +54,7 @@ export function useAgentStudioSendTarget({
   runSessionStartWorkflow,
   scheduleQueryUpdate,
   selectedSessionIdentity,
-  isSessionModelCatalogLoading,
+  isCatalogLoading,
   assertCanPrepareSession,
   agentStudioReady,
   isStarting,
@@ -66,10 +67,11 @@ export function useAgentStudioSendTarget({
     session: selectedSessionIdentity,
   });
   const isCurrentContext = useSessionStartContext(activityKey);
-  const launchedDraftKeys = useRef(new Set<string>());
+  // A lost launch reply can still mean that the host started the session.
+  const startedDrafts = useRef(new Set<string>());
   useEffect(() => {
     if (selectedSessionIdentity)
-      launchedDraftKeys.current.delete(
+      startedDrafts.current.delete(
         buildAgentStudioSessionActivityKey({ workspaceId, taskId, role, session: null }),
       );
   }, [role, selectedSessionIdentity, taskId, workspaceId]);
@@ -85,16 +87,16 @@ export function useAgentStudioSendTarget({
         (selectedSessionIdentity !== null ||
           (canStartSession &&
             selectionForNewSession?.runtimeKind !== undefined &&
-            !launchedDraftKeys.current.has(activityKey) &&
+            !startedDrafts.current.has(activityKey) &&
             !activity.hasInFlight(activityKey))) &&
-        !isSessionModelCatalogLoading,
+        !isCatalogLoading,
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
         requireCompactionTarget(parts, selectedSessionIdentity);
         if (!selectedSessionIdentity) {
           if (!canStartSession || !selectionForNewSession?.runtimeKind)
             throw new Error("Select an available runtime and model before sending a message.");
-          const workflow = await runSessionStartWorkflow({
+          const launch = await runSessionStartWorkflow({
             request: {
               taskId,
               role,
@@ -118,22 +120,22 @@ export function useAgentStudioSendTarget({
               failure instanceof RemoteConnectionError &&
               failure.failure.code === "outcome_unknown"
             )
-              launchedDraftKeys.current.add(activityKey);
+              startedDrafts.current.add(activityKey);
             throw cause;
           });
-          launchedDraftKeys.current.add(activityKey);
+          startedDrafts.current.add(activityKey);
           if (isCurrentContext())
             scheduleQueryUpdate(
               buildAgentStudioSelectionQueryUpdate({
                 taskId,
-                sessionExternalId: workflow.externalSessionId,
+                sessionExternalId: launch.externalSessionId,
                 role,
               }),
             );
           if (
-            !workflow.postStartMessageReceipt &&
-            workflow.postStartActionError &&
-            workflow.retryPostStartMessage
+            !launch.postStartMessageReceipt &&
+            launch.postStartActionError &&
+            launch.retryPostStartMessage
           )
             return {
               result: {
@@ -146,11 +148,11 @@ export function useAgentStudioSendTarget({
                 recoveryKey: agentStudioChatDraftScopeKey(workspaceId, {
                   taskId,
                   role,
-                  session: workflow,
+                  session: launch,
                 }),
-                error: workflow.postStartActionError,
+                error: launch.postStartActionError,
                 inAppFeedbackHandled: isSessionStartFailureFeedbackHandled(
-                  workflow.postStartActionError,
+                  launch.postStartActionError,
                 ),
               },
             };
@@ -183,7 +185,7 @@ export function useAgentStudioSendTarget({
     agentStudioReady,
     canStartSession,
     isCurrentContext,
-    isSessionModelCatalogLoading,
+    isCatalogLoading,
     isStarting,
     launchActionId,
     role,

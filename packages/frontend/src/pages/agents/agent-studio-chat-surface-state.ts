@@ -112,9 +112,10 @@ const deriveAgentStudioChatEmptyState = ({
     return null;
   }
 
+  const title = "Choose a runtime and model, then send your first message to start a session.";
   if (canKickoff) {
     return {
-      title: "Choose a runtime and model, then send your first message to start a session.",
+      title,
       actionLabel: kickoffLabel,
       onAction: (): void => {
         void startLaunchKickoff();
@@ -122,7 +123,5 @@ const deriveAgentStudioChatEmptyState = ({
     };
   }
 
-  return {
-    title: "Choose a runtime and model, then send your first message to start a session.",
-  };
+  return { title };
 };

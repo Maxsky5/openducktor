@@ -154,7 +154,7 @@ const createBaseArgs = (): HookArgs => ({
   }),
   scheduleQueryUpdate: () => {},
   selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
-  isSessionModelCatalogLoading: false,
+  isCatalogLoading: false,
 
   assertCanPrepareSession: () => {},
   agentStudioReady: true,
@@ -172,7 +172,7 @@ describe("useAgentStudioSendTarget", () => {
       const args = {
         ...createBaseArgs(),
         selectedSessionIdentity: createSelectedSessionIdentity(externalSessionId),
-        isSessionModelCatalogLoading: true,
+        isCatalogLoading: true,
         sendAgentMessage,
         runSessionStartWorkflow,
       };
@@ -184,7 +184,7 @@ describe("useAgentStudioSendTarget", () => {
         });
         expect(sendAgentMessage).not.toHaveBeenCalled();
         expect(runSessionStartWorkflow).not.toHaveBeenCalled();
-        await harness.update({ ...args, isSessionModelCatalogLoading: false });
+        await harness.update({ ...args, isCatalogLoading: false });
         await harness.run(async (state) => {
           expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
         });
@@ -251,8 +251,8 @@ describe("useAgentStudioSendTarget", () => {
     await harness.unmount();
   });
 
-  test.each(["model", "runtime", "role"] as const)(
-    "blocks a first Send without an available %s",
+  test.each(["model", "runtime", "start policy"] as const)(
+    "blocks first Send when %s is unavailable",
     async (missing) => {
       const runSessionStartWorkflow = mock(createBaseArgs().runSessionStartWorkflow);
       const args: HookArgs = {
@@ -263,7 +263,7 @@ describe("useAgentStudioSendTarget", () => {
       if (missing === "model") args.selectionForNewSession = null;
       if (missing === "runtime")
         args.selectionForNewSession = { providerId: "openai", modelId: "gpt-5" };
-      if (missing === "role") args.canStartSession = false;
+      if (missing === "start policy") args.canStartSession = false;
       const harness = createTaskHarness(args);
       try {
         await harness.mount();

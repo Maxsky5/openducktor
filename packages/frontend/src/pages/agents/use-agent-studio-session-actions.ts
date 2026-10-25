@@ -200,7 +200,7 @@ export function useAgentStudioSessionActions({
     taskId,
     role,
     selectedSessionIdentity: stableSelectedSessionIdentity,
-    isSessionModelCatalogLoading: isSelectionCatalogLoading,
+    isCatalogLoading: isSelectionCatalogLoading,
     launchActionId,
     selectionForNewSession,
     selectedTask,

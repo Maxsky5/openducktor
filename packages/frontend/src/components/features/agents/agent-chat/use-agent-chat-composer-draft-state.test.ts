@@ -130,7 +130,7 @@ describe("useAgentChatComposerDraftState", () => {
     expect(latestAdapter.flush).toHaveBeenCalledTimes(2);
   });
 
-  test("keeps an opaque non-task draft identity in memory without persistence", async () => {
+  test("keeps local drafts across session navigation", async () => {
     const scope = {
       key: "repository-chat:conversation/42",
       persistence: null,

@@ -94,17 +94,13 @@ export function useAgentChatComposerDraftState({
     }
 
     const nextState = createInitialDraftState({ key: nextKey, persistence: nextPersistence });
-    const recovered = pendingDraftsRef.current.get(nextKey);
-    if (recovered) {
-      if (draftHasMeaningfulContent(nextState.draft)) {
-        pendingDraftsRef.current.delete(nextKey);
-      } else {
-        nextState.draft = recovered;
-        if (nextPersistence) {
-          nextPersistence.set(recovered);
-          pendingDraftsRef.current.delete(nextKey);
-        }
-      }
+    const pendingDraft = pendingDraftsRef.current.get(nextKey);
+    if (pendingDraft && !draftHasMeaningfulContent(nextState.draft)) {
+      nextState.draft = pendingDraft;
+      nextPersistence?.set(pendingDraft);
+    }
+    if (nextPersistence) {
+      pendingDraftsRef.current.delete(nextKey);
     }
     latestStateRef.current = nextState;
     setState(nextState);

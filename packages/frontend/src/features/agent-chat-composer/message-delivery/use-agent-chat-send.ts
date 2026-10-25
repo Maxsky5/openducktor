@@ -39,7 +39,7 @@ export type AgentChatResolvedTarget =
       readonly sendOptions?: Omit<AgentMessageSendOptions, "mode">;
     }
   | {
-      /** A workflow launch already sent the first message. */
+      /** The launch handles the first send, so the composer must not send it again. */
       readonly result: AgentChatSendResult;
     };
 
