@@ -20,18 +20,18 @@ export const TaskDetailsMetadata = memo(
         icon={<Layers3 className="size-3.5" />}
         defaultExpanded={defaultExpanded}
       >
-        <div className="grid gap-3 rounded-lg border border-border p-3 text-sm text-foreground">
-          {task.parentId ? (
-            <div className="grid gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Parent
-              </span>
-              <span className="font-mono text-xs text-foreground">{task.parentId}</span>
-            </div>
-          ) : (
-            <span className="text-muted-foreground">No metadata to display.</span>
-          )}
-        </div>
+        {task.parentId ? (
+          <div className="grid gap-1 rounded-lg border border-border p-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Parent
+            </span>
+            <span className="font-mono text-xs text-foreground">{task.parentId}</span>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+            No metadata to display.
+          </p>
+        )}
       </CollapsibleCard>
     );
   },
