@@ -178,8 +178,8 @@ export function AgentChatComposer({
 
   const modelPickerDisabled =
     isSendOrModelPending ||
-    !isInteractionEnabled ||
     isReadOnly ||
+    (!isInteractionEnabled && model.modelPicker.selectionPolicy.kind === "runtime_locked") ||
     model.foregroundTurnActive === true ||
     model.isWaitingInput;
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);

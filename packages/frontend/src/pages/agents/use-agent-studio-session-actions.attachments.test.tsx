@@ -176,6 +176,7 @@ const createBaseArgs = (): HookArgs => {
       sessionAuxiliaryError: null,
     },
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    isSelectionCatalogLoading: false,
     selectedModelDescriptor: {
       id: "openai/gpt-5",
       providerId: "openai",

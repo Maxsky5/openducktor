@@ -201,7 +201,7 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "spec",
       launchActionId,
-      "Create a Spec session without sending a kickoff.",
+      "Open a Spec composer without sending a kickoff.",
     );
   }
 
@@ -210,7 +210,7 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "planner",
       launchActionId,
-      "Create a Planner session without sending a kickoff.",
+      "Open a Planner composer without sending a kickoff.",
     );
   }
 
@@ -218,13 +218,13 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "build",
       resolveBuildLaunchAction(),
-      "Create a Builder session without sending a kickoff.",
+      "Open a Builder composer without sending a kickoff.",
     );
   }
 
   if (params.roleEnabledByTask.qa) {
     const launchActionId = firstLaunchAction("qa");
-    addMessageFirstOption("qa", launchActionId, "Create a QA session without sending a kickoff.");
+    addMessageFirstOption("qa", launchActionId, "Open a QA composer without sending a kickoff.");
   }
 
   return options;

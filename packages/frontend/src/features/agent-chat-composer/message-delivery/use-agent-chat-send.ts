@@ -33,10 +33,15 @@ import {
 } from "./agent-chat-send-draft";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
-export type AgentChatResolvedTarget = {
-  readonly identity: AgentSessionIdentity;
-  readonly sendOptions?: Omit<AgentMessageSendOptions, "mode">;
-};
+export type AgentChatResolvedTarget =
+  | {
+      readonly identity: AgentSessionIdentity;
+      readonly sendOptions?: Omit<AgentMessageSendOptions, "mode">;
+    }
+  | {
+      /** A workflow launch already sent the first message. */
+      readonly result: AgentChatSendResult;
+    };
 
 /** What differs between chat kinds: how a chat finds its session and reports a failure. */
 export type AgentChatSendTarget = {
@@ -48,7 +53,7 @@ export type AgentChatSendTarget = {
   readonly canSend: () => boolean;
   /** Captures the selected recipient before attachment staging starts. */
   readonly capture: () => () => boolean;
-  /** Returns the recipient. Null cancels the send and keeps the draft. */
+  /** Returns a recipient or a completed launch result. Null keeps the draft. */
   readonly resolve: (parts: AgentUserMessagePart[]) => Promise<AgentChatResolvedTarget | null>;
   /** Turns a failure into the composer result. Without it, the composer gets the failure. */
   readonly onFailure?: (cause: Error) => AgentChatSendResult;
@@ -188,6 +193,7 @@ export function useAgentChatSend({
         if (!parts || !isCurrentRecipient()) return false;
         const resolved = await target.resolve(parts);
         if (!resolved) return false;
+        if ("result" in resolved) return resolved.result;
         await sendAgentMessage(resolved.identity, parts, {
           ...resolved.sendOptions,
           mode,

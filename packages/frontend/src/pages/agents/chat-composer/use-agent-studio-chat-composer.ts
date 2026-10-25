@@ -50,7 +50,9 @@ import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/pro
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
 import { availableDefaultSessionSelectionFor } from "@/features/session-start/session-start-selection";
 import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
+import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { type RuntimeReadiness, useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { retryRuntimeCatalog } from "@openducktor/frontend-core/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
@@ -77,6 +79,7 @@ type UseAgentStudioChatComposerArgs = {
 };
 
 type AgentStudioChatComposerState = {
+  runtimeReadiness: RuntimeReadiness;
   speed: SpeedControlModel | null;
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
@@ -142,8 +145,6 @@ export function useAgentStudioChatComposer({
   const sessionModelCatalog = selectedSession.runtimeData.modelCatalog;
   const isSessionModelCatalogLoading = selectedSession.runtimeData.isLoadingModelCatalog;
   const loadedSessionIdentity = loadedSession ? toAgentSessionIdentity(loadedSession) : null;
-  const runtimeReadinessState = selectedSession.runtimeReadiness.state;
-  const isRuntimeReady = runtimeReadinessState === "ready";
   const hasSessionTarget = selectedSessionIdentity !== null;
   const defaultSelection = useMemo(
     () =>
@@ -172,6 +173,15 @@ export function useAgentStudioChatComposer({
     [availableRuntimeDefinitions, draftSelection, defaultSelection, selectedSessionModel],
   );
   const selectedTargetRuntimeKind = selectedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
+  const draftRuntimeReadiness = useRuntimeReadiness({
+    hasWorkspace: workspaceRepoPath !== null,
+    runtimeTarget: runtimeReadinessTargetForRuntime(selectedTargetRuntimeKind),
+  });
+  const runtimeReadiness = hasSessionTarget
+    ? selectedSession.runtimeReadiness
+    : draftRuntimeReadiness;
+  const runtimeReadinessState = runtimeReadiness.state;
+  const isRuntimeReady = runtimeReadinessState === "ready";
   const selectedTargetRuntimeDefinitions = hasSessionTarget
     ? allRuntimeDefinitions
     : availableRuntimeDefinitions;
@@ -469,6 +479,7 @@ export function useAgentStudioChatComposer({
   });
 
   return {
+    runtimeReadiness,
     speed,
     selectionForNewSession,
     selectedModelSelection,

@@ -2,21 +2,26 @@ import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   type SelectAgentStudioSelection,
   toAgentStudioSessionlessRoleSelection,
   toAgentStudioSessionSelection,
 } from "../shell/agent-studio-selection-state";
 
+type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
+
 type UseAgentStudioSelectionActionsArgs = {
   taskId: string;
   sessionsForTask: AgentSessionSummary[];
+  canPrepareMessageFirstSession: CanPrepareMessageFirstSession;
   selectAgentStudioSelection: SelectAgentStudioSelection;
 };
 
 export function useAgentStudioSelectionActions({
   taskId,
   sessionsForTask,
+  canPrepareMessageFirstSession,
   selectAgentStudioSelection,
 }: UseAgentStudioSelectionActionsArgs) {
   const findSessionByValue = useCallback(
@@ -67,11 +72,29 @@ export function useAgentStudioSelectionActions({
     [findSessionByValue, selectAgentStudioSelection, taskId],
   );
 
+  const handlePrepareMessageFirstSession = useCallback(
+    (option: SessionCreateOption): void => {
+      if (!canPrepareMessageFirstSession(option)) {
+        return;
+      }
+
+      selectAgentStudioSelection(
+        toAgentStudioSessionlessRoleSelection({
+          taskId,
+          role: option.role,
+        }),
+      );
+    },
+    [canPrepareMessageFirstSession, selectAgentStudioSelection, taskId],
+  );
+
   return {
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
+    handlePrepareMessageFirstSession,
   } satisfies {
     handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
     handleSessionSelectionChange: (nextValue: string) => void;
+    handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
   };
 }
