@@ -780,7 +780,7 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
-  test("shows skill menu entries alphabetically with the Blocks icon", async () => {
+  test("shows skill menu entries alphabetically with the ScrollText icon", async () => {
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
@@ -801,7 +801,7 @@ describe("AgentChatComposerEditor", () => {
     expect(
       skillButtons.map((button) => button.querySelector(".text-foreground")?.textContent),
     ).toEqual(["$analyze", "$review"]);
-    expect(skillButtons[0]?.querySelector(".lucide-blocks")).toBeDefined();
+    expect(skillButtons[0]?.querySelector(".lucide-scroll-text") ?? null).not.toBeNull();
   });
 
   test("shows the skill menu when the editable sentinel precedes the dollar trigger", async () => {
@@ -2228,7 +2228,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.input(firstTextSegment);
 
     await expectComposerText(rendered.container, "before review");
-    expect(rendered.container.querySelector(".lucide-blocks")).toBeDefined();
+    expect(rendered.container.querySelector(".lucide-scroll-text")).not.toBeNull();
   });
 
   test("keeps shift-enter newlines after file chips in normal inline flow", async () => {

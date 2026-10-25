@@ -1,8 +1,22 @@
-import { FileText, Folder, Globe, ListTodo, Search, Terminal, Wrench } from "lucide-react";
+import {
+  FileText,
+  Folder,
+  Globe,
+  ListTodo,
+  ScrollText,
+  Search,
+  Terminal,
+  Wrench,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
+const SKILL_TOOL_NAMES = new Set(["skill", "Skill"]);
+
 export const toolIcon = (meta: Pick<ToolMeta, "tool" | "toolType">): ReactElement => {
+  if (SKILL_TOOL_NAMES.has(meta.tool)) {
+    return <ScrollText className="size-3.5" />;
+  }
   const value = meta.toolType;
   if (value === "read") {
     return <FileText className="size-3.5" />;

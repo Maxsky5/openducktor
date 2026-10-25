@@ -670,6 +670,19 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "skill",
             toolType: "generic" as const,
+            status: "completed",
+            preview: "test-audit",
+            output: '<skill_content name="test-audit"># Skill: test-audit</skill_content>',
+          }),
+          "",
+        ),
+      ).toBe("test-audit");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "skill",
+            toolType: "generic" as const,
             status: "error",
             preview: "clean-ddd-hexagonal",
             error: "Skill not found",

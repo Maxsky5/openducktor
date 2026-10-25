@@ -3442,6 +3442,46 @@ describe("OpenCode V2 live observation", () => {
     expect(events[0]).toMatchObject({ part: history.parts[0] });
     expect(history.text).toBe("Hello");
   });
+  test("uses the skill name as the preview for native skill tools", () => {
+    const projector = new OpenCodeLiveMessageProjector();
+    projector.seed([
+      {
+        id: "msg_skill",
+        type: "assistant",
+        agent: "build",
+        model,
+        time: { created: 2 },
+        content: [
+          {
+            type: "tool",
+            id: "call_skill",
+            name: "skill",
+            time: { created: 3, ran: 4, completed: 5 },
+            state: {
+              status: "completed",
+              input: { id: "test-audit" },
+              content: [
+                {
+                  type: "text",
+                  text: '<skill_content name="test-audit"># Skill: test-audit</skill_content>',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+    const history = projectMessage(projector.messages.get("msg_skill")!);
+    expect(history.parts).toContainEqual(
+      expect.objectContaining({ kind: "tool", tool: "skill", preview: "test-audit" }),
+    );
+    expect(projector.snapshotEvents(ref.externalSessionId)).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({ kind: "tool", preview: "test-audit" }),
+      }),
+    );
+  });
   test.each(["text", "reasoning", "tool.input"] as const)(
     "emits only the addressed %s content during preparation, deltas, and completion",
     (kind) => {

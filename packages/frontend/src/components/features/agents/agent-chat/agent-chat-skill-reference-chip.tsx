@@ -1,5 +1,5 @@
 import type { AgentSkillReference } from "@openducktor/core";
-import { Blocks } from "lucide-react";
+import { ScrollText } from "lucide-react";
 import type { ComponentProps, ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ function AgentChatInlineSkillReferenceChip({
       {...props}
     >
       <span className={AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME}>
-        <Blocks className="size-3.5" />
+        <ScrollText className="size-3.5" />
       </span>
       <span className={AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME}>{skill.name}</span>
     </Badge>
