@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildSessionPolicyNoticeMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-notice-messages";
 import {
@@ -28,6 +29,7 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("text-warning-surface-foreground");
     expect(html).toContain("Claude permission mode mismatch");
     expect(html).toContain("Check your Claude permission settings.");
+    expect(html).not.toContain("<details");
   });
 
   test("renders user-stopped session notices as cancelled cards", () => {
@@ -54,6 +56,7 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("Stopped");
     expect(html).not.toContain("border-destructive-border");
     expect(html).not.toContain(">System<");
+    expect(html).not.toContain("<details");
   });
 
   test("wraps long unbroken session notice prose", () => {
@@ -104,6 +107,7 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain('data-notification-attention-id="2026-02-22T10:21:50.000Z"');
     expect(html).not.toContain("border-cancelled-border");
     expect(html).not.toContain(">System<");
+    expect(html).not.toContain("<details");
   });
 
   test("uses an explicit attention ID for a post-start send failure", () => {
@@ -156,6 +160,7 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).not.toContain("border-destructive-border");
     expect(html).not.toContain("border-cancelled-border");
     expect(html).not.toContain(">System<");
+    expect(html).not.toContain("<details");
   });
 
   test("renders running session compaction notices with a loader", () => {
@@ -183,19 +188,22 @@ describe("AgentChatMessageCard system messages", () => {
     expect(html).toContain("animate-spin");
   });
 
-  test("renders system prompt as expandable card", () => {
+  test.each([
+    { label: "Show system prompt", prefix: "System prompt:\n\n" },
+    { label: "Show instruction update", prefix: AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX },
+  ])("renders $label as an expandable card", ({ label, prefix }) => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
           id: "sys-1",
           role: "system",
-          content: "System prompt:\n\nAlways validate tool inputs before execution.",
+          content: `${prefix}Always validate tool inputs before execution.`,
           timestamp: "2026-02-22T10:22:00.000Z",
         },
       }),
     );
 
-    expect(html).toContain("Show system prompt");
+    expect(html).toContain(label);
     expect(html).toContain("Always validate tool inputs");
   });
 

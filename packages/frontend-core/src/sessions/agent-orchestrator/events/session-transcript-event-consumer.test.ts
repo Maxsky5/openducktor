@@ -7,6 +7,7 @@ import { applyAgentSessionLiveDelta } from "../session-read-model/agent-session-
 import { loadSessionHistoryIntoStore } from "../history/session-history-loader";
 import { createSessionHistoryReadGeneration } from "../history/session-history-read-generation";
 import { createSessionTurnState } from "../support/session-turn-state";
+import { historyToChatMessages } from "../support/session-history-chat-messages";
 import type { UpdateSession } from "./session-event-types";
 import {
   buildSession,
@@ -327,6 +328,112 @@ describe("agent session transcript event consumer", () => {
       consumer.close();
     }
   });
+
+  test.each(["msg-a", "msg-b"])(
+    "keeps an unlinked shell result from %s separate from another running call",
+    (messageId) => {
+      const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
+      const { consumer, sessionsRef } = createConsumerHarness(
+        0,
+        buildSession({ runtimeKind: "opencode" }),
+      );
+      const running = {
+        type: "assistant_part",
+        externalSessionId: liveRef.externalSessionId,
+        sessionRef: liveRef,
+        timestamp: "2026-10-25T08:00:01.000Z",
+        part: {
+          kind: "tool",
+          messageId: "msg-a",
+          partId: "call-a",
+          callId: "call-a",
+          tool: "shell",
+          toolType: "bash",
+          status: "running",
+          input: { command: "sleep 100", background: true },
+          output: "Command moved to the background",
+        },
+      } satisfies AgentSessionTranscriptEvent;
+      const result = {
+        ...running,
+        timestamp: "2026-10-25T08:00:02.000Z",
+        part: {
+          kind: "tool",
+          messageId,
+          partId: "msg-b:shell",
+          callId: "msg-b",
+          tool: "shell",
+          toolType: "bash",
+          status: "completed",
+          input: { command: "echo B" },
+          output: "B output",
+        },
+      } satisfies AgentSessionTranscriptEvent;
+      const completed = {
+        ...running,
+        timestamp: "2026-10-25T08:00:03.000Z",
+        part: { ...running.part, status: "completed", output: "A output" },
+      } satisfies AgentSessionTranscriptEvent;
+      try {
+        consumer.handle(running);
+        consumer.handle(result);
+        expect(getSessionMessages(sessionsRef)).toMatchObject([
+          {
+            id: "tool:msg-a:call-a",
+            meta: {
+              callId: "call-a",
+              status: "running",
+              input: { command: "sleep 100", background: true },
+              output: "Command moved to the background",
+            },
+          },
+          {
+            id: `tool:${messageId}:msg-b`,
+            meta: {
+              callId: "msg-b",
+              status: "completed",
+              input: { command: "echo B" },
+              output: "B output",
+            },
+          },
+        ]);
+
+        consumer.handle(completed);
+        expect(getSessionMessages(sessionsRef)).toMatchObject([
+          {
+            id: "tool:msg-a:call-a",
+            meta: { callId: "call-a", status: "completed", output: "A output" },
+          },
+          {
+            id: `tool:${messageId}:msg-b`,
+            meta: { callId: "msg-b", status: "completed", output: "B output" },
+          },
+        ]);
+        const history = historyToChatMessages(
+          [
+            {
+              messageId: "msg-a",
+              role: "assistant",
+              timestamp: running.timestamp,
+              text: "",
+              parts: [completed.part],
+            },
+            {
+              messageId,
+              role: "assistant",
+              timestamp: result.timestamp,
+              text: "",
+              parts: [result.part],
+            },
+          ],
+          { role: "spec" },
+        );
+        expect(getSessionMessages(sessionsRef)).toMatchObject(history);
+      } finally {
+        consumer.close();
+      }
+    },
+  );
 
   for (const runtimeKind of ["opencode", "codex", "claude"] as const) {
     for (const batchWindowMs of [0, 60_000]) {

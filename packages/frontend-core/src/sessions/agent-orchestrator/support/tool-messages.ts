@@ -42,9 +42,7 @@ export const resolveToolMessageId = (
         entry.meta.tool === part.tool &&
         entry.meta.callId === part.callId,
     );
-    if (byCallId) {
-      return byCallId.id;
-    }
+    return byCallId?.id ?? fallbackId;
   }
 
   if (part.status === "pending" || part.status === "running") {

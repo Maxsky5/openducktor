@@ -2429,9 +2429,14 @@ describe("OpenCode V2 live observation", () => {
               sessionID: ref.externalSessionId,
               type: "synthetic",
               payload: {
-                text: "Native background shell result",
-                description: "Shell completed",
-                metadata: { source: "shell" },
+                text: '<shell id="sh_background" state="completed" command="bun run test">\nNative background shell result\n</shell>',
+                description: "bun run test",
+                metadata: {
+                  source: "shell",
+                  shellID: "sh_background",
+                  state: "completed",
+                  exit: 0,
+                },
               },
               delivery: "steer",
               time: { created: 9 },
@@ -2499,19 +2504,38 @@ describe("OpenCode V2 live observation", () => {
         type: "session_event",
         externalSessionId: ref.externalSessionId,
         event: {
-          type: "session_policy_notice",
+          type: "assistant_part",
           externalSessionId: ref.externalSessionId,
-          messageId: "msg_background",
-          message: "Native background shell result",
           timestamp: new Date(10).toISOString(),
+          part: {
+            kind: "tool",
+            messageId: "msg_background",
+            partId: "msg_background:shell",
+            callId: "msg_background",
+            tool: "shell",
+            toolType: "bash",
+            status: "completed",
+            input: { command: "bun run test" },
+            output: "Native background shell result",
+            resultContent: [{ kind: "text", text: "Native background shell result" }],
+            endedAtMs: 10,
+            metadata: {
+              shellID: "sh_background",
+              state: "completed",
+              status: "completed",
+              exit: 0,
+              backgroundTaskId: "sh_background",
+              backgroundTaskStatus: "completed",
+            },
+          },
         },
       });
       expect(
         signals.filter(
           (signal) =>
             signal.type === "session_event" &&
-            signal.event.type === "session_policy_notice" &&
-            signal.event.messageId === "msg_background",
+            signal.event.type === "assistant_part" &&
+            signal.event.part.messageId === "msg_background",
         ),
       ).toHaveLength(1);
       expect(signals).toContainEqual({

@@ -391,7 +391,10 @@ describe("OpenCode V2 conversation identity and history", () => {
         },
       ],
     });
-    expect(history[2]?.text).toContain("Native output was truncated.");
+    expect(history[2]).toMatchObject({
+      role: "assistant",
+      parts: [{ kind: "tool", toolType: "bash", output: "Passed\nNative output was truncated." }],
+    });
     expect(requests.every((request) => request.method === "GET")).toBe(true);
     expect(
       requests

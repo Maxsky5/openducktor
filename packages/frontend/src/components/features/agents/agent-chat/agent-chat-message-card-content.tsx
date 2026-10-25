@@ -709,25 +709,47 @@ const ToolMessageBody = ({
   );
 };
 
-const renderInstructionsMessage = (
+const SystemMessageDisclosure = ({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): ReactElement => (
+  <details className="rounded border border-border">
+    <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {label}
+    </summary>
+    <div className="border-t border-border p-2">{children}</div>
+  </details>
+);
+
+const renderSystemMessage = (
   message: AgentChatMessage,
   systemPromptBody: string,
+  sessionRuntimeKind: RuntimeKind | null,
 ): ReactElement | null => {
   if (message.role !== "system") return null;
   const isInstructionUpdate = message.content.startsWith(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX);
-  if (!isInstructionUpdate && !message.content.startsWith(SYSTEM_PROMPT_PREFIX)) return null;
-  const instructions = isInstructionUpdate
-    ? message.content.slice(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX.length)
-    : systemPromptBody;
-  return (
-    <details className="rounded border border-border">
-      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
-        {isInstructionUpdate ? "Show instruction update" : "Show system prompt"}
-      </summary>
-      <div className="border-t border-border p-2">
+  if (isInstructionUpdate || message.content.startsWith(SYSTEM_PROMPT_PREFIX)) {
+    const instructions = isInstructionUpdate
+      ? message.content.slice(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX.length)
+      : systemPromptBody;
+    return (
+      <SystemMessageDisclosure
+        label={isInstructionUpdate ? "Show instruction update" : "Show system prompt"}
+      >
         <AgentChatMarkdownRenderer markdown={instructions} variant="compact" />
-      </div>
-    </details>
+      </SystemMessageDisclosure>
+    );
+  }
+  if (sessionRuntimeKind !== "opencode") return null;
+  return (
+    <SystemMessageDisclosure label="Show system message">
+      <AgentChatTranscriptProse className="leading-6 text-foreground">
+        {message.content}
+      </AgentChatTranscriptProse>
+    </SystemMessageDisclosure>
   );
 };
 
@@ -795,8 +817,8 @@ export const MessageBody = ({
     return <SessionNoticeMessage message={message} timeLabel={timeLabel} />;
   }
 
-  const instructionsMessage = renderInstructionsMessage(message, systemPromptBody);
-  if (instructionsMessage) return instructionsMessage;
+  const systemMessage = renderSystemMessage(message, systemPromptBody, sessionRuntimeKind);
+  if (systemMessage) return systemMessage;
 
   if (message.role === "user") {
     return <UserMessage message={message} timeLabel={timeLabel} />;
