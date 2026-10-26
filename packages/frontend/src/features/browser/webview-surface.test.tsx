@@ -111,10 +111,10 @@ describe("WebviewBrowserSurface agent focus guard", () => {
     setSystemTime();
   });
 
-  test("keeps composer focus and selection while hidden tabs alternately take focus", () => {
-    const { channel } = createChannelFixture();
+  test.each(["hidden", "hide", "press"])("avoids focus cycles across tabs (%s)", (scenario) => {
+    const { channel, emit } = createChannelFixture();
     const focus = createBrowserFocusRegistry();
-    render(
+    const content = (isShown: boolean) => (
       <>
         <textarea aria-label="Composer" defaultValue="Keep typing here" />
         {[TAB_ID, OTHER_TAB_ID].map((tabId) => (
@@ -123,13 +123,14 @@ describe("WebviewBrowserSurface agent focus guard", () => {
             bridge={bridge}
             channel={channel}
             focus={focus}
-            isShown={false}
+            isShown={isShown}
             tabId={tabId}
             workspaceId="workspace-1"
           />
         ))}
-      </>,
+      </>
     );
+    const view = render(content(scenario !== "hidden"));
     const composer = screen.getByLabelText<HTMLTextAreaElement>("Composer");
     composer.focus();
     composer.setSelectionRange(5, 11, "backward");
@@ -143,6 +144,18 @@ describe("WebviewBrowserSurface agent focus guard", () => {
       });
     });
     try {
+      if (scenario !== "hidden") {
+        for (const webview of webviews) pressFocus(webview);
+        focus.focusPage(TAB_ID, { fromKeyboard: false });
+        if (scenario === "hide") view.rerender(content(false));
+        else {
+          for (const tabId of [TAB_ID, OTHER_TAB_ID]) emit(press(tabId, true));
+        }
+        focus.focusPage(OTHER_TAB_ID, { fromKeyboard: false });
+        const expected = scenario === "hide" ? document.body : webviews[0];
+        expect(document.activeElement === expected).toBe(true);
+        composer.focus();
+      }
       for (let round = 0; round < 5; round += 1) {
         for (const webview of webviews) {
           pressFocus(webview);

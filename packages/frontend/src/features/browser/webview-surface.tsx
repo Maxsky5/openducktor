@@ -75,6 +75,7 @@ export function WebviewBrowserSurface({
     // display value leaves the page at the default iframe height of 150 px. A page without a
     // background is white, as in a browser.
     className: "flex h-full w-full bg-white",
+    "data-browser-shown": isShown,
     "data-testid": "browser-webview",
   });
 }
@@ -90,7 +91,7 @@ export function DevToolsWebviewSurface({ frontendUrl }: { frontendUrl: string })
 }
 
 /**
- * Keeps user focus outside hidden pages, and outside shown pages during an agent press.
+ * Preserves user focus when a hidden page or an agent press moves it.
  * Electron can focus a guest without a webview focus event. The window blur event also reports
  * that move, after its active element changes to the webview. Hidden pages stay guarded even
  * before the press notification arrives or after it ends.
@@ -105,6 +106,7 @@ const useAgentFocusGuard = (
   useEffect(() => {
     if (element === null) return;
     let guardUntil = 0;
+    const isGuarded = (): boolean => !isShownNow() || Date.now() <= guardUntil;
     let userFocus = focusedElement() === element ? null : focusedElement();
     const unsubscribe = channel.subscribe((message) => {
       if (message.type !== "agent_press" || message.tabId !== tabId) return;
@@ -113,7 +115,7 @@ const useAgentFocusGuard = (
     const onFocusIn = (event: FocusEvent): void => {
       const active = focusedElement();
       // A nested focus restore can finish before the original focusin event reaches this guard.
-      if (active !== null && active !== element && event.target === active) {
+      if (active !== null && event.target === active && (active !== element || !isGuarded())) {
         userFocus = active;
       }
     };
@@ -124,9 +126,9 @@ const useAgentFocusGuard = (
       });
     };
     const onFocus = (): void => {
-      if (focusedElement() !== element || (isShownNow() && Date.now() > guardUntil)) return;
-      if (userFocus?.isConnected) {
-        userFocus.focus({ preventScroll: true });
+      if (focusedElement() !== element || !isGuarded()) return;
+      if (userFocus?.isConnected && userFocus.getAttribute("data-browser-shown") !== "false") {
+        if (userFocus !== element) userFocus.focus({ preventScroll: true });
         return;
       }
       element.blur();
