@@ -28,7 +28,7 @@ The sidebar excludes sessions for `closed` tasks. If the visible task closes, th
 
 ## Issue types
 
-The issue types are `feature`, `task`, and `bug`.
+The built-in workflow has the issue types `feature`, `task`, and `bug`.
 
 `feature` uses this path:
 
@@ -71,18 +71,10 @@ The `tasks_artifacts` table stores workflow history and the current version of e
 
 | Classification | Identity | Content | Revisions |
 |---|---|---|---|
-| Workflow | Task ID and fixed workflow kind. | Markdown text with `plain_text` format. | Append a row for each revision. |
+| Workflow | Task ID and artifact code. | Markdown text with `plain_text` format. | Append a row for each revision. |
 | Free | Generated artifact ID. | Exact file bytes, filename, media type, and byte size. | Keep one row and increment revision on change. |
 
-Workflow rows keep their source tool, updater, update time, and optional review verdict. The stored workflow kinds are `spec`, `implementation_plan`, and `qa_report`. Only the SQLite adapter maps public artifact codes to these stored kinds and IDs. Public artifact IDs use `workflow:<taskId>:<code>`. Stored `sourceTool` values retain the existing domain operation names for provenance; they are not public MCP writer names.
-
-```json
-[
-  { "kind": "spec", "sourceTool": "odt_set_spec" },
-  { "kind": "implementation_plan", "sourceTool": "odt_set_plan" },
-  { "kind": "qa_report", "sourceTool": "odt_qa_approved" }
-]
-```
+Workflow rows store the public artifact code, such as `spec`, `plan`, or `qaReport`, and the ID `workflow:<taskId>:<code>`. Each row keeps its source command, writer, update time, and optional review verdict. A new row records `odt_set_task_artifact` or `workflow_artifact_save` as `sourceTool`, and the writer role or `user` as `updatedBy`. Rows from before migration 0009 keep their earlier `sourceTool` values.
 
 A free artifact can contain up to 10 MiB. Its display name never selects a workflow role. Replacement keeps its identity and display name. Closed tasks retain all artifacts but reject free-artifact changes.
 

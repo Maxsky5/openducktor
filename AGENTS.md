@@ -113,7 +113,7 @@ Read [docs/external-mcp.md](docs/external-mcp.md) before you change the MCP pack
 
 Read [docs/agent-orchestrator-module-map.md](docs/agent-orchestrator-module-map.md) before you change Agent Studio orchestration.
 
-- Keep `ODT_TOOL_SCHEMAS` and `AGENT_ROLE_TOOL_POLICY` consistent.
+- Keep `ODT_TOOL_SCHEMAS` and the role tool lists of the built-in workflow consistent.
 - Update every affected layer in the same change when a shared workflow tool or role policy changes.
 
 ## Tests

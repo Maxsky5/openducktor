@@ -37,12 +37,12 @@ describe("workflow docs contract", () => {
     );
   });
 
-  test("status model examples retain stored sourceTool provenance names", () => {
+  test("status model names the stored sourceTool values of new workflow rows", () => {
     const statusModelPath = join(import.meta.dir, "../../../../docs/task-workflow-status-model.md");
     const statusModelDoc = readFileSync(statusModelPath, "utf8");
 
-    expect(statusModelDoc).toContain('"sourceTool": "odt_set_spec"');
-    expect(statusModelDoc).toContain('"sourceTool": "odt_set_plan"');
-    expect(statusModelDoc).toContain('"sourceTool": "odt_qa_approved"');
+    expect(statusModelDoc).toContain(
+      "`odt_set_task_artifact` or `workflow_artifact_save` as `sourceTool`",
+    );
   });
 });

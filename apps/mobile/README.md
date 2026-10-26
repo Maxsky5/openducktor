@@ -121,7 +121,7 @@ The app needs a host with Remote control turned on. Open Settings, Remote contro
 Do these steps once on each development machine.
 
 1. Install Android Studio, for example with `brew install --cask android-studio`. Open it once. Its setup wizard installs the Android SDK, the emulator, and the platform tools in `~/Library/Android/sdk`.
-2. Add these lines to your shell profile, such as `~/.zshrc`, and open a new terminal. Gradle needs a JDK 21 or later and `ANDROID_HOME` to find the SDK. Android Studio includes a JDK. Change `JAVA_HOME` only to use another JDK 21 or later.
+2. Add these lines to your shell profile, such as `~/.zshrc`, and open a new terminal. Gradle needs JDK 21 or later and `ANDROID_HOME`. The first line uses the JDK that Android Studio includes.
 
    ```sh
    export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
@@ -129,7 +129,7 @@ Do these steps once on each development machine.
    export PATH="$JAVA_HOME/bin:$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"
    ```
 
-3. Make sure that `java -version` shows version 21 or later in a new terminal.
+3. In a new terminal, make sure that `java -version` shows version 21 or later.
 
 4. In Android Studio, open Device Manager and create a virtual device with a recent Pixel profile and an API 36 system image. Use an ARM64 image on Apple silicon.
 

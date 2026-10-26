@@ -53,7 +53,7 @@ A new runtime kind plugs in through one `RuntimeDriver` from `@openducktor/runti
 
 Each session operation sends the directory of its session to the shared runtime. Do not depend on the directory of one workspace.
 
-Codex can return a canonical directory path such as `/private/tmp` for a session saved under `/tmp`. The host compares differing paths through the filesystem port. It reports resolution failures and rejects different directories. Keep exact session ID and ownership checks, and retain the saved directory in live session references.
+Codex can report the real path of a session directory, such as `/private/tmp` for a session saved under `/tmp`. When the paths differ, the host compares their real paths through the filesystem port. A path that does not resolve fails with its cause, and a different directory fails. Session ID and ownership checks stay exact, and live session references keep the saved directory.
 
 ### Workspace binding of OpenDucktor tools
 
@@ -368,7 +368,7 @@ Existing custom overrides remain active. Users must review, update, or disable o
 
 ### Permissions and pending input
 
-The roles of the built-in workflow definition in `packages/workflows` list the canonical `odt_*` tools of each role. `AGENT_ROLE_TOOL_POLICY` reads them from the definition. The runtime descriptor in `packages/contracts` maps them to native aliases and lists native tools blocked for read-only roles. Adapters classify native tools and apply native permissions.
+Each role of the task workflow lists its canonical `odt_*` tools. Adapters read the tools and workspace access of a session role through the `WorkflowRolePolicyResolver`. The runtime descriptor in `packages/contracts` maps the canonical tools to native aliases and lists native tools blocked for read-only roles. Adapters classify native tools and apply native permissions.
 
 Inherit native permissions and sandbox settings. Add session hooks through SDK options. Let unclassified tools use the native approval path. Shared code does not edit user settings or parse shell commands.
 

@@ -53,7 +53,7 @@ Stop also cancels Autopilot submissions that are still being prepared. A cancele
 
 Builder can revise the spec with `odt_set_task_artifact` and code `spec`, and the plan with code `plan` when implementation findings require artifact changes. Builder must get user approval before changing required scope, design contracts, or security posture. Each call saves the complete Markdown artifact for the session task. Revisions from `in_progress`, `blocked`, `ai_review`, or `human_review` keep the task status unchanged.
 
-Manual document saves use `workflowArtifactSave` with `submit: false`. They keep task status unchanged, including on closed tasks. They send no workflow event.
+Manual document saves use `workflow_artifact_save` with `submit: false`. They keep task status unchanged, including on closed tasks. They send no workflow event.
 
 `odt_set_task_artifact` submits workflow artifacts. A document save sends the save event of its artifact. A review save requires a declared verdict, sends the event of that verdict, and commits the report with its status change. Code `qaReport` completes one QA review pass. Build completion remains separate. Managed workflow writes follow the role policy described in [external MCP](external-mcp.md#tool-access).
 

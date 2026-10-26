@@ -41,11 +41,11 @@ The unit of work OpenDucktor coordinates through specification, planning, buildi
 _Avoid_: ticket, card, issue
 
 **Issue Type**:
-The category of a **Task** that determines workflow expectations. OpenDucktor **Issue Types** are `feature`, `task`, and `bug`.
+The category of a **Task** that determines workflow expectations. The built-in workflow has the **Issue Types** `feature`, `task`, and `bug`.
 _Avoid_: task type, label, kind, category
 
 **Task Status**:
-The SQLite-backed lifecycle status of a **Task**. OpenDucktor **Task Statuses** are `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review`, and `closed`. `ai_review` and `human_review` are statuses, not review activities.
+The SQLite-backed lifecycle status of a **Task**. The built-in workflow has the **Task Statuses** `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review`, and `closed`. `ai_review` and `human_review` are statuses, not review activities.
 _Avoid_: phase, lane, label
 
 **Task Workflow**:
