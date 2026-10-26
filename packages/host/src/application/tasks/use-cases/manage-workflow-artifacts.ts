@@ -13,7 +13,7 @@ export type WorkflowArtifactSaveResult = {
 };
 
 /** The workflow artifact with this code, or an error that lists the workflow codes. */
-export const requireWorkflowArtifact = (workflow: TaskWorkflow, code: string) => {
+const requireWorkflowArtifact = (workflow: TaskWorkflow, code: string) => {
   const artifact = workflow.artifact(code);
   return artifact
     ? Effect.succeed(artifact)

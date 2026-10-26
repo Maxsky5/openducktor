@@ -80,14 +80,14 @@ const artifactRowsSchema = z.array(
 
 const readArtifactRows = (taskId: string) => {
   const database = new Database(harness.databasePath, { readonly: true });
+  const statement = database.prepare(
+    "select artifact_id, code, revision, verdict, source_tool, updated_by from tasks_artifacts where task_id = ? and classification = 'workflow' order by code, revision",
+  );
   try {
-    const rows = database
-      .prepare(
-        "select artifact_id, code, revision, verdict, source_tool, updated_by from tasks_artifacts where task_id = ? and classification = 'workflow' order by code, revision",
-      )
-      .all(taskId);
-    return artifactRowsSchema.parse(rows);
+    return artifactRowsSchema.parse(statement.all(taskId));
   } finally {
+    // An open statement keeps the file open, and Windows then cannot remove the test directory.
+    statement.finalize();
     database.close();
   }
 };

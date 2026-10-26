@@ -20,14 +20,14 @@ export type PromptTemplate = {
 };
 
 /** The shared system templates, in prompt order after the role template. */
-export const SHARED_SYSTEM_TEMPLATE_IDS = [
+const SHARED_SYSTEM_TEMPLATE_IDS = [
   "system.shared.workflow_guards",
   "system.shared.tool_protocol",
   "system.shared.task_context",
 ] as const;
-export const READ_ONLY_REJECTION_TEMPLATE_ID = "permission.read_only.reject";
+const READ_ONLY_REJECTION_TEMPLATE_ID = "permission.read_only.reject";
 /** The system template of a role. */
-export const roleSystemTemplateId = (roleId: string): string => `system.role.${roleId}.base`;
+const roleSystemTemplateId = (roleId: string): string => `system.role.${roleId}.base`;
 
 export type PromptTaskContext = {
   taskId: string;

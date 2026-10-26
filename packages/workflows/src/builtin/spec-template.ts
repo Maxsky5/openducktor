@@ -1,4 +1,4 @@
-export const specTemplateSections = [
+const specTemplateSections = [
   {
     heading: "Purpose",
     purpose: "Why this feature exists and the expected user/developer outcome.",
