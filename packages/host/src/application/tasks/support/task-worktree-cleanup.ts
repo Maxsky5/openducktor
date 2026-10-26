@@ -28,6 +28,7 @@ import type {
   TaskWorktreeServiceError,
 } from "../worktrees/task-worktree-service";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
+import { startWorktreeSessionHint } from "./task-workflow-events";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
 import { runTaskRuntimeCleanup, selectWorkflowCleanupSessionRecords } from "./task-cleanup-support";
 
@@ -340,6 +341,7 @@ export const loadTaskBranchCleanup = (
     taskWorktreeService: TaskWorktreeService;
     workspaceSettingsService: WorkspaceSettingsService;
   },
+  workflow: TaskWorkflow,
   task: TaskRecord,
   repoPath: string,
   taskId: string,
@@ -360,7 +362,7 @@ export const loadTaskBranchCleanup = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `${operationLabel} requires a task worktree for task ${taskId}. Start Builder first.`,
+          message: `${operationLabel} requires a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
           details: { repoPath, taskId },
         }),
       );

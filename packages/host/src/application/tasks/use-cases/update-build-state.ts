@@ -110,7 +110,7 @@ export const createTaskBuildStateUseCases = ({
         .filter(Boolean);
       if (postCompleteHooks.length > 0) {
         const worktreePathResult = yield* Effect.result(
-          buildCompletionWorktreePath(dependencies.settingsConfig, repoConfig, taskId),
+          buildCompletionWorktreePath(dependencies.settingsConfig, workflow, repoConfig, taskId),
         );
         if (worktreePathResult._tag === "Failure") {
           yield* blockBuildCompletionTask(taskStore, workflow, repoPath, taskId, current);

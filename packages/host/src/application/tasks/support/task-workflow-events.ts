@@ -176,3 +176,7 @@ export const formatStatusList = (statuses: readonly string[]): string => {
   if (statuses.length < 3) return statuses.join(" or ");
   return `${statuses.slice(0, -1).join(", ")}, or ${statuses.at(-1)}`;
 };
+
+/** Tells the user to start a session of a role that creates the task worktree. */
+export const startWorktreeSessionHint = (workflow: TaskWorkflow): string =>
+  `Start a ${formatStatusList(workflow.worktreeRoles.map((role) => workflow.role(role).label))} session first.`;

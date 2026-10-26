@@ -768,6 +768,7 @@ describe("task worktree cleanup", () => {
             defaultTargetBranch: { remote: "origin", branch: "main" },
           }),
         },
+        builtinTaskWorkflow,
         task(),
         "/repo",
         "task-1",
@@ -791,6 +792,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
+          builtinTaskWorkflow,
           task(),
           "/repo",
           "task-1",
@@ -798,7 +800,7 @@ describe("task worktree cleanup", () => {
         ),
       ),
     ).rejects.toThrow(
-      "direct_merge requires a task worktree for task task-1. Start Builder first.",
+      "direct_merge requires a task worktree for task task-1. Start a Builder or QA session first.",
     );
 
     await expect(
@@ -818,6 +820,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
+          builtinTaskWorkflow,
           task(),
           "/repo",
           "task-1",
@@ -843,6 +846,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
+          builtinTaskWorkflow,
           task(),
           "/repo",
           "task-1",

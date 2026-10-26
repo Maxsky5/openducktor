@@ -110,13 +110,6 @@ export const createTaskPullRequestManagementUseCases = ({
             cause,
           }),
       });
-      if (!approval.workingDirectory) {
-        return yield* new HostValidationError({
-          field: "taskId",
-          message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
-          details: { repoPath: effectiveRepoPath, taskId },
-        });
-      }
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
       const isAzureDevOps = provider.getDescriptor().id === "azure_devops";

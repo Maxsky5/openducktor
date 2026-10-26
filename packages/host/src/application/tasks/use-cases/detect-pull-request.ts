@@ -30,7 +30,8 @@ export const createTaskPullRequestDetectionUseCase = ({
         }),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* requirePullRequestManagement(taskWorkflows.forRepo(repoPath), current);
+      const workflow = taskWorkflows.forRepo(repoPath);
+      yield* requirePullRequestManagement(workflow, current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest !== undefined) {
         return yield* Effect.fail(
@@ -53,6 +54,7 @@ export const createTaskPullRequestDetectionUseCase = ({
       const effectiveRepoPath = repoConfig.repoPath;
       const taskContext = yield* loadTaskBranchCleanup(
         dependencies,
+        workflow,
         current,
         effectiveRepoPath,
         taskId,

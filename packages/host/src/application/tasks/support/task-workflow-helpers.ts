@@ -18,7 +18,12 @@ import type {
 } from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { taskWorktreeIdError } from "../worktrees/task-worktree-id";
-import { requireEffect, requireTaskEvent, type HostEffect } from "./task-workflow-events";
+import {
+  requireEffect,
+  requireTaskEvent,
+  startWorktreeSessionHint,
+  type HostEffect,
+} from "./task-workflow-events";
 
 /** Decides a named event for a task and commits its transition. A repeat returns the task. */
 export const applyTaskEvent = (
@@ -158,6 +163,7 @@ export const loadDefaultMergeMethod = (
   });
 export const buildCompletionWorktreePath = (
   settingsConfig: SettingsConfigPort,
+  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   taskId: string,
 ) =>
@@ -173,7 +179,7 @@ export const buildCompletionWorktreePath = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. Start Builder first.`,
+          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
           details: { taskId, worktreePath },
         }),
       );
@@ -184,7 +190,7 @@ export const buildCompletionWorktreePath = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. Start Builder first.`,
+          message: `The worktree path of task ${taskId} is the repository root. Change the worktree base path in the repository settings.`,
           details: { taskId, worktreePath },
         }),
       );

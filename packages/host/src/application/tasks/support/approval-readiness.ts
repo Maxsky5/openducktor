@@ -17,7 +17,11 @@ import type { TaskServiceUseCaseInput } from "../task-service";
 import type { DirectMergeInput } from "../task-inputs";
 import { requireDependencies, requireDirectMergeDependencies } from "./required-task-dependencies";
 import { ensureNoDirectMergeEffect } from "./direct-merge-block";
-import { requireEffect, requireHumanReviewStatus } from "./task-workflow-events";
+import {
+  requireEffect,
+  requireHumanReviewStatus,
+  startWorktreeSessionHint,
+} from "./task-workflow-events";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
@@ -46,7 +50,7 @@ export const loadOpenApprovalContext = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
+          message: `Human approval requires a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
           details: { repoPath: effectiveRepoPath, taskId },
         }),
       );

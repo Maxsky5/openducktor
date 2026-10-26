@@ -117,19 +117,19 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       }
 
+      const loadCleanup = loadTaskBranchCleanup(
+        dependencies,
+        workflow,
+        current,
+        repoPath,
+        taskId,
+        "Pull request linking",
+      );
       let cleanup: TaskBranchCleanup | null = null;
       if (metadata.pullRequest === undefined) {
-        cleanup = yield* loadTaskBranchCleanup(
-          dependencies,
-          current,
-          repoPath,
-          taskId,
-          "Pull request linking",
-        );
+        cleanup = yield* loadCleanup;
       } else {
-        const cleanupResult = yield* Effect.result(
-          loadTaskBranchCleanup(dependencies, current, repoPath, taskId, "Pull request linking"),
-        );
+        const cleanupResult = yield* Effect.result(loadCleanup);
         if (cleanupResult._tag === "Success") {
           cleanup = cleanupResult.success;
         } else {

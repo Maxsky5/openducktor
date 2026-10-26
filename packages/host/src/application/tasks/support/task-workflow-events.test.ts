@@ -1,4 +1,5 @@
 import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -10,6 +11,7 @@ import {
   requirePullRequestManagement,
   requireTaskEvent,
   requireTaskEventInput,
+  startWorktreeSessionHint,
 } from "./task-workflow-events";
 import { blockBuildCompletionTask } from "./task-workflow-helpers";
 
@@ -124,6 +126,15 @@ describe("task workflow events", () => {
     expect(formatStatusList(["open"])).toBe("open");
     expect(formatStatusList(["ai_review", "human_review"])).toBe("ai_review or human_review");
     expect(formatStatusList(["open", "blocked", "closed"])).toBe("open, blocked, or closed");
+  });
+
+  test("names the worktree roles of the task workflow", () => {
+    expect(startWorktreeSessionHint(builtinTaskWorkflow)).toBe(
+      "Start a Builder or QA session first.",
+    );
+    expect(startWorktreeSessionHint(createReviewTaskWorkflow())).toBe(
+      "Start a Writer session first.",
+    );
   });
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
