@@ -23,7 +23,7 @@
       "dependencies": {
         "@azure/msal-node-extensions": "^5.5.2",
         "@ff-labs/fff-node": "0.11.0",
-        "node-pty": "1.2.0-beta.15",
+        "node-pty": "1.2.0-beta.18",
         "playwright-core": "1.64.1",
       },
       "devDependencies": {
@@ -356,7 +356,7 @@
         "bippy": "0.7.3",
         "bun-types": "^1.4.2",
         "drizzle-kit": "0.31.11",
-        "node-pty": "1.2.0-beta.15",
+        "node-pty": "1.2.0-beta.18",
       },
     },
     "packages/host-client": {
@@ -397,7 +397,7 @@
       "dependencies": {
         "@azure/msal-node-extensions": "^5.5.2",
         "@ff-labs/fff-node": "0.11.0",
-        "node-pty": "1.2.0-beta.15",
+        "node-pty": "1.2.0-beta.18",
         "playwright-core": "1.64.1",
       },
       "devDependencies": {
@@ -3062,7 +3062,7 @@
 
     "node-mock-http": ["node-mock-http@1.0.5", "", {}, "sha512-KQyt/wLjG3TAc7DOUhpqWzgd4ERxR80JOlTK5VE5R1S12IaPVN5qkj4klBce9HPG1Njuup4Sb5bljaT34lIyjw=="],
 
-    "node-pty": ["node-pty@1.2.0-beta.15", "", { "dependencies": { "node-addon-api": "^7.1.0" } }, "sha512-vORSzHXi4Ofl7HemVWpuudLqCPdaQb4LfpRCUpE5HPxhp4JYscl8zZwxh11p26v2wvW24WMwnMfLjhRLixrfxA=="],
+    "node-pty": ["node-pty@1.2.0-beta.18", "", { "dependencies": { "node-addon-api": "^7.1.0" } }, "sha512-3Rej3788OnasAwoSmTZhlCeUraJ9CQldtL5b571b9+3Nv47+PaxA5VPIGOOs+16OYQePTrC1Lrs8a9/df5WPRg=="],
 
     "node-releases": ["node-releases@2.0.60", "", {}, "sha512-OmO8+GM1JUZqXET720VrJCwkjUCXmCMQm0Z3UDDRbfNLHS4NEAvY60j5jiFv0tkKw2PNNlqOLhahVmwJIOLDIQ=="],
 
