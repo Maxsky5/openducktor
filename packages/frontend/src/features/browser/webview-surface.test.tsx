@@ -43,10 +43,10 @@ const press = (tabId: string, pressing: boolean): BrowserServerMessage => ({
   pressing,
 });
 
-const renderSurface = () => {
+const renderSurface = (isShown = true) => {
   const { channel, emit } = createChannelFixture();
   const focus = createBrowserFocusRegistry();
-  render(
+  const content = (shown: boolean) => (
     <>
       <textarea aria-label="Composer" />
       <input aria-label="Search" />
@@ -54,18 +54,35 @@ const renderSurface = () => {
         bridge={bridge}
         channel={channel}
         focus={focus}
+        isShown={shown}
         tabId={TAB_ID}
         workspaceId="workspace-1"
       />
-    </>,
+    </>
   );
-  return { emit, focus, webview: screen.getByTestId("browser-webview") };
+  const view = render(content(isShown));
+  return {
+    emit,
+    focus,
+    webview: screen.getByTestId("browser-webview"),
+    show: () => view.rerender(content(true)),
+  };
 };
 
 /** Moves the focus to the `<webview>`, as Electron does when a press reaches its guest. */
 const pressFocus = (webview: HTMLElement): void => {
   webview.tabIndex = -1;
   webview.focus();
+};
+
+/** Electron can focus its guest without sending the public webview focus event. */
+const focusGuest = (webview: HTMLElement): void => {
+  webview.addEventListener("focus", (event) => event.stopImmediatePropagation(), {
+    capture: true,
+    once: true,
+  });
+  pressFocus(webview);
+  window.dispatchEvent(new Event("blur"));
 };
 
 describe("WebviewBrowserSurface layout", () => {
@@ -93,6 +110,61 @@ describe("WebviewBrowserSurface agent focus guard", () => {
   afterEach(() => {
     setSystemTime();
   });
+
+  test("keeps the composer focus and selection when Electron reports only a window blur", async () => {
+    const { emit, webview } = renderSurface();
+    const composer = screen.getByLabelText<HTMLTextAreaElement>("Composer");
+    composer.value = "Keep typing here";
+    composer.focus();
+    composer.setSelectionRange(5, 11, "backward");
+
+    emit(press(TAB_ID, true));
+    focusGuest(webview);
+    await Promise.resolve();
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Composer");
+    expect([composer.selectionStart, composer.selectionEnd, composer.selectionDirection]).toEqual([
+      5,
+      11,
+      "backward",
+    ]);
+    expect(composer.value).toBe("Keep typing here");
+  });
+
+  test("keeps focus outside a hidden page before its press notification and after it settles", async () => {
+    const { emit, webview } = renderSurface(false);
+    const search = screen.getByLabelText("Search");
+    search.focus();
+
+    focusGuest(webview);
+    await Promise.resolve();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Search");
+
+    setSystemTime(new Date("2026-10-13T10:00:00.000Z"));
+    emit(press(TAB_ID, false));
+    setSystemTime(new Date("2026-10-13T10:00:01.000Z"));
+    focusGuest(webview);
+    await Promise.resolve();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Search");
+  });
+
+  test.each(["running", "settling"])(
+    "keeps a %s press guarded when its hidden tab is shown",
+    async (state) => {
+      const { emit, show, webview } = renderSurface(false);
+      screen.getByLabelText("Composer").focus();
+      setSystemTime(new Date("2026-10-13T10:00:00.000Z"));
+      emit(press(TAB_ID, true));
+      if (state === "settling") emit(press(TAB_ID, false));
+      setSystemTime(new Date("2026-10-13T10:00:00.200Z"));
+
+      show();
+      focusGuest(webview);
+      await Promise.resolve();
+
+      expect(document.activeElement?.getAttribute("aria-label")).toBe("Composer");
+    },
+  );
 
   test("gives the focus back to the element that the user has focused when an agent press moves it", () => {
     const { emit, webview } = renderSurface();
@@ -127,11 +199,12 @@ describe("WebviewBrowserSurface agent focus guard", () => {
     expect(document.activeElement).toBe(webview);
   });
 
-  test("leaves the focus on the page when the user clicks it and no agent press runs", () => {
+  test("leaves the focus on the page when the user clicks it and no agent press runs", async () => {
     const { webview } = renderSurface();
     screen.getByLabelText("Composer").focus();
 
-    pressFocus(webview);
+    focusGuest(webview);
+    await Promise.resolve();
 
     expect(document.activeElement).toBe(webview);
   });

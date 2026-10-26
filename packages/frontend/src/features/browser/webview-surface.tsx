@@ -1,5 +1,5 @@
 import { BROWSER_BLANK_URL } from "@openducktor/contracts";
-import { createElement, useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useEffectEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { WebviewBrowserBridge } from "@/lib/shell-bridge";
@@ -23,18 +23,20 @@ export function WebviewBrowserSurface({
   bridge,
   channel,
   focus,
+  isShown,
   tabId,
   workspaceId,
 }: {
   bridge: WebviewBrowserBridge;
   channel: BrowserChannel;
   focus: Pick<BrowserFocusRegistry, "registerPage">;
+  isShown: boolean;
   tabId: string;
   workspaceId: string;
 }) {
   const [element, setElement] = useState<HTMLElement | null>(null);
   const bound = useRef(false);
-  useAgentFocusGuard(element, channel, tabId);
+  useAgentFocusGuard(element, channel, tabId, isShown);
   useEffect(
     () => (element === null ? undefined : focus.registerPage(tabId, () => element.focus())),
     [element, focus, tabId],
@@ -79,18 +81,18 @@ export function DevToolsWebviewSurface({ frontendUrl }: { frontendUrl: string })
 }
 
 /**
- * Keeps the keyboard focus of the user while an agent presses the mouse in the page. Electron
- * moves the focus to the `<webview>` element when a press reaches its guest, and that focus event
- * names no previous element, so the guard follows the focus of the user itself. The host reports
- * each agent press with `agent_press`, from the command to its reply. When the focus moves to the
- * `<webview>` during a press, the element that the user had focused takes it back. With no such
- * element, the `<webview>` gives up the focus. The guard does not change user input at other times.
+ * Keeps user focus outside hidden pages, and outside shown pages during an agent press.
+ * Electron can focus a guest without a webview focus event. The window blur event also reports
+ * that move, after its active element changes to the webview. Hidden pages stay guarded even
+ * before the press notification arrives or after it ends.
  */
 const useAgentFocusGuard = (
   element: HTMLElement | null,
   channel: Pick<BrowserChannel, "subscribe">,
   tabId: string,
+  isShown: boolean,
 ): void => {
+  const shown = useEffectEvent(() => isShown);
   useEffect(() => {
     if (element === null) return;
     let guardUntil = 0;
@@ -111,21 +113,25 @@ const useAgentFocusGuard = (
       });
     };
     const onFocus = (): void => {
-      if (Date.now() > guardUntil) return;
+      if (focusedElement() !== element || (shown() && Date.now() > guardUntil)) return;
       if (userFocus?.isConnected) {
         userFocus.focus({ preventScroll: true });
         return;
       }
       element.blur();
     };
+    // Wait until Chromium finishes moving focus into the guest before restoring the field.
+    const onWindowBlur = (): void => queueMicrotask(onFocus);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     element.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onWindowBlur);
     return () => {
       unsubscribe();
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
       element.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onWindowBlur);
     };
   }, [element, channel, tabId]);
 };

@@ -543,13 +543,17 @@ describe("Electron browser engine page events", () => {
 });
 
 describe("Electron browser engine popups", () => {
-  test("opens a window-feature popup in a popup window that keeps its opener", async () => {
+  test("opens a window-feature popup without focus and keeps its opener", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const opener = await harness.bind();
     expect(
       opener.windowOpenHandler?.({ url: "https://auth.example/login", disposition: "new-window" }),
-    ).toEqual({ action: "allow", outlivesOpener: false });
+    ).toEqual({
+      action: "allow",
+      outlivesOpener: false,
+      overrideBrowserWindowOptions: { show: false },
+    });
 
     const popupGuest = new FakeGuest(300, harness.workspaceSession, null, "window");
     const window = new FakePopupWindow(popupGuest);
@@ -580,6 +584,7 @@ describe("Electron browser engine popups", () => {
       },
     });
     expect(prevented).toBe(true);
+    expect([window.shownInactive, window.shown, window.focused]).toEqual([1, 0, 0]);
 
     await Effect.runPromise(harness.engine.windows?.showPopupWindow(popupTabId) ?? Effect.void);
     expect([window.shown, window.focused]).toEqual([1, 1]);

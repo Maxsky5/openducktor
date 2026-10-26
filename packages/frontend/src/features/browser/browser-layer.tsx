@@ -58,13 +58,16 @@ function WebviewSurfaces({ runtime }: { runtime: WebviewBrowserRuntime }) {
             surfaceKey={key}
             awake={awake.has(tab.tabId)}
           >
-            <WebviewBrowserSurface
-              bridge={bridge}
-              channel={channel}
-              focus={runtime.focus}
-              tabId={tab.tabId}
-              workspaceId={tab.owner.workspaceId}
-            />
+            {(isShown) => (
+              <WebviewBrowserSurface
+                bridge={bridge}
+                channel={channel}
+                focus={runtime.focus}
+                isShown={isShown}
+                tabId={tab.tabId}
+                workspaceId={tab.owner.workspaceId}
+              />
+            )}
           </SurfaceFrame>
         );
       })}
@@ -90,13 +93,15 @@ function FrameSurfaces({ runtime }: { runtime: FrameBrowserRuntime }) {
     if (!placed.has(key)) return null;
     return (
       <SurfaceFrame key={key} slots={runtime.slots} overlays={null} surfaceKey={key} awake={false}>
-        <FrameBrowserSurface
-          frames={frames}
-          focus={runtime.focus}
-          controls={runtime.frameControls}
-          tabId={tab.tabId}
-          initialUrl={tab.url}
-        />
+        {() => (
+          <FrameBrowserSurface
+            frames={frames}
+            focus={runtime.focus}
+            controls={runtime.frameControls}
+            tabId={tab.tabId}
+            initialUrl={tab.url}
+          />
+        )}
       </SurfaceFrame>
     );
   });
@@ -117,7 +122,7 @@ function SurfaceFrame({
   overlays: BrowserSurfaceRegistry<HTMLElement> | null;
   surfaceKey: string;
   awake: boolean;
-  children: ReactNode;
+  children: (isShown: boolean) => ReactNode;
 }) {
   const placement = useBrowserSurfacePlacement(slots, surfaceKey);
   const hidden = !placement.visible;
@@ -142,7 +147,7 @@ function SurfaceFrame({
         height: placement.height,
       }}
     >
-      {children}
+      {children(placement.visible)}
       {overlays ? <div ref={overlayRef} className="pointer-events-none absolute inset-0" /> : null}
     </div>
   );
@@ -163,7 +168,9 @@ function DevToolsSurface({
       surfaceKey={devToolsSurfaceKey(browserTabId)}
       awake={false}
     >
-      {frontendUrl === undefined ? null : <DevToolsWebviewSurface frontendUrl={frontendUrl} />}
+      {() =>
+        frontendUrl === undefined ? null : <DevToolsWebviewSurface frontendUrl={frontendUrl} />
+      }
     </SurfaceFrame>
   );
 }

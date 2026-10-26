@@ -199,12 +199,17 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
 
 export class FakePopupWindow implements ElectronPopupWindow {
   shown = 0;
+  shownInactive = 0;
   focused = 0;
 
   constructor(readonly webContents: FakeGuest) {}
 
   show(): void {
     this.shown += 1;
+  }
+
+  showInactive(): void {
+    this.shownInactive += 1;
   }
 
   focus(): void {
