@@ -445,33 +445,63 @@ test("automatic launch checks the worktree of an action that needs it without re
   expect(await launch(true)).toMatchObject({ status: "completed", role: "writer" });
 });
 
-const launchRevision = async (
-  startModes: AgentSessionStartMode[],
-  defaultStartMode: AgentSessionStartMode,
-  writerSession: boolean,
-) => {
+const launchCustomAutomation = async ({
+  automationId,
+  launchActionId,
+  role,
+  status,
+  startModes,
+  defaultStartMode,
+  roleSession,
+  freshReviews = false,
+}: {
+  automationId: string;
+  launchActionId: string;
+  role: string;
+  status: string;
+  startModes: AgentSessionStartMode[];
+  defaultStartMode: AgentSessionStartMode;
+  roleSession: boolean;
+  freshReviews?: boolean;
+}) => {
   const definition = reviewTaskDefinition();
   for (const step of definition.steps)
     if (step.kind === "agent")
       for (const action of step.launchActions)
-        if (action.id === "write_revise") Object.assign(action, { startModes, defaultStartMode });
+        if (action.id === launchActionId) Object.assign(action, { startModes, defaultStartMode });
   definition.automations = definition.automations.map(
     ({ startMode: _startMode, ...automation }) => automation,
   );
   const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
   const h = await createLaunchHarness("codex", {
     taskWorkflows: singleTaskWorkflow(workflow),
-    task: { issueType: "article", status: "writing" },
+    task: { issueType: "article", status },
   });
-  if (writerSession) h.addTaskSession("writer-1", { role: "writer" });
+  h.settings.autopilot.alwaysStartQaReviewsFresh = freshReviews;
+  if (roleSession) h.addTaskSession(`${role}-1`, { role });
   const result = await Effect.runPromise(
     h.launchAutomatic({
       ...requestFor("codex"),
-      policy: { kind: "automatic", actionId: "startRevision" },
+      policy: { kind: "automatic", actionId: automationId },
     }),
   );
   return { h, result };
 };
+
+const launchRevision = (
+  startModes: AgentSessionStartMode[],
+  defaultStartMode: AgentSessionStartMode,
+  roleSession: boolean,
+) =>
+  launchCustomAutomation({
+    automationId: "startRevision",
+    launchActionId: "write_revise",
+    role: "writer",
+    status: "writing",
+    startModes,
+    defaultStartMode,
+    roleSession,
+  });
 
 test.each([
   [["fresh", "reuse"], "fresh", true, "fresh"],
@@ -498,5 +528,28 @@ test.each([
     expect(result).toMatchObject({ status: "skipped", role: "writer" });
     expect(result.skipReason).toContain(reason);
     expect(h.starts).toHaveLength(0);
+  },
+);
+
+test.each([
+  ["reuse", false, "reuse"],
+  ["fork", false, "fork"],
+  ["reuse", true, "fresh"],
+  ["fork", true, "fresh"],
+] as const)(
+  "automatic %s of a role that writes a review, with fresh reviews %p, starts %p",
+  async (defaultStartMode, freshReviews, startMode) => {
+    const { result } = await launchCustomAutomation({
+      automationId: "startEditor",
+      launchActionId: "edit_review",
+      role: "editor",
+      status: "reviewing",
+      startModes: ["fresh", defaultStartMode],
+      defaultStartMode,
+      roleSession: true,
+      freshReviews,
+    });
+
+    expect(result).toMatchObject({ status: "completed", role: "editor", startMode });
   },
 );

@@ -324,7 +324,13 @@ const decideAutomaticLaunch = (
     };
     const configuredModel = () =>
       resolveConfiguredDefaultModel(deps, repoPath, config, role, request.workspaceId);
-    if (startMode === "fork") {
+    const canStartFresh = allowedStartModes.includes("fresh");
+    // A role that writes a review starts each Autopilot review fresh when the setting asks for it.
+    const forceFresh =
+      canStartFresh &&
+      alwaysStartQaReviewsFresh &&
+      workflow.role(role).writes.some((code) => workflow.artifact(code)?.kind === "review");
+    if (startMode === "fork" && !forceFresh) {
       if (!sourceSession)
         return {
           kind: "skipped" as const,
@@ -340,12 +346,6 @@ const decideAutomaticLaunch = (
       };
       return { kind: "decided" as const, decision };
     }
-    const canStartFresh = allowedStartModes.includes("fresh");
-    // A role that writes a review starts each Autopilot review fresh when the setting asks for it.
-    const forceFresh =
-      canStartFresh &&
-      alwaysStartQaReviewsFresh &&
-      workflow.role(role).writes.some((code) => workflow.artifact(code)?.kind === "review");
     const reuse = startMode === "reuse" && !forceFresh;
     const continuation =
       reuse || action.requiresWorktree
