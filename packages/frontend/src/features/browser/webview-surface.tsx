@@ -102,7 +102,12 @@ const useAgentFocusGuard = (
       guardUntil = Date.now() + (message.pressing ? AGENT_PRESS_LIMIT_MS : AGENT_PRESS_SETTLE_MS);
     });
     const onFocusIn = (event: FocusEvent): void => {
-      if (event.target instanceof HTMLElement && event.target !== element) {
+      // A nested focus restore can finish before the original focusin event reaches this guard.
+      if (
+        event.target instanceof HTMLElement &&
+        event.target !== element &&
+        event.target === focusedElement()
+      ) {
         userFocus = event.target;
       }
     };

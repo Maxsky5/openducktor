@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import type { BrowserServerMessage } from "@openducktor/contracts";
 import { render, screen } from "@testing-library/react";
 import type { WebviewBrowserBridge } from "@/lib/shell-bridge";
@@ -109,6 +109,55 @@ describe("WebviewBrowserSurface focus", () => {
 describe("WebviewBrowserSurface agent focus guard", () => {
   afterEach(() => {
     setSystemTime();
+  });
+
+  test("keeps composer focus and selection while hidden tabs alternately take focus", () => {
+    const { channel } = createChannelFixture();
+    const focus = createBrowserFocusRegistry();
+    render(
+      <>
+        <textarea aria-label="Composer" defaultValue="Keep typing here" />
+        {[TAB_ID, OTHER_TAB_ID].map((tabId) => (
+          <WebviewBrowserSurface
+            key={tabId}
+            bridge={bridge}
+            channel={channel}
+            focus={focus}
+            isShown={false}
+            tabId={tabId}
+            workspaceId="workspace-1"
+          />
+        ))}
+      </>,
+    );
+    const composer = screen.getByLabelText<HTMLTextAreaElement>("Composer");
+    composer.focus();
+    composer.setSelectionRange(5, 11, "backward");
+    const webviews = screen.getAllByTestId("browser-webview");
+    let focusCalls = 0;
+    const spies = webviews.map((webview) => {
+      const focusPage = webview.focus.bind(webview);
+      return spyOn(webview, "focus").mockImplementation((options) => {
+        // Bound the pre-fix recursion so the test reports a failure instead of overflowing.
+        if (++focusCalls <= 20) focusPage(options);
+      });
+    });
+    try {
+      for (let round = 0; round < 5; round += 1) {
+        for (const webview of webviews) {
+          pressFocus(webview);
+          expect(document.activeElement?.getAttribute("aria-label")).toBe("Composer");
+          expect([
+            composer.selectionStart,
+            composer.selectionEnd,
+            composer.selectionDirection,
+          ]).toEqual([5, 11, "backward"]);
+        }
+      }
+      expect(composer.value).toBe("Keep typing here");
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
   });
 
   test("keeps the composer focus and selection when Electron reports only a window blur", async () => {
