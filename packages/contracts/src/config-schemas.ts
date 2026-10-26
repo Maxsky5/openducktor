@@ -5,6 +5,7 @@ import { openCodePermissionRulesSchema } from "./opencode-permission-schemas";
 import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
+import { DEFAULT_REMOTE_ACCESS_SETTINGS, remoteAccessSettingsSchema } from "./remote-host-schemas";
 import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
 import {
   gitProviderConfigSchema,
@@ -856,6 +857,8 @@ const globalConfigSharedFields = {
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
+  hostId: z.string().uuid().optional(),
+  remoteAccess: remoteAccessSettingsSchema.default(DEFAULT_REMOTE_ACCESS_SETTINGS),
 };
 
 const persistedGlobalConfigFields = {

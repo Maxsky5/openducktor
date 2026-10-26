@@ -1,7 +1,7 @@
 import type { GitLocalChanges } from "@openducktor/contracts";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
+import { collectUnmergedFilePaths } from "@openducktor/frontend-core/git/model/unmerged-file-paths";
 import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { PRELOAD_DIFF_LIMIT } from "./constants";
 import { DiffLoadFailedState, EmptyDiffState } from "./empty-diff-state";

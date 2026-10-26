@@ -2,7 +2,7 @@ import type { AgentRole, OpenCodePermissionRule } from "@openducktor/contracts";
 import { useId, useRef, type ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { NEW_RULE, ROLE_OPTIONS } from "./opencode-permission-options";
 import { PermissionScope } from "./opencode-permission-scope";
 

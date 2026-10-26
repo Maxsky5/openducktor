@@ -12,7 +12,8 @@ import {
   currentBranchQueryOptions,
   worktreeBranchQueryOptions,
 } from "@openducktor/frontend-core/queries/git";
-import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
+import { useWorkspaceSessionBranch } from "@openducktor/frontend-core/git/workspace-session/use-workspace-session-branch";
+import { windowReturnVisibility } from "@/lib/window-return-visibility";
 import {
   WorkspaceSessionFilePreview,
   type WorkspaceSessionFilePreviewHandle,
@@ -52,6 +53,7 @@ for (const isWorktree of [false, true]) {
           isWorktree,
           isSwitchingBranch: false,
           activeBranch: null,
+          visibility: windowReturnVisibility,
         });
         return (
           <>

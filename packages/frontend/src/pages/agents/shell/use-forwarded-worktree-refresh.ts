@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import type { GitDiffRefresh } from "@openducktor/frontend-core/git/contracts";
 
 export type WorktreeRefreshRef = {
   current: GitDiffRefresh | null;

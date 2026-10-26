@@ -4,6 +4,10 @@ import { buildWorkspaceStateValue } from "../app-state-context-values";
 import {
   useActiveWorkspaceContext,
   useTaskControlContext,
+  WorkspaceScopeContext,
+  type WorkspaceScopeContextValue,
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
   WorkspaceBranchStateContext,
   WorkspaceOperationsContext,
   type WorkspaceOperationsContextValue,
@@ -219,6 +223,11 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     ],
   );
 
+  const workspaceScopeValue = useMemo<WorkspaceScopeContextValue>(
+    () => ({ workspaces, activeWorkspace: resolvedActiveWorkspace }),
+    [resolvedActiveWorkspace, workspaces],
+  );
+
   const workspaceOperationsValue = useMemo<WorkspaceOperationsContextValue>(
     () => ({
       refreshWorkspaces,
@@ -233,7 +242,9 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       <WorkspacePresenceContext.Provider value={workspacePresenceValue}>
         <WorkspaceBranchStateContext.Provider value={workspaceBranchStateValue}>
           <WorkspaceStateContext.Provider value={workspaceStateValue}>
-            {children}
+            <WorkspaceScopeContext.Provider value={workspaceScopeValue}>
+              {children}
+            </WorkspaceScopeContext.Provider>
           </WorkspaceStateContext.Provider>
         </WorkspaceBranchStateContext.Provider>
       </WorkspacePresenceContext.Provider>

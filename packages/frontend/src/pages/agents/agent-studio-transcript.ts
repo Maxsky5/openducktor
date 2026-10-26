@@ -1,7 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
-import type { AgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentSessionTranscriptTarget } from "@/components/features/agents/agent-chat/agent-session-transcript-target";
+import type { AgentChatTranscriptSession } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { toSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";

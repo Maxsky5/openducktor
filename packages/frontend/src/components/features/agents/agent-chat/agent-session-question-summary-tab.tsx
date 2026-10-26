@@ -4,34 +4,17 @@ import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
+  agentQuestionTitle,
+  formatAgentQuestionAnswerPreview,
   isAgentQuestionAnswered,
-} from "./agent-session-question-draft";
-import { buildQuestionContentEntries } from "./agent-session-question-keys";
+} from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-draft";
+import { buildQuestionContentEntries } from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-keys";
 
 type QuestionSummaryTabProps = {
   request: AgentQuestionRequest;
   draft: AgentQuestionDraftEntry[];
   onSelectQuestion: (index: number) => void;
   panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
-};
-
-const answerPreviewForQuestion = (
-  question: AgentQuestionRequest["questions"][number],
-  entry: AgentQuestionDraftEntry | undefined,
-): string => {
-  const selection = (entry?.selectedOptionValues ?? []).map(
-    (value) =>
-      question.options.find((option) => (option.value ?? option.label) === value)?.label ?? value,
-  );
-  const freeText = entry?.useFreeText ? (entry.freeText ?? "").trim() : "";
-  if (!question.multiple) {
-    if (freeText.length > 0) {
-      return freeText;
-    }
-    return selection[0] ?? "No answer yet";
-  }
-  const answers = [...selection, ...(freeText.length > 0 ? [freeText] : [])];
-  return answers.length > 0 ? answers.join(", ") : "No answer yet";
 };
 
 export const QuestionSummaryTab = ({
@@ -63,7 +46,7 @@ export const QuestionSummaryTab = ({
               ) : (
                 <Circle className="size-3 text-muted-foreground" />
               )}
-              {question.header?.trim() || `Question ${index + 1}`}
+              {agentQuestionTitle(question, index)}
             </p>
             <p
               className={cn(
@@ -71,7 +54,7 @@ export const QuestionSummaryTab = ({
                 answered ? "text-foreground" : "italic text-muted-foreground",
               )}
             >
-              {answerPreviewForQuestion(question, draft[index])}
+              {formatAgentQuestionAnswerPreview(question, draft[index])}
             </p>
           </button>
         );

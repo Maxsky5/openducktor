@@ -46,13 +46,14 @@ export const readCachedTaskSessionRecords = (
   const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
   const recordsByTaskId: TaskSessionRecordsByTaskId = {};
   for (const taskId of normalizedTaskIds) {
-    const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
-    const state = queryClient.getQueryState(queryKey);
-    const records = queryClient.getQueryData<AgentSessionRecord[]>(queryKey);
-    if (state?.status !== "success" || state.isInvalidated || records === undefined) {
+    // One read for each task: each session change reads every task of the workspace.
+    const state = queryClient.getQueryState<AgentSessionRecord[]>(
+      agentSessionQueryKeys.list(repoPath, taskId),
+    );
+    if (state?.status !== "success" || state.isInvalidated || state.data === undefined) {
       return null;
     }
-    recordsByTaskId[taskId] = records;
+    recordsByTaskId[taskId] = state.data;
   }
   return toTaskSessionRecords(
     normalizedTaskIds.map((id) => ({ id })),

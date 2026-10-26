@@ -32,3 +32,13 @@ packages/openducktor-web/.wrangler/
 apps/marketing-website/public/
 apps/marketing-website/test-results/
 apps/marketing-website/playwright-report/
+# Expo mobile app: native projects come from `expo prebuild`; never commit signing files.
+.expo/
+apps/mobile/ios/
+apps/mobile/android/
+apps/mobile/dist/
+apps/mobile/assets/pages/
+*.jks
+*.keystore
+*.p12
+*.mobileprovision

@@ -19,7 +19,7 @@ import {
 } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
-import { SessionViewContext } from "@/features/session-navigation/session-view-context";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { QueryProvider } from "@/test-utils/query-provider";
 
 enableReactActEnvironment();

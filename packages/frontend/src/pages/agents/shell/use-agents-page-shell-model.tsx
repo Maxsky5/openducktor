@@ -1,6 +1,6 @@
 import type { BrowserTabOwner } from "@openducktor/contracts";
 import { useBrowserPanelModel } from "@/features/browser";
-import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
+import type { SessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
@@ -11,15 +11,16 @@ import {
   type ToolTabKind,
   useSessionPanels,
 } from "@/features/session-panels";
-import { useSessionStartWorkflowRunner } from "@/features/session-start";
-import { gitProviderReadError } from "@/lib/git-provider-health";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useSessionStartWorkflowRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-workflow-runner";
+import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
+import { useNotificationContext } from "@/state/notifications/notification-context";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   useAgentOperations,
-  useAgentSessionSummaries,
   useTasksState,
   useWorkspaceBranchState,
 } from "@/state/app-state-provider";
+import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useAgentStudioTerminals } from "../terminals/use-agent-studio-terminals";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
@@ -34,7 +35,7 @@ import {
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
 import { useAgentsPageOrchestrationShellModel } from "./use-agents-page-orchestration-shell-model";
 import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
@@ -94,8 +95,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
+  const { sessionStartNotifications } = useNotificationContext();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
+    repoPath: workspaceRepoPath,
+    notifications: sessionStartNotifications,
   });
   const sessions = useAgentSessionSummaries();
 

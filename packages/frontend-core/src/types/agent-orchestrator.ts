@@ -220,10 +220,16 @@ export type AgentSessionContextUsage = {
   profileId?: string;
 };
 
+/**
+ * `unverified`: the transcript was current when live coverage ended. The next live snapshot makes
+ * it `loaded` again, or `stale` when the session can have new messages. `stale`: the transcript
+ * misses messages, so it needs a new history read.
+ */
 export type AgentSessionHistoryLoadState =
   | "not_requested"
   | "loading"
   | "loaded"
+  | "unverified"
   | "stale"
   | "refreshing"
   | "failed";

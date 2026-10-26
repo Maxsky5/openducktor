@@ -1,6 +1,6 @@
 import { agentRoleValues, type WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { TASK_SESSION_QUERY_KEYS } from "@/features/session-navigation/session-navigation-target";
+import { TASK_SESSION_QUERY_KEYS } from "@/features/session-navigation/sessions-route";
 
 const AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-panel";
 

@@ -10,6 +10,10 @@ import {
   pathEnvironmentValue,
   sanitizeChildProcessEnvironment,
 } from "./process-environment";
+import {
+  createLoadTimeFixtureFolder,
+  writeCheckedExecutable,
+} from "../../test-support/checked-executable";
 import { processIsAlive } from "./process-tree";
 
 const testIfPosixShellIsAvailable = process.platform === "win32" ? test.skip : test;
@@ -72,12 +76,66 @@ const resolveProcessEnvironment = async (
   (await Effect.runPromise(createProcessEnvironment(input))).environment;
 const loginShellPath = (pathValue: string) => () => Effect.succeed(pathValue);
 
-const writeFakeLoginShell = async (shellPath: string, pathValue: string): Promise<void> => {
-  await writeFile(
-    shellPath,
+// The fixture shells are written while this file loads, as `writeCheckedExecutable` explains. Each
+// shell has its own folder, as the probe reads some shell names.
+const fixtureRoot = await createLoadTimeFixtureFolder("odt-process-environment-shells-");
+
+const fixtureShell = async (folder: string, name: string, script: string): Promise<string> => {
+  await mkdir(path.join(fixtureRoot, folder));
+  const shellPath = path.join(fixtureRoot, folder, name);
+  await writeCheckedExecutable(shellPath, script);
+  return shellPath;
+};
+const fakeLoginShell = (folder: string, name: string, pathValue: string): Promise<string> =>
+  fixtureShell(
+    folder,
+    name,
     `#!/bin/sh\nprintf 'profile noise\\0'\nexport PATH="${pathValue}"\nexec /bin/sh -c "$2"\n`,
   );
-  await chmod(shellPath, 0o755);
+
+const shells = {
+  account: await fakeLoginShell("account", "account-shell", "/opt/account:/usr/bin"),
+  configured: await fakeLoginShell("configured", "configured-shell", "/opt/configured:/usr/bin"),
+  nologin: await fakeLoginShell("nologin", "nologin", "/opt/account:/usr/bin"),
+  fallback: await fakeLoginShell("fallback", "fake-shell", "/opt/bin:/usr/bin"),
+  endMarker: await fakeLoginShell(
+    "end-marker",
+    "fixture-shell",
+    "/first:/tmp/__OPENDUCKTOR_ENV_END__",
+  ),
+  interactiveTcsh: await fixtureShell(
+    "interactive",
+    "tcsh",
+    '#!/bin/sh\ncase "$1" in *l*) exit 64 ;; esac\ncase "$1" in *i*) . "$HOME/.zshrc" ;; esac\nexec /bin/sh -c "$2"\n',
+  ),
+  zdotdir: await fixtureShell(
+    "zdotdir",
+    "fixture-shell",
+    '#!/bin/sh\n[ -z "$ODT_HOST_TOKEN" ] || exit 23\n. "$ZDOTDIR/.zshrc"\nexec /bin/sh -c "$2"\n',
+  ),
+  failing: await fixtureShell("failing", "fixture-shell", "#!/bin/sh\nexit 17\n"),
+  noPath: await fixtureShell("no-path", "fixture-shell", '#!/bin/sh\nunset PATH\neval "$2"\n'),
+  markerless: await fixtureShell("markerless", "fixture-shell", "#!/bin/sh\nexit 0\n"),
+  markerlessChild: await fixtureShell(
+    "markerless-child",
+    "fixture-shell",
+    '#!/bin/sh\nsleep 5 &\nprintf \'%s\' "$!" > "$HOME/child.pid"\nexit 0\n',
+  ),
+  largeOutput: await fixtureShell(
+    "large-output",
+    "fixture-shell",
+    '#!/bin/sh\ni=0\nwhile [ "$i" -lt 1025 ]; do\n  printf \'%1024s\' x\n  i=$((i + 1))\ndone\nexec /bin/sh -c "$2"\n',
+  ),
+  slow: await fixtureShell(
+    "slow",
+    "fixture-shell",
+    '#!/bin/sh\nsleep 5 &\nprintf \'%s\' "$!" > "$HOME/child.pid"\nsleep 5\n',
+  ),
+  backgroundChild: await fixtureShell(
+    "background-child",
+    "fixture-shell",
+    `#!/bin/sh\nexport PATH="/fixture/background:$PATH"\nsleep 5 &\nprintf '%s' "$!" > "$HOME/child.pid"\nexec /bin/sh -c "$2"\n`,
+  ),
 };
 
 describe("createProcessEnvironment", () => {
@@ -154,22 +212,14 @@ describe("createProcessEnvironment", () => {
   });
 
   test("sets SHELL to the resolved account shell", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-process-environment-"));
-    const shellPath = path.join(root, "account-shell");
-    try {
-      await writeFakeLoginShell(shellPath, "/opt/account:/usr/bin");
+    const env = await resolveProcessEnvironment({
+      baseEnv: { SHELL: "/bin/bash", PATH: "/usr/bin:/bin" },
+      platform: "darwin",
+      readUserShell: () => shells.account,
+      readLoginShellPath: loginShellPath("/usr/bin:/bin"),
+    });
 
-      const env = await resolveProcessEnvironment({
-        baseEnv: { SHELL: "/bin/bash", PATH: "/usr/bin:/bin" },
-        platform: "darwin",
-        readUserShell: () => shellPath,
-        readLoginShellPath: loginShellPath("/usr/bin:/bin"),
-      });
-
-      expect(env.SHELL).toBe(shellPath);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
+    expect(env.SHELL).toBe(shells.account);
   });
 
   test("reports an unusable shell instead of keeping the inherited PATH", async () => {
@@ -194,20 +244,18 @@ describe("createProcessEnvironment", () => {
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-process-environment-"));
       const accountShellPath = path.join(root, "account-shell");
-      const configuredShellPath = path.join(root, "configured-shell");
       try {
         await writeFile(accountShellPath, "#!/bin/sh\n");
         await chmod(accountShellPath, 0o644);
-        await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
 
         const env = await resolveProcessEnvironment({
-          baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
+          baseEnv: { SHELL: shells.configured, PATH: "/usr/bin:/bin" },
           platform: "linux",
           readUserShell: () => accountShellPath,
           readLoginShellPath: loginShellPath("/usr/bin:/bin"),
         });
 
-        expect(env.SHELL).toBe(configuredShellPath);
+        expect(env.SHELL).toBe(shells.configured);
       } finally {
         await rm(root, { force: true, recursive: true });
       }
@@ -215,86 +263,50 @@ describe("createProcessEnvironment", () => {
   );
 
   test("falls back to the inherited SHELL when the account shell is a nologin shell", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-process-environment-"));
-    const accountShellPath = path.join(root, "nologin");
-    const configuredShellPath = path.join(root, "configured-shell");
-    try {
-      await writeFakeLoginShell(accountShellPath, "/opt/account:/usr/bin");
-      await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
+    const env = await resolveProcessEnvironment({
+      baseEnv: { SHELL: shells.configured, PATH: "/usr/bin:/bin" },
+      platform: "linux",
+      readUserShell: () => shells.nologin,
+      readLoginShellPath: loginShellPath("/usr/bin:/bin"),
+    });
 
-      const env = await resolveProcessEnvironment({
-        baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
-        platform: "linux",
-        readUserShell: () => accountShellPath,
-        readLoginShellPath: loginShellPath("/usr/bin:/bin"),
-      });
-
-      expect(env.SHELL).toBe(configuredShellPath);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
+    expect(env.SHELL).toBe(shells.configured);
   });
 
   test("falls back to the inherited SHELL when the account shell does not exist", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-process-environment-"));
-    const configuredShellPath = path.join(root, "configured-shell");
-    try {
-      await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
+    const env = await resolveProcessEnvironment({
+      baseEnv: { SHELL: shells.configured, PATH: "/usr/bin:/bin" },
+      platform: "linux",
+      readUserShell: () => path.join(fixtureRoot, "missing-shell"),
+      readLoginShellPath: loginShellPath("/usr/bin:/bin"),
+    });
 
-      const env = await resolveProcessEnvironment({
-        baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
-        platform: "linux",
-        readUserShell: () => path.join(root, "missing-shell"),
-        readLoginShellPath: loginShellPath("/usr/bin:/bin"),
-      });
-
-      expect(env.SHELL).toBe(configuredShellPath);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
+    expect(env.SHELL).toBe(shells.configured);
   });
 
   testIfPosixShellIsAvailable(
     "reads PATH from the account login shell before the SHELL value",
     async () => {
-      const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-path-"));
-      const accountShellPath = path.join(root, "account-shell");
-      const configuredShellPath = path.join(root, "configured-shell");
-      try {
-        await writeFakeLoginShell(accountShellPath, "/opt/account:/usr/bin");
-        await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
+      const env = await resolveProcessEnvironment({
+        baseEnv: { SHELL: shells.configured, PATH: "/usr/bin:/bin" },
+        platform: "darwin",
+        readUserShell: () => shells.account,
+      });
 
-        const env = await resolveProcessEnvironment({
-          baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
-          platform: "darwin",
-          readUserShell: () => accountShellPath,
-        });
-
-        expect(env.PATH?.split(":")).toEqual(["/opt/account", "/usr/bin", "/bin"]);
-      } finally {
-        await rm(root, { force: true, recursive: true });
-      }
+      expect(env.PATH?.split(":")).toEqual(["/opt/account", "/usr/bin", "/bin"]);
     },
   );
 
   testIfPosixShellIsAvailable(
     "falls back to the SHELL value when the account shell is unavailable",
     async () => {
-      const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-path-"));
-      const shellPath = path.join(root, "fake-shell");
-      try {
-        await writeFakeLoginShell(shellPath, "/opt/bin:/usr/bin");
+      const env = await resolveProcessEnvironment({
+        baseEnv: { SHELL: shells.fallback, PATH: "/usr/bin:/bin" },
+        platform: "darwin",
+        readUserShell: () => null,
+      });
 
-        const env = await resolveProcessEnvironment({
-          baseEnv: { SHELL: shellPath, PATH: "/usr/bin:/bin" },
-          platform: "darwin",
-          readUserShell: () => null,
-        });
-
-        expect(env.PATH?.split(":")).toEqual(["/opt/bin", "/usr/bin", "/bin"]);
-      } finally {
-        await rm(root, { force: true, recursive: true });
-      }
+      expect(env.PATH?.split(":")).toEqual(["/opt/bin", "/usr/bin", "/bin"]);
     },
   );
 
@@ -302,14 +314,9 @@ describe("createProcessEnvironment", () => {
     "matches the PATH from an interactive login fixture shell",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-interactive-login-shell-"));
-      const shellPath = path.join(root, "tcsh");
+      const shellPath = shells.interactiveTcsh;
       try {
         await writeFile(path.join(root, ".zshrc"), 'export PATH="/fixture/zshrc-only:$PATH"\n');
-        await writeFile(
-          shellPath,
-          '#!/bin/sh\ncase "$1" in *l*) exit 64 ;; esac\ncase "$1" in *i*) . "$HOME/.zshrc" ;; esac\nexec /bin/sh -c "$2"\n',
-        );
-        await chmod(shellPath, 0o755);
         const baseEnv = {
           HOME: root,
           PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -341,15 +348,12 @@ describe("createProcessEnvironment", () => {
 
   testIfPosixShellIsAvailable("keeps an end marker literal in PATH", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-marker-"));
-    const shellPath = path.join(root, "fixture-shell");
     try {
-      await writeFakeLoginShell(shellPath, "/first:/tmp/__OPENDUCKTOR_ENV_END__");
-
       const resolution = await Effect.runPromise(
         createProcessEnvironment({
           baseEnv: { HOME: root, PATH: "/inherited" },
           platform: "linux",
-          readUserShell: () => shellPath,
+          readUserShell: () => shells.endMarker,
         }),
       );
 
@@ -369,15 +373,9 @@ describe("createProcessEnvironment", () => {
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-env-"));
       const configRoot = path.join(root, "zsh");
-      const shellPath = path.join(root, "fixture-shell");
       try {
         await mkdir(configRoot);
         await writeFile(path.join(configRoot, ".zshrc"), 'export PATH="/fixture/zdotdir:$PATH"\n');
-        await writeFile(
-          shellPath,
-          '#!/bin/sh\n[ -z "$ODT_HOST_TOKEN" ] || exit 23\n. "$ZDOTDIR/.zshrc"\nexec /bin/sh -c "$2"\n',
-        );
-        await chmod(shellPath, 0o755);
 
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
@@ -389,7 +387,7 @@ describe("createProcessEnvironment", () => {
               ZDOTDIR: configRoot,
             },
             platform: "darwin",
-            readUserShell: () => shellPath,
+            readUserShell: () => shells.zdotdir,
           }),
         );
 
@@ -446,11 +444,8 @@ describe("createProcessEnvironment", () => {
     "returns a typed diagnostic and removes the GUI PATH when the probe exits non-zero",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-failed-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = shells.failing;
       try {
-        await writeFile(shellPath, "#!/bin/sh\nexit 17\n");
-        await chmod(shellPath, 0o755);
-
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
@@ -476,11 +471,8 @@ describe("createProcessEnvironment", () => {
     "returns a typed diagnostic when the shell output has no PATH",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-invalid-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = shells.noPath;
       try {
-        await writeFile(shellPath, '#!/bin/sh\nunset PATH\neval "$2"\n');
-        await chmod(shellPath, 0o755);
-
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
@@ -505,11 +497,8 @@ describe("createProcessEnvironment", () => {
     "reports invalid output when the shell exits cleanly without markers",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-markerless-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = shells.markerless;
       try {
-        await writeFile(shellPath, "#!/bin/sh\nexit 0\n");
-        await chmod(shellPath, 0o755);
-
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
@@ -541,16 +530,10 @@ describe("createProcessEnvironment", () => {
     "reports invalid output when a child keeps stdout open after the shell exits",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-markerless-child-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = shells.markerlessChild;
       const childPidPath = path.join(root, "child.pid");
       let childPid: number | null = null;
       try {
-        await writeFile(
-          shellPath,
-          '#!/bin/sh\nsleep 5 &\nprintf \'%s\' "$!" > "$HOME/child.pid"\nexit 0\n',
-        );
-        await chmod(shellPath, 0o755);
-
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
@@ -580,20 +563,16 @@ describe("createProcessEnvironment", () => {
         await rm(root, { force: true, recursive: true });
       }
     },
+    // The shell may run for 3 s, and the test then waits for its child to stop.
+    15_000,
   );
 
   testIfPosixShellIsAvailable(
     "returns a typed diagnostic when shell startup output is too large",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-large-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = shells.largeOutput;
       try {
-        await writeFile(
-          shellPath,
-          '#!/bin/sh\ni=0\nwhile [ "$i" -lt 1025 ]; do\n  printf \'%1024s\' x\n  i=$((i + 1))\ndone\nexec /bin/sh -c "$2"\n',
-        );
-        await chmod(shellPath, 0o755);
-
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
@@ -614,57 +593,51 @@ describe("createProcessEnvironment", () => {
     },
   );
 
-  testIfPosixShellIsAvailable("times out and stops child jobs", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-timeout-login-shell-"));
-    const shellPath = path.join(root, "fixture-shell");
-    const childPidPath = path.join(root, "child.pid");
-    let childPid: number | null = null;
-    try {
-      await writeFile(
-        shellPath,
-        '#!/bin/sh\nsleep 5 &\nprintf \'%s\' "$!" > "$HOME/child.pid"\nsleep 5\n',
-      );
-      await chmod(shellPath, 0o755);
-      const resolution = await Effect.runPromise(
-        createProcessEnvironment({
-          baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
-          // The fixture shell must start its child job before the timeout, also under load.
-          loginShellTimeoutMs: 2_000,
-          platform: "linux",
-          readUserShell: () => shellPath,
-        }),
-      );
-      const stoppedPid = Number(await readFile(childPidPath, "utf8"));
-      childPid = stoppedPid;
+  testIfPosixShellIsAvailable(
+    "times out and stops child jobs",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-timeout-login-shell-"));
+      const shellPath = shells.slow;
+      const childPidPath = path.join(root, "child.pid");
+      let childPid: number | null = null;
+      try {
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            // The fixture shell must start its child job before the timeout, also under load.
+            loginShellTimeoutMs: 2_000,
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }),
+        );
+        const stoppedPid = Number(await readFile(childPidPath, "utf8"));
+        childPid = stoppedPid;
 
-      expect(resolution.error).toMatchObject({
-        _tag: "ProcessEnvironmentError",
-        reason: "timed_out",
-        shell: shellPath,
-      });
-      expect(resolution.error?.message).toContain("wait for input");
-      expect(resolution.environment.PATH).toBeUndefined();
-      await waitFor(() => processHasStopped(stoppedPid));
-    } finally {
-      stopChild(childPid);
-      await rm(root, { force: true, recursive: true });
-    }
-  });
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "timed_out",
+          shell: shellPath,
+        });
+        expect(resolution.error?.message).toContain("wait for input");
+        expect(resolution.environment.PATH).toBeUndefined();
+        await waitFor(() => processHasStopped(stoppedPid));
+      } finally {
+        stopChild(childPid);
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+    // The shell always runs out its 2 s timeout, and the test then waits for its child to stop.
+    10_000,
+  );
 
   testIfPosixShellIsAvailable(
     "finishes after the shell exits and stops a background child that inherited stdout",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-background-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = shells.backgroundChild;
       const childPidPath = path.join(root, "child.pid");
       let childPid: number | null = null;
       try {
-        await writeFile(
-          shellPath,
-          `#!/bin/sh\nexport PATH="/fixture/background:$PATH"\nsleep 5 &\nprintf '%s' "$!" > "$HOME/child.pid"\nexec /bin/sh -c "$2"\n`,
-        );
-        await chmod(shellPath, 0o755);
-
         const resolution = await Effect.runPromise(
           createProcessEnvironment({
             baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },

@@ -44,7 +44,10 @@ import {
   buildSessionErrorNoticeMessage,
   buildSessionPolicyNoticeMessage,
 } from "./agent-orchestrator/support/session-notice-messages";
-import { markSessionHistoryStale } from "./agent-orchestrator/history/session-history-freshness";
+import {
+  markSessionHistoryStale,
+  markSessionHistoryUnverified,
+} from "./agent-orchestrator/history/session-history-freshness";
 import type { SessionHistoryFreshnessTracker } from "../queries/agent-session-history-freshness-tracker";
 
 export {
@@ -114,12 +117,12 @@ export const createAgentSessionsStore = (
   const historyProgress = historyFreshness?.createHistoryProgressTracker();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
-  type VisiblePendingInputSnapshot = {
+  // One entry for each identity, so views of different sessions keep stable snapshots.
+  type VisiblePendingInputSnapshots = {
     collection: AgentSessionCollection;
-    identityKey: string | null;
-    snapshot: AgentSessionVisiblePendingInput;
+    byIdentityKey: Map<string | null, AgentSessionVisiblePendingInput>;
   };
-  let visiblePendingInputSnapshot: VisiblePendingInputSnapshot | null = null;
+  let visiblePendingInputSnapshots: VisiblePendingInputSnapshots | null = null;
   const listeners = new Set<Listener>();
   // Keep the current notices of each live identity, including roots not registered yet. History
   // reloads replace messages, so each commit puts the notices back.
@@ -366,16 +369,14 @@ export const createAgentSessionsStore = (
     listSessionSnapshots: () => listAgentSessions(sessionCollection),
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
     getVisiblePendingInputSnapshot: (identity) => {
-      const identityKey = identity ? agentSessionIdentityKey(identity) : null;
-      if (
-        visiblePendingInputSnapshot?.collection === sessionCollection &&
-        visiblePendingInputSnapshot.identityKey === identityKey
-      ) {
-        return visiblePendingInputSnapshot.snapshot;
+      if (visiblePendingInputSnapshots?.collection !== sessionCollection) {
+        visiblePendingInputSnapshots = { collection: sessionCollection, byIdentityKey: new Map() };
       }
-
+      const identityKey = identity ? agentSessionIdentityKey(identity) : null;
+      const cached = visiblePendingInputSnapshots.byIdentityKey.get(identityKey);
+      if (cached) return cached;
       const snapshot = getAgentSessionVisiblePendingInput(sessionCollection, identity);
-      visiblePendingInputSnapshot = { collection: sessionCollection, identityKey, snapshot };
+      visiblePendingInputSnapshots.byIdentityKey.set(identityKey, snapshot);
       return snapshot;
     },
     commitSessionCollection,
@@ -388,16 +389,25 @@ export const createAgentSessionsStore = (
             setSessionCollection((current) => {
               let collection = current;
               for (const session of listAgentSessions(current)) {
+                const read = historyProgress?.getVersion(session) ?? null;
                 if (
-                  envelope.historyReplayGap ||
-                  !historyFreshness.isCurrent(
-                    envelope.repoPath,
-                    session,
-                    historyProgress?.getVersion(session) ?? null,
-                  )
+                  !envelope.historyReplayGap &&
+                  historyFreshness.isCurrent(envelope.repoPath, session, read)
                 ) {
-                  collection = replaceAgentSession(collection, markSessionHistoryStale(session));
+                  continue;
                 }
+                // In the same stream epoch, the stream recorded a change that the transcript
+                // misses. After a gap, no record exists, so the snapshot settles the transcript.
+                const latest = historyFreshness.getVersion(envelope.repoPath, session);
+                const missed =
+                  !envelope.historyReplayGap &&
+                  read !== null &&
+                  latest !== null &&
+                  read.epoch === latest.epoch;
+                collection = replaceAgentSession(
+                  collection,
+                  missed ? markSessionHistoryStale(session) : markSessionHistoryUnverified(session),
+                );
               }
               return collection;
             });

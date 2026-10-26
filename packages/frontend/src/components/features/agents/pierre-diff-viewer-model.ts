@@ -12,10 +12,13 @@ import type {
   InlineCommentDraft,
   InlineCommentSide,
 } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import {
+  buildInlineCommentContext,
+  inlineCommentMatchesLines,
+} from "@openducktor/frontend-core/drafts/inline-comment-placement";
 import { selectRenderableDiff } from "./renderable-patch";
 
 const MAX_RENDERABLE_DIFF_CACHE_ENTRIES = 64;
-const INLINE_COMMENT_CONTEXT_RADIUS = 2;
 
 export type PierreDiffSelection = {
   selectedLines: SelectedLineRange;
@@ -299,23 +302,14 @@ export const buildPierreDiffSelection = (
     return null;
   }
 
-  const sideLines = buildSideLines(fileDiff, startSide);
-  const startIndex = sideLines.findIndex((line) => line.lineNumber === normalizedSelection.start);
-  const endIndex = sideLines.findIndex((line) => line.lineNumber === normalizedSelection.end);
-  if (startIndex < 0 || endIndex < 0) {
+  const codeContext = buildInlineCommentContext(
+    buildSideLines(fileDiff, startSide),
+    normalizedSelection.start,
+    normalizedSelection.end,
+  );
+  if (codeContext === null) {
     return null;
   }
-
-  const contextStartIndex = Math.max(0, startIndex - INLINE_COMMENT_CONTEXT_RADIUS);
-  const contextEndIndex = Math.min(sideLines.length - 1, endIndex + INLINE_COMMENT_CONTEXT_RADIUS);
-  const codeContext = sideLines.slice(contextStartIndex, contextEndIndex + 1).map((line, index) => {
-    const absoluteIndex = contextStartIndex + index;
-    return {
-      lineNumber: line.lineNumber,
-      text: line.text,
-      isSelected: absoluteIndex >= startIndex && absoluteIndex <= endIndex,
-    } satisfies InlineCommentContextLine;
-  });
 
   return {
     selectedLines: normalizedSelection,
@@ -359,10 +353,8 @@ export const commentMatchesDiff = (
 ): boolean => {
   const { fileDiff } = getRenderableFileDiff(patch, filePath);
   if (fileDiff == null) return false;
-  const textByLine = sideTextByLine(fileDiff, comment.side === "old" ? "deletions" : "additions");
-  const selected = comment.codeContext.filter((line) => line.isSelected);
-  if (selected.length === 0) {
-    return textByLine.has(comment.startLine) && textByLine.has(comment.endLine);
-  }
-  return selected.every((line) => textByLine.get(line.lineNumber) === line.text);
+  return inlineCommentMatchesLines(
+    sideTextByLine(fileDiff, comment.side === "old" ? "deletions" : "additions"),
+    comment,
+  );
 };

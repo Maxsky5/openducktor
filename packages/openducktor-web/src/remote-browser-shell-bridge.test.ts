@@ -11,7 +11,7 @@ import {
   type TerminalServerMessage,
 } from "@openducktor/contracts";
 import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
-import { createTerminalTransportController } from "../../frontend/src/features/terminals/terminal-transport-controller";
+import { createTerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
 import { createUnavailableShellBridge } from "@openducktor/frontend/lib/shell-bridge";
 
@@ -165,7 +165,11 @@ test.each(["restored", "lost", "failure"])(
       const cause = await outcome;
       if (result === "failure") {
         expect(cause).toMatchObject({ failure: { code: "synchronization_failed" } });
-        expect(connection.readState().status).toBe("failed");
+        // A failed synchronization keeps its failure and retries by itself.
+        expect(connection.readState()).toMatchObject({
+          status: "disconnected",
+          failure: { code: "synchronization_failed" },
+        });
       } else {
         expect(cause).toBeNull();
         expect(connection.readState().status).toBe("connected");

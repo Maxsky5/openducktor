@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
-import type { TerminalTransportController } from "./terminal-transport-controller";
-import type { TerminalExitNotice } from "./terminal-viewport-policy";
+import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
+import type { TerminalExitNotice } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type TerminalViewportProps = {

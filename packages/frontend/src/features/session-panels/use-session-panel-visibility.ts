@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { isUserStartedTab } from "@/features/terminals";
+import { isUserStartedTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { PanelId } from "./panel-tab-kinds";
 import type { ResolvedPanelTab } from "./session-panel-layout";
 import { useRightPanelOpen } from "./use-right-panel-open";

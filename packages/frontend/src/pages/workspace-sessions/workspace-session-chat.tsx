@@ -1,40 +1,39 @@
-import { sessionForkDisabledReason } from "@/components/features/agents/agent-chat/session-fork-availability";
+import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import { useWorkspaceSessionFork } from "./use-workspace-session-fork";
 import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
-import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
+import { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import {
   canInteractWithWorkspaceSession,
   canResumeWorkspaceSession,
   projectWorkspaceSessionChatState,
-} from "./workspace-session-chat-state";
-import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
+} from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-chat-state";
+import { useSessionPromptInput } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-session-prompt-input";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
 import { type ReactElement, useMemo } from "react";
 import { SessionViewShownActivity } from "@/features/session-navigation/session-view-visibility";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
-import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
-import { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
-import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
-import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
-import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
+import { useAgentChatPresentation } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-presentation";
+import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
+import { useAgentSessionApprovalActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-approval-actions";
+import { useAgentSessionQuestionActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-actions";
+import { useSelectedSessionContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/use-selected-session-context-usage";
 import { isAgentSessionBlockedOnInput } from "@openducktor/frontend-core/lib/agent-session-waiting-input";
 import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
-import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
+import { useRuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import {
-  useAgentOperations,
-  useAgentSession,
-  useAgentSessionReadModelState,
-} from "@/state/app-state-provider";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { useAgentOperations, useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useAgentSession } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useSelectedSessionContextLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-context-load";
 import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
 import { useSessionRuntimeData } from "@openducktor/frontend-core/sessions/agent-orchestrator/hooks/use-session-runtime-data";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
-import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
+import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -151,17 +150,18 @@ export function WorkspaceSessionChat({
       }),
     [runtime.allRuntimeDefinitions, record.runtimeKind],
   );
-  const promptInput = useWorkspaceSessionPromptInput({
+  const promptInput = useSessionPromptInput({
     repoPath: workspace.repoPath,
-    record,
+    runtimeKind: record.runtimeKind,
+    workingDirectory: record.executionTarget.workingDirectory,
     identity,
     runtimeReadinessState: runtimeReadiness.state,
     reusablePrompts,
   });
   const { support, skills } = promptInput;
   const contextUsage = useSelectedSessionContextUsage({
-    selectedSession: session,
-    sessionModelCatalog: modelCatalog,
+    contextUsage: session?.contextUsage,
+    catalog: modelCatalog,
     selectedModelEntry: picker.selectedModelEntry,
   });
   const presentation = useAgentChatPresentation({
@@ -170,7 +170,6 @@ export function WorkspaceSessionChat({
     pendingApprovals: chatState.pendingApprovals,
     pendingQuestions: chatState.pendingQuestions,
     skills: skills.skills,
-    runtimeKind: record.runtimeKind,
     runtimeReadiness,
   });
   const { readiness, transcript, retryError } = useWorkspaceSessionTranscript({
@@ -250,6 +249,7 @@ export function WorkspaceSessionChat({
     owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
     workingDirectory: record.executionTarget.workingDirectory,
     onSend: messageDelivery.onSend,
+    visibility: documentVisibility,
   });
   const fork = useWorkspaceSessionFork({
     workspace,
@@ -287,7 +287,7 @@ export function WorkspaceSessionChat({
     pendingApprovalRequests: chatState.pendingApprovals,
     pendingQuestionRequests: chatState.pendingQuestions,
     todos: runtimeData.todos,
-    sessionAccentColor: presentation.sessionAccentColor,
+    sessionAccentColor: resolveAgentSessionAccentColor({ runtimeKind: record.runtimeKind }),
     subagentPendingApprovalCountBySessionKey: presentation.subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey: presentation.subagentPendingQuestionCountBySessionKey,
     approvals: {

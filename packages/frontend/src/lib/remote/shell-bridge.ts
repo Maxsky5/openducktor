@@ -1,4 +1,5 @@
 import { createRemoteHostConnection } from "@openducktor/frontend-core/recovery/remote-host-connection";
+import { createRemoteTerminalBridge } from "@openducktor/frontend-core/terminals/remote-terminal-bridge";
 import {
   remoteError,
   type RemoteHostClient,
@@ -22,12 +23,8 @@ export const createRemoteShellBridge = ({
   notifications: ShellBridge["notifications"];
   queryClient: QueryClient;
 }): ShellBridge => {
-  const { remote, waitForAdmission, subscribeRecovery, ...host } = createRemoteHostConnection({
-    endpoint,
-    version,
-    transport,
-    queryClient,
-  });
+  const connection = createRemoteHostConnection({ endpoint, version, transport, queryClient });
+  const { remote, waitForAdmission, subscribeRecovery: _subscribeRecovery, ...host } = connection;
   return {
     ...host,
     getArtifactPreviewEnvironment: async () => browserArtifactPreviewEnvironment(endpoint),
@@ -61,29 +58,7 @@ export const createRemoteShellBridge = ({
     },
     // The pages of browser tabs load on the host machine, so a remote client cannot show them.
     browser: { surface: "frame", frames: null },
-    terminals: {
-      subscribeRecovery,
-      connect: async (onFrame, onState, onFailure) => {
-        const abort = new AbortController();
-        await waitForAdmission();
-        const socket = await remote.connectTerminal(abort.signal, onFrame, (failure) => {
-          onState("disconnected");
-          if (failure)
-            onFailure({
-              code: "protocol_error",
-              message: failure.message,
-            });
-        });
-        onState("connected");
-        return {
-          send: socket.send,
-          close: () => {
-            abort.abort();
-            socket.close();
-          },
-        };
-      },
-    },
+    terminals: createRemoteTerminalBridge(connection),
   };
 };
 

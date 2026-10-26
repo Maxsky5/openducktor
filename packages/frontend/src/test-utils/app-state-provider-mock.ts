@@ -21,7 +21,5 @@ export const createAppStateProviderModuleMock = (
   useSpecState: unused("useSpecState"),
   useAgentOperations: unused("useAgentOperations"),
   useAgentSessionReadModelState: unused("useAgentSessionReadModelState"),
-  useAgentSessionSummaries: unused("useAgentSessionSummaries"),
-  useAgentSession: unused("useAgentSession"),
   ...overrides,
 });

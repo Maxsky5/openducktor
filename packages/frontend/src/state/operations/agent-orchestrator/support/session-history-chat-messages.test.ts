@@ -9,9 +9,9 @@ import {
 } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import { getToolDuration } from "@/components/features/agents/agent-chat/tool-duration";
-import { buildAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/agent-chat-transcript-model";
-import { getAssistantFooterData } from "@/components/features/agents/agent-chat/message-formatting";
+import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
+import { buildAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { getAssistantFooterData } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 import {
   applyLoadedSessionHistory,
   historyToChatMessages,

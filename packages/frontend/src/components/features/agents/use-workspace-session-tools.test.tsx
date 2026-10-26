@@ -15,15 +15,19 @@ import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
+import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
-import { useWorkspaceSessionBranch } from "@/pages/workspace-sessions/use-workspace-session-branch";
+import { useWorkspaceSessionBranch } from "@openducktor/frontend-core/git/workspace-session/use-workspace-session-branch";
+import { windowReturnVisibility } from "@/lib/window-return-visibility";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
+import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
 import { useGitPanelViewStore } from "./agent-studio-git-panel/git-panel-view-store";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import { workspaceSessionGitSource } from "@/test-utils/workspace-session-git-source";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
 type HarnessTab = "diffs" | "files";
@@ -39,8 +43,9 @@ const targetReference = "origin/main";
 const createToolsConnection = (
   client: Partial<HostClient>,
   settings = createSettingsSnapshotFixture(),
+  feedback: ClientFeedback = createFeedbackFake(),
 ) => {
-  const connection = createTestClientConnection({ client });
+  const connection = createTestClientConnection({ client, feedback });
   connection.queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settings);
   return connection;
 };
@@ -126,16 +131,18 @@ function PanelHarness({
     applyTarget: async () => {},
     repoPath: "/repo",
     workspaceSession: { workspaceId: "workspace-1", sessionId },
-    workingDirectory,
     contextMode: contextMode,
-    branchKey: branchKey,
-    currentBranch: branchReady ? { name: branchKey, detached: false } : null,
-    branchReady: branchReady,
-    target: target,
-    savedTarget,
-    targetError: targetError,
-    retryTarget: retryTarget,
-    readBranch: readBranch,
+    git: workspaceSessionGitSource({
+      workingDirectory,
+      branchKey,
+      currentBranch: branchReady ? { name: branchKey, detached: false } : null,
+      branchReady,
+      target,
+      savedTarget,
+      targetError,
+      retryTarget,
+      readBranch,
+    }),
     isFilesActive: isVisible && activeTabId === "files",
     selectedFile: null,
     onSelectFile,
@@ -520,6 +527,7 @@ test.each(["recovers", "fails"] as const)(
       if (outcome === "fails") throw new Error("Repository settings still unavailable");
     });
     const reportError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+    const feedback = createFeedbackFake();
     const toolsHost: Partial<HostClient> = withLocalChanges({
       gitGetComparisonTarget: comparison,
       gitFetchRemote: fetchRemote,
@@ -547,7 +555,7 @@ test.each(["recovers", "fails"] as const)(
         />
       );
     }
-    const connection = createToolsConnection(toolsHost);
+    const connection = createToolsConnection(toolsHost, undefined, feedback);
     const queryClient = connection.queryClient;
     const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
     const textKey = filesystemQueryKeys.textFile("/repo", "draft.txt");
@@ -573,6 +581,7 @@ test.each(["recovers", "fails"] as const)(
         await waitFor(() => expect(statusTargets).toContain(targetReference));
         expect(screen.queryByText("Could not read repository settings")).toBeNull();
         expect(reportError).not.toHaveBeenCalled();
+        expect(feedback.shownOf("error")).toEqual([]);
         expect(fetchRemote).toHaveBeenCalledTimes(1);
         // A manual Refresh drops the inactive tree and reads file text again.
         await waitFor(() => {
@@ -581,8 +590,10 @@ test.each(["recovers", "fails"] as const)(
         });
       } else {
         await waitFor(() =>
-          expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {
-            description: "Repository settings still unavailable",
+          expect(feedback.shownOf("error")).toContainEqual({
+            kind: "error",
+            message: "Could not refresh Git changes",
+            options: { description: "Repository settings still unavailable" },
           }),
         );
         expect(screen.getByText("Could not read repository settings")).toBeTruthy();
@@ -801,6 +812,7 @@ test("manual refresh retains data when branch and comparison identity stay uncha
       isWorktree: false,
       isSwitchingBranch: false,
       activeBranch: { name: "feature", detached: false },
+      visibility: windowReturnVisibility,
     });
     return (
       <>
@@ -1425,7 +1437,7 @@ test("manual refresh fetches a missing comparison target before checking it agai
 });
 
 test("a missing target fetch failure tells the user what failed", async () => {
-  const reportError = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  const feedback = createFeedbackFake();
   const comparison = mock(async (): Promise<GitComparisonTarget> => ({
     kind: "unavailable",
     reason: "No tracked upstream.",
@@ -1442,7 +1454,7 @@ test("a missing target fetch failure tells the user what failed", async () => {
     },
     gitGetBranches: async () => [],
   });
-  const connection = createToolsConnection(toolsHost);
+  const connection = createToolsConnection(toolsHost, undefined, feedback);
   const queryClient = connection.queryClient;
   const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
@@ -1464,8 +1476,10 @@ test("a missing target fetch failure tells the user what failed", async () => {
     );
     fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
     await waitFor(() =>
-      expect(reportError).toHaveBeenCalledWith("Could not refresh Git changes", {
-        description: "Current branch has no upstream remote",
+      expect(feedback.shownOf("error")).toContainEqual({
+        kind: "error",
+        message: "Could not refresh Git changes",
+        options: { description: "Current branch has no upstream remote" },
       }),
     );
     expect(comparison).toHaveBeenCalledTimes(1);
@@ -1475,7 +1489,6 @@ test("a missing target fetch failure tells the user what failed", async () => {
   } finally {
     view.unmount();
     queryClient.clear();
-    reportError.mockRestore();
   }
 });
 
@@ -2040,7 +2053,7 @@ test("a failed History read fails a manual refresh once and stays until a retry"
 
 test("a failed fetch refreshes both diff tabs and reports the fetch error", async () => {
   let revision = 1;
-  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  const feedback = createFeedbackFake();
   const toolsHost: Partial<HostClient> = withLocalChanges({
     gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
     gitGetBranches: async () => [],
@@ -2061,7 +2074,7 @@ test("a failed fetch refreshes both diff tabs and reports the fetch error", asyn
       ],
     }),
   });
-  const connection = createToolsConnection(toolsHost);
+  const connection = createToolsConnection(toolsHost, undefined, feedback);
   const client = connection.queryClient;
   const view = render(
     <ClientConnectionProvider connection={connection}>
@@ -2092,8 +2105,10 @@ test("a failed fetch refreshes both diff tabs and reports the fetch error", asyn
       fireEvent.click(screen.getByTestId("agent-studio-git-refresh-button"));
     });
     await waitFor(() =>
-      expect(report).toHaveBeenCalledWith("Could not refresh Git changes", {
-        description: "Check the remote connection.",
+      expect(feedback.shownOf("error")).toContainEqual({
+        kind: "error",
+        message: "Could not refresh Git changes",
+        options: { description: "Check the remote connection." },
       }),
     );
     // The panel keeps the failure next to the retained data.
@@ -2112,6 +2127,5 @@ test("a failed fetch refreshes both diff tabs and reports the fetch error", asyn
   } finally {
     view.unmount();
     client.clear();
-    report.mockRestore();
   }
 });

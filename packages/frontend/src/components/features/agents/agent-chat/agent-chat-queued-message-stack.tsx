@@ -25,17 +25,16 @@ import { Button } from "@/components/ui/button";
 import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessageQueueAction } from "./agent-chat.types";
+import type { AgentChatMessageQueueAction } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { QueuedMessageActionRun } from "@openducktor/frontend-core/sessions/send/use-queued-message-action-runs";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   type QueuedMessageSteerContext,
   queuedMessageSteerBlockedReason,
-} from "./agent-chat-steering";
-import {
-  isUserMessageReferencePart,
-  renderUserMessageReferenceChip,
-} from "./agent-chat-user-message-reference-chip";
+} from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
+import { renderUserMessageReferenceChip } from "./agent-chat-user-message-reference-chip";
+import { isUserMessageReferencePart } from "@openducktor/frontend-core/sessions/messages/agent-chat-user-message-content";
 
 export type QueuedMessageEntryAction = Exclude<AgentChatMessageQueueAction, { kind: "resume" }>;
 
@@ -68,14 +67,15 @@ export function QueuedMessageStack({
   entries,
   isPaused,
   steerContext,
-  pendingSubmissionId,
+  runningActions,
   onAction,
 }: {
   /** In delivery order: the first entry goes out first. */
   entries: readonly StackedQueuedMessage[];
   isPaused: boolean;
   steerContext: QueuedMessageSteerContext;
-  pendingSubmissionId: string | null;
+  /** The action that runs now for each message, by submission ID. */
+  runningActions: ReadonlyMap<string, QueuedMessageActionRun>;
   onAction: (action: QueuedMessageEntryAction) => void;
 }): ReactElement {
   const hover = useDelayedFlag(OPEN_DELAY_MS, CLOSE_DELAY_MS);
@@ -120,7 +120,7 @@ export function QueuedMessageStack({
               isPaused={isPaused}
               showsFull={showsFull}
               steerContext={steerContext}
-              isPending={pendingSubmissionId === entry.submissionId}
+              isPending={runningActions.has(entry.submissionId)}
               onAction={onAction}
             />
           ))}

@@ -2,7 +2,7 @@ import { type ComponentProps, type ReactElement, useMemo } from "react";
 import type { Components } from "react-markdown";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { GithubIssueImage, type IssueImageContext } from "./github-issue-image";
-import { isGithubIssueAttachmentUrl } from "./issue-image-url";
+import { isGithubIssueAttachmentUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 
 export type { IssueImageContext } from "./github-issue-image";
 

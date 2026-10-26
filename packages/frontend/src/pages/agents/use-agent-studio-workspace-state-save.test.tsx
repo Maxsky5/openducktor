@@ -5,7 +5,7 @@ import type {
   WorkspaceAgentStudioStateAction,
 } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { useSessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
+import { useSessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import {
   createHookHarness as createSharedHookHarness,

@@ -23,6 +23,16 @@ import { useMinimumLoading } from "@/lib/use-minimum-loading";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { workspaceSessionArchivePreviewQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-archive";
+import {
+  ARCHIVE_CHAT_TEXT,
+  canArchiveWorkspaceSession,
+  effectiveWorktreeRemoval,
+  isWorktreeChat,
+  sharedWorktreeNotice,
+  taskWorktreeNotice,
+  worktreeArchiveConfirmation,
+  worktreeArchiveNotice,
+} from "@openducktor/frontend-core/workspace-sessions/workspace-session-archive-plan";
 import { WorktreeArchivePreview } from "./worktree-archive-preview";
 
 /** A shorter loader reads as a flash before the final content. */
@@ -43,7 +53,7 @@ type Props = {
 };
 
 export function WorkspaceSessionArchiveDialog({ record, ...props }: Props): ReactElement {
-  if (record.executionTarget.kind === "local_worktree") {
+  if (isWorktreeChat(record)) {
     return <WorktreeArchiveDialog record={record} {...props} />;
   }
   return (
@@ -53,7 +63,7 @@ export function WorkspaceSessionArchiveDialog({ record, ...props }: Props): Reac
       onConfirm={() => props.onArchive(false)}
       canArchive={!props.isArchiving}
     >
-      <p className="text-sm text-muted-foreground">Your repository files will stay on disk.</p>
+      <p className="text-sm text-muted-foreground">{ARCHIVE_CHAT_TEXT.repositoryFilesStay}</p>
     </ArchiveDialog>
   );
 }
@@ -67,14 +77,16 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
   });
   // The dialog shows one loader, then the content and buttons of the finished check together.
   const isChecking = useMinimumLoading(preview.isFetching, WORKTREE_CHECK_MINIMUM_MS);
-  const sharedWith = preview.data?.sharedWith ?? [];
-  const taskOwners = preview.data?.taskOwners ?? [];
-  const isNeeded = sharedWith.length > 0 || taskOwners.length > 0;
-  const removeWorktree = !isChecking && wantsWorktreeRemoval && !isNeeded;
-  const canArchive =
-    !props.isArchiving &&
-    !isChecking &&
-    (!removeWorktree || (preview.isSuccess && preview.data.branchName !== null));
+  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview, isChecking);
+  const sharedNotice = sharedWorktreeNotice(preview);
+  const taskNotice = taskWorktreeNotice(preview);
+  const canArchive = canArchiveWorkspaceSession({
+    record,
+    removeWorktree,
+    preview,
+    isArchiving: props.isArchiving,
+    checking: isChecking,
+  });
   return (
     <ArchiveDialog
       {...props}
@@ -84,12 +96,7 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
       onConfirm={() =>
         props.onArchive(
           removeWorktree,
-          removeWorktree && preview.data?.branchName
-            ? {
-                workingDirectory: record.executionTarget.workingDirectory,
-                branchName: preview.data.branchName,
-              }
-            : undefined,
+          worktreeArchiveConfirmation(record, removeWorktree, preview),
         )
       }
     >
@@ -99,34 +106,24 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
           className="flex min-h-28 items-center justify-center gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground"
         >
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Checking the worktree…
+          {ARCHIVE_CHAT_TEXT.checkingWorktree}
         </div>
       ) : (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
           <div className="flex items-center gap-3">
             <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <Label htmlFor={switchId} className="flex-1 cursor-pointer leading-5">
-              Remove worktree and branch
+              {ARCHIVE_CHAT_TEXT.removeWorktree}
             </Label>
             <Switch
               id={switchId}
               checked={removeWorktree}
               onCheckedChange={setWantsWorktreeRemoval}
-              disabled={props.isArchiving || isNeeded}
+              disabled={props.isArchiving || sharedNotice !== null || taskNotice !== null}
             />
           </div>
-          {sharedWith.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              This worktree stays because these saved chats need it for files or history:{" "}
-              {sharedWith.map((owner) => owner.title).join(", ")}.
-            </p>
-          )}
-          {taskOwners.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              This worktree stays because these tasks need it:{" "}
-              {taskOwners.map((task) => `${task.title} (${task.taskId})`).join(", ")}.
-            </p>
-          )}
+          {sharedNotice && <p className="text-sm text-muted-foreground">{sharedNotice}</p>}
+          {taskNotice && <p className="text-sm text-muted-foreground">{taskNotice}</p>}
           <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
           <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
         </div>
@@ -172,10 +169,8 @@ function ArchiveDialog({
           }}
         >
           <DialogHeader className="border-b border-border px-5 py-4 pr-12">
-            <DialogTitle>Archive chat</DialogTitle>
-            <DialogDescription>
-              Move this chat to Archived chats. You can restore it later.
-            </DialogDescription>
+            <DialogTitle>{ARCHIVE_CHAT_TEXT.title}</DialogTitle>
+            <DialogDescription>{ARCHIVE_CHAT_TEXT.description}</DialogDescription>
           </DialogHeader>
           <fieldset disabled={isArchiving} className="flex min-h-0 flex-1 flex-col border-0 p-0">
             <DialogBody className="flex flex-col gap-4 px-5 py-4">
@@ -192,10 +187,7 @@ function ArchiveDialog({
                   </p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Archiving stops this chat's terminals, development servers, and its running session.
-                Your chat history stays available in Archived chats.
-              </p>
+              <p className="text-sm text-muted-foreground">{ARCHIVE_CHAT_TEXT.stopsWork}</p>
               {children}
               {error && (
                 <p role="alert" className="text-sm text-destructive-muted">
@@ -222,7 +214,7 @@ function ArchiveDialog({
                 ) : (
                   <Archive data-icon="inline-start" aria-hidden="true" />
                 )}
-                {isArchiving ? "Archiving…" : "Archive chat"}
+                {isArchiving ? ARCHIVE_CHAT_TEXT.confirming : ARCHIVE_CHAT_TEXT.confirm}
               </Button>
             </DialogFooter>
           </fieldset>
@@ -239,29 +231,14 @@ function ArchiveWorktreeNotice({
   removeWorktree: boolean;
   preview: UseQueryResult<WorkspaceSessionArchivePreview>;
 }): ReactElement | null {
-  if (!removeWorktree) {
-    let notice = "The worktree and its branch will stay on disk.";
-    if (preview.data?.worktreeExists === false) {
-      notice =
-        preview.data.branchName === null
-          ? "The worktree is missing. Restore the worktree at this path before restoring the chat."
-          : "The worktree is missing. Restoring this chat creates a fresh worktree from the default branch.";
-    }
-    return <p className="text-sm text-muted-foreground">{notice}</p>;
-  }
+  const notice = worktreeArchiveNotice(removeWorktree, preview);
+  if (notice.kind !== "delete_branch")
+    return <p className="text-sm text-muted-foreground">{notice.text}</p>;
   // A failed check shows its own error and retry.
-  if (!preview.data) return null;
-  if (preview.data.branchName === null)
-    return (
-      <p className="text-sm text-muted-foreground">
-        No branch is attached. Turn off worktree removal to archive this chat.
-      </p>
-    );
+  if (notice.branchName === null) return null;
   return (
     <p className="text-sm text-muted-foreground">
-      Branch <span className="font-mono">{preview.data.branchName}</span> will be deleted. Commits
-      that exist only on this branch may be lost. Restoring this chat creates a fresh worktree from
-      the chat's target branch. It does not recover deleted changes.
+      Branch <span className="font-mono">{notice.branchName}</span> {notice.consequence}
     </p>
   );
 }

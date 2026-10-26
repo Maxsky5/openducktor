@@ -2,22 +2,23 @@ import { CircleAlert, LoaderCircle } from "lucide-react";
 import { memo, useId, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
-import { useSessionUnread } from "@/features/session-navigation/session-read-state";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import { cn } from "@/lib/utils";
 import type {
   SessionNavigationEntry,
   SessionNavigationGroup,
   SessionNavigationModel,
   SessionNavigationSourceIssue,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { SessionEntryPreview, SessionPreviewProvider } from "./session-entry-preview";
 import {
   SESSION_GROUP_LABELS,
   sessionEntryAccessibleName,
-  sessionEntryIcon,
   sessionSourceIssueText,
-} from "./session-navigation-entry-model";
+  visibleSessionNavigationGroups,
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
+import { sessionEntryIcon } from "./session-navigation-entry-model";
 import {
   SessionEntryStatusDot,
   SessionSelectionIndicator,
@@ -49,9 +50,7 @@ export function SessionNavigationRail({
   onOpen,
   onRetry,
 }: SessionNavigationRailProps): ReactElement {
-  const visibleGroups = model.groups.filter(
-    (group) => group.id !== "recent" || group.entries.length > 0,
-  );
+  const visibleGroups = visibleSessionNavigationGroups(model.groups);
   const issueText = model.issues.map(sessionSourceIssueText).join("\n");
   return (
     <SessionPreviewProvider>

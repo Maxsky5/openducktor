@@ -40,6 +40,16 @@ A `renderToStaticMarkup` test that uses Query or app context needs the same prov
 
 Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) for Vite server tests in the web package. It gives each server a temporary cache and closes the server before cleanup. A test server must not share the running app's cache. Vite can delete that cache when the test uses different dependency settings.
 
+## Mobile tests
+
+- `apps/mobile` runs `bun test --parallel`. React Native components do not load under Bun, so test the logic in modules and hooks without React Native imports.
+- Inject native modules through their interfaces, such as the network module of `src/platform/native-remote-transport.ts`. Do not mock modules.
+- Use `apps/mobile/src/test-support/simulated-remote-host.ts` for flows that need a remote host: discovery, negotiation, the event stream, refusals, unreachable hosts, and release. Add a helper to it when a mobile test needs more host behavior.
+- `packages/openducktor-web/src/mobile-host-session.integration.test.ts` starts a real TypeScript host with Remote control on and connects the mobile host session owner to it. Run it through the package `test` script, so the test preload gives the host a temporary config directory.
+- The `Build workspaces` step of the quality jobs bundles the JavaScript of the app with `expo export`.
+- The native CI jobs run only when a change reaches a native input that the `mobile-changes` job of `ci.yml` lists. On a pull request, `Mobile Native Projects` runs `expo prebuild` for both platforms, which runs the config plugins. After a merge to `main` and on each manual run, `Mobile iOS Build` and `Mobile Android Build` compile Debug builds of the iOS app for the simulator and of the Android app, for `arm64` only.
+- Check native behavior, gestures, layout, and performance on real iOS and Android devices with release builds against a real host. See [Device validation](../apps/mobile/README.md#device-validation).
+
 ## Parallel runs
 
 - The root `bun run test` and CI run workspace suites in sequence.
@@ -62,6 +72,9 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - Await a hook harness call or another `act()` flow directly. Do not wrap it in `expect(...).resolves`, because Bun can then delay the end of `act()` by hundreds of milliseconds.
 - Await a Promise that waits for a timer before you assert its result. Do not use `expect(promise).rejects` or `.resolves` for it: on Windows, Bun can stop timers while the matcher waits, and the test hangs.
 - Run flake checks in sequence.
+- Bun starts the next test while the body of a timed-out test continues to run. The late steps of that body can overlap the `act()` calls of the next test and remove its spies and globals.
+- A harness or test wrapper that installs spies, globals, or a rendered tree must wait in `onTestFinished` until the test body ends, and then remove them. Use [restoreAfterTestBody](../packages/frontend/src/test-utils/restore-after-test-body.ts) for this. An `afterEach` hook cannot wait for the body.
+- [createDialogPreviewHarness](../packages/frontend/src/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness.tsx) shows this pattern for a harness, and `previewTest` in [task-execution-file-preview.test.tsx](../packages/frontend/src/components/features/agents/task-execution-file-preview.test.tsx) shows it for a test wrapper.
 
 ## Browser validation
 

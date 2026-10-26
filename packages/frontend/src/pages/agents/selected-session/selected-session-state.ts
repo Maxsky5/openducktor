@@ -1,4 +1,4 @@
-import type { RuntimeReadiness } from "@/lib/use-runtime-readiness";
+import type { RuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentSessionIdentity,

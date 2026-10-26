@@ -1,11 +1,11 @@
 import { describe, expect, type Mock, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
-import type { GitConflict } from "@/features/agent-studio-git";
-import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
+import { GitConflictRequestCancelled } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 import {
   type SessionStartWorkflowResult,
   startSessionWorkflow,
-} from "@/features/session-start/session-start-workflow";
+} from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import {
   agentSessionIdentityKey,
   toAgentSessionIdentity,

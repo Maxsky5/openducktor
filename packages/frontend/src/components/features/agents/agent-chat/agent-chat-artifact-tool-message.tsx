@@ -1,4 +1,8 @@
-import { mcpArtifactSaveResultSchema, type McpTaskArtifact } from "@openducktor/contracts";
+import type { McpTaskArtifact } from "@openducktor/contracts";
+import {
+  type ArtifactToolHeading,
+  readArtifactToolCall,
+} from "@openducktor/frontend-core/sessions/messages/artifact-tool-call";
 import {
   ArrowRight,
   File,
@@ -11,9 +15,17 @@ import {
 import { useMemo, useState, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatArtifactLinkAction } from "./agent-chat-artifact-link-context";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
-import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
+
+const HEADING_ICONS = {
+  spec: <FileText className="size-3.5" />,
+  plan: <ListChecks className="size-3.5" />,
+  qa_approved: <ShieldCheck className="size-3.5" />,
+  qa_rejected: <ShieldX className="size-3.5" />,
+  qa_report: <ShieldCheck className="size-3.5" />,
+  free: <File className="size-3.5" />,
+} satisfies Record<ArtifactToolHeading, ReactElement>;
 
 export const ArtifactToolMessage = ({
   meta,
@@ -24,24 +36,14 @@ export const ArtifactToolMessage = ({
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
 }): ReactElement => {
-  const completed = getToolLifecyclePhase(meta) === "completed";
-  const saved = useMemo(
-    () => (completed ? readSavedArtifact(meta.output) : null),
-    [completed, meta.output],
-  );
-  const code = saved?.code ?? readInputText(meta, "code");
-  const verdict =
-    saved?.classification === "workflow" ? saved.verdict : readInputText(meta, "verdict");
-  const { title, icon } = artifactHeading(code, verdict);
-  const name = saved?.name ?? readInputText(meta, "name") ?? code;
-  const freeTitle = name ? `Set Artifact · ${name}` : "Set Artifact";
+  const { heading, title, saved } = useMemo(() => readArtifactToolCall(meta), [meta]);
 
   return (
     <WorkflowToolMessage
       {...props}
       meta={meta}
-      displayName={title ?? freeTitle}
-      icon={icon}
+      displayName={title}
+      icon={HEADING_ICONS[heading]}
       action={
         saved?.classification === "free" ? (
           <ArtifactOpenButton key={`${saved.taskId}:${saved.code}`} artifact={saved} />
@@ -93,38 +95,4 @@ const ArtifactOpenButton = ({ artifact }: { artifact: McpTaskArtifact }): ReactE
       ) : null}
     </>
   );
-};
-
-const readInputText = (meta: ToolMeta, field: string): string | null => {
-  const value = meta.input?.[field];
-  return hasNonEmptyText(value) ? value.trim() : null;
-};
-
-const readSavedArtifact = (output: string | undefined): McpTaskArtifact | null => {
-  if (!output) return null;
-  try {
-    const result = mcpArtifactSaveResultSchema.safeParse(JSON.parse(output));
-    return result.success ? result.data.artifact : null;
-  } catch {
-    return null;
-  }
-};
-
-const artifactHeading = (code: string | null, verdict: string | null | undefined) => {
-  if (code === "spec") return { title: "Set Spec", icon: <FileText className="size-3.5" /> };
-  if (code === "plan") return { title: "Set Plan", icon: <ListChecks className="size-3.5" /> };
-  if (code === "qaReport") {
-    if (verdict === "approved")
-      return {
-        title: "Approve QA",
-        icon: <ShieldCheck className="size-3.5" />,
-      };
-    if (verdict === "rejected")
-      return {
-        title: "Reject QA",
-        icon: <ShieldX className="size-3.5" />,
-      };
-    return { title: "Set QA Report", icon: <ShieldCheck className="size-3.5" /> };
-  }
-  return { title: null, icon: <File className="size-3.5" /> };
 };

@@ -4,15 +4,16 @@ import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
+import { useInterruptedTurnResume } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import type { AgentChatSendTarget } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
-import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
+import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
+import { useAsyncActivityTracker } from "@openducktor/frontend-core/lib/use-async-activity-tracker";
 import { getAgentSessionResumeFailureNotice } from "@openducktor/frontend-core/sessions/agent-runtime-services";
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
-import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
+import { useAgentOperations } from "@/state/app-state-provider";
+import { useAgentSession } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import {
   workspaceSessionIdentity,
   workspaceSessionTitle,
@@ -25,9 +26,9 @@ import type {
   AgentMessageSendOptions,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
-import { projectWorkspaceSessionResult } from "./launch-workspace-session";
-import { useChatSessionPreparation } from "@/features/agent-chat-composer/use-chat-session-preparation";
+import { GitConflictRequestCancelled } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
+import { startWorkspaceSessionRuntime } from "@openducktor/frontend-core/workspace-sessions/create/launch-workspace-session";
+import { useChatSessionPreparation } from "@openducktor/frontend-core/sessions/composer/use-chat-session-preparation";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 const CHAT_UNAVAILABLE = "The original chat is no longer available. Reopen it to send your draft.";
@@ -105,20 +106,13 @@ export function useWorkspaceSessionChatActions(
   );
 
   const prepare = useCallback(async () => {
-    const result = await host.workspaceSessionStart({
-      workspaceId: workspace.workspaceId,
-      sessionId: record.id,
-    });
-    projectWorkspaceSessionResult(
-      {
-        workspaceId: workspace.workspaceId,
-        repoPath: workspace.repoPath,
-        record: result.session,
-        session: result.runtimeSession ?? undefined,
-      },
+    await startWorkspaceSessionRuntime({
+      host,
       store,
       queryClient,
-    );
+      workspace: { workspaceId: workspace.workspaceId, repoPath: workspace.repoPath },
+      sessionId: record.id,
+    });
   }, [host, queryClient, record.id, store, workspace.repoPath, workspace.workspaceId]);
   const preparation = useChatSessionPreparation({
     identity: recordIdentity,

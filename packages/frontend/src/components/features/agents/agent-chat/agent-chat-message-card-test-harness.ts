@@ -4,13 +4,13 @@ import { type ComponentProps, createElement } from "react";
 import { renderToReadableStream } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
-import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   AgentSessionTranscriptDialogContext,
   type AgentSessionTranscriptDialogContextValue,
 } from "./agent-session-transcript-dialog-context";
-import type { ParentSessionRuntimeContext } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 
 export const LONG_TRANSCRIPT_SAMPLE =
   "supercalifragilisticexpialidocioussupercalifragilisticexpialidocious";

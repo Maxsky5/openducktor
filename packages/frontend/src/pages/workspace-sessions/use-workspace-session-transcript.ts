@@ -1,14 +1,14 @@
-import { deriveAgentChatReadiness } from "@/components/features/agents/agent-chat/agent-chat-readiness";
-import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
-import { useFailedTranscriptAction } from "@/components/features/agents/agent-chat/use-failed-transcript-action";
-import type { RuntimeReadiness } from "@/lib/use-runtime-readiness";
+import { deriveAgentChatReadiness } from "@openducktor/frontend-core/sessions/send/agent-chat-readiness";
+import { resolveAgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-presentation";
+import { useFailedTranscriptAction } from "@openducktor/frontend-core/sessions/transcript/use-failed-transcript-action";
+import type { RuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
 import type { AgentSessionTransientFault } from "@openducktor/frontend-core/types/agent-session-transient-fault";
-import type { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
+import type { useAgentChatPresentation } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-presentation";
 import type {
   AgentOperationsContextValue,
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
-import type { projectWorkspaceSessionChatState } from "./workspace-session-chat-state";
+import type { projectWorkspaceSessionChatState } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-chat-state";
 
 export function useWorkspaceSessionTranscript({
   repoPath,

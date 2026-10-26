@@ -73,7 +73,13 @@ export const createTaskCompleteDirectMergeUseCase = ({
       }
       yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
       return yield* closeMergedTask(
-        { ...dependencies, taskStore, completionState },
+        {
+          ...dependencies,
+          taskStore,
+          completionState,
+          taskActivityGuard,
+          taskSessionLifecycleCoordinator,
+        },
         { ...input, repoPath },
         merge,
         currentTasks,

@@ -20,6 +20,7 @@ import {
   openWorkspaceRecordsInEffectiveOrder,
   workspaceRecordsInEffectiveOrder,
 } from "./workspace-catalog-model";
+import { createHostIdentitySettingsMethods } from "./host-identity-settings";
 import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
 import { updateSidebarSessionGrouping } from "./workspace-sidebar-grouping";
 import {
@@ -50,6 +51,7 @@ const createUnserializedWorkspaceSettingsService = (
 ): WorkspaceSettingsService => ({
   ...createCustomAgentRoleOperations(settingsConfig),
   ...createWorkspaceLifecycleSettingsMethods(settingsConfig),
+  ...createHostIdentitySettingsMethods(settingsConfig),
   listWorkspaces() {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);

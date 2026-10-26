@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ReactNode } from "react";
-import type { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
+import type { useWorkspaceSessionBranch } from "@openducktor/frontend-core/git/workspace-session/use-workspace-session-branch";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 
 export type WorkspaceSessionFilePreviewHandle = {

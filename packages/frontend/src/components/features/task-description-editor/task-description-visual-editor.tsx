@@ -38,7 +38,7 @@ import {
   type TaskDescriptionMathEdit,
 } from "./task-description-math-dialog";
 import { TaskDescriptionMermaidNode } from "./task-description-mermaid-node";
-import type { TaskDescriptionAssetUpload } from "./use-task-description-asset-draft";
+import type { TaskDescriptionAssetUpload } from "@openducktor/frontend-core/tasks/description/use-task-description-asset-draft";
 
 const MermaidCodeBlock = CodeBlock.extend({
   addNodeView() {

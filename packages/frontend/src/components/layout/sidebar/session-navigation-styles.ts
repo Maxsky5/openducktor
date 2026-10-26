@@ -1,9 +1,13 @@
 import { AGENT_WORKFLOW_TONE_ICON_CLASSES } from "@/lib/agent-workflow-styles";
 import { cn } from "@/lib/utils";
+import {
+  type SessionEntryTitleTone,
+  sessionEntryIconTone,
+} from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type {
   SessionNavigationEntry,
   SessionNavigationGroupId,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 
 export const SESSION_GROUP_ICON_CLASSES = {
   needs_you: "text-warning-accent",
@@ -17,16 +21,19 @@ export const SESSION_GROUP_COUNT_CLASSES = {
   recent: "bg-muted text-sidebar-foreground",
 } satisfies Record<SessionNavigationGroupId, string>;
 
+/** The title shows attention when the session needs you, and dims when it is read and settled. */
+export const SESSION_TITLE_CLASSES = {
+  attention: "text-warning-muted",
+  read: "text-sidebar-read-foreground",
+  default: "text-foreground",
+} satisfies Record<SessionEntryTitleTone, string>;
+
 /** Task role colors follow the workflow rail. Known attention always keeps its warning cue. */
 export const sessionEntryIconClassName = (entry: SessionNavigationEntry): string => {
-  if (entry.attention.length > 0) return AGENT_WORKFLOW_TONE_ICON_CLASSES.waiting_input;
-  if (entry.status.kind === "checking" || entry.status.kind === "unavailable") {
-    return "text-sidebar-muted-foreground";
-  }
-  if (entry.workflowTone !== null) return AGENT_WORKFLOW_TONE_ICON_CLASSES[entry.workflowTone];
-  if (entry.status.kind === "running") return AGENT_WORKFLOW_TONE_ICON_CLASSES.in_progress;
-  if (entry.status.failed) return AGENT_WORKFLOW_TONE_ICON_CLASSES.failed;
-  return "text-sidebar-muted-foreground";
+  const tone = sessionEntryIconTone(entry);
+  return tone === "muted"
+    ? "text-sidebar-muted-foreground"
+    : AGENT_WORKFLOW_TONE_ICON_CLASSES[tone];
 };
 
 /** A selection strengthens its section's surface instead of replacing its state color. */

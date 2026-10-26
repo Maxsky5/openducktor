@@ -1,0 +1,3 @@
+/* The block page styles: KaTeX and the block layout. */
+@import "katex/dist/katex.min.css";
+@import "./shared/block-page.css";

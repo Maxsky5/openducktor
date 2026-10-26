@@ -9,7 +9,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { toast } from "sonner";
 import { z } from "zod";
-import { perConnection } from "@/lib/per-connection";
+import { perConnection } from "@openducktor/frontend-core/lib/per-connection";
 
 const STORAGE_PREFIX = "openducktor:browser-recent-pages:v1:";
 export const BROWSER_RECENT_PAGES_LIMIT = 8;

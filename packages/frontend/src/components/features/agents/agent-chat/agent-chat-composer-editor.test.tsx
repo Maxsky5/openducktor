@@ -3,8 +3,8 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useReducer } from "react";
-import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { resolveRuntimePromptInputSupport } from "@openducktor/frontend-core/sessions/composer/prompt-input/runtime-prompt-input-support";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,

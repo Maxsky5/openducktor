@@ -1,7 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo } from "react";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,

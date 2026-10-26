@@ -12,30 +12,26 @@ export const emptyAgentSessionCollection = (): AgentSessionCollection => new Map
 export const listAgentSessions = (collection: AgentSessionCollection): AgentSessionState[] =>
   Array.from(collection.values());
 
+/**
+ * True when both sessions have the same own keys with the same values. The store runs this on each
+ * commit for each session, so it compares keys without sorting them.
+ */
 export const areAgentSessionStatesEquivalent = (
   current: AgentSessionState,
   nextSession: AgentSessionState,
 ): boolean => {
-  const currentEntries = Object.entries(current).toSorted(([left], [right]) =>
-    left.localeCompare(right),
-  );
-  const nextEntries = Object.entries(nextSession).toSorted(([left], [right]) =>
-    left.localeCompare(right),
-  );
+  if (current === nextSession) {
+    return true;
+  }
+  const currentEntries = Object.entries(current);
+  const nextEntries = Object.entries(nextSession);
   if (currentEntries.length !== nextEntries.length) {
     return false;
   }
-  for (const [index, currentEntry] of currentEntries.entries()) {
-    const nextEntry = nextEntries[index];
-    if (
-      nextEntry === undefined ||
-      currentEntry[0] !== nextEntry[0] ||
-      currentEntry[1] !== nextEntry[1]
-    ) {
-      return false;
-    }
-  }
-  return true;
+  const nextValues = new Map(nextEntries);
+  return currentEntries.every(
+    ([key, value]) => nextValues.has(key) && nextValues.get(key) === value,
+  );
 };
 
 export const hasAgentSessionStateChanges = (

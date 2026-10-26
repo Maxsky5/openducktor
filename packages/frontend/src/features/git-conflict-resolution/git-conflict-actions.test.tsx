@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { GitConflictActions } from "./git-conflict-actions";
-import { createGitConflictActionsModel } from "./git-conflict-actions-model";
+import { createGitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 
 test.each([
   ["light", "Builder"],

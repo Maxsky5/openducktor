@@ -8,7 +8,11 @@ import {
 import { PierreFilePairDiffViewer } from "@/components/features/agents/pierre-file-pair-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { FileEditData } from "./agent-chat-message-card-model";
+import type { FileEditData } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import {
+  inferFileEditStatus,
+  splitFileEditPath,
+} from "@openducktor/frontend-core/sessions/messages/file-edit-tool";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 
 type AgentChatFileEditCardProps = {
@@ -20,25 +24,6 @@ const STATUS_CONFIG = {
   added: { icon: FilePlus, color: "text-green-400", badge: "A" },
   deleted: { icon: FileX, color: "text-red-400", badge: "D" },
 };
-
-type FileEditStatus = keyof typeof STATUS_CONFIG;
-
-function inferStatus(data: FileEditData): FileEditStatus {
-  if (
-    data.changeType === "modified" ||
-    data.changeType === "added" ||
-    data.changeType === "deleted"
-  ) {
-    return data.changeType;
-  }
-  if (data.deletions === 0 && data.additions > 0) {
-    return "added";
-  }
-  if (data.additions === 0 && data.deletions > 0) {
-    return "deleted";
-  }
-  return "modified";
-}
 
 const DEFAULT_CONFIG = {
   icon: FileText,
@@ -55,15 +40,12 @@ const FileEditCardHeader = ({
   onToggle: () => void;
 }): ReactElement => {
   const hasContent = data.kind !== "path";
-  const status = inferStatus(data);
+  const status = inferFileEditStatus(data);
   const config = STATUS_CONFIG[status] ?? DEFAULT_CONFIG;
   const Icon = config.icon;
   const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
 
-  const fileName = data.filePath.split("/").pop() ?? data.filePath;
-  const dirName = data.filePath.includes("/")
-    ? data.filePath.slice(0, data.filePath.lastIndexOf("/"))
-    : "";
+  const { fileName, dirName } = splitFileEditPath(data.filePath);
 
   return (
     <button

@@ -14,9 +14,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
-env:
-  BUN_VERSION: 1.4.3
-
 jobs:
   react-doctor:
     name: React Doctor
@@ -38,7 +35,7 @@ jobs:
       - name: Run React Doctor
         uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2.4.0
         with:
-          project: "@openducktor/frontend,@openducktor/frontend-core,@openducktor/electron"
+          project: "@openducktor/frontend,@openducktor/frontend-core,@openducktor/electron,@openducktor/mobile"
           blocking: warning
           version: "0.9.14"
 
@@ -52,45 +49,16 @@ jobs:
         include:
           - label: Linux
             runner: ubuntu-latest
-            bunCacheDir: ~/.bun/install/cache
           - label: macOS
             runner: macos-15
-            bunCacheDir: ~/.bun/install/cache
           - label: Windows
             runner: windows-latest
-            bunCacheDir: D:/bun-cache
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Use a same-volume Bun install cache
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          echo "BUN_INSTALL_CACHE_DIR=${{ matrix.bunCacheDir }}" >> "$GITHUB_ENV"
-          mkdir -p "${{ matrix.bunCacheDir }}"
-
-      - name: Cache Bun download cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ matrix.bunCacheDir }}
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Check formatting
         run: bun run format:check
@@ -118,3 +86,110 @@ jobs:
 
       - name: Check built workers in Node, Bun, and Electron
         run: bun run test:workers
+
+  mobile-changes:
+    name: Mobile Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Only native inputs can break a native build: the native modules, the config plugins, the app
+      # config and assets, the dependencies, and the CI files. The quality jobs check the JavaScript
+      # bundle. A manual run has no base commit, so it builds the app.
+      - name: Compare the native inputs with the base commit
+        id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE" ]] || ! git diff --quiet "$BASE" HEAD -- apps/mobile/modules apps/mobile/plugins \
+            apps/mobile/app.config.ts apps/mobile/assets apps/mobile/package.json package.json bun.lock patches \
+            .github/actions .github/workflows/ci.yml; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Pull requests generate the native projects, which runs the config plugins. The native builds run
+  # after a merge to main and on manual runs.
+  mobile-native-projects:
+    name: Mobile Native Projects
+    needs: mobile-changes
+    if: github.event_name == 'pull_request' && needs.mobile-changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      - name: Generate the iOS and Android projects
+        working-directory: apps/mobile
+        run: bunx expo prebuild --clean --no-install
+
+  mobile-ios:
+    name: Mobile iOS Build
+    needs: mobile-changes
+    if: github.event_name != 'pull_request' && needs.mobile-changes.outputs.changed == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      # A Debug build for the simulator compiles the Swift modules and the native dependencies once,
+      # for the runner architecture, and skips the JavaScript bundle. It needs no store credentials.
+      - name: Build the iOS app for the simulator
+        working-directory: apps/mobile
+        run: |
+          bunx expo prebuild --platform ios --clean --no-install
+          (cd ios && pod install)
+          xcodebuild build -quiet -workspace ios/OpenDucktor.xcworkspace -scheme OpenDucktor -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 CODE_SIGNING_ALLOWED=NO
+
+  mobile-android:
+    name: Mobile Android Build
+    needs: mobile-changes
+    if: github.event_name != 'pull_request' && needs.mobile-changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      # The Gradle and compiler caches carry over between the builds on main.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('bun.lock') }}
+          restore-keys: gradle-
+
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: android
+          max-size: 2G
+
+      # A Debug build compiles the Kotlin and C++ code for one ABI and skips the JavaScript bundle and
+      # R8. CMake reads the compiler launchers from the environment. Gradle installs the NDK of React
+      # Native on each run, so ccache checks the compiler by its content.
+      - name: Build the Android app
+        working-directory: apps/mobile
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CCACHE_COMPILERCHECK: content
+        run: |
+          bunx expo prebuild --platform android --clean --no-install
+          cd android
+          JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew :app:assembleDebug --build-cache --no-daemon \
+            -PreactNativeArchitectures=arm64-v8a

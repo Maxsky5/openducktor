@@ -21,6 +21,16 @@ export type AgentChatDraftCleanupTarget = AgentChatDraftSessionIdentity & {
   taskId: string;
 };
 
+/** A draft over the storage limit. The composer keeps it, but the device does not save it. */
+export class ChatDraftTooLargeError extends Error {
+  constructor(readonly byteLength: number) {
+    super(
+      `This chat draft is too long to keep on this device (${byteLength} bytes, maximum ${AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES} bytes). Shorten it or send it before you close the app.`,
+    );
+    this.name = "ChatDraftTooLargeError";
+  }
+}
+
 export type AgentChatDraftStoreOptions = {
   storage: ClientStorage;
   stageAttachment: AttachmentStager;
@@ -303,11 +313,8 @@ export const createAgentChatDraftStore = ({
       draft: entry.draft,
       updatedAt: now().toISOString(),
     });
-    if (writeResult.status === "oversized") {
-      throw new Error(
-        `Chat draft is too large to persist (${writeResult.byteLength} bytes, maximum ${AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES} bytes).`,
-      );
-    }
+    if (writeResult.status === "oversized")
+      throw new ChatDraftTooLargeError(writeResult.byteLength);
     if (writeResult.status === "unpersistable_attachments") {
       throw new Error("Chat draft contains attachments that cannot be persisted.");
     }

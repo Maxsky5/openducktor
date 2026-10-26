@@ -27,9 +27,25 @@ import {
   githubPullListPayload,
   githubPullResponsePayload,
   pullRequest,
+  type TaskActivityGuardPort,
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
+
+/** A guard that sees no live session and records which task sessions the closure releases. */
+const createReleasingActivityGuard = (calls: unknown[]): TaskActivityGuardPort => ({
+  countLiveSessions: () => Effect.die(new Error("unexpected live session count")),
+  cleanupTaskSessions: (input) =>
+    Effect.sync(() => {
+      calls.push({
+        type: "releaseSessions",
+        sessionIds: input.taskSessions.flatMap((entry) =>
+          entry.sessions.map((session) => session.externalSessionId),
+        ),
+      });
+      return { stoppedSessionCount: 0 };
+    }),
+});
 
 type GithubTaskDependencies = Required<
   Pick<
@@ -2245,6 +2261,7 @@ describe("createTaskService pull requests", () => {
               updatedAt: "2026-05-10T11:00:00.000Z",
             }),
           }),
+          taskActivityGuard: createReleasingActivityGuard(calls),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
           worktreeFiles: createBuildStartWorktreeFiles(calls),
@@ -2282,6 +2299,16 @@ describe("createTaskService pull requests", () => {
       branch: "odt/task-1",
       force: false,
     });
+    const releaseIndex = calls.findIndex(
+      (call) =>
+        JSON.stringify(call) ===
+        JSON.stringify({ type: "releaseSessions", sessionIds: [buildSession.externalSessionId] }),
+    );
+    const removeIndex = calls.findIndex((call) =>
+      JSON.stringify(call).includes('"type":"removeWorktree"'),
+    );
+    expect(releaseIndex).toBeGreaterThan(-1);
+    expect(releaseIndex).toBeLessThan(removeIndex);
   });
   test("syncs linked pull request metadata without a matching local remote", async () => {
     const calls: unknown[] = [];
@@ -3399,6 +3426,7 @@ describe("createTaskService pull requests", () => {
         ancestorResults: { "/repo|odt/task-1|main": true },
       }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskActivityGuard: createReleasingActivityGuard(calls),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       worktreeFiles: createBuildStartWorktreeFiles(calls),
@@ -3427,6 +3455,8 @@ describe("createTaskService pull requests", () => {
       },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "releaseSessions", sessionIds: [buildSession.externalSessionId] },
       {
         type: "removeWorktree",
         repoPath: "/repo",

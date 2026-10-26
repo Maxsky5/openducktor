@@ -1,24 +1,26 @@
 import { ChevronDown, LoaderCircle } from "lucide-react";
 import { memo, type ReactElement, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
-import { useSessionUnread } from "@/features/session-navigation/session-read-state";
+import { statusBadgeClassName } from "@/lib/task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { sessionEntryTitleTone } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import { cn } from "@/lib/utils";
 import type {
   SessionNavigationEntry,
   SessionNavigationGroup,
   SessionNavigationModel,
   SessionNavigationSourceIssue,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { SessionEntryPreview, SessionPreviewProvider } from "./session-entry-preview";
 import {
-  SESSION_GROUP_ICONS,
   SESSION_GROUP_LABELS,
   sessionEntryAccessibleName,
-  sessionEntryIcon,
   sessionEntryShortTime,
-} from "./session-navigation-entry-model";
+  visibleSessionNavigationGroups,
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
+import { SESSION_GROUP_ICONS, sessionEntryIcon } from "./session-navigation-entry-model";
 import {
   AttentionBadges,
   SessionEntryIssueIcon,
@@ -33,6 +35,7 @@ import { useSessionEntrySelection } from "./session-navigation-selection";
 import {
   SESSION_GROUP_COUNT_CLASSES,
   SESSION_GROUP_ICON_CLASSES,
+  SESSION_TITLE_CLASSES,
   sessionEntryIconClassName,
   sessionEntrySurfaceClassName,
 } from "./session-navigation-styles";
@@ -58,9 +61,7 @@ export function SessionNavigationList({
   onRetry,
   footer = null,
 }: SessionNavigationListProps): ReactElement {
-  const visibleGroups = model.groups.filter(
-    (group) => group.id !== "recent" || group.entries.length > 0,
-  );
+  const visibleGroups = visibleSessionNavigationGroups(model.groups);
   return (
     <SessionPreviewProvider>
       <div className="flex flex-col gap-3">
@@ -164,12 +165,7 @@ const SessionRow = memo(function SessionRow({
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const unread = useSessionUnread(entry);
-  const needsAttention = entry.attention.length > 0;
-  let titleClassName = "text-foreground";
-  if (needsAttention) titleClassName = "text-warning-muted";
-  else if (entry.status.kind === "settled" && !unread) {
-    titleClassName = "text-sidebar-read-foreground";
-  }
+  const titleClassName = SESSION_TITLE_CLASSES[sessionEntryTitleTone(entry, unread)];
   const task = entry.context.kind === "task" ? entry.context.task : null;
   const Icon = sessionEntryIcon(entry);
   const readStatusId = useId();

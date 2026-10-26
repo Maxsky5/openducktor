@@ -35,19 +35,27 @@ type CreateNodePtyPortInput = {
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
+/** What to do after a failed call on a running terminal, such as a resize. */
+const RUNNING_TERMINAL_NEXT_STEP =
+  "Close this terminal and open a new one. If the new terminal fails too, restart OpenDucktor on the host.";
+
 const operation = (
   name: TerminalPtyError["operation"],
   run: () => void,
 ): Effect.Effect<void, TerminalPtyError> =>
   Effect.try({
     try: run,
-    catch: (cause) =>
-      new TerminalPtyError({
+    catch: (cause) => {
+      const detail = (cause instanceof Error ? cause.message : String(cause)).replace(/\.$/, "");
+      // The callers of a termination name their own next step.
+      const nextStep = name === "terminate" ? "" : ` ${RUNNING_TERMINAL_NEXT_STEP}`;
+      return new TerminalPtyError({
         code: "operation_failed",
         operation: name,
-        message: `node-pty ${name} failed.`,
+        message: `node-pty ${name} failed: ${detail}.${nextStep}`,
         cause,
-      }),
+      });
+    },
   });
 
 export const createNodePtyPort = ({

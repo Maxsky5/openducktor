@@ -21,6 +21,7 @@ describe("release version helpers", () => {
       releaseVersion,
     );
     expect(expectedVersionForEntry("apps/electron/package.json", releaseVersion)).toBe("0.4.0");
+    expect(expectedVersionForEntry("apps/mobile/package.json", releaseVersion)).toBe("0.4.0");
   });
 
   test("rejects malformed release versions", () => {

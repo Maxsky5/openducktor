@@ -11,10 +11,10 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { humanDate } from "@/lib/task-display";
+import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import type { DocumentEditorView } from "@/types/task-composer";
+import type { DocumentEditorView } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 type TaskDocumentEditorProps = {
   title: string;

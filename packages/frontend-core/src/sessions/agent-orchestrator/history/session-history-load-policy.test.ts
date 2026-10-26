@@ -20,7 +20,7 @@ test("current and pending histories do not start another read", () => {
   }
 });
 
-test("a stale baseline stays visible during refresh, failure, and cancellation", () => {
+test("a stale baseline shows the loader during refresh and cancellation, and shows again after a failure", () => {
   const current = createAgentSessionFixture({ historyLoadState: "loaded", messages: [] });
   const stale = markSessionHistoryStale(current);
   const refreshing = claimSessionHistoryLoad(stale);
@@ -28,12 +28,15 @@ test("a stale baseline stays visible during refresh, failure, and cancellation",
   expect(refreshing.historyLoadState).toBe("refreshing");
   const failed = failSessionHistoryLoad(refreshing, failure);
   const cancelled = abandonSessionHistoryLoad(refreshing);
+  const transcriptKind = (session: typeof current) =>
+    deriveLoadedAgentSessionTranscriptState({ session, runtimeReadinessState: "ready" }).kind;
   for (const session of [stale, refreshing, failed, cancelled]) {
     expect(session.messages).toBe(current.messages);
-    expect(
-      deriveLoadedAgentSessionTranscriptState({ session, runtimeReadinessState: "ready" }).kind,
-    ).toBe("visible");
   }
+  for (const session of [stale, refreshing, cancelled]) {
+    expect(transcriptKind(session)).toBe("session_loading");
+  }
+  expect(transcriptKind(failed)).toBe("visible");
   expect(failed.historyLoadState).toBe("stale");
   expect(failed.historyLoadFailure).toBe(failure);
   expect(claimSessionHistoryLoad(failed)?.historyLoadState).toBe("refreshing");

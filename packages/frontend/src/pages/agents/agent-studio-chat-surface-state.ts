@@ -1,4 +1,4 @@
-import type { AgentChatEmptyStateModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatEmptyStateModel } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { AgentSessionTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 

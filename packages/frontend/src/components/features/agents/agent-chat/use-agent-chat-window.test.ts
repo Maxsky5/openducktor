@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, createRef } from "react";
-import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { installReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
   AGENT_CHAT_ROW_WINDOW_SIZE,
 } from "./agent-chat-row-windows";
-import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
-import { buildAgentChatTurnAnchors } from "./agent-chat-transcript-model";
+import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { buildAgentChatTurnAnchors } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { revealElement } from "@/lib/reveal-element";
 import {
   JUMP_HIGHLIGHT_ATTRIBUTE,

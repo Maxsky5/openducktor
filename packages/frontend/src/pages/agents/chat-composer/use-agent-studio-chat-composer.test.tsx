@@ -20,7 +20,7 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   createSessionMessagesState,

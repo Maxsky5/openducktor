@@ -3,10 +3,10 @@ import { memo, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
-  AgentChatComposerModel,
   AgentChatPendingSendGroup,
   AgentChatPendingSendGroupKey,
-} from "./agent-chat.types";
+} from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatComposerModel } from "./agent-chat.types";
 
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
   "inline-flex min-h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none text-neutral-950 ring-2 ring-card";

@@ -1,17 +1,12 @@
-import { type AgentToolData, isOdtBrowserToolName, type OdtToolName } from "@openducktor/contracts";
+import type { AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 import { localImagePathOf } from "@/lib/local-image-path";
-import { readInputString } from "./tool-input-utils";
-import { compactText } from "./tool-text-utils";
+import { readInputString } from "@openducktor/frontend-core/sessions/messages/tool-input-utils";
+import { compactText } from "@openducktor/frontend-core/sessions/messages/tool-text-utils";
 
-const BROWSER_TOOL_PREFIX = "odt_browser_";
 const TITLE_TEXT_MAX_LENGTH = 160;
 
 const stringListSchema = z.array(z.string());
-
-/** The action of an `odt_browser_*` tool, such as `click`, or null for other tools. */
-export const readBrowserToolAction = (odtTool: OdtToolName): string | null =>
-  isOdtBrowserToolName(odtTool) ? odtTool.slice(BROWSER_TOOL_PREFIX.length) : null;
 
 const quote = (text: string): string => `"${compactText(text, TITLE_TEXT_MAX_LENGTH)}"`;
 

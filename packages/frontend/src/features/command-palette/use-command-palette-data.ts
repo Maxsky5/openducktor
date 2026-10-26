@@ -5,7 +5,7 @@ import {
   combineTaskSessionReads,
   toSessionNavigationReads,
   withRecordStreamError,
-} from "@/features/session-navigation/use-session-navigation-model";
+} from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-model";
 import type { WorkspaceSessionLiveSnapshot } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
 import {
   UNKNOWN_WORKSPACE_SESSION_LIVE_STATE,
@@ -30,8 +30,8 @@ import {
   type SessionNavigationRead,
   type SessionNavigationSourceIssue,
   type SessionNavigationWorkspaceSources,
-} from "@/state/read-models/session-navigation-read-model";
-import { useWorkspaceSessionLiveSnapshot } from "@/state/workspace-activity/workspace-activity-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { useWorkspaceSessionLiveSnapshot } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { paletteChatKey, paletteTaskKey } from "./command-palette-row-keys";
 import type { PaletteChat, PaletteTask } from "./command-palette-types";
 

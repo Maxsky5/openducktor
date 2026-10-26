@@ -1,4 +1,4 @@
-import { splitTaskDescriptionFrontMatter } from "@/components/features/task-description-editor/task-description-front-matter";
+import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
 
 export const prepareMarkdownRenderContent = (
   markdown: string,

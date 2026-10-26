@@ -1,5 +1,5 @@
 import { createContext, use } from "react";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 
 export type OpenAgentSessionTranscriptRequest = {
   target: AgentSessionTranscriptTarget;

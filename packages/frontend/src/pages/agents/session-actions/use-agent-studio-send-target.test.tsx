@@ -1,4 +1,4 @@
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { describe, expect, mock, test } from "bun:test";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
@@ -11,10 +11,10 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
+import { toReusablePromptSlashCommand } from "@openducktor/frontend-core/sessions/send/agent-chat-reusable-prompts";
 import { createBrowserAttachmentStager } from "@/lib/local-attachment-files";
-import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
-import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import { useAgentChatSendForTarget } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
+import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
@@ -29,8 +29,8 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import {
   SessionStartWorkflowError,
   type RunSessionStartWorkflow,
-  type SessionStartWorkflowResult,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import {
   createDeferred,
   createTaskCardFixture,

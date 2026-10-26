@@ -1,9 +1,9 @@
 import { remoteAccessEnableInputSchema } from "@openducktor/contracts";
-import type { RemoteAccessController } from "@openducktor/remote-host";
+import type { RemoteAccessOperator } from "@openducktor/remote-host";
 import { Effect, Fiber, Stream } from "effect";
 export const handleRemoteAccessHttp = async (
   request: Request,
-  controller: RemoteAccessController,
+  controller: RemoteAccessOperator,
 ): Promise<Response> => {
   const route = new URL(request.url).pathname;
   if (route === "/remote-access/networks" && request.method === "GET") {

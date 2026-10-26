@@ -13,7 +13,7 @@ describe("TaskCloseConfirmDialog", () => {
         onOpenChange={() => {}}
         onCancel={() => {}}
         onConfirm={() => {}}
-        taskId="TASK-1"
+        task={{ id: "TASK-1", title: "Fix login" }}
         impact={{
           isLoading: true,
           isLoadingStopImpact: false,
@@ -24,7 +24,7 @@ describe("TaskCloseConfirmDialog", () => {
           activeSessionCountError: null,
           error: null,
         }}
-        operation={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}
       />,
     );
 
@@ -52,7 +52,7 @@ describe("TaskCloseConfirmDialog", () => {
         onOpenChange={() => {}}
         onCancel={() => {}}
         onConfirm={() => {}}
-        taskId="TASK-2"
+        task={{ id: "TASK-2", title: "Fix login" }}
         impact={{
           isLoading: false,
           isLoadingStopImpact: false,
@@ -63,7 +63,7 @@ describe("TaskCloseConfirmDialog", () => {
           activeSessionCountError: null,
           error: "Could not preview cleanup",
         }}
-        operation={{ isPending: false, error: "Close failed" }}
+        operation={{ isPending: false, error: "Close failed", errorOutcomeUnknown: false }}
       />,
     );
 
@@ -92,7 +92,7 @@ describe("TaskCloseConfirmDialog", () => {
         onOpenChange={() => {}}
         onCancel={() => {}}
         onConfirm={() => {}}
-        taskId="TASK-3"
+        task={{ id: "TASK-3", title: "Fix login" }}
         impact={{
           isLoading: false,
           isLoadingStopImpact: false,
@@ -103,7 +103,7 @@ describe("TaskCloseConfirmDialog", () => {
           activeSessionCountError: "host unavailable",
           error: null,
         }}
-        operation={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}
       />,
     );
 

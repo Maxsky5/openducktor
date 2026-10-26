@@ -3,7 +3,10 @@ import type { TerminalSummary } from "@openducktor/contracts";
 import { act, screen, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { SessionPanel } from "@/features/session-panels";
-import { terminalTabLabel, terminalTabLifecycle } from "@/features/terminals";
+import {
+  terminalTabLabel,
+  terminalTabLifecycle,
+} from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import * as terminalMountModule from "@/features/terminals/terminal-viewport-mount";
 import {
   bottomEntryId,

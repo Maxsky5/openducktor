@@ -7,8 +7,12 @@ import { QuestionFeedback, QuestionSubmitFooter } from "./agent-session-question
 import { QuestionSummaryTab } from "./agent-session-question-summary-tab";
 import { QuestionTabs } from "./agent-session-question-tabs";
 import { QuestionTab } from "./agent-session-question-tab";
-import { QUESTION_SUMMARY_TAB_ID, useQuestionDraft } from "./use-agent-session-question-draft";
+import {
+  QUESTION_SUMMARY_TAB_ID,
+  useQuestionDraft,
+} from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-question-draft";
 import { RequestCardHeader } from "./request-card-header";
+import { questionAnsweredStatus } from "@openducktor/frontend-core/sessions/pending-input/pending-input-labels";
 import { useRequestCardCollapse } from "./use-request-card-collapse";
 
 type AgentSessionQuestionCardProps = {
@@ -118,11 +122,7 @@ export function AgentSessionQuestionCard({
           kind="question"
           description={description}
           isSubagent={request.source?.kind === "subagent"}
-          status={
-            <>
-              {answeredCount}/{requiredCount} answered
-            </>
-          }
+          status={questionAnsweredStatus(answeredCount, requiredCount)}
           isExpanded={isExpanded}
           triggerRef={triggerRef}
         />

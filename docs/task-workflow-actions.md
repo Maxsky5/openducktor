@@ -63,6 +63,8 @@ Stop all running sessions for the task before direct merge or its completion. Th
 
 The host waits for publication consent, then completes publication, cleanup, and closure in one operation. An unfinished merge requires manual Git review after a host restart because its original applied-commit evidence is no longer available.
 
+Cleanup releases the live state of the task sessions before it removes the task worktree. A later runtime read then does not report the removed worktree as a session fault, so Delete can run on the closed task.
+
 ## Reset implementation
 
 `reset_implementation` discards the current build and QA attempt. It can run from `in_progress`, `blocked`, `ai_review`, or `human_review`.
@@ -120,11 +122,13 @@ Use "Sync pull requests" in the command palette to start a manual sync. Each run
 
 Manual sync keeps its chosen targets when you change pages or workspaces. The progress toast names the scope, and this client cannot start another manual run until it finishes. A batch run ignores workspaces without a configured, enabled Git provider. These workspaces do not cause a warning or appear in the result. If none can sync, the result explains that no open workspace has an enabled provider. Other skipped or failed workspaces remain in the result, with recovery instructions. A workspace that closes before its turn is skipped. Manual sync does not change the automatic schedule.
 
-Pull request sync records the merged pull request, stops task terminals, and removes the task worktree and local source branch before it closes the task. If cleanup fails, the task keeps its current status and the host reports the error.
+Pull request sync records the merged pull request. Before it closes the task, it stops task terminals and live task sessions, releases the task sessions, and removes the task worktree and local source branch. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules
 
 A task can have more than one action. The UI can choose one primary action and put the rest in a menu. Display order is a UI rule. The backend list remains the authority.
+
+The Close, Delete, and Reset Task confirmations count the task worktrees that the host still finds and the action removes. A worktree that Approve already removed does not count.
 
 Non-closed Kanban cards show shortcuts for existing Spec, Planner, Builder, and QA sessions above the main action. The card omits a shortcut when the main control opens the same session. The menu contains the remaining valid actions.
 

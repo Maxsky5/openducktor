@@ -2,21 +2,21 @@ import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contra
 import type { AgentRole } from "@openducktor/core";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import { isQaRejectedTask } from "@/lib/task-qa";
+import { buildRoleWorkflowMapForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
+import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentStudioQuickActionOption,
   buildAgentStudioQuickActions,
   buildGitConflictQuickAction,
+  buildRoleEnabledMapForTask,
   selectPrimaryAgentStudioQuickAction,
-} from "./agent-studio-quick-actions";
+} from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildLiveSessionByRoleMap,
-  buildRoleEnabledMapForTask,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,

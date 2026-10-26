@@ -1,10 +1,8 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
-import {
-  buildSessionNavigationHref,
-  type SessionNavigationTarget,
-} from "@/features/session-navigation/session-navigation-target";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
 
 export function useForkNavigation(ownerKey: string, visible = true) {
   const navigate = useNavigate();

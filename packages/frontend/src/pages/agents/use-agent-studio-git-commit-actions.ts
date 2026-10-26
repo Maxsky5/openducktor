@@ -4,7 +4,7 @@ import type {
   GitLocalChanges,
 } from "@openducktor/contracts";
 import { useCallback, useState } from "react";
-import type { GitCommitMode } from "@/features/agent-studio-git";
+import type { GitCommitMode } from "@openducktor/frontend-core/git/contracts";
 import {
   type GitActionKind,
   type RefreshGitDiffData,

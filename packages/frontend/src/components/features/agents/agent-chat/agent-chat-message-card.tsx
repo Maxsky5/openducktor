@@ -1,10 +1,10 @@
 import type { AgentModelCatalog } from "@openducktor/core";
 import { memo, type ReactElement } from "react";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { AgentChatRuntimePresentation } from "./agent-chat.types";
+import type { AgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
-import type { ParentSessionRuntimeContext } from "./subagent-session-key";
+import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;

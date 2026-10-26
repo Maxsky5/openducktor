@@ -9,9 +9,9 @@ import type {
   AgentChatEmptyStateModel,
   AgentChatInterruptedTurnResumeModel,
   AgentChatRuntimePresentation,
-  AgentChatThreadModel,
-  AgentChatTranscriptPresentation,
-} from "./agent-chat.types";
+} from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze<Record<string, number>>({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze<Record<string, number>>({});

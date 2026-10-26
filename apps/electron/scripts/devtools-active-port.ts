@@ -161,6 +161,11 @@ export const waitForDevToolsActivePort = (
       failWatch(watchedDirectory, cause);
     });
     signal.addEventListener("abort", handleAbort, { once: true });
+    // The macOS watcher starts after `watch` returns, so it can miss a file that is written in
+    // the same turn. One read after this turn finds such a file.
+    queueMicrotask(() => {
+      if (!settled) observePortFile();
+    });
   });
 
 export const prepareDevToolsActivePortFileEffect = (

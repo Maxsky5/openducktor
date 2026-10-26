@@ -1,7 +1,7 @@
 import { LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import type { GitConflictActionsModel } from "./git-conflict-actions-model";
+import type { GitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 
 type GitConflictActionsProps = {
   actions: GitConflictActionsModel;

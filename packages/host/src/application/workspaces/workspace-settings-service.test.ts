@@ -60,6 +60,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
     ],
   },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
+  remoteAccess: { enabled: false, configuration: null },
   agentRuntimes: {
     opencode: {
       defaults: { rules: [] },

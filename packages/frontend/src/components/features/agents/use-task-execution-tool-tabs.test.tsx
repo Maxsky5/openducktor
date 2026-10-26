@@ -10,7 +10,7 @@ import { createElement, type PropsWithChildren, useEffect, useState } from "reac
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { TaskArtifactsViewProps } from "@/components/features/task-artifacts/task-artifacts";
-import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
+import type { DiffScopeState } from "@openducktor/frontend-core/git/contracts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";

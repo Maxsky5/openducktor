@@ -4,7 +4,7 @@ import { type ReactElement, useCallback, useMemo } from "react";
 import { z } from "zod";
 import type { PierreDiffSelection } from "@/components/features/agents/pierre-diff-viewer";
 import { commentMatchesDiff } from "@/components/features/agents/pierre-diff-viewer-model";
-import type { DiffScope } from "@/features/agent-studio-git";
+import type { DiffScope } from "@openducktor/frontend-core/git/contracts";
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { DiffAnnotationShell, DraftCommentCard, NewCommentForm } from "./file-diff-comments";
 import { useOwnerScopedCommentActions } from "./use-file-diff-comment-actions";

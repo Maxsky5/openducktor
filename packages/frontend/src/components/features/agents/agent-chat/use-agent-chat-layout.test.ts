@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {

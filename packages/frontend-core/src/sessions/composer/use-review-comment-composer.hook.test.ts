@@ -1,0 +1,340 @@
+import "../../test-support/dom-environment";
+import type { AgentChatSendResult } from "../send/agent-chat-send-result";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { createFeedbackFake } from "../../test-support/feedback-fake";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import { classifySystemSlashCommandInvocation } from "@openducktor/core";
+import type { InlineCommentOwner } from "../../drafts/inline-comment-owner";
+import {
+  type AgentChatComposerDraft,
+  createSlashCommandSegment,
+  createTextSegment,
+  draftToSerializedText,
+  resolveDraftToUserMessageParts,
+} from "../../drafts/agent-chat-composer-draft";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { renderHook } from "@testing-library/react";
+import { act, createElement, type PropsWithChildren, type ReactElement } from "react";
+import type { ClientConnection } from "../../connection/client-connection";
+import { ClientConnectionProvider } from "../../connection/client-connection-react";
+import { toInlineCommentDraftStorageKey } from "../../drafts/inline-comment-draft-storage";
+import { type ClientStorage, createMemoryClientStorage } from "../../platform/client-storage";
+import { useReviewCommentComposer } from "./use-review-comment-composer";
+
+import { createAppVisibilityFake, VISIBLE_APP } from "../../test-support/app-visibility-fake";
+// The test client never hides, so only unmount writes the drafts.
+
+const OWNER_KEY = toInlineCommentDraftStorageKey({
+  workspaceId: "workspace-1",
+  taskId: "task-1",
+});
+
+const buildStoredPayload = (text: string): string =>
+  JSON.stringify({
+    version: 1,
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    updatedAt: new Date().toISOString(),
+    comments: [
+      {
+        id: "stored-comment",
+        filePath: "packages/frontend/src/stored.ts",
+        diffScope: "uncommitted",
+        side: "new",
+        startLine: 3,
+        endLine: 3,
+        text,
+        codeContext: [{ lineNumber: 3, text: "const stored = true;", isSelected: true }],
+        language: "ts",
+        createdAt: 1_700_000_000_000,
+      },
+    ],
+  });
+
+describe("useReviewCommentComposer", () => {
+  let storage: ClientStorage;
+  let connection: ClientConnection;
+  let feedback: ReturnType<typeof createFeedbackFake>;
+  const commentDrafts = () => connection.drafts.inlineComments;
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(ClientConnectionProvider, { connection }, children);
+
+  beforeEach(() => {
+    storage = createMemoryClientStorage();
+    feedback = createFeedbackFake();
+    connection = createTestClientConnection({ storage, feedback, scheduleTask: () => () => {} });
+  });
+
+  afterEach(async () => {
+    await connection.dispose();
+  });
+
+  test("hydrates stored comments on mount and exposes their pending count", () => {
+    storage.setItem(OWNER_KEY, buildStoredPayload("Restored instruction"));
+
+    const rendered = renderHook(
+      () =>
+        useReviewCommentComposer({
+          owner: { kind: "task", workspaceId: "workspace-1", taskId: "task-1" },
+          onSend: async () => true,
+          visibility: VISIBLE_APP,
+        }),
+      { wrapper },
+    );
+
+    expect(rendered.result.current.pendingSendItems?.count).toBe(1);
+    expect(commentDrafts().getState().hydratedOwners[OWNER_KEY]).toBe(true);
+    rendered.unmount();
+  });
+
+  test("flushes pending comments when the client hides so a comment written before quitting survives", () => {
+    const visibility = createAppVisibilityFake();
+    const rendered = renderHook(
+      () =>
+        useReviewCommentComposer({
+          owner: { kind: "task", workspaceId: "workspace-1", taskId: "task-1" },
+          onSend: async () => true,
+          visibility,
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      commentDrafts()
+        .getState()
+        .addDraft(OWNER_KEY, {
+          filePath: "packages/frontend/src/pending.ts",
+          diffScope: "uncommitted",
+          startLine: 7,
+          endLine: 7,
+          side: "new",
+          text: "Pending instruction",
+          codeContext: [{ lineNumber: 7, text: "const pending = true;", isSelected: true }],
+          language: "ts",
+        });
+    });
+    expect(storage.getItem(OWNER_KEY)).toBeNull();
+
+    act(() => {
+      visibility.setHidden(true);
+    });
+
+    expect(storage.getItem(OWNER_KEY)).not.toBeNull();
+    expect(rendered.result.current.pendingSendItems?.count).toBe(1);
+    rendered.unmount();
+  });
+  test.each([
+    ["task", "compact"],
+    ["workspace_session", "compact"],
+    ["task", "other"],
+    ["workspace_session", "other"],
+  ] as const)("keeps %s comments pending for system command %s", async (kind, trigger) => {
+    const owner: InlineCommentOwner =
+      kind === "task"
+        ? { kind, workspaceId: "workspace-1", taskId: "task-1" }
+        : { kind, workspaceId: "workspace-1", sessionId: "chat-1" };
+    const ownerKey = toInlineCommentDraftStorageKey(
+      kind === "task"
+        ? { workspaceId: "workspace-1", taskId: "task-1" }
+        : { workspaceId: "workspace-1", workspaceSessionId: "chat-1" },
+    );
+    const command =
+      trigger === "compact"
+        ? { ...MANUAL_SESSION_COMPACTION_SLASH_COMMAND }
+        : {
+            id: "system:other",
+            trigger,
+            title: "Other command",
+            source: "system" as const,
+            hints: [],
+          };
+    const draft = { segments: [createSlashCommandSegment(command)] };
+    const sent: AgentChatComposerDraft[] = [];
+    let accepted = false;
+    const view = renderHook(
+      () =>
+        useReviewCommentComposer({
+          owner,
+          visibility: VISIBLE_APP,
+          onSend: async (message) => {
+            sent.push(message);
+            if (trigger === "compact" && sent.length <= 2) {
+              const parts = await resolveDraftToUserMessageParts(message, async () => "");
+              expect(classifySystemSlashCommandInvocation(parts).kind).toBe(
+                "manual_session_compaction",
+              );
+            }
+            return accepted;
+          },
+        }),
+      { wrapper },
+    );
+    act(() => {
+      commentDrafts().getState().addDraft(ownerKey, {
+        filePath: "src/a.ts",
+        diffScope: "uncommitted",
+        startLine: 1,
+        endLine: 1,
+        side: "new",
+        text: "Pending instruction",
+        codeContext: [],
+      });
+    });
+    for (const outcome of [false, true]) {
+      accepted = outcome;
+      await act(async () => {
+        expect(await view.result.current.onSend(draft, "default")).toBe(outcome);
+      });
+      expect(sent.at(-1)).toEqual(draft);
+      expect(view.result.current.pendingSendItems?.count).toBe(1);
+      expect(commentDrafts().getState().getPendingDrafts(ownerKey)[0]?.text).toBe(
+        "Pending instruction",
+      );
+    }
+    await act(async () => {
+      expect(
+        await view.result.current.onSend(
+          { segments: [createTextSegment("Review these changes")] },
+          "default",
+        ),
+      ).toBe(true);
+    });
+    expect(draftToSerializedText(sent[2]!)).toContain("Review these changes");
+    expect(draftToSerializedText(sent[2]!)).toContain("Instruction: Pending instruction");
+    expect(view.result.current.pendingSendItems).toBeNull();
+    view.unmount();
+  });
+  test.each(["task", "workspace_session"] as const)(
+    "settles the captured %s owner after selection changes",
+    async (kind) => {
+      const first: InlineCommentOwner =
+        kind === "task"
+          ? { kind, workspaceId: "workspace-1", taskId: "task-1" }
+          : { kind, workspaceId: "workspace-1", sessionId: "task-1" };
+      const second: InlineCommentOwner = {
+        kind: "workspace_session",
+        workspaceId: "workspace-2",
+        sessionId: "task-1",
+      };
+      const firstKey = toInlineCommentDraftStorageKey(
+        kind === "task"
+          ? { workspaceId: "workspace-1", taskId: "task-1" }
+          : { workspaceId: "workspace-1", workspaceSessionId: "task-1" },
+      );
+      const secondKey = toInlineCommentDraftStorageKey({
+        workspaceId: "workspace-2",
+        workspaceSessionId: "task-1",
+      });
+      const input = {
+        filePath: "src/a.ts",
+        diffScope: "target" as const,
+        startLine: 2,
+        endLine: 4,
+        side: "old" as const,
+        text: "Original comment",
+        codeContext: [{ lineNumber: 3, text: "removed code", isSelected: true }],
+        language: "ts",
+      };
+      commentDrafts().getState().addDraft(firstKey, input);
+      commentDrafts()
+        .getState()
+        .addDraft(secondKey, { ...input, text: "Other workspace" });
+      const accepted = Promise.withResolvers<boolean>();
+      let sentText = "";
+      const firstSend = (
+        draft: Parameters<ReturnType<typeof useReviewCommentComposer>["onSend"]>[0],
+      ) => {
+        sentText = draftToSerializedText(draft);
+        return accepted.promise;
+      };
+      const view = renderHook(
+        ({ owner, onSend }) => useReviewCommentComposer({ owner, onSend, visibility: VISIBLE_APP }),
+        {
+          initialProps: { owner: first, onSend: firstSend },
+          wrapper,
+        },
+      );
+      let result!: Promise<AgentChatSendResult>;
+      act(() => {
+        result = view.result.current.onSend(
+          { segments: [createTextSegment("User text")] },
+          "default",
+        );
+      });
+      expect(view.result.current.pendingSendItems).toBeNull();
+      expect(sentText).toContain("User text");
+      expect(sentText).toContain("Change: removed");
+      expect(sentText).toContain("Lines: 2-4");
+      expect(sentText).toContain("3 | removed code");
+      expect(sentText).not.toContain("Other workspace");
+      act(() =>
+        commentDrafts()
+          .getState()
+          .addDraft(firstKey, { ...input, text: "Later comment" }),
+      );
+      view.rerender({ owner: second, onSend: async () => false });
+      expect(view.result.current.pendingSendItems?.count).toBe(1);
+      await act(async () => {
+        accepted.resolve(true);
+        expect(await result).toBe(true);
+      });
+      expect(
+        commentDrafts()
+          .getState()
+          .getPendingDrafts(firstKey)
+          .map((draft) => draft.text),
+      ).toEqual(["Later comment"]);
+      expect(view.result.current.pendingSendItems?.count).toBe(1);
+      view.unmount();
+    },
+  );
+  test("keeps accepted comments cleared when removing their saved record fails", async () => {
+    const owner: InlineCommentOwner = {
+      kind: "workspace_session",
+      workspaceId: "workspace-1",
+      sessionId: "chat",
+    };
+    const ownerKey = toInlineCommentDraftStorageKey({
+      workspaceId: "workspace-1",
+      workspaceSessionId: "chat",
+    });
+    const input = {
+      filePath: "src/a.ts",
+      diffScope: "uncommitted" as const,
+      startLine: 1,
+      endLine: 1,
+      side: "new" as const,
+      text: "Accepted note",
+      codeContext: [],
+    };
+    commentDrafts().getState().addDraft(ownerKey, input);
+    commentDrafts().getState().flush();
+    const removeItem = storage.removeItem;
+    storage.removeItem = () => {
+      throw new Error("Storage remove failed");
+    };
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+    const view = renderHook(
+      () => useReviewCommentComposer({ owner, onSend: async () => true, visibility: VISIBLE_APP }),
+      {
+        wrapper,
+      },
+    );
+    try {
+      await act(async () => {
+        expect(await view.result.current.onSend({ segments: [] }, "default")).toBe(true);
+      });
+      expect(commentDrafts().getState().draftsByOwner[ownerKey]).toEqual([]);
+      expect(feedback.shownOf("error")).toContainEqual({
+        kind: "error",
+        message: "Message sent, but the comment save failed",
+        options: { description: "These comments are not saved for this session." },
+      });
+    } finally {
+      // Teardown disposes the connection, which reports a draft that it cannot save.
+      storage.removeItem = removeItem;
+      view.unmount();
+      consoleError.mockRestore();
+    }
+  });
+});

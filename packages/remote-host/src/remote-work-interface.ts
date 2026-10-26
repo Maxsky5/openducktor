@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   HOST_COMMAND_NAMES,
   REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   REMOTE_CONNECTION_HEADER,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
@@ -43,6 +44,7 @@ export type RemoteHostServices = Pick<
   EffectNodeHostCommandRouter,
   | "invoke"
   | "hostInstanceId"
+  | "hostSettings"
   | "taskEventStream"
   | "notificationStream"
   | "terminalService"
@@ -56,6 +58,11 @@ type Connection = {
 };
 const MAX_CONNECTIONS = 128;
 const MAX_LEASES_PER_CONNECTION = 32;
+/** The baseline capabilities and the heartbeat of the event and task streams. */
+const HOST_CAPABILITIES: readonly string[] = [
+  ...REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
+];
 const WORK_COMMANDS = new Set<string>(HOST_COMMAND_NAMES);
 const SHELL_COMMANDS = new Set(["open_external_url", "system_open_directory_in_tool"]);
 /** Network resources observe the supplied host. They never create or dispose it. */
@@ -64,6 +71,8 @@ export const createRemoteWorkInterface = (
   options: {
     shell: "electron" | "web";
     appVersion: string;
+    /** The stable ID of this host in its settings file. */
+    hostId: string;
     publicEndpoint: string;
     listenHost: string;
     frontendOrigins?: ReadonlySet<string>;
@@ -76,10 +85,9 @@ export const createRemoteWorkInterface = (
     shell: options.shell,
     appVersion: options.appVersion,
     hostInstanceId: services.hostInstanceId,
+    hostId: options.hostId,
     accessPolicy: "network_reach",
-    protocols: [
-      { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-    ],
+    protocols: [{ version: REMOTE_PROTOCOL_VERSION, capabilities: [...HOST_CAPABILITIES] }],
   };
   const endpoint = new URL(options.publicEndpoint);
   const mountPath = endpoint.pathname.replace(/\/$/, "");
@@ -176,7 +184,7 @@ export const createRemoteWorkInterface = (
         },
       };
     }
-    const capabilities: readonly string[] = REMOTE_BASELINE_CAPABILITIES;
+    const capabilities = HOST_CAPABILITIES;
     const missing = hello.requiredCapabilities.filter((name) => !capabilities.includes(name));
     if (missing.length)
       return {

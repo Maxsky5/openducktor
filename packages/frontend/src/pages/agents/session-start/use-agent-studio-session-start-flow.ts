@@ -1,29 +1,31 @@
 import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
-import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
+import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
 import { useQueryClient } from "@tanstack/react-query";
-import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
+import { createSessionStartKickoffResolver } from "@openducktor/frontend-core/sessions/start/session-start-kickoff";
 import type { GitBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { toast } from "sonner";
-import type { SessionStartModalModel } from "@/components/features/agents";
-import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import type {
   ResolvedSessionStartDecision,
   RunSessionStartWorkflow,
-  SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartLaunchRequest,
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
+import type {
   SessionStartPostAction,
   SessionStartWorkflowResult,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import {
   buildSessionStartModalRequest,
   isSessionStartFailureFeedbackHandled,
-  sessionStartPostActionErrorTitle,
-  useSessionStartModalRunner,
-  useWorkspaceSessionStartGate,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import { sessionStartPostActionErrorTitle } from "@openducktor/frontend-core/sessions/start/session-start-post-action-errors";
+import { useSessionStartModalRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-modal-runner";
+import { useWorkspaceSessionStartGate } from "@openducktor/frontend-core/sessions/start/use-workspace-session-start-gate";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { isWorkflowAgentSession } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/workflow-session";
 import type {
@@ -31,13 +33,13 @@ import type {
   AgentSessionState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   buildAgentStudioSelectionQueryUpdate,
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "../query-sync/agent-studio-navigation";
-import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
+import { useAsyncActivityTracker } from "@openducktor/frontend-core/lib/use-async-activity-tracker";
 import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
 

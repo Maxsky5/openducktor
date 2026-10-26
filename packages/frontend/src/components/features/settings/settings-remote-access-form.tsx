@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -36,13 +35,11 @@ export function RemoteAccessForm({
 }) {
   const id = useId();
   const [submitted, setSubmitted] = useState(false);
-  const [advanced, setAdvanced] = useState(
-    fields.listenPort !== 0 || fields.publicEndpoint !== undefined,
-  );
+  const [advanced, setAdvanced] = useState(fields.publicEndpoint !== undefined);
   const parsed = remoteAccessEnableInputSchema.safeParse(fields);
   const issue = submitted && !parsed.success ? parsed.error.issues[0] : undefined;
   const invalid = issue?.path[0];
-  const error = fieldError(invalid, fields.listenPort);
+  const error = fieldError(invalid);
   const selected = networks.some((network) => network.address === fields.listenHost);
   const label = status === "available" ? "Apply connection changes" : "Enable remote control";
   return (
@@ -73,13 +70,12 @@ export function RemoteAccessForm({
           </Button>
         </div>
         <p id={`${id}-network-help`} className="text-xs text-muted-foreground">
-          Select a network shared with your other device. The host chooses a free port.
+          Select a network shared with your other device. The address stays the same after a
+          restart.
         </p>
         <RadioGroup
           value={selected ? fields.listenHost : ""}
-          onValueChange={(listenHost) =>
-            onChange({ listenHost, listenPort: 0, publicEndpoint: undefined })
-          }
+          onValueChange={(listenHost) => onChange({ listenHost, publicEndpoint: undefined })}
           aria-labelledby={`${id}-networks`}
           aria-describedby={`${id}-network-help`}
           aria-invalid={invalid === "listenHost"}
@@ -151,13 +147,10 @@ export function RemoteAccessForm({
   );
 }
 
-function fieldError(field: PropertyKey | undefined, port: number): string | undefined {
+function fieldError(field: PropertyKey | undefined): string | undefined {
   if (field === "listenHost")
     return "Choose a network, or enter a public host address in Advanced.";
-  if (field === "listenPort")
-    return port === 0
-      ? "Turn off automatic port selection. Enter the fixed port for this public host address."
-      : "Enter a whole port number from 1 to 65535.";
+  if (field === "listenPort") return "Enter a whole port number from 1 to 65535.";
   if (field === "publicEndpoint") return "Enter a full http or https host URL, or leave it blank.";
   if (field === "webOrigins")
     return "Enter web client URLs separated by commas, with no path or trailing slash.";
@@ -177,33 +170,23 @@ function AdvancedSettings({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <Label htmlFor={`${id}-automatic`}>Choose a port automatically</Label>
-        <Switch
-          id={`${id}-automatic`}
-          checked={fields.listenPort === 0}
-          onCheckedChange={(automatic) => onChange({ listenPort: automatic ? 0 : 14328 })}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${id}-port`}>Port</Label>
+        <Input
+          id={`${id}-port`}
+          name="listenPort"
+          type="number"
+          min={1}
+          max={65535}
+          value={Number.isNaN(fields.listenPort) ? "" : fields.listenPort}
+          onChange={(event) => onChange({ listenPort: event.target.valueAsNumber })}
+          aria-invalid={invalid === "listenPort"}
+          aria-describedby={`${id}-port-help`}
         />
+        <p id={`${id}-port-help`} className="text-xs text-muted-foreground">
+          Your devices connect on this port. OpenDucktor keeps it after a restart.
+        </p>
       </div>
-      {fields.listenPort !== 0 ? (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${id}-port`}>Fixed port</Label>
-          <Input
-            id={`${id}-port`}
-            name="listenPort"
-            type="number"
-            min={1}
-            max={65535}
-            value={Number.isNaN(fields.listenPort) ? "" : fields.listenPort}
-            onChange={(event) => onChange({ listenPort: event.target.valueAsNumber })}
-            aria-invalid={invalid === "listenPort"}
-            aria-describedby={`${id}-port-help`}
-          />
-          <p id={`${id}-port-help`} className="text-xs text-muted-foreground">
-            Keeps the same port for firewall or proxy rules.
-          </p>
-        </div>
-      ) : null}
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-host`}>Local listen address</Label>
         <Input

@@ -6,11 +6,11 @@ import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtur
 import {
   buildAgentStudioQuickActions,
   buildGitConflictQuickAction,
+  buildRoleEnabledMapForTask,
   selectPrimaryAgentStudioQuickAction,
   withGitConflictQuickAction,
-} from "./agent-studio-quick-actions";
+} from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { createAgentSessionSummaryFixture } from "./agent-studio-test-utils";
-import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
 
 const buildSession = (
   overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},

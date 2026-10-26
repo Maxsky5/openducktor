@@ -1,7 +1,7 @@
 import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { formatAgentDuration } from "./format-agent-duration";
+import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import "./agent-chat-tool-message-timing.css";
 
 export type ToolMessageActivity = "preparing" | "running" | null;

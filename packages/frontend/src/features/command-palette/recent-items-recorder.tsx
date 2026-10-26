@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import { useVisibleSessionTarget } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { useRecentItems } from "./recent-items";
 
 /** Add each task or chat that the app shows to the Recent list, however the user opened it. */

@@ -2,8 +2,10 @@ import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   type AgentChatDraftStore,
+  ChatDraftTooLargeError,
   createAgentChatDraftStore,
 } from "../drafts/agent-chat-draft-store";
+import { AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES } from "../drafts/agent-chat-draft-storage";
 import {
   createQueuedMessageEditDrafts,
   type QueuedMessageEditDrafts,
@@ -75,6 +77,27 @@ export type ClientConnection = {
 // Each entry belongs to one connection. Query functions find their host through their own client.
 const connectionsByQueryClient = new WeakMap<QueryClient, ClientConnection>();
 
+/** Repeated saves of one long draft replace this one message. */
+const CHAT_DRAFT_TOO_LARGE_FEEDBACK_ID = "chat-draft-too-large";
+
+/**
+ * The composer keeps a draft that is too long to save, so the user must know that closing the app
+ * loses it. Other draft failures go to the console.
+ */
+const chatDraftPersistenceReporter =
+  (feedback: ClientFeedback) =>
+  (error: Error): void => {
+    if (!(error instanceof ChatDraftTooLargeError)) {
+      console.error(error);
+      return;
+    }
+    const maxKilobytes = Math.floor(AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES / 1024);
+    feedback.show("warning", "This chat draft is too long to keep on this device", {
+      id: CHAT_DRAFT_TOO_LARGE_FEEDBACK_ID,
+      description: `The app does not save drafts over ${maxKilobytes} KB. Shorten the draft or send it before you close the app.`,
+    });
+  };
+
 export const createClientConnection = ({
   host,
   queryClient,
@@ -92,6 +115,7 @@ export const createClientConnection = ({
     chat: createAgentChatDraftStore({
       storage,
       stageAttachment,
+      reportPersistenceError: chatDraftPersistenceReporter(feedback),
       ...(scheduleTask && { scheduleTask }),
     }),
     inlineComments: createInlineCommentDraftStore({

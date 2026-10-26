@@ -19,16 +19,24 @@ const decodeSessionIdentityPart = (value: string): string | null => {
   }
 };
 
+// Each store commit builds the key of each session, and many sessions share a few directories.
+const encodedWorkingDirectories = new Map<string, string>();
+
+const encodeWorkingDirectory = (workingDirectory: string): string => {
+  let encoded = encodedWorkingDirectories.get(workingDirectory);
+  if (encoded === undefined) {
+    encoded = encodeSessionIdentityPart(normalizeWorkingDirectory(workingDirectory));
+    encodedWorkingDirectories.set(workingDirectory, encoded);
+  }
+  return encoded;
+};
+
 export const agentSessionIdentityKey = ({
   externalSessionId,
   runtimeKind,
   workingDirectory,
 }: AgentSessionIdentityLike): string =>
-  [
-    encodeSessionIdentityPart(externalSessionId),
-    encodeSessionIdentityPart(runtimeKind),
-    encodeSessionIdentityPart(normalizeWorkingDirectory(workingDirectory)),
-  ].join(SESSION_IDENTITY_KEY_SEPARATOR);
+  `${encodeSessionIdentityPart(externalSessionId)}${SESSION_IDENTITY_KEY_SEPARATOR}${encodeSessionIdentityPart(runtimeKind)}${SESSION_IDENTITY_KEY_SEPARATOR}${encodeWorkingDirectory(workingDirectory)}`;
 
 export const matchesAgentSessionIdentity = (
   session: AgentSessionIdentityLike | null | undefined,

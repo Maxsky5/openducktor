@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { useState } from "react";
 import { openCodeRuntimeConfigSchema, type OpenCodeRuntimeConfig } from "@openducktor/contracts";
 import { OpenCodePermissionsSettings } from "./settings-opencode-permissions";

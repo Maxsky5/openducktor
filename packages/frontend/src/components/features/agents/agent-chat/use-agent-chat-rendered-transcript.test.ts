@@ -4,7 +4,10 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import {
+  buildMessage,
+  buildSession,
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import {
   getTurnActiveStreamingAssistantMessageId,
   useAgentChatRenderedTranscript,

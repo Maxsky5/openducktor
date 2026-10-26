@@ -1,7 +1,7 @@
 import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
-import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
@@ -17,11 +17,8 @@ import {
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import {
-  ChecksOperationsContext,
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { type HostClient, HostInvokeError } from "@openducktor/host-client";
 import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
@@ -45,7 +42,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
-import { deriveSelectedSessionViewProjection } from "./selected-session/selected-session-view-projection";
+import { deriveSelectedSessionViewProjection } from "@openducktor/frontend-core/sessions/session-view/selected-session-view-projection";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 enableReactActEnvironment();

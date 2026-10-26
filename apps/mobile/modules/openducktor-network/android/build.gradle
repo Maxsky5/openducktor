@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.openducktor.network'
+version = '1.0.0'
+
+android {
+  namespace "com.openducktor.network"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // react-android supplies WebSocketModule. It also exposes OkHttp and Okio through its `api`
+  // dependencies, so this module compiles and runs against the OkHttp version that React Native
+  // ships. The React Native Gradle plugin resolves the react-android version, as it does for the
+  // Expo packages.
+  implementation 'com.facebook.react:react-android'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2'
+}

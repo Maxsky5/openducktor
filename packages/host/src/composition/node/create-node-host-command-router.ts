@@ -17,6 +17,7 @@ import {
 } from "../../application/autopilot/autopilot-service";
 import { withConfigCommit } from "../../adapters/config/config-commit";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
+import { createNodeLocalToolCommandHandlers } from "./node-local-tool-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
 import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
 import { Effect } from "effect";
@@ -25,17 +26,13 @@ import {
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
-import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
-import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
 import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
-import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
 import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
-import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createRepoActionService } from "../../application/actions/repo-action-service";
@@ -50,15 +47,10 @@ import type { GitProviderResolver } from "../../application/git/git-provider-res
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
-import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
-import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
-import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-in-tools-command-handlers";
 import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
 import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
 import { createRuntimeCommandHandlers } from "../../interface/commands/runtime-command-handlers";
-import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands/system-diagnostics-command-handlers";
-import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
 import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
@@ -109,7 +101,6 @@ export const assembleNodeEffectHostCommandRouter = (
     filesystem,
     git,
     localAttachments,
-    openInTools,
     configDir,
     runtimeHealth,
     settingsConfig: baseSettingsConfig,
@@ -118,7 +109,6 @@ export const assembleNodeEffectHostCommandRouter = (
     browserEngine,
     browserAutomation,
     toolDiscovery,
-    userEnvironment,
     readEnv,
     startupEnv,
     worktreeFiles,
@@ -194,15 +184,7 @@ export const assembleNodeEffectHostCommandRouter = (
       eventBus,
       lifecycleLogger,
     });
-  const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
-  const openInToolsService = createOpenInToolsService(openInTools);
-  const systemDiagnosticsService = createSystemDiagnosticsService({
-    systemCommands,
-    toolDiscovery,
-    repoStoreDiagnostics: taskStore,
-    userEnvironment,
-  });
   const workingDirectoryDependencies = { gitPort: git, settingsConfig, workspaceSettingsService };
   let resolvedMcpHostBridge = mcpHostBridge;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
@@ -446,9 +428,7 @@ export const assembleNodeEffectHostCommandRouter = (
       runtimeRegistry,
       adapterRegistry: liveSessionAdapterRegistry,
     }),
-    ...createFilesystemCommandHandlers(createFilesystemService(filesystem)),
     ...createWorkspaceFilesCommandHandlers(workspaceFiles),
-    ...createGitCommandHandlers(gitService),
     ...createNodeGitProviderCommandHandlers({
       resolver: gitProviderResolver,
       issueImportStore: assets.issueImportStore,
@@ -464,7 +444,6 @@ export const assembleNodeEffectHostCommandRouter = (
       runtimeDefinitionsService,
       { ...workingDirectoryDependencies, worktreeFiles },
     ),
-    ...createOpenInToolsCommandHandlers(openInToolsService),
     ...createPullRequestReviewCommandHandlers(pullRequestReviewService),
     ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),
     ...createNodeRuntimeExecutableCommandHandlers({
@@ -475,8 +454,11 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createRuntimeCommandHandlers(taskSessionStopService, hostRuntimeService, () =>
       resolvedMcpHostBridge.status(),
     ),
-    ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
-    ...createSystemPlatformCommandHandlers(),
+    ...createNodeLocalToolCommandHandlers({
+      ...defaultPorts,
+      settingsConfig,
+      repoStoreDiagnostics: taskStore,
+    }),
     ...createTaskAssetCommandHandlers(taskAssetStagingService),
     ...createTaskCommandHandlers(taskService),
     ...createTaskWorktreeCommandHandlers(taskWorktreeService),
@@ -488,6 +470,7 @@ export const assembleNodeEffectHostCommandRouter = (
   };
   return Object.assign(createEffectHostCommandRouter({ ...hostRouterLifecycle, handlers }), {
     hostInstanceId,
+    hostSettings: workspaceSettingsService,
     taskAssetReadService,
     taskEventStream,
     notificationStream: notificationService.stream,

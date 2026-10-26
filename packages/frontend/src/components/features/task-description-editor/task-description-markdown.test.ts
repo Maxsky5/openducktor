@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Editor } from "@tiptap/core";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
+import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
 import {
   assessVisualMarkdownCompatibility,
   canonicalizeTaskDescriptionMarkdown,
-  splitTaskDescriptionFrontMatter,
 } from "./task-description-markdown";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
 
@@ -63,23 +63,6 @@ describe("task description Markdown dialect", () => {
         split.kind === "valid" ? split.raw : "",
       ),
     ).toBe(true);
-  });
-
-  test("preserves TOML front matter exactly", () => {
-    const markdown = '+++\nname = "task"\n+++\nBody';
-    expect(splitTaskDescriptionFrontMatter(markdown)).toEqual({
-      kind: "valid",
-      raw: '+++\nname = "task"\n+++\n',
-      body: "Body",
-    });
-  });
-
-  test("does not treat a byte-order mark or leading content as front matter", () => {
-    expect(splitTaskDescriptionFrontMatter("\uFEFF---\ntitle: no\n---\nBody")).toEqual({
-      kind: "none",
-      raw: "",
-      body: "\uFEFF---\ntitle: no\n---\nBody",
-    });
   });
 
   test("blocks unterminated leading front matter", () => {

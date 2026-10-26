@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
-} from "@/components/features/kanban/kanban-task-workflow";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +21,8 @@ export type TaskDetailsSheetFooterProps = {
   onDeleteSelect?: () => void;
 };
 
+// The footer maps each host workflow action and session state to one button set.
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function
 export function TaskDetailsSheetFooter({
   task,
   onOpenChange,

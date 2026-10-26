@@ -267,6 +267,8 @@ const createFakeOpenCode = async (
     configCapturePath?: string;
     environmentCapturePath?: string;
     silent?: boolean;
+    /** A file that the script writes when it runs. */
+    startedPath?: string;
   } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "opencode.mjs");
@@ -286,6 +288,8 @@ if (Number(args[portFlagIndex + 1]) !== 0 || !args.includes("--stdio")) {
   console.error("unexpected port");
   process.exit(2);
 }
+const startedPath = ${JSON.stringify(options.startedPath ?? null)};
+if (startedPath) writeFileSync(startedPath, "");
 const childPidPath = ${JSON.stringify(options.childPidPath ?? null)};
 const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
 const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
@@ -553,8 +557,9 @@ describe("createOpenCodeRuntimeStarter", () => {
     const ownedCleanups: OwnedCleanup[] = [];
     try {
       const repo = join(root, "repo");
+      const startedPath = join(root, "started");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root, { silent: true });
+      const opencodeBinary = await createFakeOpenCode(root, { silent: true, startedPath });
       const starter = createOpenCodeRuntimeStarter({
         systemCommands: createSystemCommands(),
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
@@ -583,6 +588,11 @@ describe("createOpenCodeRuntimeStarter", () => {
           );
           return yield* Effect.gen(function* () {
             yield* Effect.promise(() => acquired.promise);
+            // On Windows, `taskkill /t` misses a script that `cmd.exe` has not started yet, and
+            // the script then keeps the output pipes open. The deadline passes after it runs.
+            yield* Effect.promise(() =>
+              waitFor(() => existsSync(startedPath), PROCESS_START_TIMEOUT_MS),
+            );
             yield* TestClock.adjust("39 millis");
             expect(completed).toBe(false);
             yield* TestClock.adjust("1 milli");
@@ -1134,7 +1144,8 @@ describe("createOpenCodeRuntimeStarter", () => {
       }
       await removeTestDirectory(root);
     }
-  });
+    // Starts and force-stops a real fake OpenCode process, which can outlast the host budget.
+  }, 10_000);
 
   test("rejects an empty saved executable path before it starts a process", async () => {
     const starter = createOpenCodeRuntimeStarter({});

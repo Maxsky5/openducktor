@@ -1,4 +1,4 @@
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import {
   createContext,
   useCallback,
@@ -12,9 +12,9 @@ import {
 } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { useSetSessionUnread } from "@/features/session-navigation/session-read-state";
-import { useRequiredContext } from "@/state/app-state-contexts";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import { useSetSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { useSessionPresent } from "./session-navigation-presence-context";
 import { SessionPreviewContent } from "./session-preview-content";
 import { SessionEntryMenu } from "./session-entry-menu";

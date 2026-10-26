@@ -11,7 +11,8 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
-import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";

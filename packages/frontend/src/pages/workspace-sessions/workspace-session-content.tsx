@@ -4,7 +4,7 @@ import type { TaskExecutionSelectedFile } from "@/components/features/agents/tas
 import { useWorkspaceSessionTools } from "@/components/features/agents/use-workspace-session-tools";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { Button } from "@/components/ui/button";
-import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
+import type { ResolveGitConflict } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 import {
   SessionPanel,
   type SessionPanelModel,
@@ -14,14 +14,18 @@ import {
   type ToolTabViews,
   useNarrowWindow,
 } from "@/features/session-panels";
-import { useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useAgentSessionReadModelState, useWorkspaceBranchState } from "@/state/app-state-provider";
+import { windowReturnVisibility } from "@/lib/window-return-visibility";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 import {
   requestWorkspaceGitConflictAssistance,
   workspaceConflictChatKey,
 } from "./workspace-git-conflict-assistance";
-import { useWorkspaceSessionGit } from "./use-workspace-session-git";
+import { useWorkspaceSessionGit } from "@openducktor/frontend-core/git/workspace-session/use-workspace-session-git";
+import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
+import { invalidateGitWorkingDirectoryQueries } from "@openducktor/frontend-core/queries/git";
+import { useQueryClient } from "@tanstack/react-query";
 import { WorkspaceSessionChatPane } from "./workspace-session-chat-pane";
 import {
   WorkspaceSessionFilePreview,
@@ -66,6 +70,7 @@ export function WorkspaceSessionContent({
   onSafeToLeave,
 }: WorkspaceSessionContentProps): ReactElement {
   const isPanelOpen = isActive && rightPanel.isVisible;
+  const { activeBranch, isSwitchingBranch } = useWorkspaceBranchState();
   const [chatActions, setChatActions] = useState<WorkspaceConflictChatActions | null>(null);
   const selectedKey = workspaceConflictChatKey(workspace.workspaceId, record.id);
   const onActionsReady = useCallback(
@@ -96,21 +101,32 @@ export function WorkspaceSessionContent({
       conflict,
       assertCurrent,
     });
-  const {
-    branch,
-    workingDirectory,
-    isWorktree,
-    hasRootBranch,
-    branchError,
-    target,
-    savedTarget,
-    targetError,
-    applyTarget,
-    retryTarget,
-    refreshAfterChange,
-    refreshRef,
-  } = useWorkspaceSessionGit({ workspace, record, isPanelOpen });
-  const { branchKey, branchReady, readBranch } = branch;
+  const sessionGit = useWorkspaceSessionGit({
+    workspace,
+    record,
+    activeBranch,
+    isSwitchingBranch,
+    visibility: windowReturnVisibility,
+  });
+  const { branch, workingDirectory, isWorktree, hasRootBranch } = sessionGit;
+  const { branchKey, refreshBranch } = branch;
+  const queryClient = useQueryClient();
+  // The tools hook below gives the panel refresh, and the views above it need this callback first.
+  const refreshRef = useRef<(() => Promise<void>) | null>(null);
+  /** Refreshes Git and files after a file save or a tool change. */
+  const refreshAfterChange = useCallback(() => {
+    refreshBranch();
+    const refresh = isPanelOpen ? refreshRef.current : null;
+    if (refresh) {
+      // The panel shows a failed read.
+      void refresh().catch(() => {});
+      return;
+    }
+    if (!workingDirectory) return;
+    void invalidateGitWorkingDirectoryQueries(queryClient, workspace.repoPath, workingDirectory);
+    // File queries render their own refresh errors.
+    void refreshWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
+  }, [isPanelOpen, queryClient, refreshBranch, workingDirectory, workspace.repoPath]);
   const previewRef = useRef<WorkspaceSessionFilePreviewHandle | null>(null);
   const isNarrow = useNarrowWindow();
   const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
@@ -179,19 +195,10 @@ export function WorkspaceSessionContent({
     conflictAssistanceIsStarting: assistance?.isStarting ?? false,
     repoPath: workspace.repoPath,
     workspaceSession,
-    workingDirectory,
     contextMode: record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree",
     repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,
-    branchKey,
-    currentBranch: branch.currentBranch,
-    branchReady,
-    branchError,
-    applyTarget,
-    target,
-    savedTarget,
-    targetError,
-    readBranch,
-    retryTarget,
+    git: sessionGit,
+    applyTarget: sessionGit.applyTarget,
     isFilesActive: rightPanel.activeKind === "files",
     selectedFile,
     onSelectFile,

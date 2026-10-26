@@ -8,7 +8,7 @@ import type {
 import {
   buildSessionNavigationHref,
   type SessionsPageKind,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import { findWorkspaceSessionByIdentity } from "@openducktor/frontend-core/queries/agent-session-association";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { buildKanbanTaskHref } from "@/pages/kanban/kanban-task-link";

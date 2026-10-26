@@ -2,19 +2,22 @@ import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
-import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
+import { useRuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
+import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import {
+  useAgentSession,
+  useAgentSessionVisiblePendingInput,
+} from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { useWorkspaceChatSettings } from "@openducktor/frontend-core/queries/use-workspace-chat-settings";
-import { deriveAgentChatReadiness } from "../agent-chat-readiness";
-import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-presentation";
-import { resolveAgentChatTranscriptPresentation } from "../agent-chat-transcript-presentation";
-import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
+import { deriveAgentChatReadiness } from "@openducktor/frontend-core/sessions/send/agent-chat-readiness";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
+import { resolveAgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-presentation";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
-import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
-import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
-import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
+import { deriveRuntimeTranscriptSurfaceState } from "@openducktor/frontend-core/sessions/readonly-transcript/runtime-transcript-surface-state";
+import { useRuntimeTranscriptInteractions } from "@openducktor/frontend-core/sessions/readonly-transcript/use-runtime-transcript-interactions";
+import { useRuntimeTranscriptSessionHistory } from "@openducktor/frontend-core/sessions/readonly-transcript/use-runtime-transcript-session-history";
 
 const EMPTY_TODOS = Object.freeze(new Array<AgentSessionTodoItem>());
 

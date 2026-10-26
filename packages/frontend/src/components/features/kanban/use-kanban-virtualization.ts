@@ -8,7 +8,7 @@ import {
   resolveVirtualViewportWindow,
   type VirtualWindowRange,
 } from "@/components/features/kanban/kanban-column-virtualization";
-import type { CardLayout } from "@/components/features/kanban/kanban-task-footer";
+import type { CardLayout } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 
 const VIRTUALIZATION_MIN_TASK_COUNT = 30;
 const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 156;

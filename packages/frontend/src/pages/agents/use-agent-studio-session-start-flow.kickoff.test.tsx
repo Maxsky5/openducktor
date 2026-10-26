@@ -3,11 +3,8 @@ import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import {
-  ChecksOperationsContext,
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";

@@ -11,17 +11,17 @@ import {
   agentSessionIdentityKey,
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { compareAgentSessionRecency } from "@/lib/agent-session-options";
-import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
-import { roleWorkflowForTask } from "@/lib/task-agent-workflows";
+import { compareAgentSessionRecency } from "@openducktor/frontend-core/lib/agent-session-options";
+import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
+import { roleWorkflowForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { SessionNavigationTarget } from "./session-navigation-target";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 
 export type SessionPreviewPendingInput = {
   ref: AgentSessionLiveRef;

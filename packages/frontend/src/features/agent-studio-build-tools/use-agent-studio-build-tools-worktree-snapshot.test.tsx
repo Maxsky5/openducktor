@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { toast } from "sonner";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
   type GitReadContext,
@@ -8,10 +7,11 @@ import {
 } from "@openducktor/contracts";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
-import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
+import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { HostClient } from "@openducktor/host-client";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createAgentSessionFixture,
@@ -1050,7 +1050,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
       const snapshot = harness.getLatest();
       expect(snapshot.worktree.path).toBeNull();
-      expect(snapshot.worktree.error).toContain("Task worktree is not available.");
+      expect(snapshot.worktree.error).toBe(
+        "Task task-24 has no worktree yet. Start the Builder to create one.",
+      );
       expect(snapshot.worktree.shouldBlockDiffLoading).toBe(true);
       expect(snapshot.openInTarget).toEqual({
         path: null,
@@ -1459,7 +1461,7 @@ function taskStatus(target: string, scope: "target" | "uncommitted"): GitWorktre
 }
 
 test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once", async (mode) => {
-  const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
+  const feedback = createFeedbackFake();
   gitClient = createGitClient({
     client: {
       gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
@@ -1472,7 +1474,8 @@ test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once",
       },
     },
   });
-  const harness = createHookHarness(
+  const harness = createSharedHookHarness(
+    useAgentStudioBuildToolsWorktreeSnapshot,
     createBaseArgs({
       selectedView: createSelectedView({
         selectedTask: createTaskCardFixture({
@@ -1481,6 +1484,7 @@ test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once",
         }),
       }),
     }),
+    { connection: createTestClientConnection({ client: gitClient, feedback }) },
   );
   try {
     await harness.mount();
@@ -1492,13 +1496,15 @@ test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once",
         await state.refreshWorktree(mode);
       } catch {}
     });
-    expect(report).toHaveBeenCalledTimes(1);
-    expect(report).toHaveBeenCalledWith("Could not refresh Git changes", {
-      description: "Check the remote connection.",
-    });
+    expect(feedback.shownOf("error")).toEqual([
+      {
+        kind: "error",
+        message: "Could not refresh Git changes",
+        options: { description: "Check the remote connection." },
+      },
+    ]);
   } finally {
     await harness.unmount();
-    report.mockRestore();
   }
 });
 

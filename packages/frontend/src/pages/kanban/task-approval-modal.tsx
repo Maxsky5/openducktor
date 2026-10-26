@@ -6,8 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { TaskApprovalModalModel } from "./kanban-page-model-types";
-import { getTaskApprovalModalHeader } from "./task-approval-modal-header";
+import type { TaskApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
+import { getTaskApprovalModalHeader } from "@openducktor/frontend-core/tasks/approval/task-approval-modal-header";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 export { TaskApprovalModalPanel } from "./task-approval-modal-panel";

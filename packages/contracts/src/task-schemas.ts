@@ -264,5 +264,10 @@ export type TaskStopImpactRequest = z.infer<typeof taskStopImpactRequestSchema>;
 
 export const taskStopImpactSchema = z.object({
   stoppableSessionCount: z.number().int().nonnegative(),
+  /**
+   * The existing task worktrees that Close, Delete, or Reset Task removes. Reset Implementation
+   * omits it. Hosts older than this field omit it too.
+   */
+  removedWorktreeCount: z.number().int().nonnegative().optional(),
 });
 export type TaskStopImpact = z.infer<typeof taskStopImpactSchema>;

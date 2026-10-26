@@ -1,13 +1,18 @@
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 import { isSessionSystemPromptMessage } from "./session-prompt";
 
-const timestampMs = (timestamp: string): number | null => {
-  const parsed = Date.parse(timestamp);
+// History merges and turn timing read the time of each message many times, and a message never
+// changes its time, so each message parses its time once.
+const timestampsMs = new WeakMap<Pick<AgentChatMessage, "timestamp">, number>();
+
+export const messageTimestampMs = (message: Pick<AgentChatMessage, "timestamp">): number | null => {
+  let parsed = timestampsMs.get(message);
+  if (parsed === undefined) {
+    parsed = Date.parse(message.timestamp);
+    timestampsMs.set(message, parsed);
+  }
   return Number.isNaN(parsed) ? null : parsed;
 };
-
-export const messageTimestampMs = (message: Pick<AgentChatMessage, "timestamp">): number | null =>
-  timestampMs(message.timestamp);
 
 export const sessionMessageTimestampInsertionIndex = (
   messages: readonly AgentChatMessage[],

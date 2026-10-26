@@ -2,7 +2,10 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatTokenCompact, formatTokenExact } from "../format-token-count";
+import {
+  buildContextUsagePresentation,
+  type ContextUsageSeverity,
+} from "@openducktor/frontend-core/sessions/composer/context-usage/context-usage-presentation";
 
 type AgentContextUsageIndicatorProps = {
   totalTokens: number;
@@ -17,19 +20,15 @@ type ContextUsageColorClasses = {
   ring: string;
 };
 
-const usageColorClasses = (usagePercent: number): ContextUsageColorClasses => {
-  if (usagePercent >= 90) {
-    return {
-      text: "text-destructive-muted",
-      bar: "bg-destructive-accent",
-      ring: "stroke-destructive-accent",
-    };
-  }
-  if (usagePercent >= 75) {
-    return { text: "text-warning-muted", bar: "bg-warning-accent", ring: "stroke-warning-accent" };
-  }
-  return { text: "text-success-muted", bar: "bg-success-accent", ring: "stroke-success-accent" };
-};
+const USAGE_COLOR_CLASSES = {
+  critical: {
+    text: "text-destructive-muted",
+    bar: "bg-destructive-accent",
+    ring: "stroke-destructive-accent",
+  },
+  warning: { text: "text-warning-muted", bar: "bg-warning-accent", ring: "stroke-warning-accent" },
+  normal: { text: "text-success-muted", bar: "bg-success-accent", ring: "stroke-success-accent" },
+} satisfies Record<ContextUsageSeverity, ContextUsageColorClasses>;
 
 // The ring draws its arc with pathLength 100, so the dash length is the usage percent.
 const RING_RADIUS = 6;
@@ -41,20 +40,17 @@ export function AgentContextUsageIndicator({
   outputLimit,
   className,
 }: AgentContextUsageIndicatorProps): ReactElement {
-  const safeTotalTokens = Math.max(0, Math.round(totalTokens));
-  const safeContextWindow = Math.max(1, Math.round(contextWindow));
-  const rawUsagePercent = (safeTotalTokens / safeContextWindow) * 100;
-  const textUsagePercent = Math.min(Math.max(rawUsagePercent, 0), 999);
-  const barUsagePercent = Math.min(Math.max(rawUsagePercent, 0), 100);
-  const colors = usageColorClasses(rawUsagePercent);
-  const usageLabel = `${
-    textUsagePercent >= 100 ? Math.round(textUsagePercent) : textUsagePercent.toFixed(1)
-  }%`;
-
-  const compactTotal = formatTokenCompact(safeTotalTokens) ?? "0";
-  const exactTotal = formatTokenExact(safeTotalTokens) ?? "0";
-  const exactWindow = formatTokenExact(safeContextWindow) ?? "0";
-  const exactOutput = formatTokenExact(outputLimit);
+  const {
+    usageLabel,
+    meterPercent: barUsagePercent,
+    severity,
+    compactTotal,
+    exactTotal,
+    exactWindow,
+    exactOutput,
+    accessibleLabel,
+  } = buildContextUsagePresentation({ totalTokens, contextWindow, outputLimit });
+  const colors = USAGE_COLOR_CLASSES[severity];
 
   return (
     <TooltipProvider>
@@ -68,7 +64,7 @@ export function AgentContextUsageIndicator({
               "h-7 gap-1.5 rounded-lg px-1.5 font-medium hover:bg-muted data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted",
               className,
             )}
-            aria-label={`Session context: ${usageLabel} used, ${compactTotal} tokens`}
+            aria-label={accessibleLabel}
           >
             <svg viewBox="0 0 16 16" className="size-4 shrink-0 -rotate-90" aria-hidden="true">
               <circle

@@ -7,7 +7,7 @@ import {
 import { useMutation, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { type ReactElement, useId } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
-import { sessionComparisonOptions } from "@/features/agent-studio-git/use-session-comparison";
+import { sessionComparisonOptions } from "@openducktor/frontend-core/git/session-comparison-options";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {

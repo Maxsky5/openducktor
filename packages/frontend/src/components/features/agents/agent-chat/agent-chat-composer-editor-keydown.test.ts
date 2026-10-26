@@ -15,10 +15,10 @@ import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydow
 import { isApplePlatform } from "@/lib/device-platform";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import type {
-  ReferenceMenuItem,
   ReferenceMenuState,
   SkillMenuState,
 } from "./use-agent-chat-composer-editor-autocomplete";
+import type { ReferenceMenuItem } from "@openducktor/frontend-core/sessions/composer/composer-autocomplete-filters";
 import type {
   ActiveTextSelection,
   ActiveTextSelectionRange,

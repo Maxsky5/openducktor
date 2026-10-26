@@ -1,5 +1,5 @@
 import { Activity, type ReactNode, useEffect, useEffectEvent } from "react";
-import { useSessionViewShown } from "./session-view-context";
+import { useSessionViewShown } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 /**
  * Shows its content while the session view is on screen. The content stops its effects while

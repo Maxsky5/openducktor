@@ -14,7 +14,7 @@ import { useCallback } from "react";
 import {
   normalizeRepoAgentDefaultForSave,
   normalizeRepoDefaultModelForSave,
-} from "@/lib/repo-agent-defaults";
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { normalizeTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { dropBlankLines } from "@/state/read-models/settings-read-model";

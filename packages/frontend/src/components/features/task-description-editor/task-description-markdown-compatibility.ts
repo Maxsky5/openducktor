@@ -5,7 +5,7 @@ import type { Root, RootContent } from "mdast";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { normalizeTaskListBlockMath } from "@/components/ui/markdown-task-list-math";
-import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
+import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
 
 export type VisualMarkdownCompatibility =
   | { compatible: true }

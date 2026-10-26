@@ -2,10 +2,10 @@ import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ListTodo } from "lucide-react";
 import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
-import { issueTypeGuidance } from "@/components/features/task-composer/utils";
+import { issueTypeGuidance } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import TaskDescriptionEditor from "@/components/features/task-description-editor/task-description-editor";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
-import type { TaskDescriptionAssetUpload } from "@/components/features/task-description-editor/use-task-description-asset-draft";
+import type { TaskDescriptionAssetUpload } from "@openducktor/frontend-core/tasks/description/use-task-description-asset-draft";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TagSelector } from "@/components/ui/tag-selector";
 import { cn } from "@/lib/utils";
-import type { ComposerMode, ComposerState } from "@/types/task-composer";
+import type {
+  ComposerMode,
+  ComposerState,
+} from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 type TaskDetailsFormProps = {
   mode: ComposerMode;

@@ -1,16 +1,25 @@
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, createElement } from "react";
+import {
+  fireEvent,
+  render as renderWithoutConnection,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { act, createElement, type ReactElement } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { AppRuntimeProvider } from "@/state/providers/app-runtime-provider";
+import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/providers/app-runtime-provider";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { SessionStartModal, type SessionStartModalModel } from "./session-start-modal";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
+import { SessionStartModal } from "./session-start-modal";
 
 enableReactActEnvironment();
+
+/** The modal reads its connection for feedback, as in the app. */
+const render = (ui: ReactElement) => renderWithoutConnection(ui, { wrapper: QueryProvider });
 
 const noop = () => {};
 const existingSessionOption = (externalSessionId: string) => ({
@@ -362,6 +371,29 @@ describe("SessionStartModal", () => {
       }),
     );
 
+    expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
+      true,
+    );
+
+    unmount();
+  });
+
+  test("explains a missing configured target branch and blocks session start", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          showTargetBranchSelector: true,
+          targetBranchOptions: [{ value: "refs/heads/main", label: "main" }],
+          selectedTargetBranch: "",
+          targetBranchError:
+            "Target branch origin/main does not exist in this repository. Choose another target branch.",
+        }),
+      }),
+    );
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Target branch origin/main does not exist in this repository. Choose another target branch.",
+    );
     expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
       true,
     );

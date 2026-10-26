@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, type RenderResult, screen, within } from "@testing-library/react";
 import { act, createElement, Fragment } from "react";
-import { type GitChangeIntent, gitChangeIntentKey } from "@/features/agent-studio-git";
+import type { GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
+import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel";
 import { FILE_LIST_VIEW_MODE_STORAGE_KEY } from "./agent-studio-git-panel/file-list-view-preference";

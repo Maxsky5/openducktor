@@ -35,7 +35,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import type { DiffScope, GitChangeIntent } from "@/features/agent-studio-git";
+import type { DiffScope, GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";

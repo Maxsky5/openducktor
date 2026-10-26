@@ -8,7 +8,7 @@ import {
   useRef,
 } from "react";
 import { useBlocker } from "react-router";
-import { SESSIONS_PATH } from "@/features/session-navigation/session-navigation-target";
+import { SESSIONS_PATH } from "@/features/session-navigation/sessions-route";
 
 type RequestTransition = (
   apply: () => void | Promise<void | boolean>,

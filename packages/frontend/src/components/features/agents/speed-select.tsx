@@ -1,25 +1,12 @@
-import type { AgentSpeedLevel } from "@openducktor/contracts";
 import { Zap, ZapOff } from "lucide-react";
 import { type ReactElement, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { STANDARD_SPEED } from "@openducktor/frontend-core/lib/model-catalog-selection";
+import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import { cn } from "@/lib/utils";
 import "./speed-select.css";
-
-export type SpeedControlModel = {
-  key: string;
-  /** The selected level ID, or `standard`. */
-  choice: string;
-  /** The levels above standard that the selected model supports. */
-  levels: AgentSpeedLevel[];
-  blockedReason: string | undefined;
-  pending: boolean;
-  disabled: boolean;
-  error: string | null;
-  onChange: (choice: string) => void;
-};
 
 export function SpeedSelect({
   model,

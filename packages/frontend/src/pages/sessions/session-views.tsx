@@ -19,16 +19,16 @@ import {
   useVisibleSessionControls,
   useVisibleSessionView,
   type VisibleSession,
-} from "@/features/session-navigation/visible-session-target";
+} from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import {
   buildSessionNavigationSearch,
   sameSessionSelection,
   type SessionsPageKind,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import {
   SessionViewContext,
   SessionViewShownContext,
-} from "@/features/session-navigation/session-view-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { AgentsPage } from "@/pages/agents/agents-page";
 import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
 import { useWorkspaceState } from "@/state/app-state-provider";

@@ -6,14 +6,14 @@ import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
-import { pullRequestHealthError } from "@/lib/git-provider-health";
-import { formatElapsedAgo, useMinuteClock } from "@/lib/relative-time";
 import {
-  canUnlinkTaskPullRequest,
-  humanDate,
-  statusBadgeClassName,
-  statusLabel,
-} from "@/lib/task-display";
+  resolveTaskPullRequestActions,
+  TASK_PULL_REQUEST_ACTION_LABELS,
+} from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
+import { statusBadgeClassName } from "@/lib/task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
+import { formatElapsedAgo, useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
+import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;
@@ -56,7 +56,9 @@ function TaskPullRequestActions({
             data-testid="task-details-detect-pr-button"
           >
             <Link2 data-icon="inline-start" />
-            {isDetecting ? "Detecting PR" : "Detect PR"}
+            {isDetecting
+              ? TASK_PULL_REQUEST_ACTION_LABELS.detecting
+              : TASK_PULL_REQUEST_ACTION_LABELS.detect}
           </Button>
           {disabledReason ? (
             <p id={errorId} className="max-w-72 text-right text-xs text-destructive">
@@ -76,7 +78,9 @@ function TaskPullRequestActions({
           data-testid="task-details-unlink-pr-button"
         >
           <Unlink data-icon="inline-start" />
-          {isUnlinking ? "Unlinking PR" : "Unlink PR"}
+          {isUnlinking
+            ? TASK_PULL_REQUEST_ACTION_LABELS.unlinking
+            : TASK_PULL_REQUEST_ACTION_LABELS.unlink}
         </Button>
       ) : null}
     </div>
@@ -130,20 +134,14 @@ export function TaskDetailsSheetHeader({
   isDetectingPullRequest = false,
   isUnlinkingPullRequest = false,
 }: TaskDetailsSheetHeaderProps): ReactElement {
-  const detectPullRequestDisabledReason =
-    gitProviderReadError ?? pullRequestHealthError(gitProviderContext);
-  const supportsPullRequests =
-    gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
-  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError !== null;
-  const showDetectPullRequest =
-    (supportsPullRequests || readFailedWithoutContext) &&
-    task.pullRequest == null &&
-    canUnlinkTaskPullRequest(task.status) &&
-    onDetectPullRequest !== undefined;
-  const showUnlinkPullRequest =
-    task.pullRequest != null &&
-    canUnlinkTaskPullRequest(task.status) &&
-    onUnlinkPullRequest !== undefined;
+  const pullRequestActions = resolveTaskPullRequestActions(
+    task,
+    gitProviderContext,
+    gitProviderReadError,
+  );
+  const detectPullRequestDisabledReason = pullRequestActions.detectDisabledReason;
+  const showDetectPullRequest = pullRequestActions.showDetect && onDetectPullRequest !== undefined;
+  const showUnlinkPullRequest = pullRequestActions.showUnlink && onUnlinkPullRequest !== undefined;
 
   return (
     <div className="flex flex-col gap-3">

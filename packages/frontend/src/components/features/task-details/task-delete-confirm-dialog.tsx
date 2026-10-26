@@ -1,6 +1,5 @@
 import { Loader2, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,11 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  formatActiveSessionStopLoadingMessage,
-  formatCleanupImpactMessage,
-  confirmButtonState,
-} from "./task-cleanup-impact-model";
+import { confirmButtonState } from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
+import { buildTaskDeleteConfirmCopy } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
+import { TaskConfirmCopyLines } from "./task-confirm-copy-lines";
 import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
 
 type TaskDeleteConfirmDialogProps = TaskConfirmDialogProps & { subtasksCount: number };
@@ -25,58 +22,26 @@ export function TaskDeleteConfirmDialog({
   onOpenChange,
   onCancel,
   onConfirm,
-  taskId,
+  task,
   subtasksCount,
   impact,
   operation,
   onCloseAutoFocus,
 }: TaskDeleteConfirmDialogProps): ReactElement {
-  const hasSubtasks = subtasksCount > 0;
-  const cleanupMessage = formatCleanupImpactMessage(impact, "delete");
-  const confirmButton = confirmButtonState(impact, operation, {
-    idle: "Delete",
-    pending: "Deleting...",
-  });
+  const copy = buildTaskDeleteConfirmCopy(task, impact, subtasksCount);
+  const confirmButton = confirmButtonState(impact, operation, copy.confirmLabel);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
-          <DialogTitle>Delete Task</DialogTitle>
-          <DialogDescription>
-            {hasSubtasks
-              ? `Delete ${taskId} and its ${subtasksCount} direct subtask${subtasksCount === 1 ? "" : "s"}? This cannot be undone.`
-              : `Delete ${taskId}? This cannot be undone.`}
-          </DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="py-4">
           <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
-            <p className="font-medium">
-              This action permanently removes the task and all its workflow and free artifacts.
-            </p>
-            {hasSubtasks ? (
-              <p>
-                Direct subtasks will also be deleted to avoid orphaned children in the workflow.
-              </p>
-            ) : (
-              <p>Any descendant subtasks will also be deleted to avoid orphaned children.</p>
-            )}
-            {impact.terminalCount === 0 ? null : (
-              <p>
-                {impact.terminalCount} associated terminal
-                {impact.terminalCount === 1 ? "" : "s"} will be terminated before deletion.
-              </p>
-            )}
-            <TaskStopImpactNotice
-              count={impact.activeSessionCount}
-              error={impact.activeSessionCountError}
-              operation="delete"
-            />
-            {impact.isLoadingStopImpact ? (
-              <p>{formatActiveSessionStopLoadingMessage("delete")}</p>
-            ) : null}
-            {cleanupMessage ? <p>{cleanupMessage}</p> : null}
+            <TaskConfirmCopyLines lines={copy.lines} />
             {impact.error ? <p className="text-destructive-muted">{impact.error}</p> : null}
             {operation.error ? <p className="text-destructive-muted">{operation.error}</p> : null}
           </div>

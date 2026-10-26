@@ -4,12 +4,13 @@ import { type ComponentProps, type ReactElement, useEffect, useRef, useState } f
 import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
+import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import { TASK_DETAILS_WORKFLOW_ACTIONS } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import {
   resolveHistoricalSessionRoles,
   resolveSessionTargetOptions,
-} from "@/components/features/kanban/session-target-resolution";
+} from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { TaskCloseConfirmDialog } from "@/components/features/task-details/task-close-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
@@ -21,31 +22,15 @@ import {
 import { TaskDetailsSheetFrame } from "@/components/features/task-details/task-details-sheet-frame";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
-import { useTaskDetailsSheetViewModel } from "@/components/features/task-details/use-task-details-sheet-view-model";
+import { useTaskDetailsSheetViewModel } from "@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model";
 import { useDialogOpen } from "@/components/ui/dialog-root";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   type TaskWorkflowActions,
   useTaskWorkflowActions,
-} from "@/features/task-workflow/task-workflow-actions-context";
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { useTaskDetailsHistoricalSessions } from "@/features/task-workflow/use-task-details-historical-sessions";
-import { canDetectTaskPullRequest } from "@/lib/task-display";
-
-const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
-  "set_spec",
-  "set_plan",
-  "open_spec",
-  "open_planner",
-  "qa_start",
-  "build_start",
-  "open_builder",
-  "open_qa",
-  "human_approve",
-  "human_request_changes",
-  "reset_implementation",
-  "reset_task",
-  "close_task",
-];
+import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
 
 const EMPTY_TASK_SESSIONS: KanbanTaskSession[] = [];
 
@@ -122,7 +107,7 @@ export function TaskDetailsSheetContent(
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    detailActions: DETAIL_ACTIONS,
+    detailActions: TASK_DETAILS_WORKFLOW_ACTIONS,
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
@@ -165,15 +150,15 @@ export function TaskDetailsSheetContent(
       {onDelete ? (
         <TaskDeleteConfirmDialog
           {...viewModel.deleteConfirm.dialog}
-          taskId={task.id}
+          task={task}
           subtasksCount={viewModel.subtasks.length}
         />
       ) : null}
       {workflowActions?.onResetTask ? (
-        <TaskResetConfirmDialog {...viewModel.resetConfirm.dialog} taskId={task.id} />
+        <TaskResetConfirmDialog {...viewModel.resetConfirm.dialog} task={task} />
       ) : null}
       {workflowActions?.onCloseTask ? (
-        <TaskCloseConfirmDialog {...viewModel.closeConfirm.dialog} taskId={task.id} />
+        <TaskCloseConfirmDialog {...viewModel.closeConfirm.dialog} task={task} />
       ) : null}
     </>
   );

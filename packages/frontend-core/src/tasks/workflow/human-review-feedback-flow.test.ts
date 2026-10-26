@@ -1,0 +1,178 @@
+import { describe, expect, mock, test } from "bun:test";
+import { createFeedbackFake } from "../../test-support/feedback-fake";
+import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
+import { createAgentSessionSummaryFixture } from "../../test-support/shared-test-fixtures";
+import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
+import {
+  HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
+  prepareHumanReviewFeedback,
+  submitHumanReviewFeedback,
+} from "./human-review-feedback-flow";
+import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
+
+const createBuilderSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+) =>
+  createAgentSessionSummaryFixture({
+    sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+
+    ...overrides,
+  });
+
+const createState = (
+  overrides: Partial<HumanReviewFeedbackState> = {},
+): HumanReviewFeedbackState => ({
+  taskId: "TASK-1",
+  message: "Apply the requested changes.",
+  ...overrides,
+});
+
+const STARTED_SESSION = {
+  externalSessionId: "session-new",
+  runtimeKind: "opencode",
+  workingDirectory: "/tmp/repo/worktree",
+} satisfies AgentSessionIdentity;
+
+describe("human-review-feedback-flow", () => {
+  test("prepareHumanReviewFeedback returns the created feedback state", () => {
+    const state = createState();
+
+    const result = prepareHumanReviewFeedback({
+      createState: () => state,
+    });
+
+    expect(result).toBe(state);
+  });
+
+  test("submitHumanReviewFeedback rejects blank messages before starting the shared workflow", async () => {
+    const feedback = createFeedbackFake();
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
+
+    const result = await submitHumanReviewFeedback({
+      feedback,
+      state: createState({ message: "   " }),
+      builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
+      startRequestChangesSession,
+    });
+
+    expect(result).toEqual({ outcome: "cancelled" });
+    expect(feedback.shownOf("error").map((entry) => entry.message)).toEqual([
+      HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
+    ]);
+    expect(startRequestChangesSession).not.toHaveBeenCalled();
+  });
+
+  test("submitHumanReviewFeedback builds a kickoff-based shared start-session request", async () => {
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
+    const latestBuilderSession = createBuilderSession({
+      externalSessionId: "builder-session-2",
+      startedAt: "2026-03-20T12:00:00.000Z",
+    });
+    const previousBuilderSession = createBuilderSession({
+      externalSessionId: "builder-session-1",
+      startedAt: "2026-03-19T12:00:00.000Z",
+    });
+    const builderSessions = [latestBuilderSession, previousBuilderSession];
+
+    const result = await submitHumanReviewFeedback({
+      feedback: createFeedbackFake(),
+      state: createState({ message: "  Use the standard request-changes workflow.  " }),
+      builderSessions,
+      startRequestChangesSession,
+    });
+
+    expect(result).toEqual({ outcome: "started" });
+    expect(startRequestChangesSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        initialSourceSession: {
+          externalSessionId: "builder-session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+        postStartAction: "kickoff",
+        message: "Use the standard request-changes workflow.",
+        beforeStartAction: {
+          action: "human_request_changes",
+          note: "Use the standard request-changes workflow.",
+        },
+      }),
+    );
+    expect(startRequestChangesSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingSessionOptions: [
+          expect.objectContaining({
+            value: agentSessionIdentityKey(latestBuilderSession),
+            sourceSession: {
+              externalSessionId: "builder-session-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          }),
+          expect.objectContaining({
+            value: agentSessionIdentityKey(previousBuilderSession),
+            sourceSession: {
+              externalSessionId: "builder-session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          }),
+        ],
+      }),
+    );
+  });
+
+  test("submitHumanReviewFeedback defaults the shared start-session flow to fresh when no builder sessions exist", async () => {
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
+
+    await submitHumanReviewFeedback({
+      feedback: createFeedbackFake(),
+      state: createState({ message: "Start this in a new builder session." }),
+      builderSessions: [],
+      startRequestChangesSession,
+    });
+
+    expect(startRequestChangesSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialStartMode: "fresh",
+        existingSessionOptions: [],
+      }),
+    );
+  });
+
+  test("submitHumanReviewFeedback keeps the first modal editable when the shared workflow is cancelled", async () => {
+    const startRequestChangesSession = mock(async () => undefined);
+
+    const result = await submitHumanReviewFeedback({
+      feedback: createFeedbackFake(),
+      state: createState({ message: "Keep editing if I cancel the second step." }),
+      builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
+      startRequestChangesSession,
+    });
+
+    expect(result).toEqual({ outcome: "cancelled" });
+    expect(startRequestChangesSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("submitHumanReviewFeedback preserves the human-request-changes launch action in the handoff request", async () => {
+    const startRequestChangesSession = mock(async () => STARTED_SESSION);
+
+    await submitHumanReviewFeedback({
+      feedback: createFeedbackFake(),
+      state: createState({
+        message: "Address the requested changes in the shared flow.",
+      }),
+      builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
+      startRequestChangesSession,
+    });
+
+    expect(startRequestChangesSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        launchActionId: "build_after_human_request_changes",
+        message: "Address the requested changes in the shared flow.",
+      }),
+    );
+  });
+});

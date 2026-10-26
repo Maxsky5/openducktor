@@ -9,11 +9,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { GitConflict } from "@/features/agent-studio-git";
-import { getGitConflictCopy, getGitConflictTitle } from "./conflict-copy";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
+import {
+  getGitConflictCopy,
+  getGitConflictTitle,
+} from "@openducktor/frontend-core/git/conflicts/conflict-copy";
 import { GIT_CONFLICT_TEST_IDS, INLINE_CODE_CLASS_NAME } from "./constants";
 import { GitConflictActions } from "./git-conflict-actions";
-import type { GitConflictActionsModel } from "./git-conflict-actions-model";
+import type { GitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 
 type GitConflictDialogProps = {
   conflict: GitConflict | null;

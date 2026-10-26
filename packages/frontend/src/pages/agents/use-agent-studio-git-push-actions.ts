@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import type { AgentStudioPendingForcePush } from "@/features/agent-studio-git";
+import type { AgentStudioPendingForcePush } from "@openducktor/frontend-core/git/contracts";
 import {
   type GitActionKind,
   type RefreshGitDiffData,

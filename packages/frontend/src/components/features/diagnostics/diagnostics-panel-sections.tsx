@@ -11,7 +11,7 @@ import type {
   DiagnosticsHostModel,
   DiagnosticsPanelModel,
   DiagnosticsWorkspaceModel,
-} from "./diagnostics-panel-model";
+} from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import { DiagnosticsRuntimeRow } from "./diagnostics-runtime-row";
 
 export function DiagnosticsPanelSections({

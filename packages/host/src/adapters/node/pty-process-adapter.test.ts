@@ -183,6 +183,44 @@ describe("createNodePtyPort", () => {
     expect(existsSync(/""(.+)""$/u.exec(String(commandLine))?.[1] ?? "")).toBe(false);
   });
 
+  test("names the native cause and the next step when a running terminal call fails", async () => {
+    const port = createNodePtyPort({
+      processTreeTerminator: () => Effect.void,
+      nodePty: {
+        spawn: () => ({
+          pid: 42,
+          onData: () => ({ dispose: () => undefined }),
+          onExit: () => ({ dispose: () => undefined }),
+          write: () => undefined,
+          resize: () => {
+            throw new Error("ioctl(2) failed, EBADF");
+          },
+          pause: () => undefined,
+          resume: () => undefined,
+        }),
+      },
+    });
+    const handle = await Effect.runPromise(
+      port.start(
+        { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+        { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+      ),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.result(handle.resize({ columns: 120, rows: 40 })),
+    );
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") return;
+    expect(result.failure).toMatchObject({
+      code: "operation_failed",
+      operation: "resize",
+      message:
+        "node-pty resize failed: ioctl(2) failed, EBADF. Close this terminal and open a new one. If the new terminal fails too, restart OpenDucktor on the host.",
+    });
+  });
+
   test("maps raw output, resize, pause, resume, input, exit, and cleanup", async () => {
     const calls: string[] = [];
     let dataListener: (data: string | Buffer) => void = () => undefined;

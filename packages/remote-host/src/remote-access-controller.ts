@@ -34,6 +34,22 @@ export type RemoteAccessController = {
     server: NodeFetchServer<TerminalWebSocketData>,
   ): Promise<Response | undefined> | null;
 };
+/** The configuration of a listener on `port`. The default public address uses that port. */
+export const remoteAccessConfiguration = (
+  input: RemoteAccessEnableInput,
+  port: number,
+): RemoteAccessConfiguration => {
+  const host =
+    input.listenHost.includes(":") && !input.listenHost.startsWith("[")
+      ? `[${input.listenHost}]`
+      : input.listenHost;
+  return {
+    ...input,
+    listenPort: port,
+    publicEndpoint: input.publicEndpoint ?? `http://${host}:${port}`,
+  };
+};
+
 /** Listener changes run in order so a late start cannot reopen disabled access. */
 export const createRemoteAccessController = (
   services: RemoteHostServices,
@@ -63,6 +79,27 @@ export const createRemoteAccessController = (
     return next;
   };
   publish(state);
+  /** A bind failure names the port or the address that the operator can change. */
+  const listenerFailure = (cause: unknown, listenHost: string, port: number): RemoteAccessError => {
+    const code = cause instanceof Error && "code" in cause ? cause.code : undefined;
+    if (code === "EADDRINUSE")
+      return new RemoteAccessError({
+        failure: {
+          code: "port_in_use",
+          message: `Port ${port} is in use by another app.`,
+          nextAction: "Select Use another port, or close the app that uses this port.",
+        },
+      });
+    if (code === "EADDRNOTAVAIL")
+      return new RemoteAccessError({
+        failure: {
+          code: "unavailable",
+          message: `The address ${listenHost} is not on this computer now.`,
+          nextAction: "Choose a network, then enable remote control again.",
+        },
+      });
+    return toFailure(cause);
+  };
   const toFailure = (cause: unknown): RemoteAccessError =>
     new RemoteAccessError({
       failure: {
@@ -142,6 +179,9 @@ export const createRemoteAccessController = (
                       },
                     }),
                 });
+                const hostId = yield* services.hostSettings
+                  .readHostId()
+                  .pipe(Effect.mapError(toFailure));
                 publish({
                   status: "starting",
                   connectedClients: 0,
@@ -150,19 +190,11 @@ export const createRemoteAccessController = (
                       ? null
                       : { ...parsed, publicEndpoint: parsed.publicEndpoint },
                 });
-                const configure = (port: number): RemoteAccessConfiguration => {
-                  const host =
-                    parsed.listenHost.includes(":") && !parsed.listenHost.startsWith("[")
-                      ? `[${parsed.listenHost}]`
-                      : parsed.listenHost;
-                  return {
-                    ...parsed,
-                    publicEndpoint: parsed.publicEndpoint ?? `http://${host}:${port}`,
-                  };
-                };
+                const configure = (port: number) => remoteAccessConfiguration(parsed, port);
                 const openWork = (configuration: RemoteAccessConfiguration) => {
                   const current = createRemoteWorkInterface(services, {
                     ...options,
+                    hostId,
                     publicEndpoint: configuration.publicEndpoint,
                     listenHost: parsed.listenHost,
                     frontendOrigins: new Set([
@@ -213,7 +245,7 @@ export const createRemoteAccessController = (
                         options.reportFailure(cause);
                       },
                     }),
-                  catch: toFailure,
+                  catch: (cause) => listenerFailure(cause, parsed.listenHost, parsed.listenPort),
                 });
                 return publish({
                   status: "available",

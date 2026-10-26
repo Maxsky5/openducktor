@@ -1,37 +1,9 @@
-import type { IssueType } from "@openducktor/contracts";
+import type { IssueTypeChoice } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import type { LucideIcon } from "lucide-react";
 
-export type ComposerMode = "create" | "edit";
-
-export type ComposerStep = "type" | "details";
-
-export type EditTaskSection = "details" | "spec" | "plan";
-
-export type DocumentEditorView = "write" | "split" | "preview";
-
-export type ComposerState = {
-  issueType: IssueType;
-  aiReviewEnabled: boolean;
-  title: string;
-  priority: number;
-  description: string;
-  labels: string[];
-};
-
-export type IssueTypeOption = {
-  value: IssueType;
-  label: string;
-  description: string;
+export type IssueTypeOption = IssueTypeChoice & {
   icon: LucideIcon;
   accentClass: string;
   iconClass: string;
   indicatorClass: string;
-  disabled?: boolean;
-  disabledText?: string;
-};
-
-export type PriorityOption = {
-  value: number;
-  label: string;
-  hint: string;
 };

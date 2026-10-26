@@ -1,7 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { getSessionLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
-import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
+import {
+  getSessionLaunchAction,
+  type SessionLaunchActionId,
+} from "@openducktor/frontend-core/lib/session-launch-actions";
+import { isRoleAvailableForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
 
 type AgentStudioSessionStartRoleInput = {
   taskId: string;

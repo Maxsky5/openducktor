@@ -4,13 +4,13 @@ import type {
   AppUpdateState,
   ArtifactPreviewEnvironment,
   TaskAssetRenderContext,
-  TerminalFailure,
   BrowserFailure,
   BrowserFrameSource,
 } from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
+import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
 
 export type ShellCapabilities = {
   canOpenExternalUrls: boolean;
@@ -23,23 +23,6 @@ export type AppUpdateBridge = {
   getState(): Promise<AppUpdateState>;
   install(): Promise<AppUpdateCommandResult>;
   subscribeState(listener: (state: AppUpdateState) => void): Promise<() => void>;
-};
-
-export type TerminalTransportState = "connected" | "disconnected";
-
-export type TerminalTransportConnection = {
-  send(frame: Uint8Array): Promise<void>;
-  close(): void | Promise<void>;
-};
-
-export type TerminalBridge = {
-  /** Remote shells await the selected terminal owner's finite restoration. */
-  subscribeRecovery?: (recover: (signal: AbortSignal) => Promise<void>) => () => void;
-  connect(
-    onFrame: (frame: Uint8Array) => void,
-    onStateChange: (state: TerminalTransportState) => void,
-    onFailure: (failure: TerminalFailure) => void,
-  ): Promise<TerminalTransportConnection>;
 };
 
 export type BrowserChannelState = "connected" | "disconnected";

@@ -13,11 +13,8 @@ import { act, type ComponentProps } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
-import {
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   createHostRuntimeStatusContextValue,

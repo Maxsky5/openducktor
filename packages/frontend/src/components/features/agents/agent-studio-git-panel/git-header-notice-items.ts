@@ -1,81 +1,36 @@
-import type { ReactNode } from "react";
+import {
+  type GitHeaderNoticeKey,
+  gitHeaderNotices,
+} from "@openducktor/frontend-core/git/model/git-panel-header";
 
 export type HeaderNoticeItem = {
-  key: string;
+  key: GitHeaderNoticeKey;
   tone: "warning" | "error" | "muted";
   id?: string;
   testId?: string;
-  children: ReactNode;
+  children: string;
 };
 
-/** The notices under the branch row, in display order. */
-export function headerNotices(input: {
-  detectPullRequestError: string | null;
-  lockReason: string | null;
-  refreshError: string | null;
-  upstreamError: string | null;
-  comparisonUnavailableReason: string | null;
-  rebaseError: string | null;
-  pushError: string | null;
-}): HeaderNoticeItem[] {
-  const notices: HeaderNoticeItem[] = [];
-  if (input.detectPullRequestError) {
-    notices.push({
-      key: "detect-pr",
-      tone: "error",
-      id: DETECT_PR_ERROR_ID,
-      testId: DETECT_PR_ERROR_ID,
-      children: input.detectPullRequestError,
-    });
-  }
-  if (input.lockReason) {
-    notices.push({
-      key: "lock",
-      tone: "warning",
-      testId: "agent-studio-git-lock-reason",
-      children: input.lockReason,
-    });
-  }
-  if (input.refreshError) {
-    notices.push({
-      key: "refresh",
-      tone: "error",
-      testId: "agent-studio-git-refresh-error",
-      children: `Refresh failed: ${input.refreshError}`,
-    });
-  }
-  if (input.upstreamError !== null) {
-    notices.push({
-      key: "upstream",
-      tone: "error",
-      children: `Upstream status is unavailable. ${input.upstreamError}`,
-    });
-  }
-  if (input.comparisonUnavailableReason) {
-    notices.push({
-      key: "comparison",
-      tone: "muted",
-      testId: "agent-studio-git-comparison-unavailable",
-      children: input.comparisonUnavailableReason,
-    });
-  }
-  if (input.rebaseError) {
-    notices.push({
-      key: "rebase",
-      tone: "error",
-      testId: "agent-studio-git-rebase-error",
-      children: input.rebaseError,
-    });
-  }
-  if (input.pushError) {
-    notices.push({
-      key: "push",
-      tone: "error",
-      testId: "agent-studio-git-push-error",
-      children: input.pushError,
-    });
-  }
-  return notices;
-}
-
 export const DETECT_PR_ERROR_ID = "agent-studio-git-detect-pr-error";
+
+const NOTICE_TEST_IDS = {
+  "detect-pr": DETECT_PR_ERROR_ID,
+  lock: "agent-studio-git-lock-reason",
+  refresh: "agent-studio-git-refresh-error",
+  upstream: null,
+  comparison: "agent-studio-git-comparison-unavailable",
+  rebase: "agent-studio-git-rebase-error",
+  push: "agent-studio-git-push-error",
+} satisfies Record<GitHeaderNoticeKey, string | null>;
+
+/** The notices under the branch row, in display order. */
+export function headerNotices(input: Parameters<typeof gitHeaderNotices>[0]): HeaderNoticeItem[] {
+  return gitHeaderNotices(input).map(({ key, tone, text }) => {
+    const item: HeaderNoticeItem = { key, tone, children: text };
+    const testId = NOTICE_TEST_IDS[key];
+    if (testId) item.testId = testId;
+    // Detect PR names its notice as the reason it is disabled.
+    if (key === "detect-pr") item.id = DETECT_PR_ERROR_ID;
+    return item;
+  });
+}

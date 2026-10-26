@@ -2,7 +2,7 @@ import { SessionNavigationTestProvider } from "./session-navigation.test-provide
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as cssPresence from "@/components/ui/css-presence";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { SessionNavigationList } from "./session-navigation-list";
 import {
   alphaWorkspace,

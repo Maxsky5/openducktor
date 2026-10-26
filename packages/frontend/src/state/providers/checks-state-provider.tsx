@@ -1,10 +1,10 @@
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { buildChecksStateValue } from "../app-state-context-values";
+import { useActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   ChecksOperationsContext,
   type ChecksOperationsContextValue,
   ChecksStateContext,
-  useActiveWorkspaceContext,
 } from "../app-state-contexts";
 import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useChecks } from "../operations/workspace/use-checks";

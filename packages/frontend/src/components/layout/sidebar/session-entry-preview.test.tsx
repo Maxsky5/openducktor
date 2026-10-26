@@ -9,14 +9,15 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createWorkspaceActivityObserver } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
-import { sessionNavigationTargetKey } from "@/features/session-navigation/session-navigation-target";
-import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
-import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
+import { sessionNavigationTargetKey } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
+import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import type { HostClient } from "@openducktor/host-client";
 import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
 import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
-import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   createHostRuntimeStatusContextValue,
@@ -163,7 +164,7 @@ const mountSidebar = (
         <SessionMenuProvider>
           <WorkspaceActivityContext value={observer}>
             <VisibleSessionTargetProvider>
-              <SessionReadStateProvider>
+              <SessionReadStateProvider visibility={documentVisibility}>
                 <SessionSelectionContext value={{ entryKey: other.key, visibleKey: other.key }}>
                   <SessionNavigationList
                     model={navigationModel({ needs_you: [entry], recent: [other] })}
@@ -319,7 +320,7 @@ describe("Sidebar session previews", () => {
     expect(within(preview).getByText("Feature")).toBeTruthy();
     expect(within(preview).queryByLabelText("Task labels")).toBeNull();
     expect(within(preview).queryByText("auth")).toBeNull();
-    expect(within(preview).queryByRole("button", { name: "Archive session" })).toBeNull();
+    expect(within(preview).queryByRole("button", { name: "Archive chat" })).toBeNull();
     const header = preview.querySelector("header")!;
     expect(within(header).getByRole("button", { name: /PR #134/ })).toBeTruthy();
     expect(within(header).getByRole("button", { name: "Copy task ID" })).toBeTruthy();

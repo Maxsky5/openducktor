@@ -6,7 +6,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessions, type WorkspaceSessionsViewState } from "./workspace-sessions-view";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 const WorkspaceSessionsPage = memo(function WorkspaceSessionsPage({
   workspace,

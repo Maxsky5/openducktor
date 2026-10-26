@@ -15,7 +15,7 @@ import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { AgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import * as imageWorkerClient from "@/lib/generated-images/image-worker-client";

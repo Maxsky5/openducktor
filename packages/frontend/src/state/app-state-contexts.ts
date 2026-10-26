@@ -1,28 +1,8 @@
+import type { TaskStoreCheck } from "@openducktor/contracts";
+import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { createContext } from "react";
 import type {
-  AgentRuntimes,
-  RuntimeDescriptor,
-  TaskCard,
-  TaskStoreCheck,
-} from "@openducktor/contracts";
-import type {
-  AgentFileSearchResult,
-  AgentRuntimeCatalog,
-  RuntimeWorkingDirectoryRef,
-} from "@openducktor/core";
-import {
-  type Context,
-  createContext,
-  type Dispatch,
-  type SetStateAction,
-  use,
-  useMemo,
-} from "react";
-import type {
-  ActiveWorkspace,
   ChecksStateContextValue,
-  DelegationStateContextValue,
-  SpecStateContextValue,
-  TasksStateContextValue,
   WorkspaceBranchStateContextValue,
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
@@ -34,52 +14,9 @@ export const WorkspaceBranchStateContext = createContext<WorkspaceBranchStateCon
 );
 export const WorkspacePresenceContext = createContext<WorkspacePresenceContextValue | null>(null);
 export const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
-export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
-export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
-export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
-
-export type ActiveWorkspaceContextValue = {
-  activeWorkspace: ActiveWorkspace | null;
-  setActiveWorkspace: Dispatch<SetStateAction<ActiveWorkspace | null>>;
-};
-
-export type RuntimeDefinitionsContextValue = {
-  runtimeDefinitions: RuntimeDescriptor[];
-  availableRuntimeDefinitions: RuntimeDescriptor[];
-  agentRuntimes: AgentRuntimes;
-  isLoadingRuntimeDefinitions: boolean;
-  runtimeDefinitionsError: string | null;
-  refreshRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
-  isLoadingRuntimeSettings: boolean;
-  runtimeSettingsError: string | null;
-  hasRuntimeSettingsSnapshot: boolean;
-  refreshRuntimeSettings: () => Promise<void>;
-  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
-  loadRepoRuntimeFileSearch: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-    query: string,
-  ) => Promise<AgentFileSearchResult[]>;
-};
 
 export type ChecksOperationsContextValue = {
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-};
-
-export type TaskSnapshotContextValue = {
-  tasks: TaskCard[];
-  isLoadingTasks: boolean;
-};
-
-export type TaskRefreshOptions = {
-  trigger?: "manual" | "scheduled";
-};
-
-export type TaskControlContextValue = {
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
-  refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
-  clearTaskData: () => void;
-  setIsLoadingTasks: (value: boolean) => void;
 };
 
 export type WorkspaceOperationsContextValue = {
@@ -88,68 +25,16 @@ export type WorkspaceOperationsContextValue = {
   clearBranchData: () => void;
 };
 
-export const ActiveWorkspaceContext = createContext<ActiveWorkspaceContextValue | null>(null);
-export const RuntimeDefinitionsContext = createContext<RuntimeDefinitionsContextValue | null>(null);
 export const ChecksOperationsContext = createContext<ChecksOperationsContextValue | null>(null);
-export const TaskSnapshotContext = createContext<TaskSnapshotContextValue | null>(null);
-export const TaskControlContext = createContext<TaskControlContextValue | null>(null);
 export const WorkspaceOperationsContext = createContext<WorkspaceOperationsContextValue | null>(
   null,
 );
-
-export const useRequiredContext = <T>(context: Context<T | null>, name: string): T => {
-  const value = use(context);
-  if (!value) {
-    throw new Error(`${name} must be used inside AppStateProvider`);
-  }
-  return value;
-};
-
-export const useActiveWorkspaceContext = (): ActiveWorkspaceContextValue =>
-  useRequiredContext(ActiveWorkspaceContext, "useActiveWorkspaceContext");
 
 export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
   useRequiredContext(ChecksOperationsContext, "useChecksOperationsContext");
 
 export const useChecksStateContext = (): ChecksStateContextValue =>
   useRequiredContext(ChecksStateContext, "useChecksStateContext");
-
-export const useRuntimeDefinitionsContext = (): RuntimeDefinitionsContextValue =>
-  useRequiredContext(RuntimeDefinitionsContext, "useRuntimeDefinitionsContext");
-
-export type RuntimeAvailabilityContextValue = Omit<
-  RuntimeDefinitionsContextValue,
-  "runtimeDefinitions"
-> & {
-  allRuntimeDefinitions: RuntimeDescriptor[];
-};
-
-export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue => {
-  const runtimeContext = useRuntimeDefinitionsContext();
-  return useMemo(
-    () => ({
-      availableRuntimeDefinitions: runtimeContext.availableRuntimeDefinitions,
-      allRuntimeDefinitions: runtimeContext.runtimeDefinitions,
-      agentRuntimes: runtimeContext.agentRuntimes,
-      isLoadingRuntimeDefinitions: runtimeContext.isLoadingRuntimeDefinitions,
-      runtimeDefinitionsError: runtimeContext.runtimeDefinitionsError,
-      refreshRuntimeDefinitions: runtimeContext.refreshRuntimeDefinitions,
-      isLoadingRuntimeSettings: runtimeContext.isLoadingRuntimeSettings,
-      runtimeSettingsError: runtimeContext.runtimeSettingsError,
-      hasRuntimeSettingsSnapshot: runtimeContext.hasRuntimeSettingsSnapshot,
-      refreshRuntimeSettings: runtimeContext.refreshRuntimeSettings,
-      loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
-      loadRepoRuntimeFileSearch: runtimeContext.loadRepoRuntimeFileSearch,
-    }),
-    [runtimeContext],
-  );
-};
-
-export const useTaskSnapshotContext = (): TaskSnapshotContextValue =>
-  useRequiredContext(TaskSnapshotContext, "useTaskSnapshotContext");
-
-export const useTaskControlContext = (): TaskControlContextValue =>
-  useRequiredContext(TaskControlContext, "useTaskControlContext");
 
 export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue =>
   useRequiredContext(WorkspaceOperationsContext, "useWorkspaceOperationsContext");

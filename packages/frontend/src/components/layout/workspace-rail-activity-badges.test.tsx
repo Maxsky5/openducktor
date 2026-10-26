@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
-import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
+import { workspaceActivityBadges } from "@openducktor/frontend-core/workspace-activity/workspace-activity-badges";
 
 describe("WorkspaceRailActivityBadges", () => {
   test("shares the running dot while preserving badge order, labels, and rail sizing", () => {

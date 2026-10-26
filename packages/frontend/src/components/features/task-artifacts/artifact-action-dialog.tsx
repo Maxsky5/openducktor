@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatFileSize } from "./artifact-file-info";
+import { formatFileSize } from "@openducktor/frontend-core/tasks/artifacts/artifact-presentation";
 import { artifactFileInput } from "./artifact-file-input";
 
 export type ArtifactAction =

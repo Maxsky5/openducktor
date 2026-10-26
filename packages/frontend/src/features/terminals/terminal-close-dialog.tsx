@@ -9,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { terminalTabLabel } from "./terminal-presentation-state";
-import type { TerminalTab } from "./use-terminals";
+import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/use-terminals";
 
 export type TerminalCloseDialogModel = {
   /** The terminal that still runs a process and waits for confirmation. */

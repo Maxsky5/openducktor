@@ -5,8 +5,8 @@ import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-or
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { ChatArtifactLinkContext } from "./agent-chat-artifact-link-context";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 
 enableReactActEnvironment();
 

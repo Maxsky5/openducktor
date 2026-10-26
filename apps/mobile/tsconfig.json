@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "ES2024.Promise"],
+    "module": "preserve",
+    "customConditions": ["react-native"],
+    "types": ["react-native"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "index.ts", "modules/*/src", "modules/*/index.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test-support"],
+  "files": ["../../packages/frontend-core/src/platform/platform-globals.d.ts"]
+}

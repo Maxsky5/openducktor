@@ -10,7 +10,7 @@ describe("TaskResetConfirmDialog", () => {
         onOpenChange={() => {}}
         onCancel={() => {}}
         onConfirm={() => {}}
-        taskId="TASK-123"
+        task={{ id: "TASK-123", title: "Fix login" }}
         impact={{
           isLoading: false,
           isLoadingStopImpact: false,
@@ -21,7 +21,7 @@ describe("TaskResetConfirmDialog", () => {
           activeSessionCountError: null,
           error: null,
         }}
-        operation={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}
       />,
     );
 
@@ -44,7 +44,7 @@ describe("TaskResetConfirmDialog", () => {
         onOpenChange={() => {}}
         onCancel={() => {}}
         onConfirm={() => {}}
-        taskId="TASK-123"
+        task={{ id: "TASK-123", title: "Fix login" }}
         impact={{
           isLoading: true,
           isLoadingStopImpact: false,
@@ -55,7 +55,7 @@ describe("TaskResetConfirmDialog", () => {
           activeSessionCountError: null,
           error: null,
         }}
-        operation={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}
       />,
     );
 
@@ -71,7 +71,7 @@ describe("TaskResetConfirmDialog", () => {
         onOpenChange={() => {}}
         onCancel={() => {}}
         onConfirm={() => {}}
-        taskId="TASK-123"
+        task={{ id: "TASK-123", title: "Fix login" }}
         impact={{
           isLoading: false,
           isLoadingStopImpact: false,
@@ -82,7 +82,7 @@ describe("TaskResetConfirmDialog", () => {
           activeSessionCountError: "host unavailable",
           error: null,
         }}
-        operation={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}
       />,
     );
 

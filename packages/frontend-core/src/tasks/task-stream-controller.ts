@@ -88,7 +88,9 @@ export const createTaskStreamController = ({
   const frameKey = (cursor: TaskEventCursor): string => `${cursor.epoch}:${cursor.sequence}`;
 
   const reportDegraded = (cause: unknown): void => {
-    if (degraded) return;
+    // A stopped stream closes with its connection, as on a host switch, so its failed
+    // unsubscribe asks nothing of the user.
+    if (degraded || stopped) return;
     degraded = true;
     try {
       onDegraded(cause);

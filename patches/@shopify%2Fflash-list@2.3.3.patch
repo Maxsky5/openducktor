@@ -1,0 +1,34 @@
+diff --git a/dist/recyclerview/RecyclerView.js b/dist/recyclerview/RecyclerView.js
+index 6799c8a61bff4607633196097da35c7a6975f0b6..1c1c9cc9b8dcfedd4946abbc4c2f10f6cd1438f2 100644
+--- a/dist/recyclerview/RecyclerView.js
++++ b/dist/recyclerview/RecyclerView.js
+@@ -241,7 +241,11 @@ const RecyclerViewComponent = (props, ref) => {
+      */
+     const validateItemSize = useCallback((index, size) => {
+         var _a, _b, _c, _d;
+-        const layout = recyclerViewManager.getLayout(index);
++        // A layout event of a cell can arrive after the data shrank: Shopify/flash-list#2293.
++        const layout = recyclerViewManager.tryGetLayout(index);
++        if (!layout) {
++            return;
++        }
+         const width = Math.max(Math.min(layout.width, (_a = layout.maxWidth) !== null && _a !== void 0 ? _a : Infinity), (_b = layout.minWidth) !== null && _b !== void 0 ? _b : 0);
+         const height = Math.max(Math.min(layout.height, (_c = layout.maxHeight) !== null && _c !== void 0 ? _c : Infinity), (_d = layout.minHeight) !== null && _d !== void 0 ? _d : 0);
+         if (areDimensionsNotEqual(width, size.width) ||
+diff --git a/src/recyclerview/RecyclerView.tsx b/src/recyclerview/RecyclerView.tsx
+index 3c25e7e893004932b8a13072e01fe2a940d365d4..52bdd7bd142f5071f7cd8dafff3be822b640d4cd 100644
+--- a/src/recyclerview/RecyclerView.tsx
++++ b/src/recyclerview/RecyclerView.tsx
+@@ -374,7 +374,11 @@ const RecyclerViewComponent = <T,>(
+    */
+   const validateItemSize = useCallback(
+     (index: number, size: RVDimension) => {
+-      const layout = recyclerViewManager.getLayout(index);
++      // A layout event of a cell can arrive after the data shrank: Shopify/flash-list#2293.
++      const layout = recyclerViewManager.tryGetLayout(index);
++      if (!layout) {
++        return;
++      }
+       const width = Math.max(
+         Math.min(layout.width, layout.maxWidth ?? Infinity),
+         layout.minWidth ?? 0

@@ -1,0 +1,382 @@
+import { describe, expect, test } from "bun:test";
+import type { TaskCard } from "@openducktor/contracts";
+import {
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+} from "../../sessions/agent-sessions-store";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "../../test-support/shared-test-fixtures";
+import {
+  buildActiveTaskSessionContextByTaskId,
+  buildTaskActivityStateByTaskId,
+  buildTaskSessionsByTaskId,
+  sortTasksByActivityState,
+} from "./kanban-board-sessions";
+
+const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  id: "task-1",
+  title: "Test Task",
+  description: "",
+  status: "in_progress",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  parentId: undefined,
+  subtaskIds: [],
+  pullRequest: undefined,
+  artifactSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: false, completed: false },
+    planner: { required: false, canSkip: true, available: false, completed: false },
+    builder: { required: true, canSkip: false, available: false, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-03-17T10:00:00.000Z",
+  createdAt: "2026-03-17T10:00:00.000Z",
+  ...overrides,
+});
+
+const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionSummary => {
+  const session = createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "external-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
+      status: "running",
+      runtimeStatusMessage: null,
+      startedAt: "2026-03-17T10:00:00.000Z",
+      workingDirectory: "/repo",
+      historyLoadState: overrides.historyLoadState ?? "not_requested",
+    },
+    overrides,
+  );
+  return toAgentSessionSummary(session);
+};
+
+describe("use-kanban-board-model helpers", () => {
+  test("keeps unavailable sessions visible without counting stale work as active", () => {
+    const unavailable = createSession({
+      statusUnavailableReason: "Update Claude Code and reconnect the runtime.",
+      status: "running",
+    });
+    const sessionsByTask = buildTaskSessionsByTaskId([unavailable]);
+    expect(sessionsByTask.get("task-1")).toMatchObject([
+      { statusUnavailableReason: unavailable.statusUnavailableReason },
+    ]);
+    expect(buildActiveTaskSessionContextByTaskId([unavailable]).size).toBe(0);
+    expect(buildTaskActivityStateByTaskId([createTaskCard()], sessionsByTask).get("task-1")).toBe(
+      "idle",
+    );
+
+    const waiting = {
+      ...unavailable,
+      activityState: "waiting_input" as const,
+      pendingQuestionCount: 1,
+    };
+    expect(buildActiveTaskSessionContextByTaskId([waiting]).get("task-1")).toEqual({
+      role: "build",
+      activityState: "waiting_input",
+    });
+    expect(
+      buildTaskActivityStateByTaskId([createTaskCard()], buildTaskSessionsByTaskId([waiting])).get(
+        "task-1",
+      ),
+    ).toBe("waiting_input");
+  });
+
+  test("buildTaskSessionsByTaskId keeps waiting-input sessions even when they are idle", () => {
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
+      createSession({
+        externalSessionId: "session-starting",
+        status: "starting",
+        startedAt: "2026-03-17T11:00:00.000Z",
+      }),
+      createSession({
+        externalSessionId: "session-running-older",
+        status: "running",
+        startedAt: "2026-03-17T09:00:00.000Z",
+      }),
+      createSession({
+        externalSessionId: "session-running-newer",
+        status: "running",
+        startedAt: "2026-03-17T10:00:00.000Z",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Approval",
+                question: "Need approval",
+                options: [{ label: "Approve", description: "Approve the change" }],
+              },
+            ],
+          },
+        ],
+      }),
+      createSession({
+        externalSessionId: "session-idle",
+        status: "idle",
+        pendingApprovals: [
+          {
+            requestId: "permission-2",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"tool"}`,
+            summary: `Approval request for ${"tool"}.`,
+            affectedPaths: ["odt_build_completed"],
+            action: { name: "tool" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    expect(taskSessionsByTaskId.get("task-1")).toEqual([
+      expect.objectContaining({
+        externalSessionId: "session-running-newer",
+        activityState: "waiting_input",
+      }),
+      expect.objectContaining({
+        externalSessionId: "session-idle",
+        activityState: "waiting_input",
+      }),
+      expect.objectContaining({
+        externalSessionId: "session-running-older",
+        activityState: "running",
+      }),
+      expect.objectContaining({
+        externalSessionId: "session-starting",
+        activityState: "starting",
+      }),
+    ]);
+  });
+
+  test("sortTasksByActivityState puts waiting-input tasks above active and inactive tasks", () => {
+    const tasks = [
+      createTaskCard({ id: "task-no-session" }),
+      createTaskCard({ id: "task-waiting" }),
+      createTaskCard({ id: "task-with-session" }),
+      createTaskCard({ id: "task-another-no-session" }),
+    ];
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        pendingApprovals: [
+          {
+            requestId: "permission-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"tool"}`,
+            summary: `Approval request for ${"tool"}.`,
+            affectedPaths: ["odt_read_task"],
+            action: { name: "tool" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-with-session", role: "spec" },
+        externalSessionId: "session-2",
+      }),
+    ]);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
+
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
+
+    expect(sorted.map((t) => t.id)).toEqual([
+      "task-waiting",
+      "task-with-session",
+      "task-no-session",
+      "task-another-no-session",
+    ]);
+  });
+
+  test("sortTasksByActivityState preserves relative order within groups", () => {
+    const tasks = [
+      createTaskCard({ id: "task-1-waiting" }),
+      createTaskCard({ id: "task-2-active" }),
+      createTaskCard({ id: "task-3-idle" }),
+      createTaskCard({ id: "task-4-waiting" }),
+      createTaskCard({ id: "task-5-active" }),
+      createTaskCard({ id: "task-6-idle" }),
+    ];
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1-waiting", role: "spec" },
+        externalSessionId: "session-1",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Approval",
+                question: "Need approval",
+                options: [{ label: "Approve", description: "Approve the change" }],
+              },
+            ],
+          },
+        ],
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-2-active", role: "spec" },
+        externalSessionId: "session-2",
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-4-waiting", role: "spec" },
+        externalSessionId: "session-4",
+        pendingApprovals: [
+          {
+            requestId: "permission-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"tool"}`,
+            summary: `Approval request for ${"tool"}.`,
+            affectedPaths: ["odt_read_task"],
+            action: { name: "tool" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-5-active", role: "spec" },
+        externalSessionId: "session-5",
+      }),
+    ]);
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
+
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
+
+    expect(sorted.map((t) => t.id)).toEqual([
+      "task-1-waiting",
+      "task-4-waiting",
+      "task-2-active",
+      "task-5-active",
+      "task-3-idle",
+      "task-6-idle",
+    ]);
+  });
+
+  test("sortTasksByActivityState handles empty columns gracefully", () => {
+    const tasks: TaskCard[] = [];
+    const taskActivityStateByTaskId = new Map<string, "idle" | "active" | "waiting_input">();
+
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
+
+    expect(sorted).toEqual([]);
+  });
+
+  test("sortTasksByActivityState handles no active sessions gracefully", () => {
+    const tasks = [createTaskCard({ id: "task-1" }), createTaskCard({ id: "task-2" })];
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, new Map());
+
+    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
+
+    expect(sorted.map((t) => t.id)).toEqual(["task-1", "task-2"]);
+  });
+
+  test("sortTasksByActivityState throws when a task is missing activity state", () => {
+    const tasks = [createTaskCard({ id: "task-1" })];
+
+    expect(() => sortTasksByActivityState(tasks, new Map())).toThrow(
+      "Missing Kanban task activity state for task task-1",
+    );
+  });
+
+  test("buildTaskActivityStateByTaskId marks tasks as waiting input when any displayed session is waiting", () => {
+    const tasks = [
+      createTaskCard({ id: "task-waiting" }),
+      createTaskCard({ id: "task-active" }),
+      createTaskCard({ id: "task-idle" }),
+    ];
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        externalSessionId: "session-waiting",
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        externalSessionId: "session-question",
+        status: "idle",
+        pendingQuestions: [
+          {
+            requestId: "question-2",
+            questions: [
+              {
+                header: "Question",
+                question: "Need answer",
+                options: [{ label: "Answer", description: "Answer the question" }],
+              },
+            ],
+          },
+        ],
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-active", role: "spec" },
+        externalSessionId: "session-active",
+      }),
+    ]);
+
+    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
+
+    expect(taskActivityStateByTaskId.get("task-waiting")).toBe("waiting_input");
+    expect(taskActivityStateByTaskId.get("task-active")).toBe("active");
+    expect(taskActivityStateByTaskId.get("task-idle")).toBe("idle");
+  });
+
+  test("buildActiveTaskSessionContextByTaskId prioritizes waiting-input session role", () => {
+    const activeTaskSessionContextByTaskId = buildActiveTaskSessionContextByTaskId([
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
+        externalSessionId: "build-running",
+        status: "running",
+        startedAt: "2026-03-21T10:00:00.000Z",
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+
+        externalSessionId: "qa-waiting",
+        status: "idle",
+        startedAt: "2026-03-20T10:00:00.000Z",
+        pendingQuestions: [
+          {
+            requestId: "question-qa",
+            questions: [
+              {
+                header: "Approval",
+                question: "Need QA input",
+                options: [{ label: "Approve", description: "Approve" }],
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    expect(activeTaskSessionContextByTaskId.get("task-1")).toEqual({
+      role: "qa",
+      activityState: "waiting_input",
+    });
+  });
+});

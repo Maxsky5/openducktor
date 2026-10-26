@@ -26,6 +26,10 @@
     {
       "name": "architecture",
       "specifier": "./tools/oxlint/anti-slop/src/architecture/index.ts"
+    },
+    {
+      "name": "unistyles",
+      "specifier": "./tools/oxlint/anti-slop/src/unistyles/index.ts"
     }
   ],
   "rules": {
@@ -230,6 +234,10 @@
               {
                 "group": ["@openducktor/frontend-core/test-support/*"],
                 "message": "Production frontend code must not import frontend core test support."
+              },
+              {
+                "group": ["@openducktor/mobile", "@openducktor/mobile/*", "**/apps/mobile/**"],
+                "message": "The web frontend must not import the mobile app. Move shared behavior to packages/frontend-core."
               }
             ]
           }
@@ -320,6 +328,96 @@
       ],
       "rules": {
         "architecture/allowed-imports": "off"
+      }
+    },
+    {
+      "files": ["apps/mobile/**/*.ts", "apps/mobile/**/*.tsx"],
+      "plugins": ["oxc", "react", "typescript", "unicorn"],
+      "rules": {
+        "react/exhaustive-deps": "warn",
+        "react/rules-of-hooks": "warn"
+      }
+    },
+    {
+      "files": [
+        "apps/mobile/src/**/*.ts",
+        "apps/mobile/src/**/*.tsx",
+        "apps/mobile/modules/**/*.ts",
+        "apps/mobile/modules/**/*.tsx",
+        "apps/mobile/index.ts"
+      ],
+      "rules": {
+        "anti-slop/no-hex-alpha-suffix": "error",
+        "unistyles/no-stylesheet-dependency-aliases": "error",
+        "unistyles/no-themed-colors-on-unbound-components": [
+          "error",
+          { "boundModules": ["react-native", "react-native-reanimated"], "appPrefixes": ["@/"] }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@openducktor/frontend",
+                  "@openducktor/frontend/*",
+                  "**/packages/frontend/**"
+                ],
+                "message": "The mobile app builds a native UI. Move shared behavior to packages/frontend-core instead of importing the web frontend."
+              },
+              {
+                "group": [
+                  "@openducktor/host",
+                  "@openducktor/host/*",
+                  "@openducktor/remote-host",
+                  "@openducktor/remote-host/*",
+                  "@openducktor/electron",
+                  "@openducktor/electron/*",
+                  "@openducktor/web",
+                  "@openducktor/web/*",
+                  "**/apps/electron/**",
+                  "**/packages/openducktor-web/**"
+                ],
+                "message": "The mobile app is a remote client. Reach the host through frontend-core and the remote protocol."
+              },
+              {
+                "group": ["@openducktor/frontend-core/test-support/*"],
+                "message": "Production mobile code must not import frontend core test support."
+              }
+            ],
+            "paths": [
+              {
+                "name": "react-native-unistyles",
+                "importNames": ["useUnistyles", "withUnistyles"],
+                "message": "Read the theme with useAppTheme of @/theme/app-theme-context. useUnistyles and withUnistyles add a native listener and new proxies on each render."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/mobile/src/**/*.test.ts",
+        "apps/mobile/src/**/*.test.tsx",
+        "apps/mobile/src/test-support/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@openducktor/frontend",
+                  "@openducktor/frontend/*",
+                  "**/packages/frontend/**"
+                ],
+                "message": "Mobile tests must not import the web frontend."
+              }
+            ]
+          }
+        ]
       }
     }
   ],

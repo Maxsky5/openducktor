@@ -1,4 +1,4 @@
-import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
+import { toPrimaryAgentOptions } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
 

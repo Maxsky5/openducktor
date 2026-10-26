@@ -1,10 +1,4 @@
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeDescriptor,
-  type TaskCard,
-} from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
@@ -13,20 +7,22 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { getAvailableRuntimeDefinitions } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import {
-  ChecksOperationsContext,
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { AgentSessionTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createRuntimeDefinitionsContextValue } from "@openducktor/frontend-core/test-support/runtime-hook-harness";
+export {
+  createDefaultRuntimeDefinitions,
+  createRuntimeDefinitionsContextValue,
+} from "@openducktor/frontend-core/test-support/runtime-hook-harness";
 export { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   type AgentSessionFixtureOverrides,
@@ -90,95 +86,6 @@ export const createSelectedSessionTranscriptStateFixture = (
       }
     : transcriptState;
 
-const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => {
-  const workflowToolAliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
-  for (const toolName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
-    const aliases = descriptor.workflowToolAliasesByCanonical[toolName];
-    if (aliases) {
-      workflowToolAliasesByCanonical[toolName] = [...aliases];
-    }
-  }
-
-  return {
-    ...descriptor,
-    readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],
-    workflowToolAliasesByCanonical,
-    capabilities: {
-      ...descriptor.capabilities,
-      workflow: {
-        ...descriptor.capabilities.workflow,
-        supportedScopes: [...descriptor.capabilities.workflow.supportedScopes],
-      },
-      sessionLifecycle: {
-        ...descriptor.capabilities.sessionLifecycle,
-        supportedStartModes: [...descriptor.capabilities.sessionLifecycle.supportedStartModes],
-        forkTargets: [...descriptor.capabilities.sessionLifecycle.forkTargets],
-      },
-      history: {
-        ...descriptor.capabilities.history,
-        limitations: [...descriptor.capabilities.history.limitations],
-      },
-      approvals: {
-        ...descriptor.capabilities.approvals,
-        supportedRequestTypes: [...descriptor.capabilities.approvals.supportedRequestTypes],
-        supportedReplyOutcomes: [...descriptor.capabilities.approvals.supportedReplyOutcomes],
-        pendingVisibility: [...descriptor.capabilities.approvals.pendingVisibility],
-      },
-      structuredInput: {
-        ...descriptor.capabilities.structuredInput,
-        supportedAnswerModes: [...descriptor.capabilities.structuredInput.supportedAnswerModes],
-        pendingVisibility: [...descriptor.capabilities.structuredInput.pendingVisibility],
-      },
-      promptInput: {
-        ...descriptor.capabilities.promptInput,
-        supportedParts: [...descriptor.capabilities.promptInput.supportedParts],
-      },
-      optionalSurfaces: {
-        ...descriptor.capabilities.optionalSurfaces,
-        supportedSubagentExecutionModes: [
-          ...descriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes,
-        ],
-      },
-    },
-  };
-};
-
-export const createDefaultRuntimeDefinitions = (): RuntimeDescriptor[] => [
-  cloneRuntimeDescriptor(OPENCODE_RUNTIME_DESCRIPTOR),
-];
-
-export const createRuntimeDefinitionsContextValue = (
-  overrides: Partial<RuntimeDefinitionsContextValue> = {},
-): RuntimeDefinitionsContextValue => {
-  const defaultRuntimeDefinitions = createDefaultRuntimeDefinitions();
-  const runtimeDefinitions = overrides.runtimeDefinitions
-    ? overrides.runtimeDefinitions.map(cloneRuntimeDescriptor)
-    : defaultRuntimeDefinitions;
-  const agentRuntimes = overrides.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
-
-  return {
-    runtimeDefinitions,
-    agentRuntimes,
-    availableRuntimeDefinitions:
-      overrides.availableRuntimeDefinitions ??
-      getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }),
-    isLoadingRuntimeDefinitions: overrides.isLoadingRuntimeDefinitions ?? false,
-    runtimeDefinitionsError: overrides.runtimeDefinitionsError ?? null,
-    refreshRuntimeDefinitions:
-      overrides.refreshRuntimeDefinitions ?? (async () => createDefaultRuntimeDefinitions()),
-    isLoadingRuntimeSettings: overrides.isLoadingRuntimeSettings ?? false,
-    runtimeSettingsError: overrides.runtimeSettingsError ?? null,
-    hasRuntimeSettingsSnapshot: overrides.hasRuntimeSettingsSnapshot ?? true,
-    refreshRuntimeSettings: overrides.refreshRuntimeSettings ?? (async () => {}),
-    loadRepoRuntimeCatalog:
-      overrides.loadRepoRuntimeCatalog ??
-      (async () => {
-        throw new Error("Test runtime catalog loader was not configured.");
-      }),
-    loadRepoRuntimeFileSearch: overrides.loadRepoRuntimeFileSearch ?? (async () => []),
-  };
-};
-
 export const createChecksStateContextValue = createChecksStateFixture;
 
 export { createHostRuntimeStatusContextValue };
@@ -225,9 +132,14 @@ export const createHookHarness = <Props, State>(
   if (options?.connection && options.queryClient) {
     throw new Error("Pass either connection or queryClient to the hook harness, not both.");
   }
+  // The desktop shows connection feedback with sonner, so toast assertions see it.
   const connection =
     options?.connection ??
-    createTestClientConnection(options?.queryClient ? { queryClient: options.queryClient } : {});
+    createTestClientConnection(
+      options?.queryClient
+        ? { queryClient: options.queryClient, feedback: sonnerFeedback }
+        : { feedback: sonnerFeedback },
+    );
   const queryClient = connection.queryClient;
   if (options?.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(

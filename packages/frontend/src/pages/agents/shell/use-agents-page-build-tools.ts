@@ -4,7 +4,7 @@ import {
   type AgentStudioBuildToolsWorktreeSnapshot,
   useAgentStudioBuildToolsWorktreeSnapshot,
 } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
-import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
+import { collectUnmergedFilePaths } from "@openducktor/frontend-core/git/model/unmerged-file-paths";
 import type { useWorkspaceState } from "@/state";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";

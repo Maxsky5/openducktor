@@ -7,9 +7,9 @@ import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
   ActiveWorkspaceContext,
   TaskSnapshotContext,
-  WorkspaceStateContext,
   type TaskSnapshotContextValue,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { taskQueryKeys, type RepoTaskData } from "@openducktor/frontend-core/queries/tasks";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";

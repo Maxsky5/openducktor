@@ -7,19 +7,20 @@ import {
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { upsertSessionMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
-import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import type { AgentChatMessageMeta } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
-import { createTranscriptModelCache } from "./agent-chat-transcript-model-cache";
+import { AgentChatTranscriptCacheProvider } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-cache-provider";
 import { AgentChatSurface } from "./agent-chat";
 import type { AgentChatSurfaceModel } from "./agent-chat.types";
 import {
   buildBaseModel,
-  buildMessage,
-  buildSession,
   buildSessionTranscript,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
+import {
+  buildMessage,
+  buildSession,
+} from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 test("keeps expanded tool output when returning to a session in another workspace", async () => {
   const alpha = model("/alpha");
@@ -58,14 +59,13 @@ test("keeps an expanded tool open and shows its completed result after a hidden 
   const source = createAgentSessionFixture({ ...alpha.thread.transcript.session! });
   const store = createAgentSessionsStore("/repo");
   store.replaceSession(source);
-  const cache = createTranscriptModelCache();
   const driver = createAnimationFrameTestDriver();
   driver.installAutoFlush();
   const content = (session: AgentChatSurfaceModel) => (
     <AgentSessionsContext.Provider value={store}>
-      <AgentChatTranscriptCacheContext.Provider value={cache}>
+      <AgentChatTranscriptCacheProvider>
         <AgentChatSurface model={session} />
-      </AgentChatTranscriptCacheContext.Provider>
+      </AgentChatTranscriptCacheProvider>
     </AgentSessionsContext.Provider>
   );
   const view = render(content(alpha));

@@ -301,3 +301,55 @@ test("text deltas preserve transcript order with zero snapshot equality serializ
     stringify.mockRestore();
   }
 });
+
+test("sends the snapshot that settles a turn after the final reply of the turn", () => {
+  const changes: AgentSessionLiveAdapterChange[] = [];
+  const projection = createCodexLiveSessionProjection({
+    runtime: { runtimeId: "runtime" },
+    liveSessionLifecycle: {
+      createRuntimeRegistration: (binding) =>
+        new AgentSessionLiveRegistration(binding, (mutation) =>
+          mutation.pipe(
+            Effect.map((result) => {
+              changes.push(...result.changes);
+              return result.value;
+            }),
+          ),
+        ),
+    },
+  });
+  const base = { runtimeId: "runtime", transcriptEvents: [], catalogInvalidated: false };
+  const running = { ...snapshot("thread-0"), activity: "running" as const };
+  Effect.runSync(projection.applyMutation({ ...base, snapshotMode: "full", snapshots: [running] }));
+  changes.length = 0;
+
+  Effect.runSync(
+    projection.applyMutation({
+      ...base,
+      snapshotMode: "delta",
+      snapshots: [snapshot("thread-0")],
+      removedRefs: [],
+      transcriptEvents: [
+        {
+          type: "assistant_message",
+          sessionRef: running.ref,
+          externalSessionId: "thread-0",
+          timestamp: "2026-07-16T10:00:01.000Z",
+          messageId: "message-0",
+          message: "Done.",
+        },
+        {
+          type: "session_idle",
+          sessionRef: running.ref,
+          externalSessionId: "thread-0",
+          timestamp: "2026-07-16T10:00:01.000Z",
+          turnOutcome: "completed",
+        },
+      ],
+    }),
+  );
+
+  expect(
+    changes.map((change) => (change.type === "transcript_event" ? change.event.type : change.type)),
+  ).toEqual(["assistant_message", "session_idle", "session_upsert"]);
+});

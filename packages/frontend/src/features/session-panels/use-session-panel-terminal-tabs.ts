@@ -1,11 +1,12 @@
 import { type RefObject, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { TerminalCloseDialogModel } from "@/features/terminals";
+import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
+import { terminalCloseNeedsConfirmation } from "@openducktor/frontend-core/terminals/terminal-tab-presentation";
 import {
-  type TerminalCloseDialogModel,
-  type TerminalSessionsModel,
   type TerminalTab,
   terminalTabLabel,
-} from "@/features/terminals";
+} from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { PanelId } from "./panel-tab-kinds";
 import {
@@ -65,8 +66,7 @@ export function useSessionPanelTerminalTabs({
       // and its panel stay as they are behind it.
       if (
         !confirmTerminate &&
-        tab.terminalId !== null &&
-        terminals.runningCommandTerminalIds.has(tab.terminalId)
+        terminalCloseNeedsConfirmation(tab, terminals.runningCommandTerminalIds)
       ) {
         setCandidate({ ownerKey: startOwnerKey, panel, entryId, tab });
         return false;

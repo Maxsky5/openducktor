@@ -1,15 +1,13 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
-import type { AgentChatToolCallPresentation } from "./agent-chat.types";
+import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import { getToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
-  assistantRoleFromMessage,
-  formatTime,
-  getToolLifecyclePhase,
-  SYSTEM_PROMPT_PREFIX,
-} from "./agent-chat-message-card-model";
+  type AgentChatMessageKind,
+  classifyAgentChatMessage,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 
 const SESSION_NOTICE_TONE_CLASS_NAMES = {
   cancelled:
@@ -27,22 +25,8 @@ type AgentChatMessageCardViewModelInput = {
   toolCallPresentation: AgentChatToolCallPresentation | null;
 };
 
-type AgentChatMessageCardViewModel = {
-  timeLabel: string;
-  assistantRole: AgentRole | null;
+type AgentChatMessageCardViewModel = AgentChatMessageKind & {
   assistantAccentColor: string | undefined;
-  systemPromptBody: string;
-  showSharedHeader: boolean;
-  isReasoningMessage: boolean;
-  isAssistantMessage: boolean;
-  isUserMessage: boolean;
-  isToolMessage: boolean;
-  isWorkflowToolMessage: boolean;
-  isRegularToolMessage: boolean;
-  isSubagentMessage: boolean;
-  isSessionNoticeMessage: boolean;
-  isSystemPromptMessage: boolean;
-  isRichCardMessage: boolean;
   articleClassName: string;
 };
 
@@ -103,68 +87,21 @@ export const buildAgentChatMessageCardViewModel = ({
   sessionRuntimeKind,
   toolCallPresentation,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
-  const timeLabel = message.timestampIsApproximate ? "" : formatTime(message.timestamp);
-  const meta = message.meta;
-  const isReasoningMessage = meta?.kind === "reasoning";
-  const isImageGenerationMessage = meta?.kind === "image_generation";
-  const isAssistantMessage = message.role === "assistant" && !isImageGenerationMessage;
-  const isUserMessage = message.role === "user";
-  const isToolMessage = meta?.kind === "tool";
-  const isWorkflowToolMessage =
-    isToolMessage &&
-    (toolCallPresentation?.kind === "workflow" || toolCallPresentation?.kind === "artifact");
-  const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
-  const isSubagentMessage = meta?.kind === "subagent";
-  const isSessionNoticeMessage = meta?.kind === "session_notice";
-  const isSystemPromptMessage =
-    message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
-  const isRichCardMessage =
-    isToolMessage ||
-    isSubagentMessage ||
-    isSessionNoticeMessage ||
-    isSystemPromptMessage ||
-    isImageGenerationMessage;
-  const assistantRole = assistantRoleFromMessage(message);
-  const assistantAccentColor = isAssistantMessage
-    ? resolveAgentSessionAccentColor({ runtimeKind: sessionRuntimeKind })
-    : undefined;
-  const systemPromptBody = isSystemPromptMessage
-    ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
-    : "";
-  const showSharedHeader =
-    !isImageGenerationMessage &&
-    !isUserMessage &&
-    !isToolMessage &&
-    !isReasoningMessage &&
-    !isAssistantMessage &&
-    !isSessionNoticeMessage &&
-    !isSubagentMessage;
-
+  const kind = classifyAgentChatMessage({ message, toolCallPresentation });
   return {
-    timeLabel,
-    assistantRole,
-    assistantAccentColor,
-    systemPromptBody,
-    showSharedHeader,
-    isReasoningMessage,
-    isAssistantMessage,
-    isUserMessage,
-    isToolMessage,
-    isWorkflowToolMessage,
-    isRegularToolMessage,
-    isSubagentMessage,
-    isSessionNoticeMessage,
-    isSystemPromptMessage,
-    isRichCardMessage,
+    ...kind,
+    assistantAccentColor: kind.isAssistantMessage
+      ? resolveAgentSessionAccentColor({ runtimeKind: sessionRuntimeKind })
+      : undefined,
     articleClassName: toArticleClassName(
       message,
-      isReasoningMessage,
-      isUserMessage,
-      isToolMessage,
-      isWorkflowToolMessage,
-      isSubagentMessage,
-      isSessionNoticeMessage,
-      isSystemPromptMessage,
+      kind.isReasoningMessage,
+      kind.isUserMessage,
+      kind.isToolMessage,
+      kind.isWorkflowToolMessage,
+      kind.isSubagentMessage,
+      kind.isSessionNoticeMessage,
+      kind.isSystemPromptMessage,
     ),
   };
 };

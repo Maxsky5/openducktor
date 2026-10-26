@@ -1,4 +1,8 @@
-import { batchImagePreview } from "@/lib/generated-images/image-preview-batches";
+import {
+  assertGeneratedImageReadMatches,
+  createGeneratedImageBatcher,
+  generatedImageReadIdentity,
+} from "@openducktor/frontend-core/queries/agent-generated-image-batches";
 import { runImagePreview } from "@openducktor/frontend-core/lib/image-preview-queue";
 import { decodeGeneratedImage } from "@/lib/generated-images/image-worker-client";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
@@ -7,10 +11,12 @@ import { queryOptions } from "@tanstack/react-query";
 
 export type AgentGeneratedImageQueryInput = AgentGeneratedImageReadInput;
 
+const batchImagePreview = createGeneratedImageBatcher<Blob>();
+
 export const agentGeneratedImageQueryKeys = {
   all: ["agent-generated-images"] as const,
   image: (input: AgentGeneratedImageQueryInput) =>
-    [...agentGeneratedImageQueryKeys.all, ...imageReadIdentity(input)] as const,
+    [...agentGeneratedImageQueryKeys.all, ...generatedImageReadIdentity(input)] as const,
 };
 
 export const agentGeneratedImageQueryOptions = (
@@ -28,13 +34,7 @@ export const agentGeneratedImageQueryOptions = (
           signal.throwIfAborted();
           const result = await reader.readGeneratedImage(request);
           signal.throwIfAborted();
-          if (
-            JSON.stringify(imageReadIdentity(result)) !== JSON.stringify(imageReadIdentity(request))
-          ) {
-            throw new Error(
-              "The image response belongs to another session, item, or output revision. Reopen this session.",
-            );
-          }
+          assertGeneratedImageReadMatches(result, request);
           const bytes = await decodeGeneratedImage(
             { base64: result.base64, mime: result.mime, byteLength: result.byteLength },
             signal,
@@ -50,14 +50,3 @@ export const agentGeneratedImageQueryOptions = (
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
-
-const imageReadIdentity = ({ ref, itemId, turnId, revision }: AgentGeneratedImageReadInput) =>
-  [
-    ref.repoPath,
-    ref.runtimeKind,
-    ref.workingDirectory,
-    ref.externalSessionId,
-    turnId ?? null,
-    itemId,
-    revision,
-  ] as const;

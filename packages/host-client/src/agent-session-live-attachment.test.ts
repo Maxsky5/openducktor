@@ -115,6 +115,60 @@ describe("agent session live attachment", () => {
     ]);
   });
 
+  test("a suspended attachment holds changes until a resume delivers them in order", () => {
+    const { attachment, received } = createRecorder();
+    const fault = { type: "fault", repoPath: "/repo", message: "Status read failed" } as const;
+
+    attachment.install({ ...snapshot, sequence: 5 });
+    attachment.suspend();
+    attachment.accept(transcriptEvent("missed"));
+    attachment.accept(upsert(6));
+    attachment.accept(fault);
+    expect(received).toEqual([{ ...snapshot, sequence: 5, isConnectionSnapshot: true }, fault]);
+    attachment.resume();
+    attachment.accept(transcriptEvent("live"));
+
+    expect(received).toEqual([
+      { ...snapshot, sequence: 5, isConnectionSnapshot: true },
+      fault,
+      transcriptEvent("missed"),
+      upsert(6),
+      transcriptEvent("live"),
+    ]);
+  });
+
+  test("a restart after a suspend drops the held changes and reports a history gap", () => {
+    const { attachment, received } = createRecorder();
+
+    attachment.install({ ...snapshot, sequence: 5 });
+    attachment.suspend();
+    attachment.accept(transcriptEvent("before-gap"));
+    attachment.restart();
+    attachment.accept(transcriptEvent("after-gap"));
+    attachment.install({ ...snapshot, sequence: 9 });
+
+    expect(received).toEqual([
+      { ...snapshot, sequence: 5, isConnectionSnapshot: true },
+      { ...snapshot, sequence: 9, isConnectionSnapshot: true, historyReplayGap: true },
+      transcriptEvent("after-gap"),
+    ]);
+  });
+
+  test("a resume before the first snapshot keeps the changes for that snapshot", () => {
+    const { attachment, received } = createRecorder();
+
+    attachment.suspend();
+    attachment.accept(transcriptEvent("early"));
+    attachment.resume();
+    expect(received).toEqual([]);
+    attachment.install({ ...snapshot, sequence: 1 });
+
+    expect(received).toEqual([
+      { ...snapshot, sequence: 1, isConnectionSnapshot: true },
+      transcriptEvent("early"),
+    ]);
+  });
+
   test("keeps durable records of a covered record update without its live session", () => {
     const { attachment, received } = createRecorder();
     const records = (sequence: number): AgentSessionLiveEnvelope => ({

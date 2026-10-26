@@ -5,10 +5,13 @@ import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-workflow";
+import {
+  resolveTaskCardActions,
+  type TaskWorkflowAction,
+} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import { taskActionLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import {
   TASK_ACTION_ICON,
-  taskActionLabel,
   taskMenuActionVariant,
   taskPrimaryActionVariant,
 } from "./task-action-ui";

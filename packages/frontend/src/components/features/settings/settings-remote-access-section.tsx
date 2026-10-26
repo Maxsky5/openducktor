@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  DEFAULT_REMOTE_PORT,
   type RemoteAccessState,
   type RemoteAccessEnableInput,
   type RemoteAccessConfiguration,
@@ -40,7 +41,7 @@ export function SettingsRemoteAccessSection() {
 function RemoteAccessControls({ bridge }: { bridge: RemoteAccessBridge }) {
   const id = useId();
   const [editing, setEditing] = useState(false);
-  const { state, message, form } = useRemoteAccessControls(bridge);
+  const { state, message, anotherPort, form } = useRemoteAccessControls(bridge);
   const { status, failure } = state ?? {};
   const unavailable = failure?.code === "function_unavailable";
   return (
@@ -84,14 +85,40 @@ function RemoteAccessControls({ bridge }: { bridge: RemoteAccessBridge }) {
         </Collapsible>
       ) : null}
       {message ? (
-        <p role="alert" className="text-sm text-destructive-surface-foreground">
-          {message}
-        </p>
+        <RemoteAccessMessage message={message} anotherPort={anotherPort} pending={form.pending} />
       ) : null}
       <p className="text-xs text-muted-foreground">
-        Changes apply now and reset when OpenDucktor closes.
+        OpenDucktor keeps these settings. Remote control that is on starts again with OpenDucktor,
+        at the same address.
       </p>
     </section>
+  );
+}
+
+/**
+ * A failure or a read error. A port that another app uses offers a new free port, which the host
+ * then keeps.
+ */
+function RemoteAccessMessage({
+  message,
+  anotherPort,
+  pending,
+}: {
+  message: string;
+  anotherPort: (() => void) | null;
+  pending: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p role="alert" className="text-sm text-destructive-surface-foreground">
+        {message}
+      </p>
+      {anotherPort ? (
+        <Button type="button" variant="outline" size="sm" disabled={pending} onClick={anotherPort}>
+          Use another port
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -147,40 +174,55 @@ function useRemoteAccessControls(bridge: RemoteAccessBridge) {
   const failureMessage = failure ? `${failure.message} ${failure.nextAction}` : undefined;
   const message = action.error?.message ?? stateError ?? networks.error?.message ?? failureMessage;
   const pending = action.isPending || status === "starting" || networks.isPending;
+  const onAction = (configuration: RemoteAccessEnableInput | null) =>
+    action.mutate(configuration, {
+      onSuccess: (next) => {
+        if (next.status !== "failed") setDraft(null);
+      },
+    });
   return {
     state,
     message,
+    anotherPort: offersAnotherPort(failure, fields)
+      ? () => onAction({ ...fields, listenPort: 0 })
+      : null,
     form: {
       fields,
       networks: networks.data ?? [],
       onChange: (value: Partial<RemoteAccessEnableInput>) => setDraft({ ...fields, ...value }),
-      onAction: (configuration: RemoteAccessEnableInput | null) =>
-        action.mutate(configuration, {
-          onSuccess: (next) => {
-            if (next.status !== "failed") setDraft(null);
-          },
-        }),
+      onAction,
       onRefresh: () => {
         void networks.refetch();
       },
       refreshing: networks.isFetching,
       pending,
       status,
-      changed:
-        fields.listenHost !== saved.listenHost ||
-        fields.listenPort !== saved.listenPort ||
-        fields.publicEndpoint !== saved.publicEndpoint ||
-        JSON.stringify(fields.webOrigins) !== JSON.stringify(saved.webOrigins),
+      changed: fieldsChanged(fields, saved),
     },
   };
 }
+
+/** A public host address needs its fixed port, so a busy port offers no other port then. */
+const offersAnotherPort = (
+  failure: RemoteAccessState["failure"],
+  fields: RemoteAccessEnableInput,
+): boolean => failure?.code === "port_in_use" && fields.publicEndpoint === undefined;
+
+const fieldsChanged = (fields: RemoteAccessEnableInput, saved: RemoteAccessEnableInput): boolean =>
+  fields.listenHost !== saved.listenHost ||
+  fields.listenPort !== saved.listenPort ||
+  fields.publicEndpoint !== saved.publicEndpoint ||
+  JSON.stringify(fields.webOrigins) !== JSON.stringify(saved.webOrigins);
 
 function draftFrom(
   configuration: RemoteAccessConfiguration | null | undefined,
   networks: RemoteAccessNetwork[],
 ): RemoteAccessEnableInput {
   if (!configuration)
-    return { listenHost: networks.length === 1 ? networks[0]!.address : "", listenPort: 0 };
+    return {
+      listenHost: networks.length === 1 ? networks[0]!.address : "",
+      listenPort: DEFAULT_REMOTE_PORT,
+    };
   const url = new URL(configuration.publicEndpoint);
   const host = configuration.listenHost;
   const hostname = new URL(
@@ -190,7 +232,7 @@ function draftFrom(
     url.protocol === "http:" &&
     url.pathname === "/" &&
     url.hostname === hostname &&
-    (configuration.listenPort === 0 || Number(url.port || 80) === configuration.listenPort);
+    Number(url.port || 80) === configuration.listenPort;
   const { publicEndpoint, ...fields } = configuration;
   return direct ? fields : { ...fields, publicEndpoint };
 }

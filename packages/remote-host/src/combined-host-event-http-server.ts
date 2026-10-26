@@ -8,6 +8,7 @@ import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import { Effect, Fiber, Stream } from "effect";
 import { WebHostRequestError } from "./effect/web-errors";
 import type { BufferedHostEventStream } from "./host-event-bus";
+import { startStreamHeartbeat } from "./stream-heartbeat";
 
 export const createCombinedHostSseResponse = (
   request: Request,
@@ -41,11 +42,13 @@ export const createCombinedHostSseResponse = (
       let closed = false;
       let stopHost: (() => void) | null = null;
       let stopNotifications: (() => void) | null = null;
+      let stopHeartbeat: (() => void) | null = null;
       const stop = () => {
         request.signal.removeEventListener("abort", abort);
         closed = true;
         stopHost?.();
         stopNotifications?.();
+        stopHeartbeat?.();
       };
       let abort = () => {};
       const encoder = new TextEncoder();
@@ -119,6 +122,7 @@ export const createCombinedHostSseResponse = (
             stopNotifications = () => {
               Effect.runFork(Fiber.interrupt(delivery));
             };
+            stopHeartbeat = startStreamHeartbeat(controller);
           },
           cancel: stop,
         },

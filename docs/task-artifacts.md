@@ -67,6 +67,22 @@ The bootstrap and its nested HTML frame use `sandbox="allow-scripts"` without sa
 
 SVG uses browser image mode, never inline markup or an object document. Scripts and external SVG resources remain disabled. Agent reads return complete PNG, JPEG, WebP, and GIF files as native image content, and partial reads as original-byte resources. Valid UTF-8 SVG reads return readable XML and an original-byte resource. The host does not resize or convert artifact images. See [External MCP](external-mcp.md#read-and-manage-task-artifacts) for read limits and continuation rules.
 
+## Mobile app
+
+The mobile app shows the collection in the Artifacts work view of a task. A workflow artifact opens in the Documents view. A free artifact opens in its own view. A chat call that saves a free artifact shows Open.
+
+| Format | Mobile presentation |
+|---|---|
+| Markdown | The Markdown renderer, with a Source view. |
+| Plain text | Literal text with line numbers. |
+| HTML | The source with line numbers, and a note that explains why no preview shows. |
+| PNG, JPEG, WebP, GIF, SVG | Image display with the original proportions. |
+| Other formats | File details, an unsupported-preview message, and Share. |
+
+- Share opens the system share sheet with the original bytes and the stored filename. It replaces Download.
+- The app never runs HTML. Phone browsers cannot block all network access, as [preview isolation](#preview-formats-and-isolation) requires.
+- The app does not add, rename, replace, or delete free artifacts. Use the desktop app or the browser runner for these actions.
+
 ## Task lifecycle
 
 | Action | Workflow artifacts | Free artifacts |

@@ -3,7 +3,8 @@ import type { ReactElement } from "react";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { TASK_CARD_VIEW_OPTIONS } from "./task-card-view-options";
+import { TASK_CARD_VIEW_OPTIONS } from "@openducktor/frontend-core/tasks/board/task-card-view-options";
+import { TASK_CARD_VIEW_ICONS } from "./task-card-view-options";
 
 type TaskCardViewControlProps = {
   value: KanbanTaskCardView | null;
@@ -44,7 +45,7 @@ export function TaskCardViewControl({
         }}
       >
         {TASK_CARD_VIEW_OPTIONS.map((option) => {
-          const Icon = option.icon;
+          const Icon = TASK_CARD_VIEW_ICONS[option.value];
           return (
             <Tooltip key={option.value}>
               <TooltipTrigger asChild>

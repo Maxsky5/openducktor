@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
 import { useRecentItems } from "@/features/command-palette/recent-items";
-import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { useTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";

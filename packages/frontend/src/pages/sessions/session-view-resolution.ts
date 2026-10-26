@@ -1,4 +1,5 @@
-import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/agent-chat-transcript-model-cache";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { MAX_CACHED_TRANSCRIPTS } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model-cache";
 import {
   buildSessionNavigationSearch,
   sameSessionSelection,
@@ -6,9 +7,8 @@ import {
   SESSIONS_QUERY_KEYS,
   TASK_SESSION_QUERY_KEYS,
   WORKSPACE_SESSION_QUERY_KEYS,
-  type SessionNavigationTarget,
   type SessionsPageKind,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { SessionViewScope } from "./session-view-scope";
 

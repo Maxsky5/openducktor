@@ -3,9 +3,9 @@ import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/q
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { TaskCreateDestination } from "@/components/features/task-create/use-task-create-modal-controller";
+import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { EditTaskSection } from "@/types/task-composer";
+import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 export type TaskWorkflowTaskComposerModel = {
   open: boolean;

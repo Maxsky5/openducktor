@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 import { useNavigate } from "react-router";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { Button } from "@/components/ui/button";
-import { buildNewWorkspaceSessionHref } from "@/features/session-navigation/session-navigation-target";
-import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { buildNewWorkspaceSessionHref } from "@/features/session-navigation/sessions-route";
+import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 
 /** The Sessions page before a conversation or task context is chosen. */
 export function SessionsEmptyState({

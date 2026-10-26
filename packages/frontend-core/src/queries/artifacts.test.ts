@@ -4,12 +4,13 @@ import {
   type FreeTaskArtifact,
   type TaskArtifactCollection,
 } from "@openducktor/contracts";
-import { QueryObserver } from "@tanstack/react-query";
+import { QueryObserver, queryOptions } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
 import {
   artifactQueryKeys,
   createArtifactSaveGuard,
+  readTaskArtifact,
   refreshArtifactQueries,
   taskArtifactContentQueryOptions,
   taskArtifactsQueryOptions,
@@ -395,6 +396,49 @@ describe("task artifact queries", () => {
       );
       expect(client.getQueryData(options.queryKey)).toBe(content);
     } finally {
+      client.clear();
+    }
+  });
+
+  test("live changes read a file read again and drop it when its artifact goes away", async () => {
+    let revision = 1;
+    const read = mock(async (input: ArtifactReadRequest) =>
+      input.byteOffset === 0
+        ? { ...chunk(revision), dataBase64: "AAEC/w==", nextByteOffset: 4 }
+        : { ...chunk(revision), dataBase64: "BA==", byteOffset: 4 },
+    );
+    const connection = createTestClientConnection({ client: { taskArtifactRead: read } });
+    const client = connection.queryClient;
+    const written: string[] = [];
+    const options = queryOptions({
+      queryKey: artifactQueryKeys.file("/repo", "task-1", "file-1"),
+      queryFn: (context) =>
+        readTaskArtifact(
+          client,
+          { repoPath: "/repo", taskId: "task-1", artifactId: "file-1" },
+          context,
+          ({ dataBase64, byteOffset }) => {
+            written.push(`${byteOffset}:${dataBase64}`);
+          },
+        ),
+    });
+    await client.fetchQuery(options);
+    const stop = new QueryObserver(client, options).subscribe(() => {});
+    const change = (removed: boolean) => [
+      { taskId: "task-1", artifactIds: ["file-1"], removedArtifactIds: removed ? ["file-1"] : [] },
+    ];
+    try {
+      expect(written).toEqual(["0:AAEC/w==", "4:BA=="]);
+      revision = 2;
+      await refreshArtifactQueries(client, "/repo", change(false));
+      expect(client.getQueryData(options.queryKey)?.version).toBe("v2");
+      expect(written).toHaveLength(4);
+
+      await refreshArtifactQueries(client, "/repo", change(true));
+      expect(client.getQueryState(options.queryKey)).toBeUndefined();
+      expect(read).toHaveBeenCalledTimes(4);
+    } finally {
+      stop();
       client.clear();
     }
   });

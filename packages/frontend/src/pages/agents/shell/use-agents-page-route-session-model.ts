@@ -5,7 +5,7 @@ import {
 import {
   type SessionNavigationRecovery,
   useSessionNavigationRecovery,
-} from "@/features/session-navigation/use-session-navigation-recovery";
+} from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { startTransition, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -21,13 +21,13 @@ import {
   type UseTaskExecutionFilePreviewControllerResult,
   useTaskExecutionFilePreviewController,
 } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
-import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { usePublishVisibleSessionTarget } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useTaskPreviewTransitionGuard } from "./use-task-preview-transition-guard";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;

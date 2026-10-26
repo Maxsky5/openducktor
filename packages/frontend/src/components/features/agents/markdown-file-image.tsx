@@ -7,7 +7,10 @@ import {
   resolvedPathQueryOptions,
   workspaceImageFileQueryOptions,
 } from "@openducktor/frontend-core/queries/filesystem";
-import { parseChatFileLink, resolveChatFileLink } from "./agent-chat/agent-chat-file-link";
+import {
+  parseChatFileLink,
+  resolveChatFileLink,
+} from "@openducktor/frontend-core/sessions/messages/chat-file-link";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 
 export function MarkdownFileImage({

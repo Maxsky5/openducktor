@@ -1,6 +1,6 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
@@ -17,11 +17,8 @@ import {
   createTestHostConnection,
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { HostClient } from "@openducktor/host-client";
-import {
-  ChecksOperationsContext,
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
 import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createAgentSessionFixture,

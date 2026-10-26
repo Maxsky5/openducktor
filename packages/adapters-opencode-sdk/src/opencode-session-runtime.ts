@@ -7,6 +7,7 @@ import {
 import type { SessionInfo, V2Event, OpenCodeClient } from "@opencode/client";
 import {
   isManualSessionCompactionSlashCommand,
+  OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentSessionAuthorizedRoot,
 } from "@openducktor/contracts";
 import type {
@@ -423,7 +424,8 @@ export const createPrepareOpencodeSessionRuntime =
           externalSessionId: binding.detail.id,
           workingDirectory: binding.ref.workingDirectory,
           sessionAssociation: binding.scope,
-          title: binding.detail.title ?? "",
+          // A conversation without a native title has the runtime label, as on a control result.
+          title: binding.detail.title || OPENCODE_RUNTIME_DESCRIPTOR.label,
           startedAt: iso(binding.detail.time.created),
           runtimeActivity:
             active[binding.detail.id] || awaitingTurns.has(binding.detail.id) ? "running" : "idle",

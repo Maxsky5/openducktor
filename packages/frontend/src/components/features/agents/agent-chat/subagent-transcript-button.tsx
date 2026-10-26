@@ -2,16 +2,16 @@ import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { SubagentMeta } from "./agent-chat-message-card-model.types";
+import type { SubagentMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import {
   type ParentSessionRuntimeContext,
   toSubagentTranscriptTarget,
-} from "./subagent-session-key";
+} from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 
 type SubagentTranscriptButtonProps = {
   parentSession: ParentSessionRuntimeContext | null;

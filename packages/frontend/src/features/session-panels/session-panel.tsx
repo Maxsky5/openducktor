@@ -25,11 +25,8 @@ import { tabLinkIds } from "@/components/ui/tab-link-ids";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { horizontalTabSortTransition } from "@/components/ui/use-horizontal-sortable-tabs";
-import {
-  TerminalRestartButton,
-  TerminalStatusMessages,
-  terminalTabLifecycle,
-} from "@/features/terminals";
+import { TerminalRestartButton, TerminalStatusMessages } from "@/features/terminals";
+import { terminalTabLifecycle } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { cn } from "@/lib/utils";
 import {
   isToolTabKind,
@@ -46,7 +43,7 @@ import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
 import type { SessionPanelModel } from "./use-session-panels";
 import { SessionTerminalSurface } from "./session-terminal-host";
-import { useSessionViewVisit } from "../session-navigation/session-view-context";
+import { useSessionViewVisit } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { SessionViewShownActivity } from "../session-navigation/session-view-visibility";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";

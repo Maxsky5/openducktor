@@ -1,11 +1,14 @@
 import { AlertTriangle } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import type { GitConflict } from "@/features/agent-studio-git";
-import { getGitConflictCopy } from "./conflict-copy";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
+import {
+  getGitConflictCopy,
+  UNIDENTIFIED_GIT_CONFLICT_DESCRIPTION,
+} from "@openducktor/frontend-core/git/conflicts/conflict-copy";
 import { GIT_CONFLICT_TEST_IDS } from "./constants";
 import { GitConflictActions } from "./git-conflict-actions";
-import type { GitConflictActionsModel } from "./git-conflict-actions-model";
+import type { GitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 
 type GitConflictStripProps = {
   conflict: GitConflict;
@@ -15,8 +18,7 @@ type GitConflictStripProps = {
 
 const toConflictDescription = (conflict: GitConflict): ReactNode => {
   const { operationLabel } = getGitConflictCopy(conflict.operation);
-  if (!conflict.operation)
-    return "Git reports unmerged files. Restore the operation information before asking for assistance or aborting.";
+  if (!conflict.operation) return UNIDENTIFIED_GIT_CONFLICT_DESCRIPTION;
   return (
     <>
       The {operationLabel}

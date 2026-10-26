@@ -5,7 +5,10 @@ import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segm
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { AgentQuestionDraftEntry } from "./agent-session-question-draft";
+import {
+  type AgentQuestionDraftEntry,
+  agentQuestionTitle,
+} from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-draft";
 
 type QuestionTabProps = {
   question: AgentQuestionRequest["questions"][number];
@@ -45,7 +48,7 @@ export const QuestionTab = ({
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {question.header?.trim() || `Question ${questionIndex + 1}`}
+            {agentQuestionTitle(question, questionIndex)}
           </p>
           <p className="text-[13px] font-medium text-foreground">{question.question}</p>
         </div>

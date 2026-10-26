@@ -1,5 +1,8 @@
-import type { GitConflictOperation, GitDiffRefresh } from "@/features/agent-studio-git";
-import { getGitConflictCopy } from "@/features/git-conflict-resolution";
+import type {
+  GitConflictOperation,
+  GitDiffRefresh,
+} from "@openducktor/frontend-core/git/contracts";
+import { getGitConflictCopy } from "@openducktor/frontend-core/git/conflicts/conflict-copy";
 import { z } from "zod";
 
 export type GitActionKind = "commit" | "push" | "rebase";

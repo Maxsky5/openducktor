@@ -5,6 +5,7 @@ import type { AzureDevOpsFetch } from "../../adapters/git-providers/azure-devops
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import type { TaskAssetReadService } from "../../application/task-assets/task-asset-read-service";
 import type { TaskEventPublicationReporter } from "../../application/tasks/sync/task-sync-service";
+import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { EffectHostCommandRouter } from "../../interface/router/host-command-router";
@@ -31,6 +32,11 @@ export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly taskAssetReadService: TaskAssetReadService;
   readonly notificationStream: import("../../application/notifications/notification-stream").NotificationStream;
   readonly hostInstanceId: string;
+  /** The host ID and the remote control settings, which the shell's remote access keeps. */
+  readonly hostSettings: Pick<
+    WorkspaceSettingsService,
+    "readHostId" | "readRemoteAccessSettings" | "saveRemoteAccessSettings"
+  >;
   readonly taskEventStream: import("../../events/task-event-stream").TaskEventStreamPort;
   readonly terminalService: import("../../application/terminals/terminal-service").TerminalService;
   readonly browserService: BrowserService;

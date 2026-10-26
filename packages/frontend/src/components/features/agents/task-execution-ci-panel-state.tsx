@@ -1,9 +1,9 @@
-import { AlertCircle, GitPullRequest, Loader2, RefreshCw, WifiOff } from "lucide-react";
+import { AlertCircle, CircleSlash, GitPullRequest, Loader2, RefreshCw } from "lucide-react";
 import type { ComponentType, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type TaskExecutionCiPanelStateKind = "empty" | "error" | "loading" | "unavailable";
+import type { TaskExecutionCiPanelStateKind } from "@openducktor/frontend-core/review/task-execution-ci-panel-copy";
 
 export type TaskExecutionCiPanelStateProps = {
   title: string;
@@ -35,7 +35,7 @@ const STATE_VISUALS = {
     iconClassName: "animate-spin",
   },
   unavailable: {
-    icon: WifiOff,
+    icon: CircleSlash,
   },
 } satisfies Record<TaskExecutionCiPanelStateKind, StateVisual>;
 

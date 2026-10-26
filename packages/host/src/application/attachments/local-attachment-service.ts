@@ -1,5 +1,6 @@
 import {
   LOCAL_ATTACHMENT_BYTE_LIMIT,
+  LOCAL_ATTACHMENT_NOT_STAGED_MESSAGE,
   LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
   LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
   type LocalAttachmentUnavailableDetails,
@@ -362,7 +363,7 @@ export const createLocalAttachmentService = (
           }
           return yield* Effect.fail(
             new HostValidationError({
-              message: "Attachment path is not a staged local attachment.",
+              message: LOCAL_ATTACHMENT_NOT_STAGED_MESSAGE,
               field: "path",
               details: { reason: LOCAL_ATTACHMENT_UNAVAILABLE_REASON },
             }),

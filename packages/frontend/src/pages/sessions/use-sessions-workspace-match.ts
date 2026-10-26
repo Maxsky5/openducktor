@@ -6,7 +6,7 @@ import {
   SESSIONS_PATH,
   SESSIONS_QUERY_KEYS,
   type SessionsPageKind,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { keptSessionViewAddress, type SessionView } from "./session-view-resolution";

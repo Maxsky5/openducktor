@@ -6,7 +6,7 @@ import {
   TerminalSummary,
 } from "@openducktor/contracts";
 import { act, fireEvent, render as renderComponent } from "@testing-library/react";
-import { createTerminalActivityStore } from "./terminal-activity-store";
+import { createTerminalActivityStore } from "@openducktor/frontend-core/terminals/terminal-activity-store";
 import { TerminalRestartButton } from "./terminal-restart-button";
 
 import { TooltipProvider } from "@/components/ui/tooltip";

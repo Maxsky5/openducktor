@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.openducktor.keyboard'
+version = '1.0.0'
+
+android {
+  namespace "com.openducktor.keyboard"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // ExpoView exposes React Native types, such as StateWrapper, in its public members.
+  // The React Native Gradle plugin resolves the react-android version.
+  implementation 'com.facebook.react:react-android'
+}

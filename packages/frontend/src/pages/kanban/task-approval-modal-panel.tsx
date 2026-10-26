@@ -12,68 +12,30 @@ import { openExternalUrl } from "@/lib/open-external-url";
 import { canonicalTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { cn } from "@/lib/utils";
 import type {
-  PullRequestDraftMode,
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
   TaskApprovalMissingBuilderWorktreeModalModel,
   TaskApprovalModalModel,
-  TaskApprovalMode,
-} from "./kanban-page-model-types";
-import { getTaskApprovalModalHeader } from "./task-approval-modal-header";
-
-const APPROVAL_ACTION_OPTIONS: Array<{
-  value: TaskApprovalMode;
-  label: string;
-}> = [
-  {
-    value: "direct_merge",
-    label: "Direct Merge",
-  },
-  {
-    value: "pull_request",
-    label: "Pull Request",
-  },
-];
-
-const MERGE_METHOD_OPTIONS: Array<{
-  value: TaskApprovalApprovalModalModel["mergeMethod"];
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "merge_commit",
-    label: "Merge Commit",
-    description: "Preserve the full branch history with a merge commit.",
-  },
-  {
-    value: "squash",
-    label: "Squash",
-    description: "Collapse the builder branch into a single commit.",
-  },
-  {
-    value: "rebase",
-    label: "Rebase",
-    description: "Replay builder commits directly onto the target branch.",
-  },
-];
-
-const PULL_REQUEST_DRAFT_OPTIONS: Array<{
-  value: PullRequestDraftMode;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "manual",
-    label: "Write Manually",
-    description: "Provide the pull request title and description yourself.",
-  },
-  {
-    value: "generate_ai",
-    label: "Generate With AI",
-    description:
-      "Choose a Builder session to fork, then let Builder create or update the pull request automatically.",
-  },
-];
+} from "@openducktor/frontend-core/tasks/approval/task-approval-types";
+import {
+  directMergeCompletionButtonLabel,
+  directMergeCompletionStageDescription,
+  getDirectMergeCompletionContextError,
+  getTaskApprovalSubmitState,
+  missingBuilderWorktreeConfirmLabel,
+  TASK_APPROVAL_COPY,
+  TASK_APPROVAL_MERGE_METHOD_OPTIONS,
+  TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS,
+  type TaskApprovalTextWithCode,
+  taskApprovalCompletionNextStepText,
+  taskApprovalLocalMergeReadyText,
+  taskApprovalModeOptions,
+  taskApprovalPublicationCommitLabel,
+  taskApprovalPullRequestUnavailableMessage,
+  taskApprovalSquashCommitHint,
+  taskApprovalUncommittedChangesMessage,
+} from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
+import { getTaskApprovalModalHeader } from "@openducktor/frontend-core/tasks/approval/task-approval-modal-header";
 
 const openExistingPullRequestUrl = (url: string): void => {
   void openExternalUrl(url).catch((error) => {
@@ -208,56 +170,20 @@ export function TaskApprovalModalPanel({
   );
 }
 
-function getDirectMergeCompletionContextError(
-  model: TaskApprovalCompletionModalModel,
-): string | null {
-  if (model.targetBranch === null)
-    return "Missing target branch for direct-merge completion. Refresh approval context and retry.";
-  return model.publishTarget && !model.publicationPreview
-    ? "Missing publication destinations. Refresh approval context before publishing."
-    : null;
-}
-
-function getApprovalSubmitValidation(model: TaskApprovalApprovalModalModel) {
-  const hasManualPullRequestValidationError =
-    model.mode === "pull_request" &&
-    model.pullRequestAvailable &&
-    model.pullRequestDraftMode === "manual" &&
-    (model.title.trim().length === 0 || model.body.trim().length === 0);
-  const hasSquashCommitMessageSubmitError =
-    model.mode === "direct_merge" &&
-    model.mergeMethod === "squash" &&
-    model.squashCommitMessage.trim().length === 0;
-  const showSquashCommitMessageValidationError =
-    hasSquashCommitMessageSubmitError &&
-    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
-
-  let confirmLabel = "Merge Locally";
-  if (model.mode === "pull_request" && model.pullRequestDraftMode === "manual") {
-    confirmLabel = "Create Pull Request";
-  } else if (model.mode === "pull_request") {
-    confirmLabel = "Start PR Generation";
-  }
-
-  return {
-    hasManualPullRequestValidationError,
-    hasSquashCommitMessageSubmitError,
-    showSquashCommitMessageValidationError,
-    confirmDisabled:
-      model.isLoading ||
-      model.isSubmitting ||
-      model.hasUncommittedChanges ||
-      (model.mode === "pull_request" && !model.pullRequestAvailable) ||
-      hasManualPullRequestValidationError ||
-      hasSquashCommitMessageSubmitError,
-    confirmLabel,
-  } satisfies {
-    hasManualPullRequestValidationError: boolean;
-    hasSquashCommitMessageSubmitError: boolean;
-    showSquashCommitMessageValidationError: boolean;
-    confirmDisabled: boolean;
-    confirmLabel: string;
-  };
+function TextWithCode({
+  text,
+  codeClassName,
+}: {
+  text: TaskApprovalTextWithCode;
+  codeClassName: string;
+}): ReactElement {
+  return (
+    <>
+      {text.before}
+      <span className={codeClassName}>{text.code}</span>
+      {text.after}
+    </>
+  );
 }
 
 function TaskApprovalApprovalStage({
@@ -267,18 +193,9 @@ function TaskApprovalApprovalStage({
   model: TaskApprovalApprovalModalModel;
   sectionLabelClass: string;
 }): ReactElement {
-  const { showSquashCommitMessageValidationError } = getApprovalSubmitValidation(model);
-  const actionOptions = APPROVAL_ACTION_OPTIONS.filter(
-    (option) => option.value !== "pull_request" || model.pullRequestSupported,
-  ).map((option) => ({
-    value: option.value,
-    label: option.label,
-    disabled: option.value === "pull_request" && !model.pullRequestAvailable,
-  }));
-  const dirtyWorktreeMessage =
-    model.uncommittedFileCount === 1
-      ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
-      : `The builder worktree has ${model.uncommittedFileCount} uncommitted files. Commit or discard them before approving this task.`;
+  const { showSquashCommitMessageValidationError } = getTaskApprovalSubmitState(model);
+  const actionOptions = taskApprovalModeOptions(model);
+  const dirtyWorktreeMessage = taskApprovalUncommittedChangesMessage(model.uncommittedFileCount);
 
   if (model.isLoading) {
     return (
@@ -287,9 +204,11 @@ function TaskApprovalApprovalStage({
           <div className="flex flex-col items-center gap-3 text-center">
             <LoaderCircle className="size-6 animate-spin text-status-running" />
             <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Preparing approval options</p>
+              <p className="text-sm font-medium text-foreground">
+                {TASK_APPROVAL_COPY.loadingTitle}
+              </p>
               <p className="text-sm text-muted-foreground">
-                OpenDucktor is loading the builder branch and provider readiness.
+                {TASK_APPROVAL_COPY.loadingDescription}
               </p>
             </div>
           </div>
@@ -302,22 +221,22 @@ function TaskApprovalApprovalStage({
     <div className="space-y-6 px-6 py-6 sm:px-8">
       {model.hasUncommittedChanges ? (
         <div className="grid gap-1 rounded-2xl border border-warning-border bg-warning-surface p-4 text-warning-surface-foreground">
-          <p className="text-sm font-semibold">Uncommitted changes detected</p>
+          <p className="text-sm font-semibold">{TASK_APPROVAL_COPY.uncommittedChangesTitle}</p>
           <p className="text-sm">{dirtyWorktreeMessage}</p>
         </div>
       ) : null}
 
       {model.errorMessage ? (
         <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
-          <p className="text-sm font-semibold">Approval failed</p>
+          <p className="text-sm font-semibold">{TASK_APPROVAL_COPY.approvalFailedTitle}</p>
           <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
         </div>
       ) : null}
 
       <div className="space-y-3">
-        <Label className={sectionLabelClass}>Approval Action</Label>
+        <Label className={sectionLabelClass}>{TASK_APPROVAL_COPY.approvalActionLabel}</Label>
         <SegmentedTabs
-          ariaLabel="Approval action"
+          ariaLabel={TASK_APPROVAL_COPY.approvalActionAccessibilityLabel}
           value={model.mode}
           options={actionOptions}
           disabled={model.isSubmitting}
@@ -325,7 +244,7 @@ function TaskApprovalApprovalStage({
         />
         {!model.pullRequestAvailable && model.pullRequestUnavailableReason ? (
           <p className="text-sm text-muted-foreground">
-            Pull request unavailable: {model.pullRequestUnavailableReason}
+            {taskApprovalPullRequestUnavailableMessage(model.pullRequestUnavailableReason)}
           </p>
         ) : null}
       </div>
@@ -357,11 +276,10 @@ function TaskApprovalMissingBuilderWorktreeStage({
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-semibold text-warning-surface-foreground">
-              Builder worktree not found
+              {TASK_APPROVAL_COPY.missingWorktreeTitle}
             </p>
             <p className="text-sm leading-6 text-warning-surface-foreground">
-              OpenDucktor could not load the latest builder worktree for this task. Normal direct
-              merge and pull request approval options are unavailable without that workspace.
+              {TASK_APPROVAL_COPY.missingWorktreeDescription}
             </p>
           </div>
         </div>
@@ -369,17 +287,18 @@ function TaskApprovalMissingBuilderWorktreeStage({
 
       {model.errorMessage ? (
         <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
-          <p className="text-sm font-semibold">Recovery action failed</p>
+          <p className="text-sm font-semibold">{TASK_APPROVAL_COPY.recoveryFailedTitle}</p>
           <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
         </div>
       ) : null}
 
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="space-y-1.5">
-          <p className="text-sm font-semibold text-foreground">Choose the next step</p>
+          <p className="text-sm font-semibold text-foreground">
+            {TASK_APPROVAL_COPY.nextStepChoiceTitle}
+          </p>
           <p className="text-sm leading-6 text-muted-foreground">
-            Complete task closes the review and moves this task to Done. Reset implementation opens
-            the existing reset workflow so you can send the task back for more work.
+            {TASK_APPROVAL_COPY.nextStepChoiceDescription}
           </p>
         </div>
       </div>
@@ -398,9 +317,9 @@ function TaskApprovalDirectMergeSection({
 }): ReactElement {
   return (
     <div className="space-y-3">
-      <Label className={sectionLabelClass}>Merge Method</Label>
+      <Label className={sectionLabelClass}>{TASK_APPROVAL_COPY.mergeMethodLabel}</Label>
       <div className="grid gap-3 md:grid-cols-3">
-        {MERGE_METHOD_OPTIONS.map((option) => (
+        {TASK_APPROVAL_MERGE_METHOD_OPTIONS.map((option) => (
           <OptionCard
             key={option.value}
             value={option.value}
@@ -415,26 +334,26 @@ function TaskApprovalDirectMergeSection({
 
       {model.mergeMethod === "squash" ? (
         <div className="grid gap-2 rounded-2xl border border-border bg-card p-5">
-          <Label htmlFor="task-approval-squash-commit-message">Squash Commit Message</Label>
+          <Label htmlFor="task-approval-squash-commit-message">
+            {TASK_APPROVAL_COPY.squashCommitMessageLabel}
+          </Label>
           <Textarea
             id="task-approval-squash-commit-message"
             className="min-h-28"
-            placeholder="e.g. feat: add Microsoft login"
+            placeholder={TASK_APPROVAL_COPY.squashCommitMessagePlaceholder}
             value={model.squashCommitMessage}
             disabled={model.isSubmitting}
             onChange={(event) => model.onSquashCommitMessageChange(event.currentTarget.value)}
           />
           <p className="text-sm text-muted-foreground">
-            OpenDucktor prefills this from the oldest commit unique to the builder branch. Edit it
-            before creating the single squash commit on{" "}
-            <span className="font-mono text-[13px] text-foreground">
-              {model.targetBranch?.branch ?? "the target branch"}
-            </span>
-            .
+            <TextWithCode
+              text={taskApprovalSquashCommitHint(model.targetBranch)}
+              codeClassName="font-mono text-[13px] text-foreground"
+            />
           </p>
           {showSquashCommitMessageValidationError ? (
             <p className="text-sm text-destructive">
-              Enter the squash commit message before merging locally.
+              {TASK_APPROVAL_COPY.squashCommitMessageRequired}
             </p>
           ) : null}
         </div>
@@ -468,9 +387,9 @@ function TaskApprovalPullRequestSection({
   return (
     <div className="space-y-5">
       <div className="space-y-3">
-        <Label className={sectionLabelClass}>Pull Request Draft</Label>
+        <Label className={sectionLabelClass}>{TASK_APPROVAL_COPY.pullRequestDraftLabel}</Label>
         <div className="grid gap-3 md:grid-cols-2">
-          {PULL_REQUEST_DRAFT_OPTIONS.map((option) => (
+          {TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS.map((option) => (
             <OptionCard
               key={option.value}
               value={option.value}
@@ -487,7 +406,9 @@ function TaskApprovalPullRequestSection({
       {model.pullRequestDraftMode === "manual" ? (
         <div className="grid gap-4 rounded-2xl border border-border bg-card p-5">
           <div className="grid gap-2">
-            <Label htmlFor="task-approval-pr-title">Pull Request Title</Label>
+            <Label htmlFor="task-approval-pr-title">
+              {TASK_APPROVAL_COPY.pullRequestTitleLabel}
+            </Label>
             <Input
               id="task-approval-pr-title"
               value={model.title}
@@ -497,7 +418,9 @@ function TaskApprovalPullRequestSection({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="task-approval-pr-body">Pull Request Description</Label>
+            <Label htmlFor="task-approval-pr-body">
+              {TASK_APPROVAL_COPY.pullRequestDescriptionLabel}
+            </Label>
             <Textarea
               id="task-approval-pr-body"
               className="min-h-56"
@@ -509,8 +432,7 @@ function TaskApprovalPullRequestSection({
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-          OpenDucktor will ask you to choose a Builder session to fork, then start PR generation in
-          the shared session-start flow.
+          {TASK_APPROVAL_COPY.generatePullRequestNotice}
         </div>
       )}
 
@@ -522,7 +444,7 @@ function TaskApprovalPullRequestSection({
           onContextMenu={(event) => event.preventDefault()}
           className="text-sm text-primary underline underline-offset-4"
         >
-          Open existing pull request
+          {TASK_APPROVAL_COPY.openExistingPullRequest}
         </a>
       ) : null}
     </div>
@@ -546,7 +468,7 @@ function TaskApprovalCompletionStage({
     <div className="grid gap-4 px-6 py-6 sm:px-8">
       {completionErrorMessage ? (
         <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
-          <p className="text-sm font-semibold">Direct merge completion failed</p>
+          <p className="text-sm font-semibold">{TASK_APPROVAL_COPY.completionFailedTitle}</p>
           <p className="text-sm text-destructive-muted">{completionErrorMessage}</p>
         </div>
       ) : null}
@@ -560,11 +482,13 @@ function TaskApprovalCompletionStage({
               </div>
               <div className="space-y-1.5">
                 <p className="text-sm font-semibold text-info-surface-foreground">
-                  Local merge ready
+                  {TASK_APPROVAL_COPY.localMergeReadyTitle}
                 </p>
                 <p className="text-sm leading-6 text-info-surface-foreground">
-                  The direct merge is already applied on this machine for{" "}
-                  <span className="font-mono text-[13px]">{localBranchName}</span> on this task.
+                  <TextWithCode
+                    text={taskApprovalLocalMergeReadyText(localBranchName)}
+                    codeClassName="font-mono text-[13px]"
+                  />
                 </p>
               </div>
             </div>
@@ -572,23 +496,15 @@ function TaskApprovalCompletionStage({
 
           <div className="rounded-2xl border border-border bg-card p-5">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">Next step</p>
-              {hasPublishTarget ? (
-                <p className="text-sm leading-6 text-muted-foreground">
-                  Push{" "}
-                  <span className="font-mono text-[13px] text-foreground">
-                    {publishTargetLabel}
-                  </span>{" "}
-                  to publish the merged target branch, then move the task to Done and clean up the
-                  builder workspace.
-                </p>
-              ) : (
-                <p className="text-sm leading-6 text-muted-foreground">
-                  Move the task to Done and clean up the builder workspace. The merge is already
-                  applied locally on{" "}
-                  <span className="font-mono text-[13px] text-foreground">{localBranchName}</span>.
-                </p>
-              )}
+              <p className="text-sm font-semibold text-foreground">
+                {TASK_APPROVAL_COPY.nextStepTitle}
+              </p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                <TextWithCode
+                  text={taskApprovalCompletionNextStepText(model)}
+                  codeClassName="font-mono text-[13px] text-foreground"
+                />
+              </p>
             </div>
 
             <div
@@ -599,7 +515,7 @@ function TaskApprovalCompletionStage({
               )}
             >
               <div className="rounded-xl border border-border bg-muted/40 p-4">
-                <p className={sectionLabelClass}>Local Branch</p>
+                <p className={sectionLabelClass}>{TASK_APPROVAL_COPY.localBranchLabel}</p>
                 <p className="mt-2 font-mono text-sm text-foreground">{localBranchName}</p>
               </div>
 
@@ -610,11 +526,13 @@ function TaskApprovalCompletionStage({
                   </div>
 
                   <div className="rounded-xl border border-border bg-muted/40 p-4">
-                    <p className={sectionLabelClass}>Remote To Update</p>
+                    <p className={sectionLabelClass}>{TASK_APPROVAL_COPY.remoteToUpdateLabel}</p>
                     <p className="mt-2 font-mono text-sm text-foreground">{publishTargetLabel}</p>
                     {model.publicationPreview ? (
                       <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                        <p>Commit {model.publicationPreview.sourceOid.slice(0, 12)}</p>
+                        <p>
+                          {taskApprovalPublicationCommitLabel(model.publicationPreview.sourceOid)}
+                        </p>
                         {model.publicationPreview.destinations.map((destination) => (
                           <p key={destination.identity} className="break-all">
                             {destination.label}
@@ -650,18 +568,8 @@ function DirectMergeCompletionFooter({
 }): ReactElement {
   const completionContextError = getDirectMergeCompletionContextError(model);
   const completionActionDisabled = model.isSubmitting || completionContextError !== null;
-  const publishTargetBranchName = model.publishTarget?.branch ?? "";
-  let completionButtonLabel = "Mark Task Done";
-  if (model.isSubmitting && model.publishTarget) {
-    completionButtonLabel = `Publishing ${publishTargetBranchName}`;
-  } else if (model.isSubmitting) {
-    completionButtonLabel = "Completing Direct Merge";
-  } else if (model.publishTarget) {
-    completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
-  }
-  const completionStageDescription = model.publishTarget
-    ? "Finish later to keep the task in Human Review while the local merge stays ready to publish."
-    : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
+  const completionButtonLabel = directMergeCompletionButtonLabel(model);
+  const completionStageDescription = directMergeCompletionStageDescription(model);
 
   return (
     <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -674,7 +582,7 @@ function DirectMergeCompletionFooter({
           disabled={model.isSubmitting}
           onClick={model.onSkipDirectMergeCompletion}
         >
-          Finish Later
+          {TASK_APPROVAL_COPY.finishLater}
         </Button>
         <Button
           type="button"
@@ -702,7 +610,7 @@ function MissingBuilderWorktreeFooter({
         disabled={model.isSubmitting}
         onClick={() => model.onOpenChange(false)}
       >
-        Cancel
+        {TASK_APPROVAL_COPY.cancel}
       </Button>
       <div className="flex items-center justify-end gap-2">
         <Button
@@ -711,7 +619,7 @@ function MissingBuilderWorktreeFooter({
           disabled={model.isSubmitting}
           onClick={model.onResetMissingBuilderWorktree}
         >
-          Reset Implementation
+          {TASK_APPROVAL_COPY.resetImplementation}
         </Button>
         <Button
           type="button"
@@ -719,7 +627,7 @@ function MissingBuilderWorktreeFooter({
           onClick={model.onCompleteMissingBuilderWorktree}
         >
           {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          {model.isSubmitting ? "Completing Task" : "Complete Task"}
+          {missingBuilderWorktreeConfirmLabel(model.isSubmitting)}
         </Button>
       </div>
     </DialogFooter>
@@ -727,7 +635,7 @@ function MissingBuilderWorktreeFooter({
 }
 
 function ApprovalActionsFooter({ model }: { model: TaskApprovalApprovalModalModel }): ReactElement {
-  const { confirmDisabled, confirmLabel } = getApprovalSubmitValidation(model);
+  const { confirmDisabled, confirmLabel } = getTaskApprovalSubmitState(model);
 
   return (
     <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -737,7 +645,7 @@ function ApprovalActionsFooter({ model }: { model: TaskApprovalApprovalModalMode
         disabled={model.isSubmitting}
         onClick={() => model.onOpenChange(false)}
       >
-        Cancel
+        {TASK_APPROVAL_COPY.cancel}
       </Button>
       <Button type="button" disabled={confirmDisabled} onClick={model.onConfirm}>
         {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}

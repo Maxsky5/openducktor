@@ -1,0 +1,34 @@
+import { getAgentSessionActivityStateFromSession } from "../../lib/agent-session-activity-state";
+import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
+import { toSessionMessagesState } from "../agent-orchestrator/support/messages";
+import type { AgentSessionState } from "../../types/agent-orchestrator";
+import type { AgentChatTranscriptSession } from "./agent-chat-transcript.types";
+
+type AgentChatTranscriptSessionSource = Pick<
+  AgentSessionState,
+  | "externalSessionId"
+  | "title"
+  | "runtimeKind"
+  | "workingDirectory"
+  | "status"
+  | "runtimeStatusMessage"
+  | "messages"
+  | "pendingApprovals"
+  | "pendingQuestions"
+>;
+
+export const toAgentChatTranscriptSession = (
+  session: AgentChatTranscriptSessionSource,
+): AgentChatTranscriptSession => {
+  const transcriptSession: AgentChatTranscriptSession = {
+    ...toAgentSessionIdentity(session),
+    activityState: getAgentSessionActivityStateFromSession(session),
+    runtimeStatusMessage: session.runtimeStatusMessage,
+    messages: toSessionMessagesState(session),
+    pendingQuestions: session.pendingQuestions,
+  };
+  if (session.title) {
+    transcriptSession.title = session.title;
+  }
+  return transcriptSession;
+};

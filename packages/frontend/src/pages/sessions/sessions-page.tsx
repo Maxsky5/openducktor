@@ -7,12 +7,12 @@ import {
   parseSessionsPageKind,
   SESSIONS_QUERY_KEYS,
   TASK_SESSION_QUERY_KEYS,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import { useSessionPanelLayoutPruning } from "@/features/session-panels";
 import { SessionViews, useSessionViews } from "./session-views";
 import { previewSessionViewId } from "./session-view-resolution";
 import { useActiveWorkspace } from "@/state/app-state-provider";
-import { useTaskSnapshotContext } from "@/state/app-state-contexts";
+import { useTaskSnapshotContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { SessionsEmptyState } from "./sessions-empty-state";
 import {
   isSessionsWorkspaceReady,

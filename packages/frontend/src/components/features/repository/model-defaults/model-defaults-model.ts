@@ -1,10 +1,13 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
+import { catalogModelOptionValue } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@openducktor/frontend-core/lib/agent-runtime";
-import { pickRepoAgentDefault, type RepoAgentDefaultDraft } from "@/lib/repo-agent-defaults";
-import { AGENT_ROLE_LABELS } from "@/types";
+import {
+  pickRepoAgentDefault,
+  type RepoAgentDefaultDraft,
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type {
   RepoAgentDefaultInput,
   RepoSettingsInput,

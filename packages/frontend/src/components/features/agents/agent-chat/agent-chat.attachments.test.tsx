@@ -7,10 +7,10 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
 import {
   buildModelSelection,
-  buildSession,
   buildSessionTranscript,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
+import { buildSession } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
 

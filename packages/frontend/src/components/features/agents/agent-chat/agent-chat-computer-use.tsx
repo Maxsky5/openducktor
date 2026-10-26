@@ -1,8 +1,11 @@
 import { MousePointerClick } from "lucide-react";
 import type { ReactElement } from "react";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import {
+  buildComputerUsePresentation,
+  computerUseScreenshotUri,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import { ActionToolCard } from "./agent-chat-action-tool-card";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { hasNonEmptyText } from "./tool-lifecycle";
 
 type ComputerUseToolMessageProps = {
   meta: ToolMeta;
@@ -15,7 +18,8 @@ export const ComputerUseToolMessage = ({
   messageTimestamp,
   timeLabel,
 }: ComputerUseToolMessageProps): ReactElement => {
-  const action = meta.computerUse;
+  const { actionTitle, code, errorText, outputText, screenshots } =
+    buildComputerUsePresentation(meta);
   return (
     <ActionToolCard
       meta={meta}
@@ -23,17 +27,15 @@ export const ComputerUseToolMessage = ({
       timeLabel={timeLabel}
       icon={MousePointerClick}
       label="Computer Use"
-      title={action?.action ?? "Computer action"}
+      title={actionTitle}
       screenshots={{
-        count: action?.images?.length ?? 0,
-        sources: (action?.images ?? []).map(
-          (image) => `data:${image.mimeType};base64,${image.dataBase64}`,
-        ),
+        count: screenshots.length,
+        sources: screenshots.map(computerUseScreenshotUri),
       }}
       sections={[
-        { label: "JavaScript", text: action?.code ?? "" },
-        { label: "Error", text: hasNonEmptyText(meta.error) ? meta.error : "", tone: "error" },
-        { label: "Output", text: hasNonEmptyText(meta.output) ? meta.output : "" },
+        { label: "JavaScript", text: code },
+        { label: "Error", text: errorText, tone: "error" },
+        { label: "Output", text: outputText },
       ]}
     />
   );

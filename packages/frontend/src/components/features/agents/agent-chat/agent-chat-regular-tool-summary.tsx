@@ -1,12 +1,12 @@
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
+import { getToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
-  buildToolSummary,
-  getToolDuration,
-  getToolLifecyclePhase,
-  isToolMessageActive,
-} from "./agent-chat-message-card-model";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+  isRegularToolPreparing,
+  readRegularToolTiming,
+  resolveRegularToolSummaryText,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { toolIcon } from "./agent-chat-tool-icon";
 import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
 
@@ -23,7 +23,6 @@ type RegularToolSummaryProps = {
 const DEFAULT_TOOL_APPEARANCE = {
   text: "text-foreground",
   icon: "text-muted-foreground",
-  emptySummary: "",
 };
 
 const PREPARING_TOOL_APPEARANCE = {
@@ -38,12 +37,10 @@ const TOOL_APPEARANCE = {
   failed: {
     text: "text-destructive-muted",
     icon: "text-destructive-accent",
-    emptySummary: "Tool failed",
   },
   cancelled: {
     text: "text-cancelled-muted",
     icon: "text-cancelled-accent",
-    emptySummary: "Tool cancelled",
   },
   queued: PREPARING_TOOL_APPEARANCE,
 } satisfies Record<ReturnType<typeof getToolLifecyclePhase>, typeof DEFAULT_TOOL_APPEARANCE>;
@@ -58,19 +55,15 @@ export const RegularToolSummary = ({
   hasExpandableDetails,
 }: RegularToolSummaryProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const isPreparing = meta.status === "pending" && meta.inputStreaming !== undefined;
-  const isActive =
-    isToolMessageActive(meta) && (meta.status !== "pending" || meta.inputStreaming !== false);
-  const activity = lifecyclePhase === "executing" ? "running" : "preparing";
-  const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
   const appearance = TOOL_APPEARANCE[lifecyclePhase];
-  const summaryText = summary || appearance.emptySummary;
-  const durationMs = getToolDuration(meta, messageTimestamp);
+  const summaryText = resolveRegularToolSummaryText(meta, messageContent, sessionWorkingDirectory);
+  const { isActive, durationMs } = readRegularToolTiming(meta, messageTimestamp);
+  const activity = lifecyclePhase === "executing" ? "running" : "preparing";
   return (
     <div
       className={cn(
         "flex min-h-6 items-center gap-2 text-xs",
-        isPreparing && "opacity-50",
+        isRegularToolPreparing(meta) && "opacity-50",
         hasExpandableDetails ? "cursor-pointer" : "",
         appearance.text,
       )}

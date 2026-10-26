@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/segmented-control-classnames";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { changeWorktreeMode } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 import {
   ExistingWorktreeBranchFields,
   NewWorktreeBranchFields,
@@ -38,8 +39,8 @@ export function WorkspaceSessionWorktreeFields({
       <Tabs
         value={value.mode}
         onValueChange={(mode) => {
-          if (mode === "from_branch") onChange({ mode, name: value.name, branchName: "" });
-          if (mode === "from_name") onChange({ mode, name: value.name, branchName: null });
+          if (mode === "from_branch" || mode === "from_name")
+            onChange(changeWorktreeMode(value, mode));
         }}
       >
         <TabsList

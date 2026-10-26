@@ -5,7 +5,10 @@ import {
   AGENT_CHAT_ROW_WINDOW_SIZE,
   selectTurnAnchorsForWindow,
 } from "./agent-chat-row-windows";
-import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
+import type {
+  AgentChatTranscriptRow,
+  AgentChatTurnAnchor,
+} from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX, readMountedRows } from "./agent-chat-window-shared";
 
 type UseAgentChatRowWindowInput = {

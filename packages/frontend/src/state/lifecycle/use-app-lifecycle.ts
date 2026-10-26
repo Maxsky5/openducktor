@@ -4,22 +4,14 @@ import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
-import { summarizeTaskLoadError } from "@openducktor/frontend-core/tasks/task-load-errors";
-import type { TaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
+import {
+  type TaskStreamControllerFactory,
+  type TaskStreamStart,
+  useHostTaskStream,
+} from "@openducktor/frontend-core/tasks/use-host-task-stream";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { type LifecycleTimerPort, startRepositoryLoad } from "./app-lifecycle-coordinator";
 import { lifecycleNotifications } from "./lifecycle-notifications";
-import { useOpenWorkspaceTaskLists } from "./use-open-workspace-task-lists";
-
-export type TaskStreamControllerFactory = (input: {
-  queryClient: QueryClient;
-  getOpenRepoPaths: () => readonly string[];
-  getActiveRepoPath: () => string | null;
-  onDegraded: (cause: unknown) => void;
-  onSnapshotFinished: (repoPath: string, succeeded: boolean) => void;
-  onSnapshotStarted: (repoPath: string) => void;
-  onWorkspaceFailures: (failures: ReadonlyMap<string, unknown>) => void;
-}) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -49,14 +41,46 @@ export function useAppLifecycle({
   const queryClient = useQueryClient();
   const activeWorkspaceRef = useRef(activeWorkspace);
   const loadWorkspaceTasksRef = useRef(loadWorkspaceTasks);
-  const streamStartRef = useRef<PromiseWithResolvers<StreamStart> | null>(null);
+  const streamStartRef = useRef<PromiseWithResolvers<TaskStreamStart> | null>(null);
   // A running snapshot owns the read of a repository. A failed one keeps it, so no load retries it.
   const streamOwnedReposRef = useRef(new Set<string>());
-  const controllerRef = useRef<TaskStreamController | null>(null);
   const openRepoPathsRef = useRef<readonly string[]>([]);
-  const previousOpenRepoPathsRef = useRef<readonly string[]>([]);
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
-  const openRepoPaths = useOpenWorkspaceTaskLists({ openWorkspaces, activeRepoPath });
+  const openRepoPaths = useHostTaskStream({
+    openWorkspaces,
+    activeRepoPath,
+    createController: taskStreamControllerFactory,
+    events: {
+      onDegraded: (description) => {
+        toast.error("Task stream degraded", { description });
+      },
+      onWorkspaceFailures: (description) => {
+        toast.error("Workspaces did not refresh", { description });
+      },
+      onUnavailable: (cause) => {
+        toast.error("Task stream unavailable", { description: errorMessage(cause) });
+      },
+      onSnapshotStarted: (repoPath) => {
+        streamOwnedReposRef.current.add(repoPath);
+      },
+      onSnapshotFinished: (repoPath, succeeded) => {
+        if (succeeded) streamOwnedReposRef.current.delete(repoPath);
+      },
+      onWorkspaceReleased: (repoPath) => {
+        // A workspace that opens again loads without the snapshot state of this visit.
+        streamOwnedReposRef.current.delete(repoPath);
+      },
+      trackStart: () => {
+        streamOwnedReposRef.current = new Set();
+        const streamStart = currentStreamStart(streamStartRef);
+        return (start) => {
+          streamStart.resolve(start);
+          // Loads that start later wait for the next controller.
+          if (start === "stopped") streamStartRef.current = null;
+        };
+      },
+    },
+  });
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -66,7 +90,7 @@ export function useAppLifecycle({
 
   /** Load a list unless a stream snapshot reads it now, or a failed snapshot already tried. */
   const loadUnlessStreamOwnsRepo = useCallback(
-    async (repoPath: string, streamStart: Promise<StreamStart>, isCurrent: () => boolean) => {
+    async (repoPath: string, streamStart: Promise<TaskStreamStart>, isCurrent: () => boolean) => {
       const streamUnavailable = (await streamStart) === "unavailable";
       const taskQueryState = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
       const streamOwnsRepo = streamOwnedReposRef.current.has(repoPath);
@@ -78,17 +102,6 @@ export function useAppLifecycle({
     },
     [queryClient],
   );
-
-  useEffect(() => {
-    const open = new Set(openRepoPaths);
-    for (const repoPath of previousOpenRepoPathsRef.current) {
-      if (open.has(repoPath)) continue;
-      // A workspace that opens again loads without the snapshot state of this visit.
-      streamOwnedReposRef.current.delete(repoPath);
-      void controllerRef.current?.releaseWorkspace(repoPath);
-    }
-    previousOpenRepoPathsRef.current = openRepoPaths;
-  }, [openRepoPaths]);
 
   useEffect(() => {
     // The active workspace loads after its task store check. The record flag marks it in the same
@@ -105,46 +118,6 @@ export function useAppLifecycle({
       );
     }
   }, [loadUnlessStreamOwnsRepo, openWorkspaces, queryClient]);
-
-  useEffect(() => {
-    streamOwnedReposRef.current = new Set();
-    const streamStart = currentStreamStart(streamStartRef);
-    const controller = taskStreamControllerFactory({
-      queryClient,
-      getOpenRepoPaths: () => openRepoPathsRef.current,
-      getActiveRepoPath: () => activeWorkspaceRef.current?.repoPath ?? null,
-      onDegraded: (error) => {
-        const description = summarizeTaskLoadError({ error });
-        toast.error("Task stream degraded", { description });
-      },
-      onSnapshotStarted: (repoPath) => {
-        streamOwnedReposRef.current.add(repoPath);
-      },
-      onSnapshotFinished: (repoPath, succeeded) => {
-        if (succeeded) streamOwnedReposRef.current.delete(repoPath);
-      },
-      onWorkspaceFailures: (failures) => {
-        const description = [...failures]
-          .map(([repoPath, error]) => `${repoPath}: ${summarizeTaskLoadError({ error })}`)
-          .join("\n");
-        toast.error("Workspaces did not refresh", { description });
-      },
-    });
-    controllerRef.current = controller;
-    void controller.start().then(
-      () => streamStart.resolve("started"),
-      (cause: unknown) => {
-        streamStart.resolve("unavailable");
-        toast.error("Task stream unavailable", { description: errorMessage(cause) });
-      },
-    );
-    return () => {
-      streamStart.resolve("stopped");
-      // Loads that start later wait for the next controller.
-      streamStartRef.current = null;
-      void controller.stop();
-    };
-  }, [queryClient, taskStreamControllerFactory]);
 
   useEffect(() => {
     if (!activeRepoPath) {
@@ -175,14 +148,14 @@ export function useAppLifecycle({
   ]);
 }
 
-/** When the task stream is unavailable, task loads cannot wait for its snapshot. */
-type StreamStart = "started" | "unavailable" | "stopped";
-
-/** The first caller creates the stream start, so a load can wait for it in any effect order. */
+/**
+ * The first caller creates the stream start, so a load can wait for it in any effect order. When
+ * the task stream is unavailable, task loads cannot wait for its snapshot.
+ */
 const currentStreamStart = (
-  ref: RefObject<PromiseWithResolvers<StreamStart> | null>,
-): PromiseWithResolvers<StreamStart> => {
-  ref.current ??= Promise.withResolvers<StreamStart>();
+  ref: RefObject<PromiseWithResolvers<TaskStreamStart> | null>,
+): PromiseWithResolvers<TaskStreamStart> => {
+  ref.current ??= Promise.withResolvers<TaskStreamStart>();
   return ref.current;
 };
 

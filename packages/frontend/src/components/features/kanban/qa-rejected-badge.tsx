@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
-import { isQaRejectedTask } from "@/lib/task-qa";
+import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
 
 export const QaRejectedBadge = memo(function QaRejectedBadge({
   task,

@@ -8,7 +8,7 @@ import {
   parseSessionsPageKind,
   SESSIONS_PATH,
   SESSIONS_QUERY_KEYS,
-} from "@/features/session-navigation/session-navigation-target";
+} from "@/features/session-navigation/sessions-route";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { revealElement } from "@/lib/reveal-element";
 import { useNotificationContext } from "@/state/notifications/notification-context";

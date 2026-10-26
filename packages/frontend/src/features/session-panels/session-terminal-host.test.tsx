@@ -14,15 +14,16 @@ import {
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { terminalQueryKeys } from "@openducktor/frontend-core/queries/terminals";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { useTerminals, type TerminalTab } from "@/features/terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { useTerminals } from "@openducktor/frontend-core/terminals/use-terminals";
 import * as terminalLayer from "@/features/terminals/terminal-layer";
-import type { TerminalBridge } from "@/lib/shell-bridge";
+import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
 import { SessionPanel, sessionPanelOwnerKey, useSessionPanels } from ".";
 import { SessionTerminalHost, SessionTerminalSurface } from "./session-terminal-host";
 import {
   SessionViewContext,
   SessionViewShownContext,
-} from "../session-navigation/session-view-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 const scopeKey = "task";
 const tab: TerminalTab = {

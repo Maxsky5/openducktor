@@ -8,7 +8,7 @@ import type {
   ArtifactSelection,
   TaskArtifactsProps,
 } from "@/components/features/task-artifacts/task-artifacts";
-import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {

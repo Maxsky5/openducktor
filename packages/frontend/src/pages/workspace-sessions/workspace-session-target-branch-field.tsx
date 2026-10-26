@@ -1,48 +1,15 @@
-import {
-  type GitBranch,
-  type GitTargetBranch,
-  effectiveWorkspaceSessionTargetBranch,
-  type WorkspaceSessionLocation,
-  workspaceSessionAllowsTargetBranch,
-} from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch } from "@openducktor/contracts";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { type ReactElement, useState } from "react";
+import type { ReactElement } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { sessionComparisonOptions } from "@/features/agent-studio-git/use-session-comparison";
+import { sessionComparisonOptions } from "@openducktor/frontend-core/git/session-comparison-options";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   targetBranchFromSelection,
   targetBranchSelectionValue,
 } from "@openducktor/frontend-core/lib/target-branch";
-
-/**
- * Holds the work location and the target together, so a location change can drop a pick that
- * the new location cannot use. The target then falls back to the repository default.
- */
-export function useWorkspaceSessionLocationTarget(defaultTarget: GitTargetBranch | null) {
-  const [choice, setChoice] = useState<{
-    location: WorkspaceSessionLocation;
-    picked: GitTargetBranch | null;
-  }>({
-    location: "local_repo_root",
-    picked: null,
-  });
-  const { location, picked } = choice;
-  return {
-    location,
-    targetBranch: effectiveWorkspaceSessionTargetBranch(location, picked, defaultTarget),
-    changeLocation: (next: WorkspaceSessionLocation) =>
-      setChoice((current) => ({ location: next, picked: usablePick(next, current.picked) })),
-    pickTarget: (target: GitTargetBranch) =>
-      setChoice((current) => ({ ...current, picked: target })),
-  };
-}
-
-function usablePick(location: WorkspaceSessionLocation, picked: GitTargetBranch | null) {
-  return picked && workspaceSessionAllowsTargetBranch(location, picked) ? picked : null;
-}
 
 type Props = {
   value: GitTargetBranch | null;

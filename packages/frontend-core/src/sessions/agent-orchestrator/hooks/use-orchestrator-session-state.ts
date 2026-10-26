@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "../../agent-sessions-store";
 import type { SessionHistoryFreshnessTracker } from "../../../queries/agent-session-history-freshness-tracker";
 import { normalizeWorkingDirectory } from "../../../lib/working-directory";
-import { markSessionHistoriesStale } from "../history/session-history-freshness";
+import { markSessionHistoriesUnverified } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
 
 type UseOrchestratorSessionStateArgs = {
@@ -46,7 +46,7 @@ export const useOrchestratorSessionState = ({
         const currentRepoPath = currentWorkspaceRepoPathRef.current;
         if (currentRepoPath && normalizeWorkingDirectory(currentRepoPath) === repoPath) {
           // Activity recovery can finish after this controller restores its collection.
-          sessionStore.setSessionCollection(markSessionHistoriesStale);
+          sessionStore.setSessionCollection(markSessionHistoriesUnverified);
         }
       }),
     [historyFreshness, sessionStore],

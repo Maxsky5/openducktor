@@ -492,6 +492,40 @@ test("releasing an unloaded session clears its queued image batch", async () => 
   }
 });
 
+test("later batches of saved images read no public history until the session releases", async () => {
+  const items = ["first", "second"].map((id) => ({
+    ...completed(),
+    id,
+    savedPath: `/generated/${id}.png`,
+  }));
+  const harness = createImageHarness(items);
+  await harness.adapter.prepareRuntime("runtime-live");
+  const historyReads = () =>
+    harness.calls.filter(({ method }) => method === "thread/turns/list").length;
+  try {
+    for (const item of items) {
+      const image = { itemId: item.id, turnId: "turn", revision: "file-digest" };
+      const batch = await harness.adapter.beginGeneratedImageBatch({ ref, images: [image] });
+      expect(await harness.adapter.resolveGeneratedImageSource({ ...batch, ...image })).toEqual({
+        representation: "saved_file",
+        path: item.savedPath,
+        revision: "file-digest",
+      });
+      harness.adapter.releaseGeneratedImageBatch(batch);
+    }
+    expect(historyReads()).toBe(1);
+    await harness.adapter.releaseSession(ref);
+    const batch = await harness.adapter.beginGeneratedImageBatch({
+      ref,
+      images: [{ itemId: "first", revision: "file-digest" }],
+    });
+    harness.adapter.releaseGeneratedImageBatch(batch);
+    expect(historyReads()).toBe(2);
+  } finally {
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});
+
 test("releasing a session during batch history discards the late result", async () => {
   const harness = createImageHarness();
   harness.defer();

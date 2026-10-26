@@ -1,7 +1,7 @@
 import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import { memo, type ReactElement, type ReactNode, useMemo } from "react";
-import type { DiffDataState } from "@/features/agent-studio-git";
-import type { ManualRefresh } from "@/features/agent-studio-git/refresh/use-git-refresh";
+import type { DiffDataState } from "@openducktor/frontend-core/git/contracts";
+import type { ManualRefresh } from "@openducktor/frontend-core/git/refresh/use-git-refresh";
 import type { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
@@ -60,7 +60,7 @@ type WorkspaceSessionGitToolsProps = {
   actions: ReturnType<typeof useAgentStudioGitActions>;
   commentOwner: Extract<InlineCommentOwner, { kind: "workspace_session" }>;
   control: ReturnType<
-    typeof import("@/features/agent-studio-git/use-session-comparison").useSessionComparisonControl
+    typeof import("@/features/agent-studio-git/use-session-comparison-control").useSessionComparisonControl
   >;
   diffData: DiffDataState;
   contextMode: "repository" | "worktree";

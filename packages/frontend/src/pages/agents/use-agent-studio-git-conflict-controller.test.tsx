@@ -1,6 +1,6 @@
 import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {

@@ -1,4 +1,5 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { expect, mock, spyOn, test } from "bun:test";
 import { createDefaultNotificationSettings } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -9,13 +10,13 @@ import { createSonnerNotificationAdapter } from "@/features/notifications/notifi
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { buildSessionStartErrorOccurrence } from "@openducktor/core";
 import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
-import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
+import { startKanbanSessionFlow } from "@openducktor/frontend-core/tasks/workflow/kanban-session-start-actions";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { showSessionStartMessageRecovery } from "./session-start-message-recovery";
 
 test("renders Retry below the recovery error at full width", async () => {
   const description = "Recovery layout test: the first message failed";
-  const retry = mock(async () => {});
+  const retry = mock(async () => null);
   const view = render(createElement(Toaster));
   let toastId: string | number | undefined;
   try {
@@ -163,9 +164,10 @@ test.each(["in_app", "both", "os", "disabled"] as const)(
         tasks: [createTaskCardFixture({ id: "task-1" })],
         workspaceId: "workspace-1",
         startInBackground: false,
-        roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
+        feedback: sonnerFeedback,
+        onPostStartMessageFailure: showSessionStartMessageRecovery,
         runSessionStartWorkflow,
-        openSessionInAgentStudio: () => {},
+        openStartedSession: () => {},
       });
       expect(genericToast).not.toHaveBeenCalled();
       expect(recoveryToast).toHaveBeenCalledTimes(1);

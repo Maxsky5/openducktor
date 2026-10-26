@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrowserTabSummary, TerminalSummary } from "@openducktor/contracts";
-import type { TerminalTab } from "@/features/terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
   browserTabIdFixture,
   createBrowserTabSummaryFixture,
@@ -215,6 +215,7 @@ describe("session panel layout", () => {
       label: "/repo",
       actionId: null,
       error: null,
+      outcomeUnknown: false,
       requestState: "creating",
     };
     const ctx = context({ terminal: { tabs: [creating] } });

@@ -8,12 +8,43 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
+import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
+import {
+  type FlatWorkspaceSessionGit,
+  workspaceSessionGitSource,
+} from "@/test-utils/workspace-session-git-source";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
+type ToolsOwnerProps = Omit<Parameters<typeof useWorkspaceSessionTools>[0], "git"> &
+  FlatWorkspaceSessionGit;
+
 /** Renders the tools as the right panel does: Diffs while selected, Files always mounted. */
-function ToolsOwner(props: Parameters<typeof useWorkspaceSessionTools>[0]) {
-  const { diffsContent, filesContent } = useWorkspaceSessionTools(props);
+function ToolsOwner({
+  workingDirectory,
+  branchKey,
+  currentBranch,
+  branchReady,
+  target,
+  savedTarget,
+  targetError,
+  retryTarget,
+  readBranch,
+  ...props
+}: ToolsOwnerProps) {
+  const { diffsContent, filesContent } = useWorkspaceSessionTools({
+    ...props,
+    git: workspaceSessionGitSource({
+      workingDirectory,
+      branchKey,
+      currentBranch,
+      branchReady,
+      target,
+      savedTarget,
+      targetError,
+      retryTarget,
+      readBranch,
+    }),
+  });
   if (!props.isVisible) return null;
   return (
     <>
@@ -57,7 +88,7 @@ test("returning to a session checks fresh comparison data while its previous rea
     },
     gitGetLocalChanges: async () => toLocalChanges(status("HEAD", "uncommitted")),
   };
-  const args: Parameters<typeof useWorkspaceSessionTools>[0] = {
+  const args: ToolsOwnerProps = {
     isVisible: true,
     repoPath: "/repo",
     workspaceSession: { workspaceId: "workspace", sessionId: "session-a" },

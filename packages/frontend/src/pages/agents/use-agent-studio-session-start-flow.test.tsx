@@ -10,14 +10,12 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { type SessionStartWorkflowResult } from "@/features/session-start";
+import { type SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import {
-  ChecksOperationsContext,
-  ChecksStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { HostClient } from "@openducktor/host-client";
@@ -190,7 +188,10 @@ const createSessionStartHostClient = (): Partial<HostClient> => ({
 });
 
 const createInternalModalHookHarness = (initialProps: HookArgs) => {
-  const connection = createTestClientConnection({ client: createSessionStartHostClient() });
+  const connection = createTestClientConnection({
+    client: createSessionStartHostClient(),
+    feedback: sonnerFeedback,
+  });
   const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(

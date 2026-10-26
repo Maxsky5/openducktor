@@ -11,7 +11,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { HumanReviewFeedbackModalModel } from "./human-review-feedback-types";
+import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
+import {
+  HUMAN_REVIEW_FEEDBACK_COPY,
+  isHumanReviewFeedbackConfirmDisabled,
+} from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-state";
 
 export function HumanReviewFeedbackModal({
   model,
@@ -22,7 +26,7 @@ export function HumanReviewFeedbackModal({
     return null;
   }
 
-  const confirmDisabled = model.isSubmitting || model.message.trim().length === 0;
+  const confirmDisabled = isHumanReviewFeedbackConfirmDisabled(model);
 
   return (
     <Dialog
@@ -35,23 +39,21 @@ export function HumanReviewFeedbackModal({
     >
       <DialogContent className="max-w-2xl overflow-visible">
         <DialogHeader>
-          <DialogTitle>Send Human Feedback</DialogTitle>
-          <DialogDescription>
-            Describe the changes you want the Builder to make. The next step will use the standard
-            session-start flow to choose whether to reuse an existing Builder session or start a new
-            one.
-          </DialogDescription>
+          <DialogTitle>{HUMAN_REVIEW_FEEDBACK_COPY.title}</DialogTitle>
+          <DialogDescription>{HUMAN_REVIEW_FEEDBACK_COPY.description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-6 overflow-visible pt-2 pb-4">
           <div className="space-y-3">
-            <Label htmlFor="human-review-feedback-message">Your feedback</Label>
+            <Label htmlFor="human-review-feedback-message">
+              {HUMAN_REVIEW_FEEDBACK_COPY.messageLabel}
+            </Label>
             <Textarea
               id="human-review-feedback-message"
               value={model.message}
               disabled={model.isSubmitting}
               className="min-h-48"
-              placeholder="Describe the changes you want the Builder to make."
+              placeholder={HUMAN_REVIEW_FEEDBACK_COPY.messagePlaceholder}
               onChange={(event) => model.onMessageChange(event.target.value)}
             />
           </div>
@@ -64,10 +66,10 @@ export function HumanReviewFeedbackModal({
             disabled={model.isSubmitting}
             onClick={() => model.onOpenChange(false)}
           >
-            Cancel
+            {HUMAN_REVIEW_FEEDBACK_COPY.cancelLabel}
           </Button>
           <Button type="button" disabled={confirmDisabled} onClick={() => void model.onConfirm()}>
-            Request Changes
+            {HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

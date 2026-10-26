@@ -192,10 +192,10 @@ function getGitInfoHeaderView(props: GitInfoHeaderProps) {
           ? (props.gitActionsLockReason ?? null)
           : null,
       refreshError: props.refreshError,
-      upstreamError: props.upstreamStatus === "error" ? (props.upstreamError ?? "") : null,
-      comparisonUnavailableReason: props.comparisonPending
-        ? null
-        : (props.comparisonUnavailableReason ?? null),
+      upstreamStatus: props.upstreamStatus,
+      upstreamError: props.upstreamError ?? null,
+      comparisonPending: props.comparisonPending ?? false,
+      comparisonUnavailableReason: props.comparisonUnavailableReason ?? null,
       rebaseError: props.rebaseError ?? null,
       pushError: props.pushError ?? null,
     }),

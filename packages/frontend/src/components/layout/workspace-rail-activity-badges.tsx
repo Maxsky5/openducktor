@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
 import { cn } from "@/lib/utils";
-import type { WorkspaceActivityBadge } from "./workspace-rail-activity-badges-model";
+import type { WorkspaceActivityBadge } from "@openducktor/frontend-core/workspace-activity/workspace-activity-badges";
 
 /**
  * Badge fill for session activity and workspace activity availability.

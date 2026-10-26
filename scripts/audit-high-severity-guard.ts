@@ -7,6 +7,13 @@ import {
 
 const HIGH_SEVERITY_LEVELS = new Set(["high", "critical"]);
 
+// Advisories that have no fixed release, in tools that never ship. Remove each one when a fix exists.
+// GHSA-86w9-cpqp-85rv: only the Expo CLI uses node-forge, to build the mobile app.
+const ACCEPTED_ADVISORY_IDS = ["GHSA-86w9-cpqp-85rv"];
+
+const isAccepted = (url: string | undefined): boolean =>
+  ACCEPTED_ADVISORY_IDS.some((id) => url?.toLowerCase().includes(id.toLowerCase()));
+
 export const checkHighSeverityAdvisories = (
   parsed: AuditResult,
   reporter: AuditReporter = console,
@@ -15,7 +22,7 @@ export const checkHighSeverityAdvisories = (
     advisories
       .filter((advisory) => {
         const severity = advisory.severity?.toLowerCase();
-        return Boolean(severity) && HIGH_SEVERITY_LEVELS.has(severity);
+        return Boolean(severity) && HIGH_SEVERITY_LEVELS.has(severity) && !isAccepted(advisory.url);
       })
       .map((advisory) => ({ pkg, advisory })),
   );

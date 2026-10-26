@@ -1,4 +1,4 @@
-import type { AgentWorkflowStepTone } from "@/types/agent-workflow";
+import type { AgentWorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
 
 /** Shared label colors for workflow roles in the header and session navigation. */
 export const AGENT_WORKFLOW_TONE_TEXT_CLASSES = {

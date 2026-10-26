@@ -1,5 +1,5 @@
 import { Editor, type JSONContent } from "@tiptap/core";
-import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
+import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
 import {
   assessVisualMarkdownSyntaxCompatibility,
   canonicalRendererMathSemantics,
@@ -10,11 +10,6 @@ import {
   type VisualMarkdownCompatibility,
 } from "./task-description-markdown-compatibility";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
-
-export {
-  splitTaskDescriptionFrontMatter,
-  type TaskDescriptionFrontMatter,
-} from "./task-description-front-matter";
 
 const createMarkdownEditor = (body: string): Editor =>
   new Editor({

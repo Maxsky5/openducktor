@@ -49,15 +49,15 @@ This page lets other devices access the current OpenDucktor instance.
 Choose the network that the other device can reach, then select Enable remote control.
 The host lists its own network addresses and uses IPv4 when that network has it, or unscoped IPv6 otherwise.
 Loopback and scoped link-local addresses do not appear in this list.
-The operating system chooses a free port, and the host builds the full connection address from the bound port.
+The listener uses port `14328` unless the operator enters another port in Advanced.
 The default address is the listener origin, such as `http://192.168.1.9:14328`. Users do not add a `/remote` suffix.
 Copy the address into a compatible OpenDucktor client, or show its QR code in a separate dialog.
 A browser opened at the host address shows its descriptor as JSON. To use the full app, open a standalone web client and paste the host address into its picker.
 The On status means the listener started; it does not prove that a phone can reach it.
 The local host uses a laptop icon. It uses the running-session color when remote control is on and gains a small dot when external clients connect. The tooltip gives the client count. Each client with a live event, task, or terminal stream counts once. Disconnecting its last stream clears it from the count. Operator status updates use the existing live status subscription.
-Advanced contains an optional fixed port, local listen address, and public host address.
-Choose a fixed port only when a firewall or proxy mapping needs one.
-An explicit public host address requires a fixed port.
+Advanced contains the port, the local listen address, and the public host address.
+When another app uses the port, the page shows `port_in_use` and a "Use another port" action.
+That action asks the operating system for a free port, and the host keeps that port from then on.
 The local listen address selects which network accepts connections; a wildcard or loopback listen address needs an explicit reachable public host address.
 The public host address sets the copied address, QR code, allowed hostname and browser origin, and optional path prefix. It does not configure a proxy.
 Invalid fields show a readable error before the listener starts.
@@ -77,13 +77,16 @@ OPENDUCKTOR_REMOTE_ENDPOINT=http://100.64.0.1:14328
 
 Supply all three values to request enablement.
 A partial or invalid configuration shows a remote failure.
-Operator changes apply only to the current run.
 Enable and disable take effect immediately.
-A restart restores the supplied startup configuration or starts disabled.
-No remote settings, connection IDs, or device records enter durable storage.
-Use a stable port or proxy mapping if clients must reconnect to the same address after restart.
-In the local operator contract, `listenPort: 0` requests an automatic port and remains zero in `configuration` to keep that choice when the page reopens.
-The returned `configuration.publicEndpoint` always contains the resolved connection address.
+The host saves the operator's choices in `remoteAccess` of the settings file: the on or off state and the listener of the last enable, with the port that it bound.
+A disable keeps that listener, so the next enable uses the same address.
+At start, the host turns remote control on again with the saved listener when it was on.
+A saved port that another app took shows `port_in_use`. The host does not choose another port by itself, because the clients know the old address.
+Startup configuration from environment variables or launcher options replaces the saved listener for that run and is not saved.
+No connection IDs or device records enter durable storage.
+In the local operator contract, `listenPort: 0` requests a free port from the operating system.
+The returned `configuration` names the bound port, and `configuration.publicEndpoint` always contains the resolved connection address.
+While remote control is off or failed, `configuration` is the saved listener, which the next enable uses.
 The private network-list route is `GET /remote-access/networks`; remote clients cannot use it.
 
 The endpoint must use `http` or `https`, include the work mount path, and contain no credentials, query, fragment, wildcard, loopback hostname, or zero port.
@@ -138,10 +141,11 @@ Native HTTP requests can omit Origin; browser headers do not identify a device.
 
 ## Compatibility
 
-Remote protocol `2` is independent of app release versions.
+The current remote protocol is `2`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets.
+The protocol version is independent of app release versions.
 Hosts and clients can use different app versions when they share a protocol version and the client receives all required capabilities.
 A breaking change to required behavior needs a new remote protocol version.
-An additive optional capability can keep protocol `1`.
+An additive optional capability keeps the current protocol version.
 
 | Baseline capability | Meaning |
 |---|---|
@@ -151,16 +155,26 @@ An additive optional capability can keep protocol `1`.
 | `terminal.v2` | Shared terminal creation, observation, attachment, input, resize, acknowledgements, and output recovery. |
 | `work.resources.v1` | Registered task assets and staged attachment previews. |
 
-Discovery returns `shell`, `appVersion`, `hostInstanceId`, `accessPolicy: "network_reach"`, and supported protocol versions with capability names.
+| Optional capability | Meaning |
+|---|---|
+| `streams.heartbeat.v1` | The host writes the SSE comment `: heartbeat` on `GET R/events` and on each task stream every 15 seconds. |
+
+A network path, such as a NAT, a proxy, or the Android emulator, can drop an idle stream without closing it.
+The heartbeat keeps the path busy.
+A client that receives `streams.heartbeat.v1` treats a stream without bytes for 45 seconds as a lost connection and reconnects.
+A client without the capability keeps a quiet stream, because an older host sends no heartbeat.
+
+Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "network_reach"`, and supported protocol versions with capability names.
 `hostInstanceId` identifies the live host run; it is not a durable trust identity.
+`hostId` identifies the host across restarts. The host creates it once in its settings file. A client uses it to know a saved host at a new address. It grants no access. Older hosts send no `hostId`.
 Negotiation sends this client hello:
 
 ```json
 {
   "appVersion": "mobile-release",
-  "supportedProtocolVersions": [1],
+  "supportedProtocolVersions": [2],
   "requiredCapabilities": ["host.work.v1", "host.events.v1", "agent.live.v1", "terminal.v2", "work.resources.v1"],
-  "optionalCapabilities": []
+  "optionalCapabilities": ["streams.heartbeat.v1"]
 }
 ```
 
@@ -235,13 +249,14 @@ A client app uses `createRemoteHostConnection` from `@openducktor/frontend-core/
 Supply the endpoint, the client app version, a `RemoteTransport`, and the query client of the same `ClientConnection`.
 It wraps `createRemoteHostClient` from `@openducktor/host-client/remote` and owns the recovery barrier below: task stream owners, live attachments, registered platform owners, the notification replay relay, and the refetch of active reads.
 Pass the result as the host of `createClientConnection`, with `releaseHost` set to disconnect the remote client. Disposing the connection releases the admission and sends no host command.
-A remote host stores drafts in connection memory, so two hosts never read each other's drafts, even with identical repository paths. Set `saveDraftsOnDispose: false` for this storage, so disposal does not wait for draft attachment uploads.
+Desktop and web clients store remote-host drafts in connection memory, so two hosts never read each other's drafts, even with identical repository paths. They set `saveDraftsOnDispose: false` for this storage, so disposal does not wait for draft attachment uploads.
+The mobile app stores the drafts of each saved host on the device, in a separate store for that host. Drafts keep the size limits and the 7-day expiry of desktop local drafts and survive app restart, host switch, and connection loss. The app saves the drafts when it goes to the background and before a host switch. Its connection sets `saveDraftsOnDispose: false`, so a removed host or discarded drafts upload no attachment. Removing a saved host deletes its store. See [the mobile app](../apps/mobile/README.md#host-connections).
 Electron and the browser use the same module through `createRemoteShellBridge`.
 The portable entry point uses no React, DOM, EventSource, Node API, browser cookie bootstrap, or runtime SDK.
 A native adapter can supply streaming HTTP, such as `expo/fetch`, and its platform terminal socket factory.
 The native app must supply redirect rejection, normal certificate validation, cancellation, and binary terminal frames.
 A standard JavaScript socket factory alone does not prove native redirect rejection.
-This change does not include Expo screens or native platform configuration.
+The mobile app in `apps/mobile` supplies these guarantees through its own native HTTP module and the platform WebSocket. [ADR 0012](adr/0012-build-the-mobile-client-as-an-expo-shell-over-frontend-core.md) records the decision.
 
 Subscribe to state, host events, and notifications before `connect()`.
 The connection reports `connected` after compatible admission, host replay completion, notification attachment, and application synchronization.
@@ -265,12 +280,16 @@ Host commands use the connection's cancellation signal and have no fixed client 
 The host sends the command response when work completes.
 The client reports state and event listener errors without stopping connection or event delivery.
 Established streams remain event-driven.
+With `streams.heartbeat.v1`, a stream that stays silent for three heartbeats is a transport loss.
+A work request that the host refuses with `connection_expired` is also a transport loss, because the host no longer knows the admission and ran no work.
 Changing browser tabs keeps the live host connection and work state. One page owner pauses a remote connection in the browser's back/forward cache and resumes it when visible. Notification owners stay alive during that pause.
 
 A cached page reloads if the selected host changed or its previous client was released. Local clients release their owners on cache entry and rebuild on history restore. Leaving the page closes the client and its notification owners.
 Transport loss cancels old-generation handles and permits active reconnect with exponential backoff capped at 15 seconds, or manual `retry()`.
 `setActive(false)` and `disconnect()` cancel attempts.
-Permanent endpoint, protocol, capability, TLS, local network, and synchronization failures require correction and explicit retry.
+Permanent endpoint, protocol, capability, TLS, and local network failures require correction and explicit retry.
+A synchronization failure retries with the same backoff, and the connection state keeps its failure, so the user can see it.
+In synchronization, a recovery read that the host answers with an error shows that error in its view. Only a lost connection fails synchronization.
 The browser transport reports `transportCause: "local_network"` when the browser blocks Local Network Access before the host first answers.
 Same-host reconnect resumes retained cursors; a replay gap requires the affected current state.
 A new host instance replaces stale live state and old handles.
@@ -280,3 +299,7 @@ After host restart, old terminal IDs report loss; clients must not recreate the 
 A lost command result or terminal input delivery reports `outcome_unknown`.
 Read current host state to establish its outcome when possible.
 Never resend a mutation or terminal input automatically.
+A command in `HOST_READ_COMMAND_NAMES` only reads host state. After a lost reply or a `connection_expired` refusal, the client waits up to 30 seconds for the reconnect and sends the read again.
+A read sent while the client reconnects by itself waits until it connects, after the recovery barrier. A read of the barrier runs at once.
+A result that does not match the command schema reports `invalid_protocol` and keeps the connection.
+`confirmEventStream()` resolves true when the event stream delivers bytes by its next heartbeat, and false when it stays silent or the host has no `streams.heartbeat.v1`. A client calls it after a device pause, such as a locked screen, and reconnects on false.

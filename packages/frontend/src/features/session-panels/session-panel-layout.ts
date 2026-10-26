@@ -1,6 +1,6 @@
 import { agentRoleValues, type BrowserTabSummary } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { TerminalTab } from "@/features/terminals";
+import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
   HOST_TAB_KINDS,
   type HostTabKind,

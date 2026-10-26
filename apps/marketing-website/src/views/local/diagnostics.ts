@@ -1,6 +1,6 @@
 // The Diagnostics sheet of the Local view. Sources: diagnostics-panel-model.ts,
 // diagnostics-host-model.ts, and diagnostics-workspace-model.ts in
-// packages/frontend/src/components/features/diagnostics. The versions, the user name, and the
+// packages/frontend-core/src/diagnostics. The versions, the user name, and the
 // paths are samples.
 import type { DiagCheck, DiagOverviewData, DiagStatusData } from "../../replica/diagnostics/model";
 import { CONFIG_PATH, WORKSPACE } from "../../sample/workspace";

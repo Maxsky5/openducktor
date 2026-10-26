@@ -10,9 +10,9 @@ Pass primitive identity through these modules. Use `workspaceRepoPath` for repos
 
 ## Session store
 
-Files: `packages/frontend-core/src/sessions/agent-sessions-store.ts`, `state/workspace-agent-sessions.ts`, `state/providers/agent-studio-state-provider.tsx`, and `hooks/use-orchestrator-session-state.ts`.
+Files: `packages/frontend-core/src/sessions/agent-sessions-store.ts`, `packages/frontend-core/src/sessions/workspace-agent-sessions.ts`, `packages/frontend-core/src/app-state/providers/agent-studio-state-provider.ts`, and `hooks/use-orchestrator-session-state.ts`.
 
-Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. `AgentStudioStateProvider` mounts one controller for each open workspace. Each controller keeps its own collection, read model, history loaders, turn state, and faults. Closing or removing the workspace unmounts that controller and releases its collection and queue projection.
+Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. `AgentStudioStateProvider` mounts one controller for each open workspace in `WorkspaceScopeContext`. Each controller keeps its own collection, read model, history loaders, turn state, and faults. Closing or removing the workspace unmounts that controller and releases its collection and queue projection.
 
 Rules:
 
@@ -25,7 +25,7 @@ Rules:
 - Each store is bound to one repository for its lifetime. The registry owns workspace retention and removal.
 - Context reads and writes use a view bound to the selected repository. A workspace switch selects another mounted controller. It does not rebuild a collection, restart observation, clear faults or turn state, or mark history stale.
 - Background launch results use `getWorkspaceStore` to write to their open workspace. A closed workspace has no store and cannot receive a late launch projection. Task-record removal reaches the named workspace, including an inactive one.
-- Transcript warming uses `getSessionSource` to read each retained session and its collection lifetime from any open workspace. The cache keeps its six-entry bound, complete session identity, thinking-preference keys, and cancellation rules. Rendered entries and pending builds use the collection lifetime as well as message revisions. Closing a workspace removes its rendered entries. A late build cannot write into a replacement collection.
+- The transcript cache keeper uses `getSessionSource` to read each retained session and its collection lifetime from any open workspace. The cache keeps its six-entry bound, complete session identity, thinking-preference keys, and cancellation rules. Rendered entries and pending builds use the collection lifetime as well as message revisions. Closing a workspace removes its rendered entries. A late build cannot write into a replacement collection.
 - An unfinished history read continues while its workspace stays open. Closing the workspace invalidates the controller lifetime, so a late read cannot restore its collection.
 
 ## Activity state
@@ -46,7 +46,7 @@ Owns durable record reads, root admission from durable records or explicit start
 
 Rules:
 
-- `WorkspaceActivityProvider` owns one live transport subscription for each open workspace. `workspace-activity/workspace-session-live-source.ts` feeds its envelopes to both activity and the workspace session controller. It also keeps the existing list, Git, and history-coverage updates. Do not add another transport subscription or poll.
+- `WorkspaceActivityProvider` owns one live transport subscription for each open workspace. `packages/frontend-core/src/workspace-activity/workspace-session-live-source.ts` feeds its envelopes to both activity and the workspace session controller. It also keeps the existing list, Git, and history-coverage updates. Do not add another transport subscription or poll.
 - A controller registers on that stream before it calls `agentSessionLiveAttach`. The host returns the repository snapshot to that caller only. The host-client attachment helper orders that snapshot and the changes received during the read. Switching workspaces needs no new attachment. An explicit read-model retry can attach again and restart a failed shared observation. Closing a workspace releases even an observation that is still opening.
 - The shared source returns its stop callback at once. Disposal closes the old connection before a replacement opens, also while the old transport is still opening.
 - A streamed connection snapshot installs a new controller sequence bound, including when a host restart resets the sequence. It keeps `historyReplayGap` and drops buffered changes from the lost coverage. It replaces any pending initial read, so that read's later result or failure cannot replace recovered state. If the connection snapshot arrives during startup, no additional initial snapshot read is needed.
@@ -68,11 +68,17 @@ This owner does not load catalogs, file status, diff, selected history, or page 
 
 ## Transcript history
 
-Files: `history/session-history-loader.ts`, `history/session-history-load-policy.ts`, `history/session-history-freshness.ts`, `history/use-selected-session-history-load.ts`, and `packages/frontend-core/src/queries/agent-session-history.ts`.
+Files: `history/session-history-loader.ts`, `history/session-history-load-policy.ts`, `history/session-history-freshness.ts`, `history/use-selected-session-history-load.ts`, `history/active-session-history-keeper.ts`, and `packages/frontend-core/src/queries/agent-session-history.ts`.
 
 Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
 
-Each open workspace keeps its own attachment and transcript projection while another workspace is selected. Returning to that workspace uses its current history without another attachment. A connection snapshot checks history coverage against the observation epoch and session revision. A replay gap, unknown coverage, observation failure, or scoped runtime fault keeps affected history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
+Each open workspace keeps its own attachment and transcript projection while another workspace is selected. Returning to that workspace uses its current history without another attachment. A connection snapshot checks history coverage against the observation epoch and session revision. A recorded change that a transcript misses, an observation failure, or a scoped runtime fault makes affected history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
+
+A replay gap or unknown coverage makes loaded history `unverified`. The snapshot of the same envelope settles it in `buildAgentSessionLiveCollection` with `settleUnverifiedSessionHistory`. The host gives a session a new execution episode each time it starts to work. The transcript stays `loaded` when the session did not work when coverage ended, does not work now, and keeps its execution episode and its pending input. Otherwise it is `stale`.
+
+A remote connection that drops holds the live changes of each repository. When the host replay has every missed change of a repository, the transport delivers them in order without a new attachment, so loaded transcripts stay current. A replay gap or another host instance attaches again with `historyReplayGap`.
+
+Mobile loses its live stream while the phone sleeps, so it sets `keepActiveTranscriptsCurrent` on `AgentStudioStateProvider`. While the app resumes without a live connection, the transcript of a session that worked when the connection closed shows the loader until the reconnect delivers the missed changes or makes the transcript stale. Each open workspace then reads the history of its active sessions, which work or wait for input, and of the stale transcripts among its six most recent read ones. It reads one history at a time while the runtime of the session is ready. It does not retry a failed read, and it reads a session again only after its history loaded and went stale again.
 
 TanStack Query owns native history reads and their cancellation. The session store owns the merge with live messages. A late read cannot replace newer live text or tool results, restore removed responses or answered questions, or drop known tool timing. An unchanged merge keeps the message objects and transcript revision. Failed reads keep an actionable error and wait for a retry.
 
@@ -100,7 +106,7 @@ One command module owns session control. Task and workspace policy adapters supp
 
 ## Message queues
 
-Files: `packages/host/src/application/agent-sessions/agent-message-delivery-service.ts`, `agent-message-send-outcome.ts`, `agent-message-queue-registry.ts`, `agent-message-queue-model.ts`, `agent-message-session-conditions.ts`, `agent-session-live-change-publisher.ts`, `packages/host/src/composition/node/node-message-delivery.ts`, `packages/frontend-core/src/sessions/agent-message-queues-store.ts`, `handlers/message-queue-actions.ts`, `features/agent-chat-composer/message-delivery/use-agent-chat-send.ts`, `agent-chat-send-draft.ts`, `agent-chat-message-queue.tsx`, `agent-chat-queued-message-stack.tsx`, `agent-chat-queued-message-editor.tsx`, `packages/frontend-core/src/drafts/agent-chat-queued-message-drafts.ts`, `pages/agents/session-actions/use-agent-studio-send-target.ts`, and `lib/use-async-activity-tracker.ts`.
+Files: `packages/host/src/application/agent-sessions/agent-message-delivery-service.ts`, `agent-message-send-outcome.ts`, `agent-message-queue-registry.ts`, `agent-message-queue-model.ts`, `agent-message-session-conditions.ts`, `agent-session-live-change-publisher.ts`, `packages/host/src/composition/node/node-message-delivery.ts`, `packages/frontend-core/src/sessions/agent-message-queues-store.ts`, `handlers/message-queue-actions.ts`, `packages/frontend-core/src/sessions/send/use-agent-chat-send.ts`, `packages/frontend-core/src/sessions/send/agent-chat-send-draft.ts`, `agent-chat-message-queue.tsx`, `agent-chat-queued-message-stack.tsx`, `agent-chat-queued-message-editor.tsx`, `packages/frontend-core/src/drafts/agent-chat-queued-message-drafts.ts`, `pages/agents/session-actions/use-agent-studio-send-target.ts`, and `packages/frontend-core/src/lib/use-async-activity-tracker.ts`.
 
 The host owns each message queue, its order, its pause, and its automatic delivery. The queue lives in host memory for the app lifetime. [Queue and steering](runtime-integration-guide.md#queue-and-steering) states the adapter contract. The renderer store only projects the queue snapshots of the host.
 
@@ -154,7 +160,7 @@ The host detects shared notifications for all open workspaces. Shells deliver th
 
 ## Runtime readiness
 
-Files: `packages/frontend-core/src/queries/host-runtime-status.ts`, `packages/frontend-core/src/runtime/host-runtime-status-owner.ts`, `state/providers/host-runtime-status-provider.tsx`, `packages/frontend-core/src/lib/runtime-readiness.ts`, `lib/use-runtime-readiness.ts`, `packages/host/src/application/runtimes/host-runtime-service.ts`, and `packages/runtime-orchestration/src`.
+Files: `packages/frontend-core/src/queries/host-runtime-status.ts`, `packages/frontend-core/src/runtime/host-runtime-status-owner.ts`, `packages/frontend-core/src/app-state/providers/host-runtime-status-provider.ts`, `packages/frontend-core/src/lib/runtime-readiness.ts`, `packages/frontend-core/src/lib/use-runtime-readiness.ts`, `packages/host/src/application/runtimes/host-runtime-service.ts`, and `packages/runtime-orchestration/src`.
 
 Owns the host runtime status of each kind and the mapping to ready, checking, or blocked.
 
@@ -260,7 +266,7 @@ Rules:
 - Combine live summaries and durable records before selection. Resolve one candidate.
 - `selected-session-view-projection.ts` walks the facts once. Do not repeat its branch logic in hooks.
 - The view is passive. History and runtime-data owners make requests.
-- A transcript stays in loading until it has a baseline or live rows. `loaded`, `stale`, and `refreshing` keep a visible baseline. A failed refresh keeps the transcript with its error state.
+- A transcript stays in loading until it has a baseline or live rows. `loaded` and `unverified` show the baseline. A `stale` or `refreshing` transcript misses messages, so it shows the loader until the new read ends. A failed refresh shows the baseline with its error state.
 - `transcript/session-transcript-state.ts` owns runtime waiting, session loading, visible, and failed states.
 - Use `selectedSessionIdentity !== null` for existence. Do not add `hasSession`.
 - Keep `selectedSessionActivityState`, selected role, and `selectedSessionModel` as separate facts.
@@ -281,15 +287,20 @@ Task and workspace wrappers use this hook for Claude skill mentions, child pendi
 
 ### Rendered transcript cache
 
-Files: `components/features/agents/agent-chat/use-agent-chat-transcript-model.ts`, `agent-chat-transcript-model-cache.ts`, and `agent-chat-transcript-model-build.ts`.
+Files: `packages/frontend-core/src/sessions/transcript/use-agent-chat-transcript-model.ts`, `agent-chat-transcript-model-cache.ts`, `agent-chat-transcript-model-build.ts`, `agent-chat-transcript-cache-keeper.ts`, and `agent-chat-transcript-cache-provider.ts`.
 
-The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace chats share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. It updates cached inactive transcripts that came from the active repository session store. Unregistered Query-owned runtime history keeps its own rendered model. Selected and inactive transcripts use the same incremental update path and chunk limits. The cache retains the skill references used to display Claude skill mentions. Row keys use native message identity, so older history rows do not change the keys of visible rows.
+The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace chats share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. Unregistered Query-owned runtime history keeps its own rendered model. The cache retains the skill references used to display Claude skill mentions. Row keys use native message identity, so older history rows do not change the keys of visible rows.
 
-- Background updates preserve cache recency. Selection determines which entries stay cached.
-- Selection also schedules stale cached entries when their selected build stopped on deselection. Other inactive builds continue through the switch.
-- Stop older work when a newer message revision arrives, the session leaves the active repository, the cache drops its entry, or the chat unmounts.
-- A newly selected session shows current cached rows on its first render. If those rows still need work, show loading until they are ready. Keep already visible rows while a selected session processes a large revision.
-- Cache updates do not read history or call the host. History reads stay with the selected history owner.
+A change updates a model at once when at most 100 messages at the end changed. An append adds rows. Other changes cut the rows at the first changed message and build the rows from there. That message must keep its ID and its row, and the cut must not pass the system prompt row, which shows out of message order. Other changes need a full build in short slices.
+
+- A chat applies a change that updates at once during its render, so a chat that opens or returns shows current rows on its first frame. A transcript of at most 100 messages without a model also builds during render.
+- A full build runs after the render, in slices. A chat keeps its visible rows while it builds a large revision of the same session. A session without rows shows loading until its rows are ready.
+- A mounted chat builds its own session. It registers the session with the keeper while it shows.
+- The keeper updates the cached transcripts out of view. It waits `TRANSCRIPT_KEEP_DELAY_MS` (500 ms) after a store change so that live changes collect, then updates each changed transcript. A small change updates at once. Full builds run in slices, one at a time.
+- The keeper drops the rows of a removed session or a replaced collection at once. It stops a build when a newer revision arrives, the cache drops its entry, or a chat shows the session.
+- With `prepareActiveSessions`, the keeper also builds the transcripts of the active sessions of all open workspaces before the user opens them: up to six, with the most recent activity first, after their history loaded. It builds each active session once. A transcript that the cache drops waits for the user until the session stops and starts again. Mobile sets it, because it does not keep closed chats mounted.
+- Background updates preserve cache recency. Selection and preparation determine which entries stay cached.
+- Cache updates do not read history or call the host. History reads stay with the history owners.
 
 OpenCode live and history text-part rows keep the runtime's text, part IDs, and order. A final assistant event preserves separate parts and their whitespace when its text only trims a matching part. Changed final text still replaces a single part.
 
@@ -311,7 +322,7 @@ Files: `components/features/agents/agent-chat/use-agent-chat-transcript-navigati
 
 ## Session navigation
 
-Files: `state/read-models/session-navigation-read-model.ts`, `components/layout/sidebar/session-navigation-list.tsx`, `components/layout/sidebar/session-navigation-rail.tsx`, and `pages/sessions/sessions-page.tsx`.
+Files: `packages/frontend-core/src/sessions/navigation/session-navigation-read-model.ts`, `components/layout/sidebar/session-navigation-list.tsx`, `components/layout/sidebar/session-navigation-rail.tsx`, and `pages/sessions/sessions-page.tsx`.
 
 The sidebar owns task and workspace session navigation. It shows each durable root once in Needs you, Running, or Recent. The scope control changes the list between the current workspace and all open workspaces. It does not change the visible conversation. Collapsed icons keep the same groups and expose session details on hover and focus.
 
@@ -372,7 +383,7 @@ Deferred refreshes check the current view before each read. Branch and settings 
 
 Keep this hook in the session shell. Closing or hiding the Diffs tab only unmounts its view. Conflict assistance uses the same controller and keeps task workflow policy in the task adapter.
 
-`features/git-conflict-resolution` shares conflict controls and core prompt instructions. The task adapter retains the permitted Builder launch. The workspace adapter uses the existing saved-chat action owner through `use-workspace-conflict-chat-actions.ts`. A draft starts the same saved chat, and a direct request leaves the composer draft intact. Selection guards cancel an unsent request after a context change, while an accepted startup stays in its original workspace cache.
+`frontend-core/src/git/conflicts` shares the conflict copy, the actions model, and the conflict requests. `features/git-conflict-resolution` keeps the desktop conflict controls. The task adapter retains the permitted Builder launch. The workspace adapter uses the existing saved-chat action owner through `use-workspace-conflict-chat-actions.ts`. A draft starts the same saved chat, and a direct request leaves the composer draft intact. Selection guards cancel an unsent request after a context change, while an accepted startup stays in its original workspace cache.
 
 Git status supplies the effective conflict directory but uses the comparison branch as its target. The frontend marks that target unavailable. The retained conflict controller keeps operation and branch facts from the original command and updates its file paths from Git status.
 
@@ -397,7 +408,7 @@ Rules:
 
 ## Composer
 
-Files: `pages/agents/agent-studio-chat-surface-state.ts`, `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`, `components/features/agents/model-picker/*`, `features/agent-chat-composer/context-usage/*`, `features/agent-chat-composer/model-selection/*`, `features/agent-chat-composer/prompt-input/*`, `packages/frontend-core/src/queries/use-runtime-model-catalogs.ts`, and `state/mutations/use-agent-model-favorites.ts`.
+Files: `pages/agents/agent-studio-chat-surface-state.ts`, `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`, `components/features/agents/model-picker/*`, `packages/frontend-core/src/sessions/model-selection/*`, `features/agent-chat-composer/context-usage/*`, `features/agent-chat-composer/prompt-input/*`, `packages/frontend-core/src/queries/use-runtime-model-catalogs.ts`, and `state/mutations/use-agent-model-favorites.ts`.
 
 Owns model choices, favorites, search, draft scope, empty and kickoff state, context display, prompt-input runtime state, and runtime catalog queries.
 
@@ -413,7 +424,7 @@ Rules:
 - Pass selected identity and loaded session as separate facts. Do not make a composer session copy.
 - Use the selected key for thread layout and autofocus. Do not derive it again from loaded state.
 - Validate runtime, provider, and model against the target catalog before a model update.
-- Apply live model restrictions only when a native session identity exists. `model-selection-policy.ts` supplies the same profile and variant rules to visible options and selection actions. A saved workspace draft still uses startup model options.
+- Apply live model restrictions only when a native session identity exists. `resolveModelSelectionPolicy` in core supplies the same profile and variant rules to visible options and selection actions. A saved workspace draft still uses startup model options.
 - The shared host command updates the native model, saves the durable choice, then publishes metadata. If the save fails, restore the previous native model before releasing the owner permit. A publication failure after a successful save must not roll back the native model.
 - Core model-selection services own pure runtime, profile, variant, speed, and saved-choice rules. Client presentation and host enforcement use these rules.
 - Task and workspace composers present accepted session settings. The selected chat creates or reattaches its session before enabling Send. Model, effort, speed, and profile changes use the explicit settings operation. Send never chooses or repairs them.
@@ -423,13 +434,13 @@ Rules:
 - Task and workspace targets check the loaded session before attachment staging and before transport. The host checks current blocking input before work-starting preparation and again before dispatch.
 - A retained workspace pane owns its lifetime above React Activity. Each reveal prepares the selected session again before enabling its composer. Removing the pane or changing its recipient, workspace, or catalog target cancels a pending send.
 
-Build-tool worktree reads belong to `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts`. Their key is repository, task ID, and task version. Git refresh belongs to `use-agent-studio-build-worktree-refresh.ts`. Transcript display state does not control either read.
+Build-tool worktree reads belong to `frontend-core/src/git/task/use-task-git-panel.ts`, which `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts` uses. Their key is repository, task ID, and task version. Git refresh belongs to `use-agent-studio-build-worktree-refresh.ts`. Transcript display state does not control either read.
 
 ## Session actions
 
 Files: `handlers/session-actions.ts`, `handlers/send-agent-message.ts`, `handlers/stop-session.ts`, `handlers/session-model-actions.ts`, `handlers/pending-input-actions.ts`, and `handlers/public-operations.ts`.
 
-Owns interactive send, stop, model update, pending-input replies, and presentation. `features/session-start` owns launch requests.
+Owns interactive send, stop, model update, pending-input replies, and presentation. `packages/frontend-core/src/sessions/start` owns launch requests.
 
 The host owns complete workflow execution.
 
@@ -479,13 +490,13 @@ Rules:
 
 ## Session navigation
 
-Files: `pages/sessions/sessions-page.tsx`, `pages/sessions/session-views.tsx`, `pages/sessions/session-view-resolution.ts`, `pages/sessions/use-sessions-workspace-match.ts`, `features/session-navigation/session-navigation-target.ts`, `features/session-navigation/session-view-context.ts`, `features/session-navigation/session-view-visibility.tsx`, `features/session-navigation/visible-session-target.tsx`, `features/session-navigation/use-session-navigation-model.ts`, `state/read-models/session-navigation-read-model.ts`, `components/layout/sidebar/session-selection-scope.tsx`, and `components/layout/sidebar/workspace-sidebar.tsx`.
+Files: `pages/sessions/sessions-page.tsx`, `pages/sessions/session-views.tsx`, `pages/sessions/session-view-resolution.ts`, `pages/sessions/use-sessions-workspace-match.ts`, `features/session-navigation/sessions-route.ts`, `features/session-navigation/session-view-visibility.tsx`, `packages/frontend-core/src/sessions/navigation/session-navigation-target.ts`, `packages/frontend-core/src/sessions/navigation/session-view-context.ts`, `packages/frontend-core/src/sessions/navigation/visible-session-target.ts`, `packages/frontend-core/src/sessions/navigation/use-session-navigation-model.ts`, `packages/frontend-core/src/sessions/navigation/session-navigation-read-model.ts`, `components/layout/sidebar/session-selection-scope.tsx`, and `components/layout/sidebar/workspace-sidebar.tsx`.
 
 The Sessions page shows one content at a time. The `kind` query value selects task content or workspace session content, and that content owns the other query values.
 
 Rules:
 
-- Build each session address with `buildSessionNavigationHref`. A task session address names the workspace, task, native session ID, and role. A task context address names the workspace and task, and it can name a role. A workspace session address names the saved record ID.
+- Build each session address with `buildSessionNavigationHref` in `features/session-navigation/sessions-route.ts`. The URL scheme is desktop route code, so it stays out of `packages/frontend-core`. A task session address names the workspace, task, native session ID, and role. A task context address names the workspace and task, and it can name a role. A workspace session address names the saved record ID.
 - The workspace, task, and native session ID identify a stored task session. Read its runtime and working directory from the existing session read model. Keep those fields out of the URL.
 - An address or saved selection opens a session only when exactly one session of the task has its external ID. More matches show an error.
 - The address names its workspace. A new address for another workspace selects that workspace. A workspace change from elsewhere, such as the workspace rail, replaces the address with the address of the last kept view of that workspace and content kind. That address keeps only the page and selection keys. Thus a one-time request, such as a notification focus, does not repeat. This also applies while the address still waits for its own workspace. Without a kept view, the address names no selection. The content then restores its saved selection.
@@ -550,7 +561,7 @@ Startup is complete when task records and the first host snapshot have produced 
 
 | Rule | Main tests |
 |---|---|
-| Open workspace switches, inactive warming, launches, and release | `state/providers/agent-studio-state-provider.test.tsx`, `state/workspace-activity/workspace-session-live-source.test.ts` |
+| Open workspace switches, inactive warming, launches, and release | `state/agent-studio-workspace-transcripts.test.tsx`, `packages/frontend-core/src/app-state/providers/agent-studio-state-provider.test.tsx`, `packages/frontend-core/src/workspace-activity/workspace-session-live-source.test.ts` |
 | Reload keeps active and waiting sessions | `session-read-model/agent-session-live-projection.test.ts`, host adapter tests |
 | Snapshot comes before changes | `hooks/use-repo-session-read-model.test.tsx`, `agent-session-live-state-service.test.ts` |
 | Lost live evidence clears only live state | `session-read-model/agent-session-live-projection.test.ts` |

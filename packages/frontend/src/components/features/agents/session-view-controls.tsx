@@ -9,7 +9,7 @@ import { type ReactElement, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { SessionPanelsModel } from "@/features/session-panels";
 
 type SessionViewControlsProps = {

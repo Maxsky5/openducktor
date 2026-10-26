@@ -5,7 +5,7 @@ import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspac
 import {
   type TaskWorkflowActions,
   useRequiredTaskWorkflowActions,
-} from "@/features/task-workflow/task-workflow-actions-context";
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
 
 /** The latest active-workspace values when an intent runs. */

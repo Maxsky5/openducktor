@@ -1,6 +1,5 @@
 import { CircleCheckBig, Loader2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,11 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  formatActiveSessionStopLoadingMessage,
-  formatCleanupImpactMessage,
-  confirmButtonState,
-} from "./task-cleanup-impact-model";
+import { confirmButtonState } from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
+import { buildTaskCloseConfirmCopy } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
+import { TaskConfirmCopyLines } from "./task-confirm-copy-lines";
 import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
 
 export function TaskCloseConfirmDialog({
@@ -23,47 +20,25 @@ export function TaskCloseConfirmDialog({
   onOpenChange,
   onCancel,
   onConfirm,
-  taskId,
+  task,
   impact,
   operation,
   onCloseAutoFocus,
 }: TaskConfirmDialogProps): ReactElement {
-  const confirmButton = confirmButtonState(impact, operation, {
-    idle: "Close task",
-    pending: "Closing...",
-  });
+  const copy = buildTaskCloseConfirmCopy(task, impact);
+  const confirmButton = confirmButtonState(impact, operation, copy.confirmLabel);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
-          <DialogTitle>Close Task</DialogTitle>
-          <DialogDescription>Close {taskId} manually and move it to Done?</DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="py-4">
           <div className="flex flex-col gap-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-foreground">
-            <p className="font-medium">
-              This manual override moves the task to Done and bypasses unfinished workflow steps.
-            </p>
-            <p>No code is merged and no pull request is created, updated, or merged.</p>
-            <p>{terminalStopMessage(impact.terminalCount)}</p>
-            <TaskStopImpactNotice
-              count={impact.activeSessionCount}
-              error={impact.activeSessionCountError}
-              operation="close"
-            />
-            {impact.isLoadingStopImpact ? (
-              <p>{formatActiveSessionStopLoadingMessage("close")}</p>
-            ) : null}
-            <p>
-              {formatCleanupImpactMessage(impact, "close") ??
-                "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost."}
-            </p>
-            <p>
-              The task record, all artifacts, and linked history are retained. Free artifacts become
-              read-only.
-            </p>
+            <TaskConfirmCopyLines lines={copy.lines} />
           </div>
           {impact.error ? <p className="mt-2 text-destructive-muted">{impact.error}</p> : null}
           {operation.error ? (
@@ -93,10 +68,4 @@ export function TaskCloseConfirmDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function terminalStopMessage(terminalCount: number): string {
-  if (terminalCount === 0) return "No running task terminals will be stopped.";
-  const noun = terminalCount === 1 ? "terminal" : "terminals";
-  return `${terminalCount} task ${noun}, including action terminals, will be stopped before the task closes.`;
 }

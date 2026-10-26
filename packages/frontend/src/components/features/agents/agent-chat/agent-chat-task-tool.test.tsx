@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 
 const task = (id = "task-1"): PublicTaskSummaryTask => ({

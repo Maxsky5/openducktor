@@ -437,6 +437,56 @@ describe("useRuntimeModelCatalogs", () => {
     await harness.unmount();
   });
 
+  test("shows the workspace models in a new folder while its own catalog loads", async () => {
+    const client = createClientQueryClient();
+    const sharedWrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={client}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </QueryClientProvider>
+    );
+    const rootCatalog = { ...catalogFor("opencode"), defaultModelsByProvider: { root: "model" } };
+    const worktreeCatalog = {
+      ...catalogFor("opencode"),
+      defaultModelsByProvider: { worktree: "model" },
+    };
+    const worktreeRead = createDeferred<AgentRuntimeCatalog>();
+    const loadCatalog = mock((runtimeRef: RuntimeWorkingDirectoryRef) =>
+      runtimeRef.workingDirectory === "/repo"
+        ? Promise.resolve(createRuntimeCatalogFixture({ models: rootCatalog }))
+        : worktreeRead.promise,
+    );
+    const workspace = createHookHarness(
+      useRuntimeModelCatalogs,
+      {
+        repoPath: "/repo",
+        runtimeKinds: ["opencode"] as const,
+        enabledRuntimeKinds: ["opencode"] as const,
+        loadRuntimeCatalog: loadCatalog,
+      },
+      { wrapper: sharedWrapper },
+    );
+    await workspace.mount();
+    await workspace.waitFor((state) => state.resources[0]?.catalog !== null, 2000);
+
+    const session = createHookHarness(
+      useRuntimeModelCatalogQuery,
+      {
+        runtimeRef: { repoPath: "/repo", runtimeKind: "opencode", workingDirectory: "/repo/wt" },
+        loadRuntimeCatalog: loadCatalog,
+      },
+      { wrapper: sharedWrapper },
+    );
+    await session.mount();
+    expect(session.getLatest()).toEqual(
+      expect.objectContaining({ catalog: rootCatalog, isLoading: false, error: null }),
+    );
+
+    worktreeRead.resolve(createRuntimeCatalogFixture({ models: worktreeCatalog }));
+    await session.waitFor((state) => state.catalog === worktreeCatalog, 2000);
+    await session.unmount();
+    await workspace.unmount();
+  });
+
   test("shows one runtime directory as loading while its runtime starts", async () => {
     const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) =>
       runtimeCatalogFor(runtimeRef.runtimeKind),

@@ -17,7 +17,7 @@ import type { SessionPanelModel } from "./use-session-panels";
 import {
   SessionViewContext,
   useSessionViewShown,
-} from "../session-navigation/session-view-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 type Binding = {
   model: SessionPanelModel;

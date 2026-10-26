@@ -1,11 +1,11 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { type ReactElement, useReducer } from "react";
+import { deriveWorkspaceInitials } from "@openducktor/frontend-core/workspaces/workspace-tile-appearance";
 import {
-  deriveWorkspaceInitials,
   noColorTileClasses,
   tileColorFaceStyle,
   tileLabelSizeClass,
-} from "@/lib/workspace-tile-appearance";
+} from "@/lib/workspace-tile-styles";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceTileSource = Pick<

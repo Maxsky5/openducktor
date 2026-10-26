@@ -14,14 +14,14 @@ import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
   KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import {
   getCardLayout,
   type WorkflowPendingState,
-} from "@/components/features/kanban/kanban-task-footer";
-import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
+import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";

@@ -1,4 +1,4 @@
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -11,7 +11,7 @@ import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
-import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
+import type { AgentChatDraftScope } from "@openducktor/frontend-core/sessions/send/agent-chat-draft-scope";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 type AgentChatComposerSelectedSession = AgentSessionIdentity & {

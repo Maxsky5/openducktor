@@ -24,9 +24,18 @@ export const artifactQueryKeys = {
     ["task-artifacts", "collection", repoPath, taskId] as const,
   content: (repoPath: string, taskId: string, artifactId: string) =>
     ["task-artifacts", "content", repoPath, taskId, artifactId] as const,
+  /** A read that keeps the bytes outside the query cache, such as in a device file. */
+  file: (repoPath: string, taskId: string, artifactId: string) =>
+    ["task-artifacts", "file", repoPath, taskId, artifactId] as const,
 };
 
 export type TaskArtifactContent = { artifact: TaskArtifact; version: string; bytes: Uint8Array };
+export type TaskArtifactChunk = {
+  dataBase64: string;
+  byteOffset: number;
+  totalBytes: number;
+};
+const READ_CHUNK_BYTES = 1_048_576;
 const commits = new WeakMap<object, TaskEventCursor>();
 const saveOwners = new WeakMap<object, symbol>();
 
@@ -65,6 +74,56 @@ export const workflowKindForRole = (role: AgentRole): WorkflowTaskArtifact["work
   return "plan";
 };
 
+/**
+ * Reads one version of an artifact in chunks. `write` receives each chunk in order. The read fails
+ * when the artifact changes or a chunk does not continue it.
+ *
+ * It reads `context.signal` only after a chunk arrives. TanStack Query cancels a fetch that has
+ * read its signal when the last view unmounts, so a view that remounts would start the read again.
+ */
+export const readTaskArtifact = async (
+  queryClient: QueryClient,
+  scope: { repoPath: string; taskId: string; artifactId: string },
+  context: { readonly signal: AbortSignal },
+  write: (chunk: TaskArtifactChunk) => void | Promise<void>,
+): Promise<{ artifact: TaskArtifact; version: string }> => {
+  const host = connectionHost(queryClient);
+  let offset = 0;
+  let version: string | undefined;
+  let totalBytes: number | undefined;
+  while (true) {
+    const request: ArtifactReadRequest = {
+      ...scope,
+      byteOffset: offset,
+      maxBytes: READ_CHUNK_BYTES,
+    };
+    if (version) request.expectedVersion = version;
+    const chunk = await host.taskArtifactRead(request);
+    // Let a shared first chunk finish when its preview unmounts; explicit cancellation still drops it.
+    if (context.signal.aborted) throw new CancelledError();
+    if (chunk.byteOffset !== offset || (version && chunk.version !== version)) {
+      throw new Error(
+        "The artifact changed while loading. Open it again to read its current content.",
+      );
+    }
+    totalBytes ??= chunk.totalBytes;
+    const next = offset + decodedByteSize(chunk.dataBase64);
+    if (next > totalBytes || chunk.totalBytes !== totalBytes) {
+      throw new Error("The artifact read returned an invalid size. Open it again.");
+    }
+    await write({ dataBase64: chunk.dataBase64, byteOffset: offset, totalBytes });
+    version = chunk.version;
+    if (chunk.nextByteOffset === null) {
+      if (next !== totalBytes) throw new Error("The artifact read is incomplete. Open it again.");
+      return { artifact: chunk.artifact, version };
+    }
+    if (chunk.nextByteOffset !== next || next <= offset) {
+      throw new Error("The artifact read did not advance. Open it again.");
+    }
+    offset = next;
+  }
+};
+
 export const taskArtifactContentQueryOptions = (
   queryClient: QueryClient,
   repoPath: string,
@@ -74,45 +133,17 @@ export const taskArtifactContentQueryOptions = (
   queryOptions({
     queryKey: artifactQueryKeys.content(repoPath, taskId, artifactId),
     queryFn: async (context): Promise<TaskArtifactContent> => {
-      const host = connectionHost(queryClient);
-      let offset = 0;
-      let version: string | undefined;
-      let bytes: Uint8Array | undefined;
-      while (true) {
-        const request: ArtifactReadRequest = {
-          repoPath,
-          taskId,
-          artifactId,
-          byteOffset: offset,
-          maxBytes: 1_048_576,
-        };
-        if (version) request.expectedVersion = version;
-        const chunk = await host.taskArtifactRead(request);
-        // Let a shared first chunk finish when its preview unmounts; explicit cancellation still drops it.
-        if (context.signal.aborted) throw new CancelledError();
-        if (chunk.byteOffset !== offset || (version && chunk.version !== version)) {
-          throw new Error(
-            "The artifact changed while loading. Open it again to read its current content.",
-          );
-        }
-        if (!bytes) bytes = new Uint8Array(chunk.totalBytes);
-        const binary = decodeBase64(chunk.dataBase64);
-        if (offset + binary.length > bytes.length || chunk.totalBytes !== bytes.length) {
-          throw new Error("The artifact read returned an invalid size. Open it again.");
-        }
-        bytes.set(binary, offset);
-        version = chunk.version;
-        const next = offset + binary.length;
-        if (chunk.nextByteOffset === null) {
-          if (next !== bytes.length)
-            throw new Error("The artifact read is incomplete. Open it again.");
-          return { artifact: chunk.artifact, version, bytes };
-        }
-        if (chunk.nextByteOffset !== next || next <= offset) {
-          throw new Error("The artifact read did not advance. Open it again.");
-        }
-        offset = next;
-      }
+      let bytes = new Uint8Array(0);
+      const read = await readTaskArtifact(
+        queryClient,
+        { repoPath, taskId, artifactId },
+        context,
+        ({ dataBase64, byteOffset, totalBytes }) => {
+          if (byteOffset === 0) bytes = new Uint8Array(totalBytes);
+          bytes.set(decodeBase64(dataBase64), byteOffset);
+        },
+      );
+      return { ...read, bytes };
     },
     structuralSharing: (previous, incoming) => {
       // SAFETY: this query key holds only TaskArtifactContent values.
@@ -170,7 +201,7 @@ export const refreshArtifactQueries = async (
         { silent: true, revert: false },
       );
       if (
-        query.queryKey[1] === "content" &&
+        query.queryKey[1] !== "collection" &&
         change?.removedArtifactIds.includes(String(query.queryKey[4]))
       ) {
         queryClient.getQueryCache().remove(query);
@@ -265,11 +296,12 @@ const scopeFilter = (repoPath: string, taskIds?: readonly string[]) => ({
     query.queryKey[2] === repoPath && (!taskIds || taskIds.includes(String(query.queryKey[3]))),
 });
 
+const decodedByteSize = (value: string): number =>
+  (value.length / 4) * 3 - (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0);
+
 const decodeBase64 = (value: string): Uint8Array => {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const output = new Uint8Array(
-    (value.length / 4) * 3 - (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0),
-  );
+  const output = new Uint8Array(decodedByteSize(value));
   for (let index = 0, offset = 0; index < value.length; index += 4) {
     const bits =
       (alphabet.indexOf(value[index]!) << 18) |

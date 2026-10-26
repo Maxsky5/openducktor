@@ -16,6 +16,8 @@
     "browser:dev": "cd packages/openducktor-web && bun run dev",
     "browser:client": "cd packages/openducktor-web && bun run dev:client",
     "marketing:dev": "bun run --filter @openducktor/marketing-website dev",
+    "android": "cd apps/mobile && bun run android",
+    "ios": "cd apps/mobile && bun run ios",
     "hooks:install": "husky",
     "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",
@@ -71,12 +73,16 @@
     "rollup": "^4.59.0",
     "tmp": "^0.2.7",
     "undici@^6": "^6.29.1",
-    "undici@^7": "^7.30.1"
+    "undici@^7": "^7.30.1",
+    "zod": "^4.6.6"
   },
   "engines": {
     "node": ">=22.6.0"
   },
   "packageManager": "bun@1.4.3",
+  "patchedDependencies": {
+    "@shopify/flash-list@2.3.3": "patches/@shopify%2Fflash-list@2.3.3.patch"
+  },
   "trustedDependencies": [
     "electron-winstaller",
     "esbuild",

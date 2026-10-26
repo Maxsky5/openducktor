@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 import type { AgentChatForkActions } from "./agent-chat-fork-context";
-import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import type {
+  AgentMessageSubmitMode,
   ChatSettings,
-  AgentSessionUsageLimit,
   RuntimeApprovalReplyOutcome,
-  RuntimeKind,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -19,119 +18,24 @@ import type {
   AgentSubagentCatalog,
   AgentSubagentReference,
 } from "@openducktor/core";
-import type {
-  AgentMessageQueueAction,
-  AgentMessageQueueSnapshot,
-  AgentMessageSubmitMode,
-} from "@openducktor/contracts";
 import type { MutableRefObject, RefObject } from "react";
-import type {
-  ModelPickerFavoriteState,
-  ModelPickerRuntime,
-  ModelPickerSelectionPolicy,
-  ModelPickerValue,
-} from "@/components/features/agents/model-picker";
-import type { SpeedControlModel } from "@/components/features/agents/speed-select";
+import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
-  AgentSessionIdentity,
-  SessionMessagesState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import type { AgentChatDraftScope } from "@openducktor/frontend-core/sessions/send/agent-chat-draft-scope";
 import type {
-  AgentChatComposerAttachment,
-  AgentChatComposerDraft,
-} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
-import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
-
-export type AgentChatEmptyStateModel = {
-  title: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  actionDisabled?: boolean;
-  isActionPending?: boolean;
-};
-
-export type AgentChatTranscriptSession = AgentSessionIdentity & {
-  title?: string;
-  activityState: AgentSessionActivityState | null;
-  runtimeStatusMessage: string | null;
-  messages: SessionMessagesState;
-  pendingQuestions: AgentQuestionRequest[];
-  skillReferences?: readonly AgentSkillReference[];
-};
-
-export type AgentChatTranscriptNoticeAction = {
-  label: string;
-  onAction: () => void;
-  disabled?: boolean;
-  isPending?: boolean;
-};
-
-export type AgentChatTranscriptNotice = {
-  kind:
-    | "runtime_waiting"
-    | "session_loading"
-    | "session_failed"
-    | "session_history_warning"
-    | "runtime_blocked"
-    | "catalog_warning";
-  severity: "loading" | "error";
-  title: string;
-  description: string;
-  details?: Array<{ label: string; value: string }>;
-  action?: AgentChatTranscriptNoticeAction;
-};
-
-type AgentChatTranscriptPresentationBase = {
-  repoPath: string | null;
-  target: AgentSessionTranscriptTarget | null;
-  displayedSessionKey: string | null;
-  notice: AgentChatTranscriptNotice | null;
-};
-
-export type AgentChatTranscriptPresentation = AgentChatTranscriptPresentationBase &
-  (
-    | {
-        kind: "session";
-        session: AgentChatTranscriptSession;
-        shouldResetWindow: false;
-      }
-    | {
-        kind: "empty";
-        session: null;
-        shouldResetWindow: boolean;
-      }
-  );
-
-export type AgentChatTaskToolName = "create_task" | "search_tasks" | "update_task";
-
-export type AgentChatToolCallPresentation =
-  | {
-      kind: "regular" | "workflow";
-      displayName: string;
-    }
-  | { kind: "artifact"; displayName: string; operation: "set" | "delete" }
-  | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName }
-  /** An `odt_browser_*` call. `action` is the browser action, such as `click`. */
-  | { kind: "browser"; displayName: string; action: string };
-
-export type AgentChatRuntimePresentation = {
-  runtimeKind: RuntimeKind | null;
-  presentToolCall: (toolName: string, displayLabel?: string) => AgentChatToolCallPresentation;
-  supportedApprovalReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
-};
-
-export type AgentChatInterruptedTurnResumeModel = {
-  isPending: boolean;
-  isDisabled?: boolean;
-  error: string | null;
-  onResume: () => void;
-  usageLimit?: AgentSessionUsageLimit | undefined;
-};
+  AgentChatEmptyStateModel,
+  AgentChatRuntimePresentation,
+  AgentChatInterruptedTurnResumeModel,
+  AgentChatPendingSendGroup,
+  AgentChatModelPicker,
+  AgentChatMessageQueueModel,
+} from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 
 export type AgentChatThreadModel = {
   forkActions?: AgentChatForkActions | null;
@@ -163,50 +67,6 @@ export type AgentChatThreadModel = {
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
-};
-
-export type AgentChatPendingSendAttachment = Pick<
-  AgentChatComposerAttachment,
-  "kind" | "mime" | "name"
->;
-
-export type AgentChatPendingSendGroupKey = "review_comments" | "browser_annotations";
-
-/** Items, such as review comments, that the next regular message carries after the user text. */
-export type AgentChatPendingSendGroup = {
-  key: AgentChatPendingSendGroupKey;
-  count: number;
-  accessibleLabel: string;
-  /** A save problem. Send stays available. */
-  warning?: string;
-  /** Files that the next message adds. Send checks them like composer attachments. */
-  attachments?: {
-    items: AgentChatPendingSendAttachment[];
-    /** Tells the user how to send the items without these files. */
-    removalHint: string;
-  };
-};
-
-export type AgentChatModelPicker = {
-  runtimes: ModelPickerRuntime[];
-  value: ModelPickerValue | null;
-  selectionPolicy: ModelPickerSelectionPolicy;
-  favoriteState: ModelPickerFavoriteState;
-  onValueChange: (value: ModelPickerValue) => void;
-  onOpenChange: (open: boolean) => void;
-};
-
-/** Queue actions that need no new content. A save carries an edited draft instead. */
-export type AgentChatMessageQueueAction = Exclude<AgentMessageQueueAction, { kind: "save_edit" }>;
-
-export type AgentChatMessageQueueModel = {
-  queue: AgentMessageQueueSnapshot | null;
-  onAction: (action: AgentChatMessageQueueAction) => Promise<void>;
-  /** `editId` names the edit that the host reserved, so a stale Save cannot end a newer edit. */
-  onSaveEdit: (
-    edit: { readonly submissionId: string; readonly editId: string },
-    draft: AgentChatComposerDraft,
-  ) => Promise<void>;
 };
 
 export type AgentChatComposerModel = {

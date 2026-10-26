@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
-import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
-import { getGitConflictCopy } from "@/features/git-conflict-resolution";
+import type { GitConflict, GitConflictAction } from "@openducktor/frontend-core/git/contracts";
 import {
+  detectedGitConflict,
+  CONFLICT_ABORT_REFRESH_FAILED_TITLE,
+  CONFLICT_ABORT_UNAVAILABLE_MESSAGE,
+} from "@openducktor/frontend-core/git/conflicts/conflict-copy";
+import {
+  abortGitConflict,
+  isAbortableGitConflict,
+} from "@openducktor/frontend-core/git/conflicts/abort-git-conflict";
+import {
+  describeConflictRequestReceipt,
   GitConflictRequestCancelled,
   type ResolveGitConflict,
-} from "@/features/git-conflict-resolution/conflict-assistance";
+} from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 import {
   CONFLICT_LOCK_REASON,
   type RefreshGitDiffData,
@@ -118,18 +127,7 @@ export function useAgentStudioGitConflictController({
   const localConflict = state.directoryKey === directoryKey ? state.localConflict : null;
 
   const fallbackDetectedConflict = useMemo(
-    () =>
-      detectedConflictedFiles.length > 0
-        ? ({
-            operation: null,
-            currentBranch: branch,
-            targetBranch: "",
-            conflictedFiles: detectedConflictedFiles,
-            output:
-              "Git did not report the conflict operation. Restore the operation information before asking for assistance or aborting.",
-            workingDir,
-          } satisfies GitConflict)
-        : null,
+    () => detectedGitConflict({ branch, conflictedFiles: detectedConflictedFiles, workingDir }),
     [branch, detectedConflictedFiles, workingDir],
   );
 
@@ -216,7 +214,7 @@ export function useAgentStudioGitConflictController({
     [isCurrentContext, directoryKey, worktreeStatusSnapshotKey],
   );
 
-  const abortGitConflict = useCallback(async (): Promise<void> => {
+  const abortConflict = useCallback(async (): Promise<void> => {
     if (!activeGitConflict || reservation.current) {
       return;
     }
@@ -226,27 +224,30 @@ export function useAgentStudioGitConflictController({
       return;
     }
 
-    if (!activeGitConflict.operation || !activeGitConflict.workingDir) {
-      setRebaseError("Restore the Git conflict operation and directory before aborting.");
+    if (!isAbortableGitConflict(activeGitConflict)) {
+      setRebaseError(CONFLICT_ABORT_UNAVAILABLE_MESSAGE);
       return;
     }
     reservation.current = true;
     const version = selection.current.version;
+    const isCurrentSelection = () =>
+      selection.current.version === version && selection.current.mounted;
     dispatch({ type: "start_action", action: "abort" });
     try {
-      await host.gitAbortConflict(
-        repoPath,
-        activeGitConflict.operation,
-        activeGitConflict.workingDir,
-      );
-      if (!isCurrentContext()) {
-        await refreshDiffData("soft");
+      const result = await abortGitConflict(host, repoPath, activeGitConflict);
+      if (result.kind === "failed") {
+        if (!isCurrentContext()) return;
+        const message = toErrorMessage(result.error, "Failed to abort the git conflict.");
+        if (isCurrentSelection()) {
+          setRebaseError(message);
+          toast.error(result.title, { description: message });
+        }
         return;
       }
-      if (selection.current.version === version && selection.current.mounted) {
+      if (isCurrentContext() && isCurrentSelection()) {
         clearActionErrors();
         dispatch({ type: "clear_local_conflict", closeModal: true });
-        toast.success(getGitConflictCopy(activeGitConflict.operation).abortedToastTitle);
+        toast.success(result.title);
       }
 
       try {
@@ -254,19 +255,10 @@ export function useAgentStudioGitConflictController({
       } catch (error) {
         if (!isCurrentContext()) return;
         const message = toErrorMessage(error, "Git conflict was aborted, but diff refresh failed.");
-        if (selection.current.version === version && selection.current.mounted) {
+        if (isCurrentSelection()) {
           setRebaseError(message);
-          toast.error("Conflict aborted but refresh failed", { description: message });
+          toast.error(CONFLICT_ABORT_REFRESH_FAILED_TITLE, { description: message });
         }
-      }
-    } catch (error) {
-      if (!isCurrentContext()) return;
-      const message = toErrorMessage(error, "Failed to abort the git conflict.");
-      if (selection.current.version === version && selection.current.mounted) {
-        setRebaseError(message);
-        toast.error(getGitConflictCopy(activeGitConflict.operation).abortFailureTitle, {
-          description: message,
-        });
       }
     } finally {
       reservation.current = false;
@@ -321,30 +313,15 @@ export function useAgentStudioGitConflictController({
       assertCurrent();
       if (!receipt) return;
       clearActionErrors();
-      if (
-        (receipt.outcome === "accepted" || receipt.outcome === "acknowledged") &&
-        receipt.postAcceptanceFailure
-      ) {
-        setRebaseError(
-          `The agent accepted the message, but a later host step failed: ${receipt.postAcceptanceFailure}`,
-        );
-        toast.error(`Message accepted by ${conflictRecipientLabel}; host step failed`, {
-          description: receipt.postAcceptanceFailure,
-        });
-      } else if (receipt.outcome === "uncertain") {
-        setRebaseError(
-          "Delivery of the conflict resolution request is uncertain. Inspect the original session before sending it again.",
-        );
-        toast.error("Conflict resolution request has no confirmed result");
+      const outcome = describeConflictRequestReceipt(receipt, conflictRecipientLabel);
+      if (outcome.kind === "host_step_failed") {
+        setRebaseError(outcome.message);
+        toast.error(outcome.title, { description: outcome.detail });
+      } else if (outcome.kind === "uncertain") {
+        setRebaseError(outcome.message);
+        toast.error(outcome.title);
       } else {
-        toast.success(
-          receipt.outcome === "queued" ||
-            (receipt.outcome === "accepted" &&
-              receipt.acceptedMessage.type === "user_message" &&
-              receipt.acceptedMessage.state === "queued")
-            ? `Queued git conflict resolution request for ${conflictRecipientLabel}`
-            : `Sent git conflict resolution request to ${conflictRecipientLabel}`,
-        );
+        toast.success(outcome.title);
       }
     } catch (error) {
       if (
@@ -384,7 +361,7 @@ export function useAgentStudioGitConflictController({
     gitActionsLockReason,
     showLockReasonBanner,
     captureFreshConflict,
-    abortGitConflict,
+    abortGitConflict: abortConflict,
     askBuilderToResolveGitConflict: askForHelp,
   };
 }

@@ -1,30 +1,29 @@
-import type {
-  AgentSessionUserMessagePart,
-  AutopilotOutcome,
-  AutopilotRecoveryClaimInput,
-  AutopilotRecoveryClaimResult,
-} from "@openducktor/contracts";
-import { AUTOPILOT_ACTION_DEFINITIONS } from "@openducktor/core";
+import type { AutopilotOutcome } from "@openducktor/contracts";
 import { toast } from "sonner";
-import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import {
+  AUTOPILOT_FAILURE_TITLE,
+  AUTOPILOT_NOT_CLAIMED_DESCRIPTION,
+  AUTOPILOT_RETRY_MESSAGE_LABEL,
+  autopilotFailedDescription,
+  autopilotFailedTitle,
+  autopilotNotClaimedTitle,
+  autopilotRecoveryTitle,
+  autopilotSkippedTitle,
+} from "@openducktor/frontend-core/autopilot/autopilot-outcome-copy";
+import {
+  type AutopilotFailedOutcome,
+  type AutopilotRecovery,
+  type AutopilotRecoveryPorts,
+  createAutopilotRecovery,
+  retryAutopilotRecovery,
+} from "@openducktor/frontend-core/autopilot/autopilot-recovery";
+import { RESULT_UNKNOWN_TITLE } from "@openducktor/frontend-core/lib/command-outcome";
 
-export type AutopilotOutcomePresenterPorts = {
-  claimRecovery: (input: AutopilotRecoveryClaimInput) => Promise<AutopilotRecoveryClaimResult>;
-  /** Sends the unsent first instruction through the normal session send path. */
-  sendMessage: (
-    session: AgentSessionIdentity,
-    instruction: AgentSessionUserMessagePart[],
-  ) => Promise<void>;
+export type AutopilotOutcomePresenterPorts = AutopilotRecoveryPorts & {
   /** Another view shows this host session error, so its notification skips the in-app toast. */
   markInAppFeedbackHandled: (errorId: string) => void;
-  /** The session send path works only in the selected workspace. */
-  isWorkspaceSelected: (workspaceId: string) => boolean;
   refreshTaskViews: (repoPath: string, taskId: string) => Promise<void>;
 };
-
-type FailedOutcome = Extract<AutopilotOutcome, { kind: "failed" }>;
 
 const FAILURE_TOAST_ID = "autopilot-failure";
 const RECOVERY_TOAST_CLASS_NAMES = {
@@ -34,22 +33,6 @@ const RECOVERY_TOAST_CLASS_NAMES = {
 };
 
 const toastId = (outcome: AutopilotOutcome): string => `autopilot:${outcome.outcomeId}`;
-const actionLabel = (outcome: AutopilotOutcome): string =>
-  AUTOPILOT_ACTION_DEFINITIONS[outcome.actionId].label;
-
-/** The first-message recovery of one failed launch. It outlives each replacement toast. */
-type Recovery = {
-  outcome: FailedOutcome;
-  session: AgentSessionIdentity;
-  instruction: AgentSessionUserMessagePart[];
-  message: string;
-  /** This client holds the host claim, so it can send again without a new claim. */
-  claimed: boolean;
-  /** A claim or send runs now. */
-  pending: boolean;
-  /** The instruction reached the session, or another client owns the recovery. */
-  done: boolean;
-};
 
 /**
  * Shows Autopilot outcomes from the host. Each outcome appears once in a page session, and a
@@ -58,7 +41,7 @@ type Recovery = {
  */
 export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenterPorts) => {
   const shown = new Set<string>();
-  const recoveries = new Map<string, Recovery>();
+  const recoveries = new Map<string, AutopilotRecovery>();
   const toastIdsByWorkspace = new Map<string, Set<string>>();
 
   const track = (outcome: AutopilotOutcome): string => {
@@ -69,89 +52,61 @@ export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenter
     return id;
   };
 
-  const showRecovery = (recovery: Recovery): void => {
+  const showRecovery = (recovery: AutopilotRecovery): void => {
     const { outcome } = recovery;
-    toast.error(
-      `Autopilot started ${actionLabel(outcome)} for ${outcome.task.id}, but the first message failed.`,
-      {
-        id: toastId(outcome),
-        description: recovery.message,
-        duration: Infinity,
-        classNames: RECOVERY_TOAST_CLASS_NAMES,
-        action: {
-          label: "Retry message",
-          onClick: () => {
-            void retry(recovery);
-          },
+    toast.error(autopilotRecoveryTitle(outcome), {
+      id: toastId(outcome),
+      description: recovery.message,
+      duration: Infinity,
+      classNames: RECOVERY_TOAST_CLASS_NAMES,
+      action: {
+        label: AUTOPILOT_RETRY_MESSAGE_LABEL,
+        onClick: () => {
+          void retry(recovery);
         },
       },
-    );
+    });
   };
 
   // A retry does nothing while a claim or send runs, or after the recovery ended.
-  const retry = async (recovery: Recovery): Promise<void> => {
-    if (recovery.pending || recovery.done) return;
-    const { outcome } = recovery;
-    if (!recovery.claimed && !ports.isWorkspaceSelected(outcome.workspaceId)) {
-      recovery.message = `Select the workspace of ${outcome.task.id}, then retry the message.`;
+  const retry = async (recovery: AutopilotRecovery): Promise<void> => {
+    const result = await retryAutopilotRecovery(recovery, ports);
+    if (result === "workspace_not_selected" || result === "failed") {
       showRecovery(recovery);
       return;
     }
-    recovery.pending = true;
-    try {
-      // Only one client can send the instruction again.
-      if (!recovery.claimed) {
-        const claim = await ports.claimRecovery({
-          workspaceId: outcome.workspaceId,
-          outcomeId: outcome.outcomeId,
-        });
-        if (!claim.claimed) {
-          recovery.done = true;
-          toast.info(`Autopilot did not send the message for ${outcome.task.id} again.`, {
-            id: toastId(outcome),
-            description:
-              "A retry already ran for this message, or a later Autopilot action replaced it. Open the session to check it, then send a new message if needed.",
-          });
-          return;
-        }
-        recovery.claimed = true;
-      }
-      await ports.sendMessage(recovery.session, recovery.instruction);
-      recovery.done = true;
-    } catch (cause) {
-      recovery.message = errorMessage(cause);
-      showRecovery(recovery);
-    } finally {
-      recovery.pending = false;
+    if (result === "unknown") {
+      toast.warning(RESULT_UNKNOWN_TITLE, {
+        id: toastId(recovery.outcome),
+        description: recovery.message,
+        duration: Infinity,
+      });
+      return;
+    }
+    if (result === "not_claimed") {
+      const { outcome } = recovery;
+      toast.info(autopilotNotClaimedTitle(outcome), {
+        id: toastId(outcome),
+        description: AUTOPILOT_NOT_CLAIMED_DESCRIPTION,
+      });
     }
   };
 
-  const presentFailed = (outcome: FailedOutcome): void => {
+  const presentFailed = (outcome: AutopilotFailedOutcome): void => {
     const id = track(outcome);
     const { launch } = outcome;
     // This toast shows the failure, so the host error notification skips its in-app toast.
     const errorId = launch?.failure?.noticeId ?? outcome.notificationId;
     if (errorId) ports.markInAppFeedbackHandled(errorId);
-    if (launch?.session && launch.unsentInstruction) {
-      const recovery: Recovery = {
-        outcome,
-        session: toAgentSessionIdentity(launch.session),
-        instruction: launch.unsentInstruction,
-        message: outcome.message,
-        claimed: false,
-        pending: false,
-        done: false,
-      };
+    const recovery = createAutopilotRecovery(outcome);
+    if (recovery) {
       recoveries.set(outcome.outcomeId, recovery);
       showRecovery(recovery);
       return;
     }
-    const nextStep = launch?.session
-      ? "Open the session to check it, then start the action again if needed."
-      : "Fix the cause, then start the action from the task.";
-    toast.error(`Autopilot could not start ${actionLabel(outcome)} for ${outcome.task.id}.`, {
+    toast.error(autopilotFailedTitle(outcome), {
       id,
-      description: `${outcome.message} ${nextStep}`,
+      description: autopilotFailedDescription(outcome),
       duration: Infinity,
     });
   };
@@ -174,7 +129,7 @@ export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenter
       // The host notification shows a started session.
       if (outcome.kind === "started") return;
       if (outcome.kind === "skipped") {
-        toast.info(`Autopilot skipped ${actionLabel(outcome)} for ${outcome.task.id}.`, {
+        toast.info(autopilotSkippedTitle(outcome), {
           id: track(outcome),
           description: outcome.reason,
         });
@@ -187,7 +142,7 @@ export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenter
         toast.dismiss(FAILURE_TOAST_ID);
         return;
       }
-      toast.error("Autopilot cannot evaluate task changes.", {
+      toast.error(AUTOPILOT_FAILURE_TITLE, {
         id: FAILURE_TOAST_ID,
         description: failure,
         duration: Infinity,

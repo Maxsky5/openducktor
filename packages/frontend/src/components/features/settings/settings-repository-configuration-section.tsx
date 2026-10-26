@@ -2,7 +2,7 @@ import type { GitBranch, SettingsRepoConfig } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
-import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { toBranchSelectorOptions } from "@openducktor/frontend-core/lib/branch-selector-model";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

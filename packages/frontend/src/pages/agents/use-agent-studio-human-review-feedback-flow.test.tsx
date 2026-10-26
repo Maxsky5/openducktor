@@ -155,7 +155,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       await updateFeedbackMessage(harness, "   ");
       await confirmFeedbackModal(harness);
 
-      expect(toastErrorMock).toHaveBeenCalledWith("Feedback message is required.");
+      expect(toastErrorMock).toHaveBeenCalledWith("Feedback message is required.", undefined);
       expect(startSessionRequest).toHaveBeenCalledTimes(0);
       expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
 

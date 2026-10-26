@@ -12,7 +12,10 @@ import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
-import { checkBadgeVariant, checkLabel } from "./task-execution-ci-presentation";
+import {
+  checkBadgeVariant,
+  checkLabel,
+} from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import { TaskExecutionCiTimestampLine } from "./task-execution-ci-timestamp-line";
 
 const CHECK_ICON_BY_VARIANT = {

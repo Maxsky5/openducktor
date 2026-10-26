@@ -11,8 +11,8 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { MessageBody } from "./agent-chat-message-card-content";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
-import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 enableReactActEnvironment();
 

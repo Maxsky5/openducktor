@@ -1,4 +1,4 @@
-import type { GitConflict } from "@/features/agent-studio-git";
+import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import type { AgentsPageBuildTools } from "./use-agents-page-build-tools";
 
 type BuildToolsSnapshot = AgentsPageBuildTools["buildToolsSnapshot"];

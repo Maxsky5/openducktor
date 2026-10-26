@@ -1,0 +1,148 @@
+name: Release Mobile
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (for example v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: Upload iOS to TestFlight
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      # A full tag ref, so a branch with the same name cannot replace the tag.
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup
+
+      - name: Install the signing certificate and profile
+        env:
+          CERTIFICATE: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          echo "$PROFILE" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          uuid="$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$RUNNER_TEMP/profile.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/"$uuid.mobileprovision"
+          echo "IOS_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")" >> "$GITHUB_ENV"
+
+      # The signing plugin signs only the app target. Signing settings on the xcodebuild command line
+      # also reach the Pods targets. Store build numbers must always increase, so each run and rerun
+      # gets a higher one.
+      - name: Archive the release build
+        working-directory: apps/mobile
+        env:
+          OPENDUCKTOR_IOS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          export OPENDUCKTOR_MOBILE_BUILD_NUMBER=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          bun run build:page
+          OPENDUCKTOR_IOS_PROVISIONING_PROFILE_NAME="$IOS_PROFILE_NAME" bunx expo prebuild --platform ios --clean --no-install
+          (cd ios && pod install)
+          xcodebuild archive -workspace ios/OpenDucktor.xcworkspace -scheme OpenDucktor -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/OpenDucktor.xcarchive"
+
+      - name: Upload to TestFlight
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict><key>com.openducktor.mobile</key><string>$IOS_PROFILE_NAME</string></dict>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/OpenDucktor.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey_$KEY_ID.p8" -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
+
+  android:
+    name: Upload Android to Google Play and the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup
+
+      # The release reads the Gradle cache that the CI builds of main write.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('bun.lock') }}
+          restore-keys: gradle-
+
+      # The App Bundle goes to Google Play. The APK goes to the GitHub release, for a direct install.
+      - name: Build the signed App Bundle and APK
+        working-directory: apps/mobile
+        env:
+          UPLOAD_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
+          OPENDUCKTOR_ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          OPENDUCKTOR_ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          OPENDUCKTOR_ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          export OPENDUCKTOR_MOBILE_BUILD_NUMBER=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          export OPENDUCKTOR_ANDROID_UPLOAD_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks"
+          echo "$UPLOAD_KEYSTORE" | base64 --decode > "$OPENDUCKTOR_ANDROID_UPLOAD_KEYSTORE_PATH"
+          bun run build:page
+          bunx expo prebuild --platform android --clean --no-install
+          cd android
+          JAVA_HOME="$JAVA_HOME_21_X64" ./gradlew :app:bundleRelease :app:assembleRelease --build-cache \
+            --no-daemon
+
+      - name: Upload to Google Play internal testing
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.openducktor.mobile
+          releaseFiles: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
+
+      - name: Attach the APK to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          apk="$RUNNER_TEMP/OpenDucktor-${TAG#v}-android.apk"
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$apk"
+          gh release upload "$TAG" "$apk" --repo "$GITHUB_REPOSITORY" --clobber

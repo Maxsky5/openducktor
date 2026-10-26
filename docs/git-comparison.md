@@ -69,12 +69,15 @@ When an agent of an open workspace ends a turn, the Git data of its working dire
 
 ## Panel integration
 
-The shared comparison control, check, refresh path, and read projection live in `packages/frontend/src/features/agent-studio-git`:
+The comparison check, refresh path, and read projection live in `packages/frontend-core/src/git`, so the desktop and mobile clients share them:
 
 - `reads/use-git-panel-reads.ts` observes local changes and Branch changes with TanStack Query.
 - `refresh/git-refresh-coordinator.ts` is plain TypeScript. It runs the refresh steps in order and keeps the manual Refresh state of each context.
-- `refresh/use-git-refresh.ts` gives each render's view to the coordinator and starts the focus refresh.
+- `refresh/use-git-refresh.ts` gives each render's view to the coordinator. It starts a `scheduled` refresh each time the `AppVisibility` port reports a return to the app.
 - `session-comparison-view.ts` builds the panel data from the reads and the checked comparison.
+- `task/use-task-git-panel.ts` and `workspace-session/use-workspace-session-git-panel.ts` connect these parts for a task and for a workspace session.
+
+The comparison branch control stays in `packages/frontend/src/features/agent-studio-git/use-session-comparison-control.ts`.
 
 Scope adapters own task persistence and workspace app memory. Keep Git action ownership mounted across tab and panel closure so a pending command retains its original directory, target, and operation lock. The dynamic-tabs task `openduckto-k0u1t` owns tab names and layout changes.
 

@@ -1,13 +1,16 @@
-import { newWorktreeBranchState } from "./workspace-session-new-worktree-branch";
-import {
-  type AgentSessionForkPoint,
-  type WorkspaceSession,
-  type WorkspaceSessionForkInput,
-  type WorkspaceSessionWorktreeInput,
-  workspaceSessionForkInputSchema,
+import type {
+  AgentSessionForkPoint,
+  WorkspaceSession,
+  WorkspaceSessionWorktreeInput,
 } from "@openducktor/contracts";
+import {
+  FORK_CHAT_TEXT,
+  forkSourceFolder,
+  initialForkWorktree,
+  type WorkspaceSessionForkDestination,
+  workspaceSessionForkInput,
+} from "@openducktor/frontend-core/workspace-sessions/fork/workspace-session-fork-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { basenameForPath } from "@openducktor/path-support";
 import { Folder, GitBranch, LoaderCircle } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { toast } from "sonner";
@@ -28,7 +31,7 @@ import { forkWorkspaceSession } from "@openducktor/frontend-core/sessions/sessio
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { workspaceSessionValidationError } from "./workspace-session-create-input";
+import { workspaceSessionValidationError } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-create-input";
 import { NewWorktreeBranchFields, WorktreeNameField } from "./workspace-session-worktree-inputs";
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 
@@ -58,42 +61,32 @@ export function WorkspaceSessionForkDialog({
   const queryClient = useQueryClient();
   const store = useAgentSessionsContext();
   const config = useQuery(repoConfigQueryOptions(workspace.workspaceId));
-  const directory = record.executionTarget.workingDirectory;
-  const folderName = basenameForPath(directory) || directory;
-  const [destination, setDestination] =
-    useState<WorkspaceSessionForkInput["destination"]["kind"]>("same_folder");
-  const [worktree, setWorktree] = useState<WorkspaceSessionWorktreeInput>(() => ({
-    mode: "from_name",
-    name: record.executionTarget.kind === "local_worktree" ? `${folderName}-fork` : "",
-    branchName: null,
-  }));
+  const { name: folderName, directory } = forkSourceFolder(record);
+  const [destination, setDestination] = useState<WorkspaceSessionForkDestination>("same_folder");
+  const [worktree, setWorktree] = useState<WorkspaceSessionWorktreeInput>(() =>
+    initialForkWorktree(record),
+  );
   const [failure, setFailure] = useState<Error | null>(null);
   const worktreeError = workspaceSessionValidationError(failure);
-  const branch = newWorktreeBranchState(worktree, config.data?.branchPrefix);
-  const parsed = workspaceSessionForkInputSchema.safeParse({
+  const input = workspaceSessionForkInput({
     workspaceId: workspace.workspaceId,
-    sessionId: record.id,
-    forkPoint: point,
-    destination:
-      destination === "same_folder"
-        ? { kind: "same_folder" }
-        : {
-            kind: "new_worktree",
-            name: worktree.name,
-            branchName: worktree.branchName || branch.defaultBranch,
-          },
+    record,
+    point,
+    destination,
+    worktree,
+    branchPrefix: config.data?.branchPrefix,
   });
   const changeWorktree = (value: WorkspaceSessionWorktreeInput): void => {
     setFailure(null);
     setWorktree(value);
   };
   const submit = () => {
-    if (pending || disabledReason || !parsed.success) return;
+    if (pending || disabledReason || !input) return;
     setFailure(null);
-    void forkWorkspaceSession(queryClient, store, workspace.repoPath, source, parsed.data)
+    void forkWorkspaceSession(queryClient, store, workspace.repoPath, source, input)
       .then((result) => {
         if (result.syncWarning)
-          toast.warning("The fork was created", { description: result.syncWarning });
+          toast.warning(FORK_CHAT_TEXT.forkedWithWarning, { description: result.syncWarning });
         onForked(result.record);
       })
       .catch((cause: unknown) => {
@@ -113,10 +106,8 @@ export function WorkspaceSessionForkDialog({
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader className="border-b border-border px-6 py-4">
-          <DialogTitle>Fork chat</DialogTitle>
-          <DialogDescription>
-            Copy the conversation through this reply, then choose where the new chat works.
-          </DialogDescription>
+          <DialogTitle>{FORK_CHAT_TEXT.title}</DialogTitle>
+          <DialogDescription>{FORK_CHAT_TEXT.description}</DialogDescription>
         </DialogHeader>
         <form
           className="flex min-h-0 flex-col"
@@ -131,24 +122,26 @@ export function WorkspaceSessionForkDialog({
                 value={destination}
                 onValueChange={setDestination}
                 disabled={pending}
-                ariaLabel="Fork work location"
+                ariaLabel={FORK_CHAT_TEXT.locationLabel}
                 options={[
                   {
                     value: "same_folder",
-                    label: "Same folder",
-                    description: "Work with the files already here.",
+                    label: FORK_CHAT_TEXT.sameFolder,
+                    description: FORK_CHAT_TEXT.sameFolderDescription,
                     icon: Folder,
                   },
                   {
                     value: "new_worktree",
-                    label: "New worktree",
-                    description: "Start from the last commit in the source folder.",
+                    label: FORK_CHAT_TEXT.newWorktree,
+                    description: FORK_CHAT_TEXT.newWorktreeDescription,
                     icon: GitBranch,
                   },
                 ]}
               />
               <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
-                <p className="text-xs font-medium text-muted-foreground">Source folder</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {FORK_CHAT_TEXT.sourceFolder}
+                </p>
                 <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
                     <Folder aria-hidden="true" className="size-4 shrink-0" />
@@ -189,7 +182,7 @@ export function WorkspaceSessionForkDialog({
                     alwaysExpanded
                   />
                   <p className="text-sm text-muted-foreground">
-                    Uncommitted changes in the source folder do not go to the new worktree.
+                    {FORK_CHAT_TEXT.uncommittedChanges}
                   </p>
                 </div>
               ) : null}
@@ -209,12 +202,9 @@ export function WorkspaceSessionForkDialog({
                 <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={pending || disabledReason !== null || !parsed.success}
-                >
+                <Button type="submit" disabled={pending || disabledReason !== null || !input}>
                   {pending ? <LoaderCircle className="animate-spin" /> : null}
-                  {pending ? "Forking chat…" : "Fork chat"}
+                  {pending ? FORK_CHAT_TEXT.confirming : FORK_CHAT_TEXT.confirm}
                 </Button>
               </div>
             </DialogFooter>

@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "preserve",
+    "customConditions": ["react-native"],
+    "types": ["bun-types", "react-native"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/test-support",
+    "scripts",
+    "app.config.ts",
+    "src/theme/unistyles.ts"
+  ],
+  "exclude": ["src/platform/react-native-websocket.d.ts"]
+}

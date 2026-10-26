@@ -75,7 +75,9 @@ describe("Electron DevTools active port file", () => {
       const activePortPath = path.join(directory, "DevToolsActivePort");
       const controller = new AbortController();
       const portPromise = waitForDevToolsActivePort(activePortPath, controller.signal);
-      await sleep(0);
+      // Electron writes the file after it starts. The macOS directory watcher can start after
+      // `watch` returns, so a file that appears at once can come before the watcher.
+      await sleep(100);
       await writeFile(activePortPath, "45678\n/devtools/browser/example\n");
       expect(await portPromise).toBe(45_678);
     } finally {

@@ -4,15 +4,20 @@ import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-ico
 import { Button } from "@/components/ui/button";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
 import { cn } from "@/lib/utils";
+import {
+  type SessionEntryDotTone,
+  sessionEntryDotTone,
+} from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type {
   SessionNavigationEntry,
   SessionNavigationSourceIssue,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import {
   ATTENTION_REASON_LABELS,
   sessionEntryRuntimeLabel,
   sessionSourceIssueText,
-} from "./session-navigation-entry-model";
+  visibleAttentionReasons,
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
 
 export function AttentionBadge({
   label,
@@ -35,8 +40,7 @@ export function AttentionBadge({
 
 /** Keep requests visible without repeating the task's blocked status badge. */
 export function AttentionBadges({ entry }: { entry: SessionNavigationEntry }): ReactElement | null {
-  const taskIsBlocked = entry.context.kind === "task" && entry.context.task.status === "blocked";
-  const reasons = entry.attention.filter((reason) => reason !== "blocked" || !taskIsBlocked);
+  const reasons = visibleAttentionReasons(entry);
   if (reasons.length === 0) return null;
   return (
     <span className="flex shrink-0 items-center gap-1">
@@ -122,6 +126,15 @@ type SessionEntryStatusDotProps = {
   className?: string;
 };
 
+/** The read state dots. A running session shows the running dot instead. */
+const DOT_CLASSES = {
+  input_unread: "bg-status-input-unread",
+  input_read: "bg-status-input-read",
+  running: "bg-status-running",
+  unread: "bg-status-unread",
+  read: "bg-status-read",
+} satisfies Record<SessionEntryDotTone, string>;
+
 /** Activity and read state share one fixed space in both sidebar layouts. */
 export function SessionEntryStatusDot({
   entry,
@@ -129,12 +142,10 @@ export function SessionEntryStatusDot({
   id,
   className,
 }: SessionEntryStatusDotProps): ReactElement {
-  const waiting = entry.attention.length > 0;
-  const running = entry.status.kind === "running" && !waiting;
+  const tone = sessionEntryDotTone(entry, unread);
+  const running = tone === "running";
   const readLabel = unread ? "Unread session" : "Session read";
   const label = running ? "Session running" : readLabel;
-  let dotClassName = unread ? "bg-status-unread" : "bg-status-read";
-  if (waiting) dotClassName = unread ? "bg-status-input-unread" : "bg-status-input-read";
   return (
     <span
       id={id}
@@ -145,7 +156,7 @@ export function SessionEntryStatusDot({
       {running ? (
         <RunningStatusDot size="sm" />
       ) : (
-        <span aria-hidden="true" className={cn("size-2.5 rounded-full", dotClassName)} />
+        <span aria-hidden="true" className={cn("size-2.5 rounded-full", DOT_CLASSES[tone])} />
       )}
       <span className="sr-only">{label}</span>
     </span>

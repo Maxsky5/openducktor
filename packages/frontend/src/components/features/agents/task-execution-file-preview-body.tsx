@@ -2,15 +2,15 @@ import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { EditorFocus } from "@/types/editor-focus";
 import { lazy, Suspense, type ReactElement, type RefObject, useState, useCallback } from "react";
 import type { MarkdownImageProps } from "../task-description-editor/task-description-image-context";
-import { isChatLocalDestination } from "./agent-chat/agent-chat-file-link";
+import { isChatLocalDestination } from "@openducktor/frontend-core/sessions/messages/chat-file-link";
 import { MarkdownFileImage } from "./markdown-file-image";
 import {
-  isMarkdownFile,
   type TaskExecutionSelectedFile,
   taskExecutionSelectedFileKey,
 } from "./task-execution-file-explorer-model";
 import { TaskExecutionFileCodeView, type CodeViewFile } from "./task-execution-file-code-view";
 import type { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
+import { isMarkdownFile } from "@openducktor/frontend-core/lib/markdown-file";
 
 export type FilePreviewSnapshot = {
   selectedFile: TaskExecutionSelectedFile;

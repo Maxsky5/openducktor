@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { ArrowUpRightFromSquare, CircleCheckBig, RotateCcw, Undo2 } from "lucide-react";
 import type { ReactElement } from "react";
 import {
@@ -7,63 +6,8 @@ import {
   QaRoleIcon,
   SpecRoleIcon,
 } from "@/lib/agent-role-presentation";
-import { isQaRejectedTask } from "@/lib/task-qa";
-import type { TaskWorkflowAction } from "./kanban-task-workflow";
-
-type TaskActionLabelOptions = {
-  surface?: "kanban" | "agent_studio";
-};
-
-export const taskActionLabel = (
-  action: TaskWorkflowAction,
-  task: TaskCard,
-  options: TaskActionLabelOptions = {},
-): string => {
-  if (action === "set_spec") {
-    return task.status === "spec_ready" ? "Open Spec" : "Start Spec";
-  }
-  if (action === "set_plan") {
-    return "Start Planner";
-  }
-  if (action === "open_spec") {
-    return "Open Spec";
-  }
-  if (action === "open_planner") {
-    return "Open Planner";
-  }
-  if (action === "open_builder") {
-    return "Open Builder";
-  }
-  if (action === "open_qa") {
-    return "Open QA";
-  }
-  if (action === "reset_implementation") {
-    return "Reset Implementation";
-  }
-  if (action === "reset_task") {
-    return "Reset Task";
-  }
-  if (action === "close_task") {
-    return "Close Task";
-  }
-  if (action === "build_start") {
-    if (isQaRejectedTask(task)) {
-      return "Address QA Feedbacks";
-    }
-    return options.surface === "agent_studio" ? "Start Implementation" : "Start Builder";
-  }
-  if (action === "qa_start") {
-    return "Request QA Review";
-  }
-  if (action === "human_approve") {
-    return "Approve Task";
-  }
-  if (action === "human_request_changes") {
-    return "Request Changes";
-  }
-  const exhaustive: never = action;
-  return exhaustive;
-};
+import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import { taskActionTone } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 
 export const TASK_ACTION_ICON = {
   set_spec: <SpecRoleIcon className="size-3.5" />,
@@ -81,34 +25,25 @@ export const TASK_ACTION_ICON = {
   human_request_changes: <Undo2 className="size-3.5" />,
 } satisfies Record<TaskWorkflowAction, ReactElement>;
 
+const PRIMARY_ACTION_VARIANTS = {
+  prominent: "default",
+  neutral: "outline",
+  destructive: "destructive",
+  warning: "warning",
+} as const;
+
+const MENU_ACTION_VARIANTS = {
+  prominent: "ghost",
+  neutral: "ghost",
+  destructive: "destructiveGhost",
+  warning: "warningGhost",
+} as const;
+
 export const taskPrimaryActionVariant = (
   action: TaskWorkflowAction,
-): "default" | "outline" | "destructive" | "warning" => {
-  if (action === "build_start" || action === "qa_start" || action === "human_approve") {
-    return "default";
-  }
-  if (action === "reset_implementation" || action === "reset_task") {
-    return "destructive";
-  }
-  if (action === "close_task") {
-    return "warning";
-  }
-  return "outline";
-};
-
-export const taskActionIsDestructive = (action: TaskWorkflowAction): boolean =>
-  action === "reset_implementation" || action === "reset_task";
-
-export const taskActionIsWarning = (action: TaskWorkflowAction): boolean => action === "close_task";
+): "default" | "outline" | "destructive" | "warning" =>
+  PRIMARY_ACTION_VARIANTS[taskActionTone(action)];
 
 export const taskMenuActionVariant = (
   action: TaskWorkflowAction,
-): "ghost" | "destructiveGhost" | "warningGhost" => {
-  if (taskActionIsDestructive(action)) {
-    return "destructiveGhost";
-  }
-  if (taskActionIsWarning(action)) {
-    return "warningGhost";
-  }
-  return "ghost";
-};
+): "ghost" | "destructiveGhost" | "warningGhost" => MENU_ACTION_VARIANTS[taskActionTone(action)];

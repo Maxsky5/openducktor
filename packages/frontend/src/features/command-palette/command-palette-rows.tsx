@@ -9,10 +9,11 @@ import {
 import { WorkspaceTile } from "@/components/layout/workspace-tile";
 import { Badge } from "@/components/ui/badge";
 import { CommandItem } from "@/components/ui/command";
-import { useSessionUnread } from "@/features/session-navigation/session-read-state";
-import { statusBadgeClassName, statusLabel } from "@/lib/task-status-presentation";
+import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { statusBadgeClassName } from "@/lib/task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { cn } from "@/lib/utils";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { MatchedText } from "./command-palette-match";
 import type {
   PaletteAction,

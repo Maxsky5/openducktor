@@ -3,7 +3,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import {
   type TaskWorkflowActions,
   TaskWorkflowActionsContext,
-} from "@/features/task-workflow/task-workflow-actions-context";
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";

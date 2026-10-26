@@ -5,7 +5,8 @@ import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanb
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
-import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
+import { statusBadgeClassName } from "@/lib/task-status-presentation";
+import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 
 const SUBTASKS_ICON = <GitBranch className="size-3.5" />;
 

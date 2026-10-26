@@ -4,10 +4,12 @@ import { cn } from "@/lib/utils";
 import {
   getToolDuration,
   getToolLifecyclePhase,
-  hasNonEmptyInput,
-  hasNonEmptyText,
-} from "./agent-chat-message-card-model";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import {
+  readToolDetailAvailability,
+  workflowToolStatusLabel,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { toolIcon } from "./agent-chat-tool-icon";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
 import { ToolJsonDetails } from "./agent-chat-tool-json-details";
@@ -16,39 +18,33 @@ import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-m
 const WORKFLOW_TOOL_APPEARANCE = {
   preparing: {
     activity: "preparing",
-    label: "PREPARING",
     statusClassName: "border-info-border bg-info-surface text-info-surface-foreground",
     foregroundClassName: "text-info-surface-foreground",
   },
   queued: {
     activity: null,
-    label: "PREPARING",
     statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
     foregroundClassName: "text-pending-surface-foreground",
   },
   executing: {
     activity: "running",
-    label: "RUNNING",
     statusClassName: "border-info-border bg-info-surface text-info-surface-foreground",
     foregroundClassName: "text-info-surface-foreground",
   },
   failed: {
     activity: null,
-    label: "FAILED",
     statusClassName:
       "border-destructive-border bg-destructive-surface text-destructive-surface-foreground",
     foregroundClassName: "text-destructive-surface-foreground",
   },
   cancelled: {
     activity: null,
-    label: "CANCELLED",
     statusClassName:
       "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground",
     foregroundClassName: "text-cancelled-surface-foreground",
   },
   completed: {
     activity: null,
-    label: null,
     statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
     foregroundClassName: "text-success-surface-foreground",
   },
@@ -56,7 +52,6 @@ const WORKFLOW_TOOL_APPEARANCE = {
   ReturnType<typeof getToolLifecyclePhase>,
   {
     activity: ToolMessageActivity;
-    label: string | null;
     statusClassName: string;
     foregroundClassName: string;
   }
@@ -84,17 +79,12 @@ export const WorkflowToolMessage = ({
   action,
 }: WorkflowToolMessageProps): ReactElement => {
   const durationMs = getToolDuration(meta, messageTimestamp);
-  const hasInput = hasNonEmptyInput(meta.input);
-  const hasOutput = Boolean(meta.resultContent?.length) || hasNonEmptyText(meta.output);
-  const hasError = hasNonEmptyText(meta.error);
+  const { hasInput, hasOutput, hasError } = readToolDetailAvailability(meta);
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const isFailure = lifecyclePhase === "failed";
-  const {
-    activity,
-    label: statusLabel,
-    statusClassName,
-    foregroundClassName,
-  } = WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];
+  const statusLabel = workflowToolStatusLabel(lifecyclePhase);
+  const { activity, statusClassName, foregroundClassName } =
+    WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];
 
   return (
     <div className="flex min-w-0 flex-col gap-2">

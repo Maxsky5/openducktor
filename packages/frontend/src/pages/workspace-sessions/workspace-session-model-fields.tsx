@@ -2,13 +2,13 @@ import { SpeedSelect } from "@/components/features/agents/speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import type { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+import type { useWorkspaceSessionCreateModelPicker } from "./use-workspace-session-model-picker";
 
 export function WorkspaceSessionModelFields({
   model,
   disabled,
 }: {
-  model: ReturnType<typeof useWorkspaceSessionModelPicker>;
+  model: ReturnType<typeof useWorkspaceSessionCreateModelPicker>;
   disabled: boolean;
 }) {
   return (

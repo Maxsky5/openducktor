@@ -6,13 +6,13 @@ import { createTestClientConnection } from "@openducktor/frontend-core/test-supp
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import { ChatFileLinkProvider } from "./agent-chat-file-link-provider";
-import { parseChatFileLink } from "./agent-chat-file-link";
+import { parseChatFileLink } from "@openducktor/frontend-core/sessions/messages/chat-file-link";
 import type { ChatFileLinkOwner } from "./agent-chat-file-link-context";
 import {
   chatFileLinkSuffixes,
   validChatFileDestinations,
   invalidChatFileDestinations,
-} from "./agent-chat-file-link.test-fixtures";
+} from "@openducktor/frontend-core/test-support/chat-file-link-fixtures";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
 enableReactActEnvironment();

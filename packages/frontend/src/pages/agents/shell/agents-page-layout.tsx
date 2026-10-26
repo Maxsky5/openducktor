@@ -1,4 +1,4 @@
-import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
+import type { SessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import { ChatArtifactLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-provider";
@@ -20,7 +20,7 @@ import { WorkflowRail } from "@/components/features/agents/agent-studio-header-w
 import { SessionOpenInAction } from "@/components/features/agents/session-open-in-action";
 import { SessionViewControls } from "@/components/features/agents/session-view-controls";
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import type { GitDiffRefresh } from "@openducktor/frontend-core/git/contracts";
 import {
   BottomPanelSplit,
   type SessionPanelModel,

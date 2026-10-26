@@ -18,42 +18,45 @@ import type {
   ModelPickerRuntime,
   ModelPickerSelectionPolicy,
   ModelPickerValue,
-} from "@/components/features/agents/model-picker";
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import {
   modelPickerResourceFromCatalogQuery,
   selectableModelPickerCatalog,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
-} from "@/components/features/agents/model-picker";
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
-import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
-import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
+import type { AgentStudioContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/context-usage-resolution";
+import { useSelectedSessionContextUsage } from "@openducktor/frontend-core/sessions/composer/context-usage/use-selected-session-context-usage";
+import { resolveModelSelectionOptions } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
 import {
   type ChatComposerModelSelectionSource,
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
-} from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
-import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
-import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
-import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
-import type { SpeedControlModel } from "@/components/features/agents/speed-select";
+} from "@openducktor/frontend-core/sessions/model-selection/model-selection-preferences";
+import { useDraftModelSelectionState } from "@openducktor/frontend-core/sessions/model-selection/use-draft-model-selection";
+import { useModelSelectionActions } from "@openducktor/frontend-core/sessions/model-selection/use-model-selection-actions";
+import { useSpeedControl } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
+import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import {
   type ChatComposerPromptInputRuntimeSource,
   resolveChatComposerPromptInputRuntime,
-} from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
-import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
-import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
-import { useChatComposerCatalogRefresh } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-catalog-refresh";
-import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
-import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
-import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
-import { availableDefaultSessionSelectionFor } from "@/features/session-start/session-start-selection";
+} from "@openducktor/frontend-core/sessions/composer/prompt-input/chat-composer-prompt-input-runtime";
+import { createChatComposerFileSearch } from "@openducktor/frontend-core/sessions/composer/prompt-input/create-chat-composer-file-search";
+import { resolveRuntimePromptInputSupport } from "@openducktor/frontend-core/sessions/composer/prompt-input/runtime-prompt-input-support";
+import { useChatComposerCatalogRefresh } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-chat-composer-catalog-refresh";
+import { useChatComposerSkills } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-chat-composer-skills";
+import { useChatComposerSlashCommands } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-chat-composer-slash-commands";
+import { useChatComposerSubagents } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-chat-composer-subagents";
+import { availableDefaultSessionSelectionFor } from "@openducktor/frontend-core/sessions/session-start-selection";
 import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
 import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { type RuntimeReadiness, useRuntimeReadiness } from "@/lib/use-runtime-readiness";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import {
+  type RuntimeReadiness,
+  useRuntimeReadiness,
+} from "@openducktor/frontend-core/lib/use-runtime-readiness";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { retryRuntimeCatalog } from "@openducktor/frontend-core/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
@@ -407,8 +410,8 @@ export function useAgentStudioChatComposer({
   );
 
   const selectedSessionContextUsage = useSelectedSessionContextUsage({
-    selectedSession: loadedSession,
-    sessionModelCatalog,
+    contextUsage: loadedSession?.contextUsage,
+    catalog: sessionModelCatalog,
     selectedModelEntry,
   });
 

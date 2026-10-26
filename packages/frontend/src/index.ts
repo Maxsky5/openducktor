@@ -9,9 +9,6 @@ export {
   createDisabledAppUpdateBridge,
   type ShellBridge,
   type ShellCapabilities,
-  type TerminalBridge,
-  type TerminalTransportConnection,
-  type TerminalTransportState,
 } from "./lib/shell-bridge";
 export {
   bootstrapOpenDucktorShell,

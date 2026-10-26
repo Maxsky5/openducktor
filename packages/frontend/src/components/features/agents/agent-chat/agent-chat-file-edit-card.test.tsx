@@ -3,8 +3,8 @@ import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps, ReactElement } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import type { FileEditData } from "./agent-chat-message-card-model";
-import { extractAllFileEditData } from "./file-edit-tool";
+import type { FileEditData } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import { extractAllFileEditData } from "@openducktor/frontend-core/sessions/messages/file-edit-tool";
 
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
 let AgentChatSettingsProvider: typeof import("./agent-chat-settings-context").AgentChatSettingsProvider;

@@ -24,15 +24,15 @@ import {
 } from "@/features/session-panels";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
-import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
+import { usePublishVisibleSessionTarget } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import {
   OnSessionViewHide,
   WhileSessionViewShown,
 } from "@/features/session-navigation/session-view-visibility";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
+import { useArchiveWorkspaceSession } from "@openducktor/frontend-core/workspace-sessions/use-archive-workspace-session";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,
@@ -45,7 +45,7 @@ import { SessionViewControls } from "@/components/features/agents/session-view-c
 import { SessionRepoActions } from "@/components/features/repository-actions/session-repo-actions";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
-import { useMountedRef } from "./use-mounted-ref";
+import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
 import { useVisibleSessionId } from "./use-visible-session-id";
@@ -496,7 +496,6 @@ function useWorkspaceSessionArchive({
     worktreeConfirmation?: { workingDirectory: string; branchName: string },
   ) => {
     const apply = async () => {
-      archive.reset();
       try {
         await archive.mutateAsync({
           workspaceId: workspace.workspaceId,

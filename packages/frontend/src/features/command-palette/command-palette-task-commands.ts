@@ -1,5 +1,5 @@
-import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
-import { runTaskWorkflowAction } from "@/features/task-workflow/run-task-workflow-action";
+import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
+import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
 import type { PaletteTaskCommand, PaletteTaskView } from "./command-palette-task-model";
 import type { PaletteTask } from "./command-palette-types";
 import type { WorkspaceIntent } from "./use-workspace-intent-runner";

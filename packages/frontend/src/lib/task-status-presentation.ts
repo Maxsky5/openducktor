@@ -1,5 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { KanbanColumnId } from "@openducktor/core";
+import {
+  statusTone,
+  type TaskStatusTone,
+} from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 
 type KanbanLaneTheme = {
   boardSurfaceClass: string;
@@ -10,9 +14,7 @@ type KanbanLaneTheme = {
   emptyStateClass: string;
 };
 
-type TaskStatusPresentation = {
-  label: string;
-  badgeClassName: string;
+type TaskStatusLaneTheme = {
   laneTheme?: KanbanLaneTheme;
 };
 
@@ -26,8 +28,6 @@ const DEFAULT_LANE_THEME: KanbanLaneTheme = {
 
 const TASK_STATUS_PRESENTATION = {
   open: {
-    label: "Backlog",
-    badgeClassName: "border-input bg-muted text-foreground",
     laneTheme: {
       boardSurfaceClass: "border-border/90 bg-muted/60",
       headerSurfaceClass: "bg-muted/80",
@@ -38,8 +38,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   spec_ready: {
-    label: "Spec ready",
-    badgeClassName: "border-pending-border bg-pending-surface text-pending-muted",
     laneTheme: {
       boardSurfaceClass:
         "border-violet-200/90 dark:border-violet-800/60 bg-violet-50/55 dark:bg-violet-950/30",
@@ -52,8 +50,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   ready_for_dev: {
-    label: "Ready for dev",
-    badgeClassName: "border-info-border bg-info-surface text-info-muted",
     laneTheme: {
       boardSurfaceClass: "border-sky-200/90 dark:border-sky-800/60 bg-sky-50/55 dark:bg-sky-950/30",
       headerSurfaceClass: "bg-sky-50/75 dark:bg-sky-950/40",
@@ -64,8 +60,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   in_progress: {
-    label: "In progress",
-    badgeClassName: "border-warning-border bg-warning-surface text-warning-muted",
     laneTheme: {
       boardSurfaceClass:
         "border-amber-200/90 dark:border-amber-800/60 bg-amber-50/55 dark:bg-amber-950/30",
@@ -78,8 +72,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   blocked: {
-    label: "Blocked needs input",
-    badgeClassName: "border-destructive-border bg-destructive-surface text-destructive-muted",
     laneTheme: {
       boardSurfaceClass:
         "border-rose-200/90 dark:border-rose-800/60 bg-rose-50/55 dark:bg-rose-950/30",
@@ -92,9 +84,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   ai_review: {
-    label: "AI review",
-    badgeClassName:
-      "border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300",
     laneTheme: {
       boardSurfaceClass:
         "border-indigo-200/90 dark:border-indigo-800/60 bg-indigo-50/55 dark:bg-indigo-950/30",
@@ -107,9 +96,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   human_review: {
-    label: "Human review",
-    badgeClassName:
-      "border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300",
     laneTheme: {
       boardSurfaceClass:
         "border-cyan-200/90 dark:border-cyan-800/60 bg-cyan-50/55 dark:bg-cyan-950/30",
@@ -122,8 +108,6 @@ const TASK_STATUS_PRESENTATION = {
     },
   },
   closed: {
-    label: "Done",
-    badgeClassName: "border-success-border bg-success-surface text-success-muted",
     laneTheme: {
       boardSurfaceClass:
         "border-emerald-200/90 dark:border-emerald-800/60 bg-emerald-50/55 dark:bg-emerald-950/30",
@@ -135,13 +119,24 @@ const TASK_STATUS_PRESENTATION = {
         "border-emerald-300 dark:border-emerald-800 bg-card/80 text-emerald-700 dark:text-emerald-300",
     },
   },
-} satisfies Record<TaskCard["status"], TaskStatusPresentation>;
+} satisfies Record<TaskCard["status"], TaskStatusLaneTheme>;
 
-export const statusLabel = (status: TaskCard["status"]): string =>
-  TASK_STATUS_PRESENTATION[status].label;
+/** Badge classes of each status tone. Light and dark themes use the same semantic tokens. */
+const STATUS_TONE_BADGE_CLASS_NAMES = {
+  neutral: "border-input bg-muted text-foreground",
+  pending: "border-pending-border bg-pending-surface text-pending-muted",
+  info: "border-info-border bg-info-surface text-info-muted",
+  warning: "border-warning-border bg-warning-surface text-warning-muted",
+  destructive: "border-destructive-border bg-destructive-surface text-destructive-muted",
+  review:
+    "border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300",
+  approval:
+    "border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300",
+  success: "border-success-border bg-success-surface text-success-muted",
+} satisfies Record<TaskStatusTone, string>;
 
 export const statusBadgeClassName = (status: TaskCard["status"]): string =>
-  TASK_STATUS_PRESENTATION[status].badgeClassName;
+  STATUS_TONE_BADGE_CLASS_NAMES[statusTone(status)];
 
 export const laneTheme = (columnId: KanbanColumnId): KanbanLaneTheme =>
   TASK_STATUS_PRESENTATION[columnId].laneTheme ?? DEFAULT_LANE_THEME;

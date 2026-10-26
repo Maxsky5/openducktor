@@ -1,7 +1,7 @@
 import {
   SessionViewContext,
   SessionViewShownContext,
-} from "@/features/session-navigation/session-view-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, useQuery } from "@tanstack/react-query";
@@ -39,7 +39,7 @@ import * as sessionChat from "./workspace-session-chat";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 import { AgentChatMarkdownRenderer } from "@/components/features/agents/agent-chat/agent-chat-markdown-renderer";
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-chat/agent-session-question-card";
-import { buildQuestionRequest } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { buildQuestionRequest } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import {
   WorkspaceSessionContent,
   WorkspaceSessionReadModelNotice,
@@ -261,7 +261,7 @@ test("conflict assistance follows the selected chat after switching away and bac
           targetBranch: "main",
           conflictedFiles: ["file.ts"],
           output: "Conflict",
-          workingDir: props.workingDirectory,
+          workingDir: props.git.workingDirectory,
         })
       }
     >

@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, LoaderCircle, TriangleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import type { DiagnosticsOverviewModel } from "./diagnostics-panel-model";
+import type { DiagnosticsOverviewModel } from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 
 const TONE_CLASSES = {
   healthy: {

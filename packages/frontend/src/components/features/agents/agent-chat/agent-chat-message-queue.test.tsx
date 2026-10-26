@@ -13,7 +13,10 @@ import {
 import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import type { AgentChatMessageQueueAction, AgentChatMessageQueueModel } from "./agent-chat.types";
+import type {
+  AgentChatMessageQueueAction,
+  AgentChatMessageQueueModel,
+} from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import {
   type AgentChatComposerDraft,
   draftToSerializedText,
@@ -412,6 +415,38 @@ describe("AgentChatMessageQueue", () => {
     const save = screen.getByRole("button", { name: "Save" });
     expect(save.hasAttribute("disabled")).toBe(true);
     expect(save.querySelector(".animate-spin")).toBeNull();
+  });
+
+  test("keeps the actions of each message closed until its own action ends", async () => {
+    const { onAction } = renderQueue(queueOf([entry("s-1", "First"), entry("s-2", "Second")]));
+    const remove = Promise.withResolvers<void>();
+    const steer = Promise.withResolvers<void>();
+    onAction.mockImplementationOnce(() => remove.promise);
+    onAction.mockImplementationOnce(() => steer.promise);
+    const items = within(screen.getByRole("list", { name: "Queued messages" })).getAllByRole(
+      "listitem",
+    );
+    const removeButtonOf = (index: number): HTMLElement =>
+      within(itemAt(items, index)).getByRole("button", { name: "Remove queued message" });
+
+    fireEvent.click(removeButtonOf(0));
+    fireEvent.click(within(itemAt(items, 1)).getByRole("button", { name: /Steer now/ }));
+    // A second action does not open the buttons of the first message while its action runs.
+    expect(removeButtonOf(0).hasAttribute("disabled")).toBe(true);
+    expect(removeButtonOf(1).hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      remove.resolve();
+      await remove.promise;
+    });
+    await waitFor(() => expect(removeButtonOf(0).hasAttribute("disabled")).toBe(false));
+    expect(removeButtonOf(1).hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      steer.resolve();
+      await steer.promise;
+    });
+    await waitFor(() => expect(removeButtonOf(1).hasAttribute("disabled")).toBe(false));
   });
 
   test("keeps an unsaved edit when another chat replaces the queue, until the edit ends", async () => {

@@ -1,6 +1,6 @@
 import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-import { prepareModelDefaultsForSave } from "@/lib/repo-agent-defaults";
+import { prepareModelDefaultsForSave } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { dropBlankLines } from "@/state/read-models/settings-read-model";
 import { preparePromptOverridesForSave } from "./prompt-overrides";

@@ -6,11 +6,11 @@ import { AgentChat, AgentChatSurface } from "./agent-chat";
 import {
   buildEmptyTranscript,
   buildModelSelection,
-  buildSession,
   buildSessionTranscript,
   buildTodoItem,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
+import { buildSession } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),

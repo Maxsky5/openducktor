@@ -12,8 +12,8 @@ import {
 import {
   createSessionStartWorkflowRunner as createRunner,
   type RunSessionStartWorkflow,
-} from "@/features/session-start/session-start-orchestration";
-import type { WorkflowLaunchClient } from "@/features/session-start/session-start-workflow";
+} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
+import type { WorkflowLaunchClient } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import type {
   AgentMessageSendOptions,
   AgentMessageSendReceipt,

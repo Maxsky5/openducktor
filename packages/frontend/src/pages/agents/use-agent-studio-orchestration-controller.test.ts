@@ -5,7 +5,6 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RepositoryGitProviderContext,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
@@ -31,14 +30,14 @@ import {
 import {
   ActiveWorkspaceContext,
   RuntimeDefinitionsContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
 } from "@openducktor/frontend-core/sessions/session-contexts";
-import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
-import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import { createAgentChatSendFixture } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
+import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import {
   createChatSettingsFixture,
@@ -48,10 +47,10 @@ import {
   createSettingsSnapshotFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { RuntimeDefinitionsContextValue } from "@/state/app-state-contexts";
+import type { RuntimeDefinitionsContextValue } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
-import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
+import { agentStudioChatDraftScopeKey } from "@openducktor/frontend-core/sessions/composer/agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -62,7 +61,6 @@ import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
   buildAgentStudioPageModelsArgs,
-  resolvePullRequestReviewAvailability,
   useAgentStudioOrchestrationController,
 } from "./use-agent-studio-orchestration-controller";
 
@@ -716,114 +714,3 @@ function TaskChatProviders({
     ),
   );
 }
-
-describe("resolvePullRequestReviewAvailability", () => {
-  test("keeps review visible but unavailable when the provider refresh fails", () => {
-    const gitProviderContext = {
-      descriptor: {
-        id: "github",
-        label: "GitHub",
-        description: "GitHub provider.",
-        capabilities: {
-          supportsPullRequests: true,
-          supportsPullRequestReview: true,
-        },
-      },
-      config: { id: "github", enabled: true, autoDetected: false },
-      health: {
-        providerId: "github",
-        enabled: true,
-        available: true,
-        executablePath: "gh",
-        version: "1.0.0",
-        authenticated: true,
-        account: "test",
-        repositoryMappingValid: true,
-      },
-    } satisfies NonNullable<RepositoryGitProviderContext>;
-
-    expect(
-      resolvePullRequestReviewAvailability({
-        gitProviderContext,
-        gitProviderReadError: "Could not load the current Git provider: connection failed",
-        linkedPullRequest: {
-          providerId: "github",
-          number: 7,
-          url: "https://example.com/pulls/7",
-          state: "open",
-          createdAt: "2026-09-03T10:00:00.000Z",
-          updatedAt: "2026-09-03T10:00:00.000Z",
-        },
-      }),
-    ).toEqual({
-      canShowPullRequestReview: true,
-      hasLinkedPullRequest: true,
-      unavailableReason: "Could not load the current Git provider: connection failed",
-    });
-  });
-
-  test("keeps review visible but unavailable when the initial provider read fails", () => {
-    expect(
-      resolvePullRequestReviewAvailability({
-        gitProviderContext: undefined,
-        gitProviderReadError: "Could not load the current Git provider: connection failed",
-        linkedPullRequest: {
-          providerId: "github",
-          number: 7,
-          url: "https://example.com/pulls/7",
-          state: "open",
-          createdAt: "2026-09-03T10:00:00.000Z",
-          updatedAt: "2026-09-03T10:00:00.000Z",
-        },
-      }),
-    ).toEqual({
-      canShowPullRequestReview: true,
-      hasLinkedPullRequest: true,
-      unavailableReason: "Could not load the current Git provider: connection failed",
-    });
-  });
-
-  test("hides review for a linked Pull Request when the provider does not support review", () => {
-    const gitProviderContext = {
-      descriptor: {
-        id: "fake",
-        label: "Fake Git",
-        description: "Fake provider without Pull Request review.",
-        capabilities: {
-          supportsPullRequests: true,
-          supportsPullRequestReview: false,
-        },
-      },
-      config: { id: "fake", enabled: true, autoDetected: false },
-      health: {
-        providerId: "fake",
-        enabled: true,
-        available: true,
-        executablePath: "fake-git",
-        version: "1.0.0",
-        authenticated: true,
-        account: "test",
-        repositoryMappingValid: true,
-      },
-    } satisfies NonNullable<RepositoryGitProviderContext>;
-
-    expect(
-      resolvePullRequestReviewAvailability({
-        gitProviderContext,
-        gitProviderReadError: "Could not load the current Git provider: connection failed",
-        linkedPullRequest: {
-          providerId: "fake",
-          number: 7,
-          url: "https://example.com/pulls/7",
-          state: "open",
-          createdAt: "2026-09-03T10:00:00.000Z",
-          updatedAt: "2026-09-03T10:00:00.000Z",
-        },
-      }),
-    ).toEqual({
-      canShowPullRequestReview: false,
-      hasLinkedPullRequest: true,
-      unavailableReason: null,
-    });
-  });
-});

@@ -8,8 +8,8 @@ import type { TerminalBinding } from "./shared-terminal-binding";
 import type {
   TerminalFrameListener,
   TerminalTransportController,
-} from "./terminal-transport-controller";
-import { EMPTY_TERMINAL_ACTIVITY } from "./terminal-activity-store";
+} from "@openducktor/frontend-core/terminals/terminal-transport-controller";
+import { EMPTY_TERMINAL_ACTIVITY } from "@openducktor/frontend-core/terminals/terminal-activity-store";
 
 if (globalThis.document === undefined) {
   GlobalRegistrator.register();

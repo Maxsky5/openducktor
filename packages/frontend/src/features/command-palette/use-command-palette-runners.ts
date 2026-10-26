@@ -1,8 +1,8 @@
 import { useSessionMenu } from "@/components/layout/sidebar/session-menu-provider";
-import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
-import { workspaceSessionReadKey } from "@/features/session-navigation/session-read-keys";
-import { useSetSessionUnreadKey } from "@/features/session-navigation/session-read-state";
-import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
+import { workspaceSessionReadKey } from "@openducktor/frontend-core/sessions/navigation/session-read-keys";
+import { useSetSessionUnreadKey } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import type { PaletteChatHandlers } from "./command-palette-chat-actions";

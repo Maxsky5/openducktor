@@ -129,8 +129,8 @@ describe("Workspace Session archive refresh", () => {
           await view.findByRole("button", { name: "Restore Chat 1" }, { timeout: 800 }),
         );
         await waitFor(() => expect(reads).toBe(2), { timeout: 800 });
-        expect(view.getByRole("status").textContent).toBe("Loading archived sessions…");
-        expect(view.queryByText("No archived sessions.")).toBeNull();
+        expect(view.getByRole("status").textContent).toBe("Loading archived chats…");
+        expect(view.queryByText("No archived chats.")).toBeNull();
         if (remaining > 0) {
           expect(
             view.getByRole("button", { name: "Restore Chat 2" }).hasAttribute("disabled"),
@@ -140,7 +140,7 @@ describe("Workspace Session archive refresh", () => {
         }
         await act(async () => refresh.reject(new Error("Archive refresh failed.")));
         await view.findByText("Archive refresh failed.", {}, { timeout: 800 });
-        expect(view.queryByText("No archived sessions.")).toBeNull();
+        expect(view.queryByText("No archived chats.")).toBeNull();
         expect(view.queryByText("No chats match your filter.")).toBeNull();
         expect(reads).toBe(2);
         expect(restores).toBe(1);
@@ -152,7 +152,7 @@ describe("Workspace Session archive refresh", () => {
           },
         );
         if (remaining === 0) {
-          await view.findByText("No archived sessions.", {}, { timeout: 800 });
+          await view.findByText("No archived chats.", {}, { timeout: 800 });
         } else {
           await view.findByText("No chats match your filter.", {}, { timeout: 800 });
           fireEvent.change(view.getByRole("searchbox"), { target: { value: "" } });

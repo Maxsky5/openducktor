@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode, RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { PENDING_INPUT_LABELS } from "@openducktor/frontend-core/sessions/pending-input/pending-input-labels";
 
 type RequestCardHeaderProps = {
   kind: "permission" | "question";
@@ -45,7 +46,9 @@ export function RequestCardHeader({
                 aria-hidden="true"
               />
               <span className="text-[13px] font-semibold">
-                {isPermission ? "Approval required" : "Input needed"}
+                {isPermission
+                  ? PENDING_INPUT_LABELS.permissionTitle
+                  : PENDING_INPUT_LABELS.questionTitle}
               </span>
               {isSubagent ? (
                 <span
@@ -54,7 +57,7 @@ export function RequestCardHeader({
                     isPermission ? "border-warning-border bg-background" : "border-input bg-muted",
                   )}
                 >
-                  Subagent request
+                  {PENDING_INPUT_LABELS.subagentRequest}
                 </span>
               ) : null}
             </span>

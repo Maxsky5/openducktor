@@ -1,0 +1,196 @@
+/**
+ * Parses and resolves file links in agent Markdown on all clients. A link names a file in the task
+ * worktree or workspace directory, or, with `access: "local"`, a host file outside it.
+ */
+export type ChatLinkedFile = {
+  rootPath: string;
+  relativePath: string;
+  access?: "local";
+};
+
+export type ChatFileLink =
+  | { kind: "external" | "fragment" }
+  | { kind: "file"; file: ChatLinkedFile }
+  | { kind: "invalid"; message: string };
+
+type InvalidFileLink = Extract<ChatFileLink, { kind: "invalid" }>;
+export type ChatFileRoot = "task" | "workspace";
+export type ChatFileDestination =
+  | { kind: "external" | "fragment" }
+  | { kind: "path"; path: string; absolute: boolean }
+  | InvalidFileLink;
+
+const DRIVE = /^[a-z]:/i;
+// Let the shared renderer handle URL schemes and block unsafe URLs.
+const URL_SCHEME = /^(?:https?|ircs?|mailto|xmpp|javascript|vbscript|data|blob):/i;
+// oxlint-disable-next-line no-control-regex -- Control characters must never enter a filesystem path.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+const SCHEME = /^[a-z][a-z\d+.-]*:/i;
+const ROOT_FILE_CITATION = /^(?:[^/:]+:[+-]?\d|[^/:]+\.[^/:]+:)/;
+
+// ASCII drive letters, literal or percent-encoded. Encoded colons remain filename characters.
+const ENCODED_DRIVE = /^(?:[a-z]|%[46][1-9a-f]|%[57][0-9a]):/i;
+const ENCODED_SEPARATOR = /^(?:[/\\]|%2f|%5c)/i;
+const ROOT_ERRORS = {
+  task: {
+    unavailable: "The Task's Build Worktree is unavailable.",
+    platform: "The absolute path does not match the Build Worktree platform.",
+    leaves: "The file path leaves the Build Worktree.",
+    invalid: "The Build Worktree path is invalid.",
+  },
+  workspace: {
+    unavailable: "The workspace directory is unavailable.",
+    platform: "The absolute path uses a different path style from the workspace directory.",
+    leaves: "The file path leaves the workspace directory.",
+    invalid: "The workspace directory path is invalid.",
+  },
+} as const;
+
+/** Parse line suffixes before decoding so encoded colons and hashes stay in file names. */
+export function parseChatFileLink(href: string): ChatFileDestination {
+  if (href.startsWith("#")) return { kind: "fragment" };
+  if (!isChatLocalDestination(href)) return { kind: "external" };
+  if (!href || CONTROL_CHARACTERS.test(href))
+    return invalid("The file destination is empty or contains control characters.");
+  const destination = parseFileDestination(href);
+  if (destination.kind === "invalid") return destination;
+  let path: string;
+  try {
+    path = decodeURIComponent(destination.path);
+  } catch {
+    return invalid("The file path has invalid percent encoding.");
+  }
+  if (CONTROL_CHARACTERS.test(path)) return invalid("The file path contains control characters.");
+  if (/^file:/i.test(href) && /^\/[a-z]:[/\\]/i.test(path)) path = path.slice(1);
+  if (path.startsWith("//") || path.startsWith("\\\\"))
+    return invalid("Network file paths are not supported.");
+  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+  const slashPath = hasDrive ? path.replaceAll("\\", "/") : path;
+  if (!slashPath || slashPath.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(slashPath))
+    return invalid("The destination must name a file.");
+  return { kind: "path", path, absolute: isAbsoluteChatPath(path) };
+}
+
+const isAbsoluteChatPath = (path: string): boolean =>
+  path.startsWith("/") || /^[a-z]:[/\\]/i.test(path);
+
+/** Resolves a decoded path, such as a route parameter, like a parsed file link. */
+export const resolveChatFilePath = (
+  path: string,
+  rootPath: string | null,
+  root: ChatFileRoot = "task",
+): ChatFileLink =>
+  resolveChatFileLink({ kind: "path", path, absolute: isAbsoluteChatPath(path) }, rootPath, root);
+
+export function resolveChatFileLink(
+  destination: ChatFileDestination,
+  rootPath: string | null,
+  root: ChatFileRoot = "task",
+): ChatFileLink {
+  if (destination.kind !== "path") return destination;
+  if (!rootPath)
+    return destination.absolute
+      ? resolveLocalFile(destination.path)
+      : invalid(ROOT_ERRORS[root].unavailable);
+  return resolveWorktreeFile(destination.path, rootPath, root);
+}
+
+export const isChatLocalDestination = (href: string): boolean =>
+  !URL_SCHEME.test(href) &&
+  !href.startsWith("#") &&
+  (DRIVE.test(href) || /^file:/i.test(href) || !SCHEME.test(href) || ROOT_FILE_CITATION.test(href));
+
+function parseFileDestination(href: string): { kind: "path"; path: string } | InvalidFileLink {
+  const isFileUri = /^file:/i.test(href);
+  if (isFileUri && !/^file:\/\/\//i.test(href))
+    return invalid("Use a local file URI without a remote authority.");
+  let path = isFileUri ? href.slice("file://".length) : href;
+  // A drive colon belongs to the path, even when its letter is encoded.
+  const drivePath = isFileUri ? path.slice(1) : path;
+  const drive = ENCODED_DRIVE.exec(drivePath)?.[0];
+  let prefix = "";
+  if (drive) {
+    path = drivePath.slice(drive.length);
+    if (!ENCODED_SEPARATOR.test(path))
+      return invalid("Drive-relative file paths are not supported.");
+    prefix = (isFileUri ? "/" : "") + drive;
+  }
+  if (path.includes("?")) return invalid("File links do not support query strings.");
+  const fragment = path.indexOf("#");
+  if (fragment >= 0) {
+    const match = /^#L([1-9]\d*)(?:-L([1-9]\d*))?$/.exec(path.slice(fragment));
+    if (!match || (match[2] && Number(match[2]) < Number(match[1])))
+      return invalid("The file line reference is invalid.");
+    path = path.slice(0, fragment);
+  }
+  const location = /:([1-9]\d*)(?::([1-9]\d*))?$/.exec(path);
+  if (location) path = path.slice(0, location.index);
+  if (/:[+-]?\d/.test(path)) return invalid("The file line reference is invalid.");
+  return { kind: "path", path: prefix + path };
+}
+
+function resolveWorktreeFile(input: string, rootPath: string, root: ChatFileRoot): ChatFileLink {
+  const windows = /^[a-z]:[/\\]/i.test(rootPath);
+  const path = windows ? input.replaceAll("\\", "/") : input;
+  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+  if (path.startsWith("//") || path.startsWith("\\\\"))
+    return invalid("Network file paths are not supported.");
+  if ((hasDrive && (!windows || !/^[a-z]:\//i.test(path))) || (windows && path.startsWith("/")))
+    return invalid(ROOT_ERRORS[root].platform);
+  if (!path || path.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(path))
+    return invalid("The destination must name a file.");
+  const absolute = path.startsWith("/") || hasDrive;
+  if (!absolute)
+    return resolveWorktreeFile(
+      `${windows ? rootPath.replaceAll("\\", "/") : rootPath}/${path}`,
+      rootPath,
+      root,
+    );
+  const parts = segments(path);
+  if (!parts) return invalid(ROOT_ERRORS[root].leaves);
+  const rootParts = segments(windows ? rootPath.replaceAll("\\", "/") : rootPath);
+  if (!rootParts) return invalid(ROOT_ERRORS[root].invalid);
+  if (absolute) {
+    // Compare a root prefix; contained files have additional path segments.
+    // react-doctor-disable-next-line react-doctor/js-length-check-first
+    const matchesRoot = rootParts.every((part, index) =>
+      windows ? part.toLowerCase() === parts[index]?.toLowerCase() : part === parts[index],
+    );
+    if (!matchesRoot) {
+      return resolveLocalFile(input);
+    }
+    parts.splice(0, rootParts.length);
+  }
+  if (!parts.length) return invalid("The destination must name a file.");
+  return { kind: "file", file: { rootPath, relativePath: parts.join("/") } };
+}
+
+function resolveLocalFile(path: string): ChatFileLink {
+  const windows = /^[a-z]:[/\\]/i.test(path);
+  const separator = windows && path[2] === "\\" ? "\\" : "/";
+  const parts = segments(windows ? path.replaceAll("\\", "/") : path);
+  const relativePath = parts?.pop();
+  if (!parts || !relativePath || (windows && parts.length === 0))
+    return invalid("The destination must name a file.");
+  const rootPath = windows
+    ? parts.join(separator) + (parts.length === 1 ? separator : "")
+    : "/" + parts.join("/");
+  return { kind: "file", file: { rootPath, relativePath, access: "local" } };
+}
+
+const segments = (path: string): string[] | null => {
+  const result: string[] = [];
+  for (const part of path.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (!result.length) return null;
+      result.pop();
+    } else result.push(part);
+  }
+  return result;
+};
+
+const invalid = (message: string): InvalidFileLink => ({
+  kind: "invalid",
+  message,
+});

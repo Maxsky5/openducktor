@@ -10,11 +10,14 @@ import {
   type NotificationBridge,
   useHostClient,
 } from "@openducktor/frontend-core";
-import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
-import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
-import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
-import { createRemoteHostConnection } from "@openducktor/frontend-core/recovery/remote-host-connection";
-import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { WorkspaceScopeContext } from "../src/app-state/app-state-contexts";
+import { WorkspaceActivityProvider } from "../src/app-state/providers/workspace-activity-provider";
+import { useInlineCommentDraftStore } from "../src/drafts/use-inline-comment-draft-store";
+import { createNotificationRuntime } from "../src/notifications/notification-runtime";
+import { repoTaskDataQueryOptions } from "../src/queries/tasks";
+import { createRemoteHostConnection } from "../src/recovery/remote-host-connection";
+import { useAgentSessionsContext } from "../src/sessions/session-contexts";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import type { RemoteTransport } from "@openducktor/host-client/remote";
 import { useQuery } from "@tanstack/react-query";
 import { createElement, type ReactElement } from "react";
@@ -80,9 +83,21 @@ export function TaskCount({ repoPath }: { repoPath: string }): ReactElement | nu
   return tasks.data ? createElement("Text", null, String(tasks.data.tasks.length)) : null;
 }
 
-export const renderApp = (connection: ReturnType<typeof connectToHost>): ReactElement =>
+/** The app supplies only the open workspaces and the selected one to the shared providers. */
+export const renderApp = (
+  connection: ReturnType<typeof connectToHost>,
+  workspaces: WorkspaceRecord[],
+): ReactElement =>
   createElement(
     ClientConnectionProvider,
     { connection },
-    createElement(TaskCount, { repoPath: "/repo" }),
+    createElement(
+      WorkspaceScopeContext.Provider,
+      { value: { workspaces, activeWorkspace: workspaces[0] ?? null } },
+      createElement(
+        WorkspaceActivityProvider,
+        null,
+        createElement(TaskCount, { repoPath: "/repo" }),
+      ),
+    ),
   );

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import { buildMessage } from "../agent-chat-test-fixtures";
-import type { AgentChatUserMessageAnchor } from "../agent-chat-transcript-model";
+import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
+import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type {
   AgentChatTranscriptNavigation,
   AgentChatTranscriptViewportRows,

@@ -1,11 +1,12 @@
-# Desktop, web, and MCP release process
+# Desktop, mobile, web, and MCP release process
 
-GitHub Actions creates OpenDucktor releases. A maintainer starts `Prepare Release`. The workflows create the commit, tag, draft, packages, and desktop files.
+GitHub Actions creates OpenDucktor releases. A maintainer starts `Prepare Release`. The workflows create the commit, tag, draft, packages, desktop files, and Android APK.
 
 ## Workflows
 
 - `.github/workflows/release-prep.yml`
 - `.github/workflows/release-desktop-electron.yml`
+- `.github/workflows/release-mobile.yml`
 - `.github/workflows/publish-mcp.yml`
 - `.github/workflows/publish-web.yml`
 - `.github/workflows/publish-homebrew-tap.yml`
@@ -21,10 +22,10 @@ The workflow:
 2. Updates package manifests and `bun.lock`.
 3. Creates and pushes the release commit and tag.
 4. Creates a draft GitHub release with generated notes. A beta is a GitHub prerelease.
-5. Starts the Electron, MCP, and web workflows after the draft exists.
+5. Starts the Electron, mobile, MCP, and web workflows after the draft exists.
 6. Sends the npm tag `latest` for stable or `beta` for beta.
 
-For a beta, npm packages keep the full prerelease version. The Electron repository manifest uses the numeric base version. The packaged app and updater use the full prerelease version so the updater can compare beta builds.
+For a beta, npm packages keep the full prerelease version. The Electron and mobile repository manifests use the numeric base version. The packaged app and updater use the full prerelease version so the updater can compare beta builds.
 
 ## Build the desktop app
 
@@ -35,6 +36,14 @@ The workflow checks that the checked-out repository version matches the selected
 It signs and notarizes macOS files, packages the MCP sidecar, creates updater metadata, and uploads all files to the draft. It merges the two macOS manifests into `latest-mac.yml` or `beta-mac.yml`.
 
 The package build checks that the selected platform and architecture match the host before it removes old output. It compiles the MCP sidecar for that target. It starts the packaged executable. It completes MCP initialization against a local test bridge. It also checks the packaged Claude file search module.
+
+## Build the mobile app
+
+`Prepare Release` starts `Release Mobile` with the tag. A maintainer can run it again with the same tag. Each run gets a higher store build number.
+
+The iOS job archives a signed build and uploads it to TestFlight. The Android job builds a signed App Bundle and uploads it to the Google Play internal track. It also attaches a signed APK to the draft as `OpenDucktor-<version>-android.apk`. The APK has the signature of the upload key, not the Google Play signature, so it cannot update an app installed from Google Play, and Google Play cannot update it. A missing or incorrect secret stops the step that uses it.
+
+Public store release stays manual. After the device checks, promote the builds in App Store Connect and Google Play Console. Read [the mobile app release](../apps/mobile/README.md#release) for the first setup of the store records.
 
 ## Publish MCP
 
@@ -97,6 +106,15 @@ If a check or the upload fails, the site keeps its earlier client. The workflow 
 
 `APPLE_CERTIFICATE` is a base64 Developer ID Application `.p12`. The desktop workflow stops if an Apple secret is missing. macOS releases are signed but do not use a separate unsigned path.
 
+### Mobile
+
+- `APPLE_TEAM_ID`
+- `IOS_DISTRIBUTION_CERTIFICATE` and `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`: a base64 Apple Distribution `.p12` and its password.
+- `IOS_PROVISIONING_PROFILE`: a base64 App Store provisioning profile for `com.openducktor.mobile`.
+- `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, and `APP_STORE_CONNECT_API_KEY`: the App Store Connect API key for the TestFlight upload.
+- `ANDROID_UPLOAD_KEYSTORE`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`, `ANDROID_UPLOAD_KEY_ALIAS`, and `ANDROID_UPLOAD_KEY_PASSWORD`: the base64 upload keystore and its values.
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`: a service account with release access to the app.
+
 ### MCP and web
 
 MCP and web use npm Trusted Publisher with GitHub Actions OIDC. They do not need an npm secret.
@@ -107,18 +125,19 @@ MCP and web use npm Trusted Publisher with GitHub Actions OIDC. They do not need
 
 ### Release automation
 
-`RELEASE_AUTOMATION_TOKEN` pushes the release commit and tag. The workflow rejects the default GitHub Actions token. The desktop workflow also uses this token to read the draft and upload files.
+`RELEASE_AUTOMATION_TOKEN` pushes the release commit and tag. The workflow rejects the default GitHub Actions token. The desktop workflow also uses this token to read the draft and upload files. The mobile workflow uses it to attach the APK.
 
 ## Version sources
 
-`scripts/release-version.ts` updates the root `package.json`, workspace package manifests, `apps/electron/package.json`, and `bun.lock`.
+`scripts/release-version.ts` updates the root `package.json`, workspace package manifests, `apps/electron/package.json`, `apps/mobile/package.json`, and `bun.lock`.
 
 Stable releases use one version. Beta releases use:
 
 | Source | Example |
 |---|---|
 | Root, internal packages, MCP, and web | `0.4.0-beta.1` |
-| Electron repository manifest | `0.4.0` |
+| Electron and mobile repository manifests | `0.4.0` |
+| Mobile store builds | `0.4.0` with a build number that always increases |
 | Packaged app and updater metadata | `0.4.0-beta.1` with a numeric OS short version |
 | Git tag | `v0.4.0-beta.1` |
 
@@ -127,8 +146,8 @@ Stable releases use one version. Beta releases use:
 1. Open GitHub Actions and run `Prepare Release`.
 2. Enter the version and select `stable` or `beta`.
 3. Wait for `Prepare Release` to create the commit, tag, draft, and downstream runs.
-4. Wait for desktop, MCP, and web workflows to finish.
-5. Open the draft. Check notes and every expected desktop file.
+4. Wait for desktop, mobile, MCP, and web workflows to finish.
+5. Open the draft. Check notes, every expected desktop file, and the Android APK.
 6. Publish the draft.
 7. For a stable release, wait for the Homebrew workflow to update `Casks/openducktor.rb`.
 8. For a stable release, check the `Deploy Web Client` run summary.

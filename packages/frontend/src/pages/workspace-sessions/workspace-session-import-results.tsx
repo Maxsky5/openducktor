@@ -1,6 +1,6 @@
 import type { WorkspaceSessionExternal } from "@openducktor/contracts";
 import { Folder, Import, LoaderCircle } from "lucide-react";
-import { formatCiRelativeTime } from "@/components/features/agents/task-execution-ci-relative-time-format";
+import { formatCiRelativeTime } from "@openducktor/frontend-core/review/task-execution-ci-relative-time-format";
 import { Button } from "@/components/ui/button";
 
 type Props = {

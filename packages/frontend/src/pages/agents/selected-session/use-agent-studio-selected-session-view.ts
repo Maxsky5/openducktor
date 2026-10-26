@@ -1,21 +1,18 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
+import { firstLaunchAction } from "@openducktor/frontend-core/sessions/start/session-start-prompts";
 import {
-  firstLaunchAction,
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
-} from "@/features/session-start";
+} from "@openducktor/frontend-core/lib/session-launch-actions";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { inactiveRuntimeReadinessTarget } from "@openducktor/frontend-core/lib/runtime-readiness";
-import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
+import { useRuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import {
-  useAgentOperations,
-  useAgentSession,
-  useAgentSessionReadModelState,
-} from "@/state/app-state-provider";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { useAgentOperations, useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useAgentSession } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useSessionRuntimeData } from "@openducktor/frontend-core/sessions/agent-orchestrator/hooks/use-session-runtime-data";
 import type { SessionRuntimeDataTarget } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-runtime-data-refs";
 import type {
@@ -28,12 +25,12 @@ import {
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
-import { useChatSessionPreparation } from "@/features/agent-chat-composer/use-chat-session-preparation";
+import { useChatSessionPreparation } from "@openducktor/frontend-core/sessions/composer/use-chat-session-preparation";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
   deriveSelectedSessionRuntimeTarget,
   deriveSelectedSessionViewProjection,
-} from "./selected-session-view-projection";
+} from "@openducktor/frontend-core/sessions/session-view/selected-session-view-projection";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;

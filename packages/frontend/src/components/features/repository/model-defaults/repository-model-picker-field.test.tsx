@@ -3,7 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
+import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";

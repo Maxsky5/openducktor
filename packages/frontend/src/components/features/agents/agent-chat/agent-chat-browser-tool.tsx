@@ -4,9 +4,12 @@ import { type ReactElement, useState } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { localImageDataUrl, localImageQueryOptions } from "@/state/queries/local-images";
 import { ActionToolCard } from "./agent-chat-action-tool-card";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { browserToolScreenshotPaths, browserToolTitle } from "./browser-tool-summary";
-import { hasNonEmptyInput, hasNonEmptyText } from "./tool-lifecycle";
+import {
+  hasNonEmptyInput,
+  hasNonEmptyText,
+} from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 
 type BrowserToolMessageProps = {
   meta: ToolMeta;

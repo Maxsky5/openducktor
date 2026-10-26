@@ -25,7 +25,8 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDiagnosticsPanel } from "@/components/features/diagnostics";
-import { TASK_CARD_VIEW_OPTIONS } from "@/components/features/kanban/task-card-view-options";
+import { TASK_CARD_VIEW_OPTIONS } from "@openducktor/frontend-core/tasks/board/task-card-view-options";
+import { TASK_CARD_VIEW_ICONS } from "@/components/features/kanban/task-card-view-options";
 import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal-constants";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
@@ -37,8 +38,8 @@ import {
   issueImportBlockedReason,
   runIssueImport,
   toIssueImportState,
-} from "@/pages/kanban/issue-import-provider";
-import { taskCreationBlockedReason } from "@/pages/kanban/task-creation-availability";
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
+import { taskCreationBlockedReason } from "@openducktor/frontend-core/tasks/board/task-creation-availability";
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
@@ -286,7 +287,7 @@ export function useCommandPaletteActions({
     appAction(
       `task-cards:${option.value}`,
       `Task cards: ${option.label}`,
-      icon(option.icon),
+      icon(TASK_CARD_VIEW_ICONS[option.value]),
       TASK_CARD_VIEW_KEYWORDS[option.value],
       () => changeTaskCardView(option.value),
       {

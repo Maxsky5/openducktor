@@ -2,15 +2,16 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
-import * as taskStopImpactModule from "@/state/queries/use-task-stop-impact";
+import * as taskStopImpactModule from "@openducktor/frontend-core/queries/use-task-stop-impact";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   createTaskCardFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { TaskConfirmRequestAction } from "@/components/features/task-details/task-confirm-dialog-types";
+import type { TaskConfirmRequestAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
 import { TaskConfirmDialogHost, useTaskConfirmDialogHost } from "./task-confirm-dialog-host";
 
 enableReactActEnvironment();
@@ -30,6 +31,12 @@ const createHandlers = () => ({
   onSucceeded: mock((_taskId: string) => {}),
 });
 
+const workspaceState = createWorkspaceStateFixture();
+const activeWorkspaceValue = {
+  activeWorkspace: workspaceState.activeWorkspace,
+  setActiveWorkspace: () => {},
+};
+
 let confirmTaskAction: (taskId: string, action: TaskConfirmRequestAction) => void = () => {};
 
 /** The host as `TaskWorkflowActionsProvider` mounts it, with a focusable element beside it. */
@@ -38,9 +45,11 @@ function Host(props: HostProps): ReactElement {
   confirmTaskAction = onConfirmTaskAction;
   return (
     <QueryProvider>
-      <WorkspaceStateContext.Provider value={createWorkspaceStateFixture()}>
-        <button type="button">Before the palette</button>
-        <TaskConfirmDialogHost model={model} />
+      <WorkspaceStateContext.Provider value={workspaceState}>
+        <ActiveWorkspaceContext value={activeWorkspaceValue}>
+          <button type="button">Before the palette</button>
+          <TaskConfirmDialogHost model={model} />
+        </ActiveWorkspaceContext>
       </WorkspaceStateContext.Provider>
     </QueryProvider>
   );
@@ -96,6 +105,7 @@ describe("TaskConfirmDialogHost", () => {
       // The test has no host bridge, so the stop impact comes from a local fake.
       const stopImpactSpy = spyOn(taskStopImpactModule, "useTaskStopImpact").mockReturnValue({
         stoppableSessionCount: 0,
+        removedWorktreeCount: null,
         isLoading: false,
         error: null,
       });

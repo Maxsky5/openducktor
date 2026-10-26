@@ -1053,7 +1053,10 @@ describe("use-agent-orchestrator-operations session state", () => {
           continuity === "applied-rail-first" ||
           continuity === "applied-selected-first";
 
-        expect(restoredSession?.historyLoadState).toBe(reusesHistory ? "loaded" : "stale");
+        // A late rail gap has no read-model snapshot yet. That snapshot settles the transcript.
+        expect(restoredSession?.historyLoadState).toBe(
+          reusesHistory ? "loaded" : continuity === "rail-late-recovery" ? "unverified" : "stale",
+        );
         const callsBeforeRepair = continuity === "read-fault" ? 2 : 1;
         expect(historyCalls).toBe(callsBeforeRepair);
         await harness.run(async () => {

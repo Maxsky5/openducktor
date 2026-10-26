@@ -1,6 +1,7 @@
 import { FolderGit2 } from "lucide-react";
 import type { ReactElement } from "react";
-import type { DiffScope } from "@/features/agent-studio-git";
+import type { DiffScope } from "@openducktor/frontend-core/git/contracts";
+import { emptyDiffCopy } from "@openducktor/frontend-core/git/model/empty-diff-copy";
 
 /**
  * A list whose read failed. The panel shows the error, so this state must not claim a clean
@@ -32,37 +33,13 @@ export function EmptyDiffState({
   diffScope: DiffScope;
   upstreamStatus?: "tracking" | "untracked" | "error";
 }): ReactElement {
-  const title = (() => {
-    if (diffScope === "target" && targetBranch)
-      return isLoading
-        ? `Checking changes against ${targetBranch}...`
-        : `No changes against ${targetBranch}`;
-    if (isLoading) {
-      return contextMode === "repository" && diffScope === "target"
-        ? "Checking branch changes..."
-        : "Scanning for changes...";
-    }
-    if (contextMode === "repository" && diffScope === "target" && upstreamStatus === "untracked") {
-      return "No upstream branch yet";
-    }
-    if (contextMode === "repository" && diffScope === "target") {
-      return "No branch changes detected";
-    }
-    if (contextMode === "repository") {
-      return "No repository changes detected";
-    }
-    return "No changes detected";
-  })();
-
-  // Only an action that the user can take earns a second line.
-  const description =
-    !isLoading &&
-    contextMode === "repository" &&
-    diffScope === "target" &&
-    !targetBranch &&
-    upstreamStatus === "untracked"
-      ? "Push the branch first to create its upstream."
-      : null;
+  const { title, description } = emptyDiffCopy({
+    targetBranch: targetBranch ?? "",
+    isLoading,
+    contextMode,
+    diffScope,
+    upstreamStatus,
+  });
 
   return (
     <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">

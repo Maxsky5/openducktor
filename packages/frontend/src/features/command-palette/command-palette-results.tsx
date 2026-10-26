@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import type { ReactElement } from "react";
-import { sessionSourceIssueText } from "@/components/layout/sidebar/session-navigation-entry-model";
+import { sessionSourceIssueText } from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
 import { CommandGroup } from "@/components/ui/command";
 import type { PaletteGroup } from "./command-palette-groups";
 import { ActionRow, ChatRow, RowActionRow, TaskRow } from "./command-palette-rows";

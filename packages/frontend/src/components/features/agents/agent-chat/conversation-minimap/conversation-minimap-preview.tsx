@@ -10,7 +10,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { cn } from "@/lib/utils";
 import { UserMessageContent, UserMessageFirstLine } from "../agent-chat-message-card-content";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { AgentChatUserMessageAnchor } from "../agent-chat-transcript-model";
+import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { MINIMAP_TICK_LENGTH_PX, MINIMAP_TICK_LEFT_PX } from "./constants";
 import type { MinimapTick } from "./conversation-minimap-layout";
 

@@ -5,8 +5,9 @@ import {
 import { createHostCommandLifetime } from "@openducktor/remote-host/host-command-lifetime";
 import {
   createRemoteAccessController,
-  enableRemoteAccessFromEnvironment,
+  createRemoteAccessOperator,
   type RemoteAccessController,
+  type RemoteAccessOperator,
 } from "@openducktor/remote-host";
 import { handleRemoteAccessHttp } from "./remote-access-http";
 import webPackage from "../package.json";
@@ -514,7 +515,7 @@ const routeCorsRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   requestTimeoutSource?: Request | undefined;
-  remoteAccess?: RemoteAccessController;
+  remoteAccess?: RemoteAccessOperator;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   isHostShutdownStarted: () => boolean;
@@ -750,7 +751,7 @@ export const handleTypescriptHostBackendRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   requestTimeoutSource?: Request | undefined;
-  remoteAccess?: RemoteAccessController;
+  remoteAccess?: RemoteAccessOperator;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   isHostShutdownStarted: () => boolean;
@@ -988,6 +989,14 @@ export const startTypescriptHostBackendEffect = ({
           scheduleNonFatalWebEventFailure(logger, "Remote transport failed", cause),
       },
     );
+    const remoteAccessOperator = createRemoteAccessOperator(
+      remoteAccess,
+      hostCommandRouter.hostSettings,
+      {
+        reportFailure: (cause) =>
+          scheduleNonFatalWebEventFailure(logger, "Remote control could not start", cause),
+      },
+    );
     const taskEventLeaseManager = createTaskEventLeaseManager({
       encodeFrame: writeTaskFrameSseEvent,
       reportDeliveryFailure: ({ cause, subscriptionId }) =>
@@ -1071,7 +1080,7 @@ export const startTypescriptHostBackendEffect = ({
                   taskAssetReadService: hostCommandRouter.taskAssetReadService,
                   notificationStream: hostCommandRouter.notificationStream,
                   taskEventLeaseManager,
-                  remoteAccess,
+                  remoteAccess: remoteAccessOperator,
                   localAttachments,
                   logger,
                   basePath,
@@ -1104,8 +1113,7 @@ export const startTypescriptHostBackendEffect = ({
           Effect.onInterrupt(cleanupStartedServerEffect),
         );
 
-        if (!deferRemoteStartup)
-          yield* enableRemoteAccessFromEnvironment(remoteAccess, processEnv ?? process.env);
+        if (!deferRemoteStartup) yield* remoteAccessOperator.restore(processEnv ?? process.env);
         return {
           remoteAccess,
           exited,

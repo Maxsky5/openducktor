@@ -3,6 +3,7 @@ import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_CONNECTION_HEADER,
   REMOTE_PROTOCOL_VERSION,
+  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   type HostEventEnvelope,
   type NotificationStreamFrame,
   type RemoteHostDescriptor,
@@ -226,6 +227,31 @@ test("a canceled negotiation releases its admission without disturbing the next 
   }
 });
 
+test("a redirected request releases its transport request", async () => {
+  const f = fixture();
+  const signals: AbortSignal[] = [];
+  f.transport.request = async (_method, _url, _headers, signal) => {
+    signals.push(signal);
+    return {
+      status: 302,
+      headers: { location: "https://elsewhere.example" },
+      body: (async function* () {
+        yield encoder.encode("Moved");
+      })(),
+    };
+  };
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  try {
+    const failure = await remote.connect().catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({ failure: { code: "invalid_endpoint" } });
+    expect(signals.length).toBeGreaterThan(0);
+    // A native transport keeps a request until its body ends or its signal aborts.
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
 test("a file transfer can outlast its completed setup deadline", async () => {
   const f = fixture();
   const started = latch<void>();
@@ -271,6 +297,24 @@ test("a file transfer can outlast its completed setup deadline", async () => {
     for (const timer of deadlines.keys()) nativeClearTimeout(timer);
     timers.mockRestore();
     clears.mockRestore();
+  }
+});
+
+test("leaves no abort listener on the caller signal after a file read", async () => {
+  const f = fixture();
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  try {
+    await remote.connect();
+    const caller = new AbortController();
+    const added = spyOn(caller.signal, "addEventListener");
+    const removed = spyOn(caller.signal, "removeEventListener");
+
+    await remote.readStagedPreview("file.txt", caller.signal);
+
+    expect(added).toHaveBeenCalled();
+    expect(removed.mock.calls.length).toBe(added.mock.calls.length);
+  } finally {
+    await remote.disconnect();
   }
 });
 
@@ -894,6 +938,22 @@ test("SSE parsing keeps incremental UTF-8 and mixed line endings without EventSo
   expect(frames).toEqual([{ id: "4", event: "changed", data: "café\nsecond" }]);
 });
 
+test("SSE parsing reads many frames from one chunk and line endings split across chunks", async () => {
+  const many = Array.from({ length: 2000 }, (_, index) => frame("changed", { index })).join("");
+  const chunks = [many, "data: split\r", "\n\r", "\nevent: last\ndata: end\n\n"];
+  const body = (async function* () {
+    for (const chunk of chunks) yield encoder.encode(chunk);
+  })();
+  const frames = [];
+  for await (const value of readSse(body, new AbortController().signal)) frames.push(value);
+  expect(frames).toHaveLength(2002);
+  expect(frames[1999]).toEqual({ event: "changed", data: JSON.stringify({ index: 1999 }) });
+  expect(frames.slice(2000)).toEqual([
+    { event: "message", data: "split" },
+    { event: "last", data: "end" },
+  ]);
+});
+
 test("a stalled initial task stream ends the synchronization generation", async () => {
   const f = fixture();
   const originalRequest = f.transport.request;
@@ -933,6 +993,287 @@ test("a stalled initial task stream ends the synchronization generation", async 
     timers.mockRestore();
     await remote.disconnect();
   }
+});
+
+test("an expired admission reconnects instead of refusing every later request", async () => {
+  const f = fixture();
+  let refusals = 0;
+  f.setMutation(async () => {
+    if (refusals > 0) return json(null);
+    refusals += 1;
+    return json(
+      {
+        status: "rejected",
+        failure: {
+          code: "connection_expired",
+          message: "Remote compatibility negotiation is required or has expired.",
+          nextAction: "Connect again with supported protocol versions and capabilities.",
+        },
+      },
+      409,
+    );
+  });
+  const states: string[] = [];
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  remote.subscribeState((state) => states.push(state.status));
+  try {
+    await remote.connect();
+    await expect(remote.client.setTheme("dark")).rejects.toMatchObject({
+      failure: { code: "connection_expired" },
+    });
+    expect(states.at(-1)).toBe("disconnected");
+    // The scheduled attempt negotiates a new admission, and requests work again.
+    for (let wait = 0; wait < 100 && states.at(-1) !== "connected"; wait += 1)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(states.at(-1)).toBe("connected");
+    expect(f.requests.filter((request) => request.endsWith("/connections"))).toHaveLength(2);
+    await expect(remote.client.setTheme("dark")).resolves.toBeUndefined();
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a silent event stream of a heartbeat host ends the connection", async () => {
+  const f = fixture();
+  const request = f.transport.request;
+  const heartbeatHost: RemoteHostDescriptor = {
+    ...descriptor,
+    protocols: [
+      {
+        version: REMOTE_PROTOCOL_VERSION,
+        capabilities: [...REMOTE_BASELINE_CAPABILITIES, REMOTE_STREAM_HEARTBEAT_CAPABILITY],
+      },
+    ],
+  };
+  f.transport.request = async (method, url, headers, signal, body) =>
+    url.endsWith("/connections")
+      ? json({
+          status: "accepted",
+          host: heartbeatHost,
+          connectionId: crypto.randomUUID(),
+          protocolVersion: REMOTE_PROTOCOL_VERSION,
+          missingOptionalCapabilities: [],
+        })
+      : request(method, url, headers, signal, body);
+  const silenceChecks: Array<() => void> = [];
+  const originalTimer = globalThis.setTimeout;
+  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    // Three missed heartbeats of 15 seconds.
+    if (delay === 45_000) silenceChecks.push(() => callback(...args));
+    return originalTimer(callback, delay, ...args);
+  });
+  const states: Array<{ status: string; message: string | undefined }> = [];
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  remote.subscribeState((state) =>
+    states.push({ status: state.status, message: state.failure?.message }),
+  );
+  try {
+    await remote.connect();
+    silenceChecks.at(-1)!();
+    for (let wait = 0; wait < 20 && states.at(-1)?.status === "connected"; wait += 1)
+      await Promise.resolve();
+    expect(states).toContainEqual({
+      status: "disconnected",
+      message: "The host stream went silent.",
+    });
+  } finally {
+    timers.mockRestore();
+    await remote.disconnect();
+  }
+});
+
+test("a silent task stream of a heartbeat host ends the connection", async () => {
+  const f = fixture();
+  const request = f.transport.request;
+  const heartbeatHost: RemoteHostDescriptor = {
+    ...descriptor,
+    protocols: [
+      {
+        version: REMOTE_PROTOCOL_VERSION,
+        capabilities: [...REMOTE_BASELINE_CAPABILITIES, REMOTE_STREAM_HEARTBEAT_CAPABILITY],
+      },
+    ],
+  };
+  f.transport.request = async (method, url, headers, signal, body) =>
+    url.endsWith("/connections")
+      ? json({
+          status: "accepted",
+          host: heartbeatHost,
+          connectionId: crypto.randomUUID(),
+          protocolVersion: REMOTE_PROTOCOL_VERSION,
+          missingOptionalCapabilities: [],
+        })
+      : request(method, url, headers, signal, body);
+  const silenceChecks: Array<() => void> = [];
+  const originalTimer = globalThis.setTimeout;
+  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    if (delay === 45_000) silenceChecks.push(() => callback(...args));
+    return originalTimer(callback, delay, ...args);
+  });
+  const states: Array<{ status: string; message: string | undefined }> = [];
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  remote.subscribeState((state) =>
+    states.push({ status: state.status, message: state.failure?.message }),
+  );
+  try {
+    await remote.connect();
+    const eventStreamChecks = silenceChecks.length;
+    const received = latch<TaskEventStreamFrame>();
+    const handle = await remote.subscribeTaskStream({ cursor: null }, (value) =>
+      received.resolve(value),
+    );
+    void handle.ready.catch(() => {});
+    await received.promise;
+    expect(silenceChecks.length).toBeGreaterThan(eventStreamChecks);
+    expect(states.at(-1)?.status).toBe("connected");
+
+    silenceChecks.at(-1)!();
+    for (let wait = 0; wait < 20 && states.at(-1)?.status === "connected"; wait += 1)
+      await Promise.resolve();
+
+    expect(states).toContainEqual({
+      status: "disconnected",
+      message: "The host stream went silent.",
+    });
+  } finally {
+    timers.mockRestore();
+    await remote.disconnect();
+  }
+});
+
+test("a host without heartbeats keeps a quiet event stream", async () => {
+  const f = fixture();
+  const delays: unknown[] = [];
+  const originalTimer = globalThis.setTimeout;
+  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    delays.push(delay);
+    return originalTimer(callback, delay, ...args);
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    expect(delays).not.toContain(45_000);
+  } finally {
+    timers.mockRestore();
+    await remote.disconnect();
+  }
+});
+
+test("retry does not reconnect after a disconnect during its release wait", async () => {
+  const f = fixture();
+  const released = latch<void>();
+  const request = f.transport.request;
+  f.transport.request = async (method, url, headers, signal, body) => {
+    if (method === "DELETE" && url.endsWith("/connections/current")) {
+      await released.promise;
+      return json(null, 204);
+    }
+    return request(method, url, headers, signal, body);
+  };
+  const remote = createRemoteHostClient(
+    "http://host.example:80",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    const retrying = remote.retry();
+    const disconnecting = remote.disconnect();
+    released.resolve();
+    await Promise.all([retrying, disconnecting]);
+
+    expect(remote.readState().status).toBe("idle");
+    expect(
+      f.requests.filter((entry) => entry === "POST http://host.example/connections"),
+    ).toHaveLength(1);
+  } finally {
+    released.resolve();
+    await remote.disconnect();
+  }
+});
+
+test("ends the empty bodies of acknowledgements, unsubscribes, and the connection release", async () => {
+  const f = fixture();
+  const open = new Map<string, number>();
+  const request = f.transport.request;
+  f.transport.request = async (method, url, headers, signal, body) => {
+    const response = await request(method, url, headers, signal, body);
+    if (method === "GET") return response;
+    const key = `${method} ${new URL(url).pathname.replace(/\/[0-9a-f-]{36}/, "/:id")}`;
+    if (response.status !== 204) return response;
+    open.set(key, (open.get(key) ?? 0) + 1);
+    const inner = response.body[Symbol.asyncIterator]();
+    // A native transport keeps a request until its body ends, by a final read or by return.
+    let ended = false;
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      open.set(key, (open.get(key) ?? 1) - 1);
+    };
+    return {
+      ...response,
+      body: {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            const next = await inner.next();
+            if (next.done) end();
+            return next;
+          },
+          return: async () => {
+            end();
+            return { done: true as const, value: undefined };
+          },
+        }),
+      },
+    };
+  };
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    const received = latch<TaskEventStreamFrame>();
+    const handle = await remote.subscribeTaskStream({ cursor: null }, (value) =>
+      received.resolve(value),
+    );
+    const initial = await received.promise;
+    await handle.acknowledge(initial.cursor);
+    await handle.acknowledge(initial.cursor);
+    await handle.unsubscribe();
+  } finally {
+    await remote.disconnect();
+  }
+
+  expect([...open.keys()].sort()).toEqual([
+    "DELETE /remote/connections/current",
+    "DELETE /remote/task-events/subscriptions/:id",
+    "POST /remote/task-events/subscriptions/:id/ack",
+  ]);
+  expect([...open.values()]).toEqual([0, 0, 0]);
 });
 
 test("blocked local network access fails without automatic reconnects until the user retries", async () => {
@@ -975,6 +1316,222 @@ test("blocked local network access fails without automatic reconnects until the 
     expect(discoveries).toBe(2);
   } finally {
     timers.mockRestore();
+    await remote.disconnect();
+  }
+});
+
+test("a read with a lost reply waits for the reconnect and runs again", async () => {
+  const f = fixture();
+  let reads = 0;
+  f.setMutation(async (_method, url) => {
+    if (url.endsWith("/invoke/custom_agent_role_list") && (reads += 1) === 1)
+      throw remoteError("transport_failure", "The socket closed.", "Reconnect.");
+    return json([]);
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await expect(remote.client.customAgentRoleList()).resolves.toEqual([]);
+    expect(reads).toBe(2);
+    expect(f.requests.filter((request) => request.endsWith("/connections"))).toHaveLength(2);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a mutation with a lost reply is not resent", async () => {
+  const f = fixture();
+  let sends = 0;
+  f.setMutation(async () => {
+    sends += 1;
+    throw remoteError("transport_failure", "The socket closed.", "Reconnect.");
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await expect(remote.client.setTheme("dark")).rejects.toMatchObject({
+      failure: { code: "outcome_unknown" },
+    });
+    expect(sends).toBe(1);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a read during a manual retry waits for the new connection", async () => {
+  const f = fixture();
+  f.setMutation(async () => json([]));
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    const retrying = remote.retry();
+    const read = remote.client.customAgentRoleList();
+    await retrying;
+    await expect(read).resolves.toEqual([]);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a failed synchronization reconnects by itself", async () => {
+  const f = fixture();
+  let attempts = 0;
+  const states: Array<{ status: string; code: string | undefined }> = [];
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("A view could not restore its state.");
+    },
+  );
+  remote.subscribeState((state) =>
+    states.push({ status: state.status, code: state.failure?.code }),
+  );
+  try {
+    await expect(remote.connect()).rejects.toMatchObject({
+      failure: { code: "synchronization_failed" },
+    });
+    expect(states.at(-1)).toEqual({ status: "disconnected", code: "synchronization_failed" });
+    for (let wait = 0; wait < 100 && states.at(-1)?.status !== "connected"; wait += 1)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(states.at(-1)?.status).toBe("connected");
+    expect(attempts).toBe(2);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a stream check needs heartbeat bytes after a pause", async () => {
+  const f = fixture();
+  const request = f.transport.request;
+  let push: (text: string) => void = () => {};
+  f.transport.request = async (method, url, headers, signal, body) => {
+    if (url.endsWith("/connections"))
+      return json({
+        status: "accepted",
+        host: {
+          ...descriptor,
+          protocols: [
+            {
+              version: REMOTE_PROTOCOL_VERSION,
+              capabilities: [...REMOTE_BASELINE_CAPABILITIES, REMOTE_STREAM_HEARTBEAT_CAPABILITY],
+            },
+          ],
+        },
+        connectionId: crypto.randomUUID(),
+        protocolVersion: REMOTE_PROTOCOL_VERSION,
+        missingOptionalCapabilities: [],
+      });
+    if (!url.endsWith("/events")) return request(method, url, headers, signal, body);
+    const chunks: string[] = [
+      frame("replay-complete", { hostChanged: false, gaps: [] }) +
+        frame("notification-frame", {
+          type: "attached",
+          cursor: f.boundary,
+          reason: "new",
+          health: [],
+        }),
+    ];
+    let wake = () => {};
+    push = (text) => {
+      chunks.push(text);
+      wake();
+    };
+    return {
+      status: 200,
+      headers: {},
+      body: (async function* () {
+        while (!signal.aborted) {
+          const next = chunks.shift();
+          if (next !== undefined) {
+            yield encoder.encode(next);
+            continue;
+          }
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+            signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+        }
+      })(),
+    };
+  };
+  const windows: Array<{ delay: number; fire: () => void }> = [];
+  const originalTimer = globalThis.setTimeout;
+  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    if (delay !== undefined && delay >= 2_000 && delay <= 17_000)
+      windows.push({ delay, fire: () => callback(...args) });
+    return originalTimer(callback, delay, ...args);
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    const alive = remote.confirmEventStream();
+    push(": heartbeat\n\n");
+    await expect(alive).resolves.toBe(true);
+
+    const silent = remote.confirmEventStream();
+    windows.at(-1)!.fire();
+    await expect(silent).resolves.toBe(false);
+  } finally {
+    timers.mockRestore();
+    await remote.disconnect();
+  }
+});
+
+test("a stream check of a host without heartbeats cannot prove the stream", async () => {
+  const f = fixture();
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await expect(remote.confirmEventStream()).resolves.toBe(false);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a result of another shape fails as a protocol mismatch and keeps the connection", async () => {
+  const f = fixture();
+  f.setMutation(async () => json({ unexpected: true }));
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await expect(remote.client.customAgentRoleList()).rejects.toMatchObject({
+      failure: { code: "invalid_protocol" },
+    });
+    expect(remote.readState().status).toBe("connected");
+  } finally {
     await remote.disconnect();
   }
 });

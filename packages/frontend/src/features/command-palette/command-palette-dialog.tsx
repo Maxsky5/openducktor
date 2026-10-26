@@ -9,7 +9,7 @@ import {
   useDialogPresence,
 } from "@/components/ui/dialog";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 import {
   handlePaletteKeyDown,

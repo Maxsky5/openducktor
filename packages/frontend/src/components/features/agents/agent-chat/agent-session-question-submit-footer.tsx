@@ -1,6 +1,8 @@
 import { ChevronRight, LoaderCircle, Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { agentQuestionCompletionText } from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-draft";
+import { PENDING_INPUT_LABELS } from "@openducktor/frontend-core/sessions/pending-input/pending-input-labels";
 
 type QuestionSubmitFooterProps = {
   disabled: boolean;
@@ -25,9 +27,7 @@ export const QuestionSubmitFooter = ({
 }: QuestionSubmitFooterProps): ReactElement => {
   return (
     <footer className="flex items-center justify-between gap-2 border-t border-input pt-1.5">
-      <p className="text-[11px] text-muted-foreground">
-        {isComplete ? "All questions answered." : "Answer all questions to confirm."}
-      </p>
+      <p className="text-[11px] text-muted-foreground">{agentQuestionCompletionText(isComplete)}</p>
       <div className="flex items-center gap-2">
         {canCancel ? (
           <Button
@@ -104,7 +104,7 @@ export function QuestionFeedback({
       ) : null}
       {isSubmitting ? (
         <p role="status" className="text-xs text-muted-foreground">
-          Submitting answers…
+          {PENDING_INPUT_LABELS.submittingAnswers}
         </p>
       ) : null}
     </div>

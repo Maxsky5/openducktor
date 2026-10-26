@@ -25,20 +25,24 @@ import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/ag
 import {
   buildSessionNavigationModel,
   type SessionNavigationEntry,
-} from "@/state/read-models/session-navigation-read-model";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import {
   WorkspaceActivityContext,
   useWorkspaceSessionLiveSnapshot,
-} from "@/state/workspace-activity/workspace-activity-context";
-import { SessionReadStateProvider, useWatchSessionBlockers } from "./session-read-state";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
+import {
+  SessionReadStateProvider,
+  useWatchSessionBlockers,
+} from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import {
   sessionNavigationTargetKey,
   type SessionNavigationTarget,
-} from "./session-navigation-target";
+} from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import {
   usePublishVisibleSessionTarget,
   VisibleSessionTargetProvider,
-} from "./visible-session-target";
+} from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
@@ -224,7 +228,7 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
         <HostRuntimeStatusContext value={runtimeStatus}>
           <WorkspaceActivityContext value={observer}>
             <VisibleSessionTargetProvider>
-              <SessionReadStateProvider>
+              <SessionReadStateProvider visibility={documentVisibility}>
                 <SessionMenuProvider>
                   <Body {...props} />
                 </SessionMenuProvider>

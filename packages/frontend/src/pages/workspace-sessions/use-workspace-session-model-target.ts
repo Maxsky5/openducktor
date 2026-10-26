@@ -1,6 +1,6 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMemo } from "react";
-import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { SessionModelTarget } from "./workspace-session-model-resources";
 

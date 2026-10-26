@@ -1,4 +1,4 @@
-import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
+import type { ResolveGitConflict } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 import type { CommitsAheadBehind, GitLocalChanges } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateGitWorkingDirectoryQueries } from "@openducktor/frontend-core/queries/git";
@@ -12,7 +12,7 @@ import type {
   GitConflict,
   GitConflictAction,
   GitDiffRefresh,
-} from "@/features/agent-studio-git";
+} from "@openducktor/frontend-core/git/contracts";
 import { useAgentStudioGitActionErrors } from "./use-agent-studio-git-action-errors";
 import { CONFLICT_LOCK_REASON, type GitActionKind } from "./use-agent-studio-git-action-utils";
 import { useAgentStudioGitChangeActions } from "./use-agent-studio-git-change-actions";

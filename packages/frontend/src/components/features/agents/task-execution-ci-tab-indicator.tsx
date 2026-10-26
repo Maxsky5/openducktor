@@ -5,7 +5,7 @@ import {
   type PullRequestReviewContextQueryInput,
   pullRequestReviewContextQueryOptions,
 } from "@openducktor/frontend-core/queries/pull-request-review";
-import type { CiChecksIndicatorStatus } from "./task-execution-ci-presentation";
+import type { CiChecksIndicatorStatus } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import {
   buildCiTabIndicator,
   formatOpenThreadCount,

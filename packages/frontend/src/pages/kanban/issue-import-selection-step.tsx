@@ -8,6 +8,12 @@ import { X } from "lucide-react";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
 import { Badge } from "@/components/ui/badge";
 import { SearchField } from "@/components/ui/search-field";
+import {
+  issueImportItemTitle,
+  issueImportSearchField,
+  issueImportSelectedTitle,
+  nextIssueImportCursors,
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
 import { IssueImportResults } from "./issue-import-results";
 
 type IssueSelectionStepProps = {
@@ -41,12 +47,10 @@ export function IssueSelectionStep({
   removeItem,
   openSource,
 }: IssueSelectionStepProps): ReactElement {
-  const canSearch = provider.descriptor.capabilities.issueAccess === "search";
-  const isGithub = provider.config.id === "github";
-  const searchLabel = isGithub ? "Search issues" : "Search work items";
+  const searchField = issueImportSearchField(provider);
   const onPageChange = (page: number, nextCursor?: string): void => {
     if (nextCursor) {
-      setCursors((current) => [...current.slice(0, pageIndex + 1), nextCursor]);
+      setCursors((current) => nextIssueImportCursors(current, pageIndex, nextCursor));
     }
     setPageIndex(page);
   };
@@ -54,13 +58,13 @@ export function IssueSelectionStep({
   return (
     <div className="flex min-h-0 flex-col gap-4">
       <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border">
-        {canSearch ? (
+        {searchField ? (
           <div className="grid shrink-0 gap-2.5 border-b border-border bg-muted/20 p-4">
             <SearchField
               id="issue-import-search"
-              label={searchLabel}
+              label={searchField.label}
               value={searchText}
-              placeholder={isGithub ? "Search titles or issue numbers" : "Search titles"}
+              placeholder={searchField.placeholder}
               onValueChange={setSearchText}
             />
           </div>
@@ -92,13 +96,13 @@ function SelectedIssues({
 
   return (
     <div className="flex max-h-32 shrink-0 flex-col gap-2 overflow-y-auto border-t border-border pt-3">
-      <p className="text-sm font-medium text-foreground">Selected ({items.length})</p>
+      <p className="text-sm font-medium text-foreground">
+        {issueImportSelectedTitle(items.length)}
+      </p>
       <div className="flex flex-wrap gap-2">
         {items.map((item) => (
           <Badge key={item.sourceId} variant="secondary" className="max-w-full gap-1 pr-1">
-            <span className="truncate">
-              #{item.number} {item.title}
-            </span>
+            <span className="truncate">{issueImportItemTitle(item)}</span>
             <button
               type="button"
               className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"

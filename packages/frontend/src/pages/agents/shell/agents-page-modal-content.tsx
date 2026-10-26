@@ -2,7 +2,7 @@ import { type ComponentProps, type ReactElement, useEffect, useEffectEvent } fro
 import {
   useSessionViewActive,
   useSessionViewShown,
-} from "@/features/session-navigation/session-view-context";
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { SessionStartModal } from "@/components/features/agents/session-start-modal";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";

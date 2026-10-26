@@ -1,7 +1,7 @@
 import type { AppPlatform } from "@openducktor/contracts";
-import { taskActionLabel } from "@/components/features/kanban/task-action-ui";
+import { taskActionLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { hasPlatformModifier, isPlatformChord, platformKeyLabels } from "@/lib/keyboard-shortcuts";
-import { AGENT_ROLE_LABELS } from "@/types";
+import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type { CommandPaletteHint } from "./command-palette-footer";
 import type { PaletteEntry } from "./command-palette-groups";
 import type { PaletteTaskCommand, PaletteTaskView } from "./command-palette-task-model";

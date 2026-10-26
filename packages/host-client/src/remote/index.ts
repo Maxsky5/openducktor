@@ -4,6 +4,7 @@ import {
   browserEventCursorSchema,
   browserReplayCompleteSchema,
   hostErrorResponseSchema,
+  isHostReadCommand,
   notificationStreamFrameSchema,
   hostEventEnvelopeSchema,
   remoteEndpointSchema,
@@ -12,6 +13,8 @@ import {
   remoteTaskLeaseSchema,
   taskEventStreamFrameSchema,
   REMOTE_CONNECTION_HEADER,
+  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
+  REMOTE_STREAM_HEARTBEAT_INTERVAL_MS,
   type BrowserEventCursor,
   type BrowserReplayComplete,
   type HostEventEnvelope,
@@ -33,9 +36,10 @@ import {
   type RemoteHttpResponse,
   type RemoteTerminalConnection,
 } from "./transport";
+import { linkSignals } from "./linked-signal";
 import { readSse } from "./sse";
 export * from "./transport";
-export { readSse, type SseFrame } from "./sse";
+export { readSse, type ReadSseOptions, type SseFrame } from "./sse";
 export type RemoteConnectionState = {
   status: "idle" | "connecting" | "synchronizing" | "connected" | "disconnected" | "failed";
   generation: number;
@@ -62,6 +66,13 @@ export interface RemoteHostClient {
   retry(): Promise<void>;
   disconnect(): Promise<void>;
   setActive(active: boolean): void;
+  /**
+   * Resolves true when the host event stream delivers bytes within the time that its heartbeat
+   * allows, counted from now. Resolves false when the stream stays silent, the connection is not
+   * connected, or the host sends no heartbeat. After a device pause, such as a locked screen, a
+   * dead stream shows no error until a read fails, so the app checks it on return.
+   */
+  confirmEventStream(): Promise<boolean>;
   subscribeState(listener: (state: RemoteConnectionState) => void): () => void;
   subscribeHostEvents(listener: (event: HostEventEnvelope) => void): () => void;
   subscribeNotifications(listener: (frame: NotificationStreamFrame) => void): () => void;
@@ -107,6 +118,11 @@ export const createRemoteHostClient = (
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let attempts = 0;
   let cursor: BrowserEventCursor | null = null;
+  /** How long a stream of this connection can stay silent, or null for a host without heartbeats. */
+  let streamSilenceLimitMs: number | null = null;
+  /** When the host event stream last delivered bytes, heartbeats included. */
+  let eventStreamBytesAt = 0;
+  const eventStreamListeners = new Set<() => void>();
   const stateListeners = new Set<(state: RemoteConnectionState) => void>();
   const eventListeners = new Set<(event: HostEventEnvelope) => void>();
   const notificationListeners = new Set<(frame: NotificationStreamFrame) => void>();
@@ -149,7 +165,8 @@ export const createRemoteHostClient = (
             ),
           SETUP_TIMEOUT_MS,
         );
-    const combined = AbortSignal.any([signal, setup.signal]);
+    const { signal: combined, unlink } = linkSignals([signal, setup.signal]);
+    const requestGeneration = generation;
     try {
       const requestHeaders: Record<string, string> = admitted ? headers() : {};
       if (cursor && path === "/events") requestHeaders["last-event-id"] = JSON.stringify(cursor);
@@ -175,8 +192,14 @@ export const createRemoteHostClient = (
           new TextDecoder().decode(await readBytes(response, combined)),
         );
         const negotiated = remoteNegotiationResultSchema.safeParse(payload);
-        if (negotiated.success && negotiated.data.status === "rejected")
-          throw new RemoteRefusalError(negotiated.data.failure);
+        if (negotiated.success && negotiated.data.status === "rejected") {
+          const refusal = new RemoteRefusalError(negotiated.data.failure);
+          // The host no longer knows this admission, so the connection is gone. A reconnect
+          // negotiates a new one. The host refused the request, so it ran no work.
+          if (admitted && refusal.failure.code === "connection_expired")
+            lost(requestGeneration, refusal);
+          throw refusal;
+        }
         const hostError = hostErrorResponseSchema.safeParse(payload);
         if (hostError.success)
           throw new HostInvokeError(
@@ -206,13 +229,30 @@ export const createRemoteHostClient = (
             }
           } finally {
             clearTimeout(timer);
+            unlink();
           }
         })(),
       };
     } catch (cause) {
       clearTimeout(timer);
+      // A native transport keeps a request until its body ends or its signal aborts, so a request
+      // that fails with an unread body, such as a redirect, aborts before its signal detaches.
+      setup.abort(cause);
+      unlink();
       throw cause;
     }
+  };
+  /**
+   * Sends a request whose reply the client does not use. Reading the empty body to its end lets
+   * the transport release the request, as a native transport keeps it until then.
+   */
+  const send = async (
+    method: "POST" | "DELETE",
+    path: string,
+    signal: AbortSignal,
+    body?: RequestBody,
+  ): Promise<void> => {
+    await readBytes(await request(method, path, signal, body), signal);
   };
   const json = async (
     method: "GET" | "POST" | "DELETE",
@@ -223,7 +263,9 @@ export const createRemoteHostClient = (
   ): Promise<JSONType> => {
     const bytes = await readBytes(await request(method, path, signal, body, admitted), signal);
     try {
-      return z.json().parse(JSON.parse(new TextDecoder().decode(bytes)));
+      // `JSON.parse` returns only JSON values. Each command checks the shape with its own schema.
+      const value: JSONType = JSON.parse(new TextDecoder().decode(bytes));
+      return value;
     } catch (cause) {
       throw remoteError(
         "invalid_protocol",
@@ -317,6 +359,12 @@ export const createRemoteHostClient = (
             "Update the host to implement its advertised remote contract.",
           );
         abort.signal.throwIfAborted();
+        // Three missed heartbeats mean that the network dropped the stream without closing it.
+        streamSilenceLimitMs = negotiatedProtocol.capabilities.includes(
+          REMOTE_STREAM_HEARTBEAT_CAPABILITY,
+        )
+          ? 3 * REMOTE_STREAM_HEARTBEAT_INTERVAL_MS
+          : null;
         state = { ...state, host: accepted.host };
         if (previousHostInstanceId !== accepted.host.hostInstanceId) cursor = null;
         const replay = deferred<BrowserReplayComplete>();
@@ -333,7 +381,14 @@ export const createRemoteHostClient = (
         const events = await request("GET", "/events", abort.signal, undefined, true, true);
         void (async () => {
           try {
-            for await (const frame of readSse(events.body, abort.signal)) {
+            for await (const frame of readSse(events.body, abort.signal, {
+              silenceLimitMs: streamSilenceLimitMs,
+              onBytes: () => {
+                if (generation !== current) return;
+                eventStreamBytesAt = Date.now();
+                for (const listener of eventStreamListeners) listener();
+              },
+            })) {
               if (generation !== current) return;
               if (frame.event === "replay-complete")
                 replay.resolve(parsePayload(browserReplayCompleteSchema, frame.data));
@@ -414,30 +469,96 @@ export const createRemoteHostClient = (
       );
     return { generation, signal: owner.signal };
   };
-  const client = createHostClient(async (command, args, resultSchema) => {
-    if (!connectionId && pending) await pending;
-    const { generation: current, signal } = currentConnection();
-    try {
-      return resultSchema.parse(
-        await json("POST", `/invoke/${encodeURIComponent(command)}`, signal, args ?? {}),
+  /** The failure of the current state, for work that cannot wait for a reconnect. */
+  const disconnectedError = (): RemoteConnectionError =>
+    new RemoteConnectionError(
+      state.failure ?? {
+        code: "connection_expired",
+        message: "The remote host is disconnected.",
+        nextAction: "Reconnect before using host work.",
+      },
+    );
+  /**
+   * Waits until the client connects again by itself. A read sent by the recovery barrier runs at
+   * once, as its attempt holds an admission. A waiting read runs only after the barrier, so stream
+   * snapshots come before current-state reads. Rejects when reconnects stop, after a disconnect
+   * or a permanent failure, or when `deadline` passes.
+   */
+  const connected = (deadline: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (failure?: RemoteConnectionError) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stateListeners.delete(check);
+        if (failure) reject(failure);
+        else resolve();
+      };
+      const check = () => {
+        if (state.status === "connected" && connectionId && owner && !owner.signal.aborted)
+          settle();
+        else if (!selected || state.status === "failed") settle(disconnectedError());
+      };
+      const timer = setTimeout(
+        () => settle(disconnectedError()),
+        Math.max(0, deadline - Date.now()),
       );
-    } catch (cause) {
-      if (cause instanceof HostInvokeError || cause instanceof RemoteRefusalError) throw cause;
-      lost(current, cause);
+      stateListeners.add(check);
+      check();
+    });
+  const client = createHostClient(async (command, args, resultSchema) => {
+    // A read changes no host state, so it waits for the reconnect and runs again. A mutation is
+    // never resent: a lost reply leaves its outcome unknown.
+    const read = isHostReadCommand(command);
+    const deadline = Date.now() + READ_RECONNECT_WAIT_MS;
+    while (true) {
+      const admitted = connectionId !== null && owner !== null && !owner.signal.aborted;
+      if (read && !admitted) await connected(deadline);
+      else if (!connectionId && pending) await pending;
+      const { generation: current, signal } = currentConnection();
+      let payload: JSONType;
+      try {
+        payload = await json("POST", `/invoke/${encodeURIComponent(command)}`, signal, args ?? {});
+      } catch (cause) {
+        if (cause instanceof HostInvokeError) throw cause;
+        if (cause instanceof RemoteRefusalError) {
+          // The host ran no work. Its expired admission starts a reconnect.
+          if (read && cause.failure.code === "connection_expired") continue;
+          throw cause;
+        }
+        lost(current, cause);
+        if (read) {
+          if (Date.now() < deadline) continue;
+          throw connectionError(cause);
+        }
+        throw remoteError(
+          "outcome_unknown",
+          `The result of ${command} was lost.`,
+          "Read current host state to check the outcome. Do not resend the operation automatically.",
+        );
+      }
+      // A result of another shape is a version mismatch, not a lost connection.
+      const parsed = resultSchema.safeParse(payload);
+      if (parsed.success) return parsed.data;
       throw remoteError(
-        "outcome_unknown",
-        `The result of ${command} was lost.`,
-        "Read current host state to check the outcome. Do not resend the operation automatically.",
+        "invalid_protocol",
+        `The host sent a ${command} result that this app cannot read.`,
+        "Update OpenDucktor on the host and on this device to the same version.",
       );
     }
   });
   const resource = async (path: string, signal: AbortSignal) => {
-    const combined = owner ? AbortSignal.any([signal, owner.signal]) : signal;
-    if (!connectionId && pending) await waitWithAbort(pending, combined);
-    combined.throwIfAborted();
-    currentConnection();
-    const response = await request("GET", path, combined, undefined, true, true);
-    return { bytes: await readBytes(response, combined), headers: response.headers };
+    const { signal: combined, unlink } = linkSignals(owner ? [signal, owner.signal] : [signal]);
+    try {
+      if (!connectionId && pending) await waitWithAbort(pending, combined);
+      combined.throwIfAborted();
+      currentConnection();
+      const response = await request("GET", path, combined, undefined, true, true);
+      return { bytes: await readBytes(response, combined), headers: response.headers };
+    } finally {
+      unlink();
+    }
   };
   /** Stop local delivery at once and finish bounded host cleanup before returning. */
   const stop = async () => {
@@ -458,7 +579,7 @@ export const createRemoteHostClient = (
   const release = async (id: string) => {
     const signal = AbortSignal.timeout(SETUP_TIMEOUT_MS);
     try {
-      await waitWithAbort(
+      const response = await waitWithAbort(
         transport.request(
           "DELETE",
           `${base}/connections/current`,
@@ -467,12 +588,15 @@ export const createRemoteHostClient = (
         ),
         signal,
       );
+      await readBytes(response, signal);
     } catch {
       // Local cleanup does not depend on the host reply.
     }
   };
+  let disconnects = 0;
   const disconnect = () => {
     selected = false;
+    disconnects += 1;
     return stop();
   };
   return {
@@ -480,7 +604,11 @@ export const createRemoteHostClient = (
     readState: () => state,
     connect,
     retry: async () => {
-      await disconnect();
+      // The client stays selected, so reads that wait for a reconnect keep waiting.
+      const disconnectsAtRetry = disconnects;
+      await stop();
+      // A disconnect during the release wait, such as a host switch, keeps the connection closed.
+      if (disconnects !== disconnectsAtRetry) return;
       return connect();
     },
     disconnect,
@@ -488,6 +616,38 @@ export const createRemoteHostClient = (
       active = value;
       if (!value) void stop();
       else if (selected) void connect().catch(() => {});
+    },
+    confirmEventStream() {
+      const connection = owner;
+      if (
+        state.status !== "connected" ||
+        !connection ||
+        connection.signal.aborted ||
+        streamSilenceLimitMs === null
+      )
+        return Promise.resolve(false);
+      // The host writes a heartbeat at each interval, and a live stream also delivers the bytes
+      // that arrived during the pause. So the next bytes are due by the next heartbeat.
+      const window = Math.max(
+        STREAM_PROOF_GRACE_MS,
+        eventStreamBytesAt +
+          REMOTE_STREAM_HEARTBEAT_INTERVAL_MS +
+          STREAM_PROOF_GRACE_MS -
+          Date.now(),
+      );
+      return new Promise((resolve) => {
+        const finish = (alive: boolean) => {
+          clearTimeout(timer);
+          eventStreamListeners.delete(delivered);
+          connection.signal.removeEventListener("abort", ended);
+          resolve(alive);
+        };
+        const delivered = () => finish(true);
+        const ended = () => finish(false);
+        const timer = setTimeout(() => finish(false), window);
+        eventStreamListeners.add(delivered);
+        connection.signal.addEventListener("abort", ended, { once: true });
+      });
     },
     subscribeState(listener) {
       stateListeners.add(listener);
@@ -522,8 +682,7 @@ export const createRemoteHostClient = (
       const unsubscribe = async () => {
         local.abort();
         combined.removeEventListener("abort", fail);
-        if (generation === current && !hostSignal.aborted)
-          await request("DELETE", path, hostSignal);
+        if (generation === current && !hostSignal.aborted) await send("DELETE", path, hostSignal);
       };
       let response: RemoteHttpResponse;
       try {
@@ -551,9 +710,10 @@ export const createRemoteHostClient = (
       combined.addEventListener("abort", () => clearTimeout(setupTimer), { once: true });
       void (async () => {
         try {
-          for await (const frame of readSse(response.body, combined, () =>
-            clearTimeout(setupTimer),
-          )) {
+          for await (const frame of readSse(response.body, combined, {
+            onReady: () => clearTimeout(setupTimer),
+            silenceLimitMs: streamSilenceLimitMs,
+          })) {
             clearTimeout(setupTimer);
             if (generation !== current) return;
             const parsed = parsePayload(taskEventStreamFrameSchema, frame.data);
@@ -582,7 +742,7 @@ export const createRemoteHostClient = (
               "This task handle belongs to an old connection.",
               "Restore the task subscription on the current connection.",
             );
-          await request("POST", `${path}/ack`, combined, { cursor });
+          await send("POST", `${path}/ack`, combined, { cursor });
           if (cursor.epoch === boundary.epoch && cursor.sequence >= boundary.sequence)
             ready.resolve();
         },
@@ -591,7 +751,7 @@ export const createRemoteHostClient = (
     },
     async connectTerminal(signal, onFrame, onClose) {
       const connection = currentConnection();
-      const combined = AbortSignal.any([signal, connection.signal]);
+      const { signal: combined, unlink } = linkSignals([signal, connection.signal]);
       const wsUrl = new URL(`${base}/terminal`);
       wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
       const deadline = new AbortController();
@@ -656,11 +816,13 @@ export const createRemoteHostClient = (
           close: () => {
             closedByClient = true;
             connection.signal.removeEventListener("abort", hostLost);
+            unlink();
             socket.close();
           },
         };
       } catch (cause) {
         connection.signal.removeEventListener("abort", hostLost);
+        unlink();
         throw cause;
       } finally {
         clearTimeout(timer);
@@ -710,8 +872,18 @@ const parsePayload = <Value>(schema: z.ZodType<Value>, text: string): Value => {
 };
 class RemoteRefusalError extends RemoteConnectionError {}
 const SETUP_TIMEOUT_MS = 10_000;
+/** How long a read waits for a reconnect before it fails with the connection failure. */
+const READ_RECONNECT_WAIT_MS = 30_000;
+/** How long a stream check waits at least for bytes that the stream delivers after a pause. */
+const STREAM_PROOF_GRACE_MS = 2_000;
+/**
+ * A synchronization failure also retries: one failed read or recovery, as during a host restart,
+ * must not stop the reconnects. The state keeps the failure, so the user can see it.
+ */
 const canRetry = (error: RemoteConnectionError): boolean =>
-  ["unavailable", "transport_failure", "connection_expired"].includes(error.failure.code) &&
+  ["unavailable", "transport_failure", "connection_expired", "synchronization_failed"].includes(
+    error.failure.code,
+  ) &&
   error.failure.transportCause !== "tls" &&
   error.failure.transportCause !== "local_network";
 const connectionError = (

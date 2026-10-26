@@ -1,0 +1,311 @@
+/*
+ * The block page look, from the native Markdown views in `src/rich-content/markdown/`: Space
+ * Grotesk text, IBM Plex Mono code, and the same sizes, gaps, and colors. The app sends the
+ * colors, the body text metrics, and the variant in each render message. The values in `:root`
+ * only apply before the first message, while the root is empty. Gaps keep their size, and text
+ * follows the font scale, as in native views.
+ */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../../../../../node_modules/@expo-google-fonts/space-grotesk/400Regular/SpaceGrotesk_400Regular.ttf")
+    format("truetype");
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  src: url("../../../../../node_modules/@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf")
+    format("truetype");
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 600;
+  src: url("../../../../../node_modules/@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf")
+    format("truetype");
+}
+
+/* Code uses the medium face only, as native code does. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  src: url("../../../../../node_modules/@expo-google-fonts/ibm-plex-mono/500Medium/IBMPlexMono_500Medium.ttf")
+    format("truetype");
+}
+
+:root {
+  --font-size: 15px;
+  --line-height: 1.6;
+  --font-scale: 1;
+  --font-style: normal;
+  --label: #020618;
+  --secondary-label: #62748e;
+  --foreground: #020618;
+  --code: #ec003f;
+  --separator: #cad5e2;
+  --list-number: #62748e;
+  --list-bullet: #cad5e2;
+  --table-rule: #e2e8f0;
+  --table-header-rule: #cad5e2;
+  --code-background: #f1f5f94d;
+  /* The `document` variant: `prose-p:my-2` gaps and `prose-li:my-0.5` items. */
+  --block-gap: 8px;
+  --item-gap: 2px;
+  --list-indent: 30px;
+  --code-size: 13px;
+  --code-line-height: 22px;
+  --table-size: 13px;
+  --table-line-height: 22px;
+  font-size: calc(var(--font-size) * var(--font-scale));
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* The `compact` variant: `prose-sm` with `prose-p:my-1` gaps and no item gap. */
+:root[data-variant="compact"] {
+  --block-gap: 4px;
+  --item-gap: 0px;
+  --list-indent: 28px;
+  --code-size: 12px;
+  --code-line-height: 20px;
+  --table-size: 12px;
+  --table-line-height: 18px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+body {
+  color: var(--label);
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 400;
+  font-style: var(--font-style);
+  line-height: var(--line-height);
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The padding stops child margins from leaving the root, so its height is the content height. */
+#root {
+  padding: 1px 0;
+}
+
+p,
+ul,
+ol,
+blockquote,
+table,
+pre,
+hr,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.diagram,
+.math-display {
+  margin: 0;
+}
+
+/* The native gap between the blocks in a list item or a quote. */
+li > * + *,
+blockquote > * + * {
+  margin-top: var(--block-gap);
+}
+
+/* Items of a tight list. In a loose list, the first paragraph of an item adds the block gap. */
+li + li {
+  margin-top: var(--item-gap);
+}
+
+li + li > p:first-child {
+  margin-top: var(--block-gap);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+}
+
+h1 {
+  font-size: calc(34px * var(--font-scale));
+  line-height: calc(38px * var(--font-scale));
+  letter-spacing: -0.4px;
+}
+
+h2 {
+  font-size: calc(22px * var(--font-scale));
+  line-height: calc(30px * var(--font-scale));
+  letter-spacing: -0.2px;
+}
+
+h3 {
+  font-size: calc(19px * var(--font-scale));
+  line-height: calc(30px * var(--font-scale));
+}
+
+h4 {
+  font-size: calc(15px * var(--font-scale));
+  line-height: calc(23px * var(--font-scale));
+}
+
+h5,
+h6,
+:root[data-variant="compact"] h1,
+:root[data-variant="compact"] h2,
+:root[data-variant="compact"] h3,
+:root[data-variant="compact"] h4 {
+  font-size: calc(15px * var(--font-scale));
+  line-height: calc(24px * var(--font-scale));
+  letter-spacing: normal;
+}
+
+/* Wide numbers at a large font scale need more room than the native marker column. */
+ul,
+ol {
+  padding-left: max(var(--list-indent), 2em);
+}
+
+ol {
+  font-variant-numeric: tabular-nums;
+}
+
+ol > li::marker {
+  color: var(--list-number);
+}
+
+ul > li::marker {
+  color: var(--list-bullet);
+}
+
+a {
+  color: var(--foreground);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--secondary-label);
+}
+
+/* `prose-code:text-rose-600 dark:text-rose-400 font-medium`. Code is never italic. */
+code {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 500;
+  font-style: normal;
+  font-size: calc(var(--code-size) * var(--font-scale));
+  color: var(--code);
+  padding: 0 0.2em;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 14px;
+  background: var(--code-background);
+  border: 1px solid var(--separator);
+  border-radius: 16px;
+}
+
+pre code {
+  padding: 0;
+  color: var(--foreground);
+  line-height: calc(var(--code-line-height) * var(--font-scale));
+}
+
+/* A 4-point bar, a muted wash, and medium italic text in curly quotes. */
+blockquote {
+  padding: calc(4px + var(--block-gap)) 12px;
+  border-left: 4px solid var(--separator);
+  background: var(--code-background);
+  font-weight: 500;
+  font-style: italic;
+}
+
+blockquote > p:first-of-type::before {
+  content: "\201C";
+}
+
+blockquote > p:last-of-type::after {
+  content: "\201D";
+}
+
+/* No frame, a semibold header over a darker rule, and lighter rules between rows. */
+table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: calc(var(--table-size) * var(--font-scale));
+  line-height: calc(var(--table-line-height) * var(--font-scale));
+}
+
+th,
+td {
+  padding: 8px;
+  border-bottom: 1px solid var(--table-rule);
+}
+
+th {
+  padding-top: 0;
+  font-weight: 600;
+  vertical-align: bottom;
+  border-bottom-color: var(--table-header-rule);
+}
+
+/* A header cell of a column without an alignment keeps the start alignment. */
+th:not([align]) {
+  text-align: left;
+}
+
+th:first-child,
+td:first-child {
+  padding-left: 0;
+}
+
+th:last-child,
+td:last-child {
+  padding-right: 0;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--separator);
+}
+
+.math-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-display {
+  margin: 0;
+}
+
+.katex {
+  font-size: 1.05em;
+}
+
+.diagram {
+  overflow-x: auto;
+}
+
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+}

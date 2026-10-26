@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { Stepper, type StepperStep } from "@/components/ui/stepper";
-import type { ComposerStep } from "@/types/task-composer";
+import type { ComposerStep } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 const TASK_STEPS: readonly StepperStep<ComposerStep>[] = [
   { id: "type", title: "Issue Type", shortTitle: "Type", description: "Choose the task category" },

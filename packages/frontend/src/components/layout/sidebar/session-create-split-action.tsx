@@ -7,7 +7,7 @@ import {
 } from "@/components/layout/workspace-dialogs";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { cn } from "@/lib/utils";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import {
@@ -17,8 +17,8 @@ import {
   type IssueImportState,
   runIssueImport,
   toIssueImportState,
-} from "@/pages/kanban/issue-import-provider";
-import { isKanbanTaskCreationDisabled } from "@/pages/kanban/task-creation-availability";
+} from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
+import { isKanbanTaskCreationDisabled } from "@openducktor/frontend-core/tasks/board/task-creation-availability";
 import { useActiveWorkspace, useChecksState } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 

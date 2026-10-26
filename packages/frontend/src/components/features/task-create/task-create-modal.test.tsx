@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import type { ComposerState } from "@/types/task-composer";
+import type { ComposerState } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import { render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -41,6 +41,7 @@ const controllerMock: ReturnType<
   step: "details",
   setStep: (_step: "type" | "details") => {},
   editSection: "spec",
+  isTaskDraftDirty: false,
   isSpecDirty: false,
   isPlanDirty: false,
   requestSectionChange: (_section: "details" | "spec" | "plan") => {},
@@ -71,10 +72,11 @@ const controllerMock: ReturnType<
     description: "",
     labels: [],
   },
-  priorityComboboxOptions: [],
+  priorityOptions: [],
   knownLabels: [],
   updateState: (_patch: Partial<ComposerState>) => {},
   footerError: noFooterError(),
+  footerErrorOutcomeUnknown: false,
   destination: null,
   destinationError: noFooterError(),
   isEditingDocument: true,

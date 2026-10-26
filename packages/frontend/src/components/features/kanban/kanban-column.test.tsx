@@ -6,10 +6,10 @@ import { MemoryRouter } from "react-router";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
+} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { KanbanColumn } from "./kanban-column";
 
 const renderColumnMarkup = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>

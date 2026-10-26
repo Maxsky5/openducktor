@@ -1,6 +1,6 @@
 import type { IpcMain } from "electron";
 import { remoteAccessEnableInputSchema } from "@openducktor/contracts";
-import { type RemoteAccessController } from "@openducktor/remote-host";
+import { type RemoteAccessOperator } from "@openducktor/remote-host";
 import { Effect, Stream } from "effect";
 import { z } from "zod";
 import {
@@ -9,7 +9,7 @@ import {
 } from "../shared/electron-bridge-contract";
 export const registerElectronRemoteAccessIpc = (
   ipcMain: Pick<IpcMain, "handle">,
-  controller: RemoteAccessController,
+  controller: RemoteAccessOperator,
   isShutdown: () => boolean,
 ) => {
   const senders = new Set<Electron.WebContents>();

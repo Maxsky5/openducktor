@@ -1,13 +1,9 @@
 import {
-  REMOTE_CONNECTION_HEADER,
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  TERMINAL_PROTOCOL_SUBPROTOCOL,
-} from "@openducktor/contracts";
-import {
   RemoteConnectionError,
   remoteError,
   type RemoteTransport,
 } from "@openducktor/host-client/remote";
+import { openRemoteTerminalSocket } from "@openducktor/host-client/remote/terminal-socket";
 
 export const createBrowserRemoteTransport = (): RemoteTransport => {
   // Once the host answered, a local network block does not apply to it, so later failures keep
@@ -60,84 +56,14 @@ export const createBrowserRemoteTransport = (): RemoteTransport => {
         })(),
       };
     },
-    openTerminal(url, headers, signal, onFrame, onClose) {
-      return new Promise((resolve, reject) => {
-        const connectionId = headers[REMOTE_CONNECTION_HEADER];
-        if (!connectionId) {
-          reject(
-            remoteError(
-              "connection_expired",
-              "Terminal has no negotiated connection.",
-              "Reconnect before attaching the terminal.",
-            ),
-          );
-          return;
-        }
-        const socket = new WebSocket(url, [
-          TERMINAL_PROTOCOL_SUBPROTOCOL,
-          `${REMOTE_TERMINAL_CONNECTION_PREFIX}${connectionId}`,
-        ]);
-        socket.binaryType = "arraybuffer";
-        let opened = false;
-        const abort = () => {
-          socket.close();
-          reject(signal.reason);
-        };
-        signal.addEventListener("abort", abort, { once: true });
-        if (signal.aborted) abort();
-        socket.onopen = () => {
-          if (signal.aborted) {
-            socket.close();
-            return;
-          }
-          if (socket.protocol !== TERMINAL_PROTOCOL_SUBPROTOCOL) {
-            socket.close();
-            reject(
-              remoteError(
-                "invalid_protocol",
-                "Terminal protocol was not selected.",
-                "Update the host or correct proxy WebSocket routing.",
-              ),
-            );
-            return;
-          }
-          opened = true;
-          resolve({
-            send: async (frame) => {
-              signal.throwIfAborted();
-              if (socket.readyState !== WebSocket.OPEN)
-                throw new Error("Terminal is disconnected.");
-              socket.send(Uint8Array.from(frame));
-            },
-            close: () => socket.close(),
-          });
-        };
-        socket.onmessage = (event) => {
-          if (!signal.aborted && event.data instanceof ArrayBuffer)
-            onFrame(new Uint8Array(event.data));
-        };
-        socket.onerror = () => {
-          const error = remoteError(
-            "transport_failure",
-            "Terminal connection failed.",
-            "Check the host and proxy WebSocket forwarding.",
-          );
-          if (!opened) reject(error);
-        };
-        socket.onclose = () => {
-          signal.removeEventListener("abort", abort);
-          if (!opened)
-            reject(
-              remoteError(
-                "transport_failure",
-                "Terminal closed during setup.",
-                "Check the selected host and retry.",
-              ),
-            );
-          else if (!signal.aborted) onClose();
-        };
-      });
-    },
+    openTerminal: (url, headers, signal, onFrame, onClose) =>
+      openRemoteTerminalSocket(
+        (protocols) => new WebSocket(url, protocols),
+        headers,
+        signal,
+        onFrame,
+        onClose,
+      ),
   };
 };
 
