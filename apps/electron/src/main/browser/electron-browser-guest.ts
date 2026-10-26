@@ -39,12 +39,17 @@ type GuestInput = {
 export type GuestWindowOpenDetails = { readonly url: string; readonly disposition: string };
 export type GuestWindowOpenResponse =
   | { action: "deny" }
-  | { action: "allow"; outlivesOpener: false };
+  | {
+      action: "allow";
+      outlivesOpener: false;
+      overrideBrowserWindowOptions: { show: false };
+    };
 
 /** An OpenDucktor popup window that Electron created for a `new-window` popup. */
 export type ElectronPopupWindow = {
   readonly webContents: ElectronBrowserGuest;
   show(): void;
+  showInactive(): void;
   focus(): void;
   destroy(): void;
   isDestroyed(): boolean;
@@ -272,20 +277,26 @@ export const prepareBrowserGuest = async (
         events.onSchemeRefused(scheme);
         return { action: "deny" };
       }
-      // A popup with window features opens in a popup window, which keeps `window.opener`. No
-      // window option override: an override of `sandbox` drops `window.opener`.
+      // Create the popup hidden, then show it without taking focus. Keep the inherited security
+      // settings: an override of `sandbox` drops `window.opener`.
       if (details.disposition === "new-window") {
-        return { action: "allow", outlivesOpener: false };
+        return {
+          action: "allow",
+          outlivesOpener: false,
+          overrideBrowserWindowOptions: { show: false },
+        };
       }
       // Every other popup becomes a panel tab without an opener link.
       events.onPanelPopup(details.url);
       return { action: "deny" };
     });
     guest.on("did-create-window", (window, details) => {
-      // A popup window has no browser layer, so its pages never attach a `<webview>`. The guard
-      // changes no window option, because an option override drops `window.opener`.
+      // A popup window has no browser layer, so its pages never attach a `<webview>`.
       window.webContents.on("will-attach-webview", (event) => event.preventDefault());
-      if (active) events.onPopupWindow(window, details.url);
+      if (active) {
+        window.showInactive();
+        events.onPopupWindow(window, details.url);
+      }
     });
 
     guest.once("destroyed", () => {

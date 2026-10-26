@@ -127,8 +127,8 @@ In Electron, the DevTools button shows and hides DevTools in the same panel tab.
 - The engine reloads a tab with the `reload()` of its guest. CDP `Page.reload` on a guest reloads the whole OpenDucktor window, so no code sends it to an Electron page.
 - Page screenshots go to the engine, which cuts a clip from a screenshot of the whole viewport. A CDP clip screenshot moves the shown page for one frame.
 - Electron answers `beforeunload` at once. The page stays, and the tab shows a Leave page prompt. Leave repeats the navigation.
-- A popup with window features (`disposition: "new-window"`) opens in an OpenDucktor popup window that keeps its opener link. Other popups open as panel tabs without an opener link, because a `<webview>` cannot adopt a popup page that has an opener.
-- A CDP mouse press on a guest moves the window focus to the `<webview>`. The CDP proxy sends `agent_press` while agent presses run, and the renderer gives the focus back to the element of the user.
+- A popup with window features (`disposition: "new-window"`) opens in an OpenDucktor popup window that keeps its opener link. It uses `showInactive()` to show without taking focus. On Wayland, the compositor can ignore this focus request. Show window brings it to the front when the user chooses. Other popups open as panel tabs without an opener link, because a `<webview>` cannot adopt a popup page that has an opener.
+- A CDP mouse press on a guest moves the window focus to the `<webview>`. The renderer follows both webview focus and window blur events, because Electron can omit the webview focus event. It restores the field and text selection of the user. Hidden pages stay guarded at all times. Shown pages use the `agent_press` signal while an agent press runs and for 300 ms after it ends.
 
 ### Chrome for Testing
 
