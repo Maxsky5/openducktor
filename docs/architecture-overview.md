@@ -179,7 +179,7 @@ The definition also declares the data that host and frontend code read instead o
 - Roles. Each role lists its `odt_*` tools, the artifacts that it can write, its workspace access, and its working location.
 - States. Each state has its labels, its notification, and its Agent Studio role.
 - Launch actions. Each agent step lists the ways to start its role: start modes, prompt template, selection condition, prompt context, target branch choice, and worktree need.
-- Signals and automations. An event outcome can raise a signal with its source role. An automation maps a signal to the launch actions that Autopilot can start.
+- Signals and automations. An event outcome can raise a signal with its source role. A signal lists the automations that the user can attach to it. An automation names the launch action that Autopilot starts and its start mode. The default start mode of the launch action applies when the automation has none. A reuse start that finds no role session in the task worktree starts fresh if the launch action permits it.
 - Action order and priority. Task cards show actions in the declared order. The first matching priority rule selects the primary action.
 
 An event can name one host effect from `workflowEventEffectValues`, such as `build.start`, `task.close`, or `pull_request.merged`. Each effect has at most one event. The exception is `status.set`, which has at most one event for each target state.

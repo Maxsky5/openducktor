@@ -119,7 +119,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         {
           id: "write_revise",
           label: "Revise draft",
-          startModes: ["fresh", "reuse"],
+          startModes: ["fresh", "reuse", "fork"],
           defaultStartMode: "reuse",
           template: { kind: "kickoff", id: "kickoff.write_revise" },
           selectWhen: revised,
@@ -355,14 +355,13 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       label: "Start Editor",
       description: "Start the editor review.",
       launchActionId: "edit_review",
-      start: "launch_action",
     },
     {
       id: "startRevision",
       label: "Start Revision",
       description: "Fork the latest writer session to revise the draft.",
       launchActionId: "write_revise",
-      start: "latest_role_session",
+      startMode: "fork",
     },
   ],
   actionOrder: [

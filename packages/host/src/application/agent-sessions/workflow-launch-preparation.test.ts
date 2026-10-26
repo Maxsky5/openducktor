@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import type { WorkflowLaunchRequest } from "@openducktor/contracts";
+import type { AgentSessionStartMode, WorkflowLaunchRequest } from "@openducktor/contracts";
 import { createTaskWorkflow } from "@openducktor/workflows";
 import {
   reviewTaskDefinition,
@@ -424,7 +424,7 @@ test("automatic launch checks the worktree of an action that needs it without re
           action.defaultStartMode = "fresh";
         }
   definition.automations = definition.automations.map((automation) =>
-    automation.id === "startRevision" ? { ...automation, start: "launch_action" } : automation,
+    automation.id === "startRevision" ? { ...automation, startMode: "fresh" as const } : automation,
   );
   const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
   const launch = async (worktreeExists: boolean) => {
@@ -444,3 +444,59 @@ test("automatic launch checks the worktree of an action that needs it without re
   expect(await launch(false)).toMatchObject({ status: "skipped", role: "writer" });
   expect(await launch(true)).toMatchObject({ status: "completed", role: "writer" });
 });
+
+const launchRevision = async (
+  startModes: AgentSessionStartMode[],
+  defaultStartMode: AgentSessionStartMode,
+  writerSession: boolean,
+) => {
+  const definition = reviewTaskDefinition();
+  for (const step of definition.steps)
+    if (step.kind === "agent")
+      for (const action of step.launchActions)
+        if (action.id === "write_revise") Object.assign(action, { startModes, defaultStartMode });
+  definition.automations = definition.automations.map(
+    ({ startMode: _startMode, ...automation }) => automation,
+  );
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const h = await createLaunchHarness("codex", {
+    taskWorkflows: { forRepo: () => workflow, workflows: [workflow] },
+    task: { issueType: "article", status: "writing" },
+  });
+  if (writerSession) h.addTaskSession("writer-1", { role: "writer" });
+  const result = await Effect.runPromise(
+    h.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startRevision" },
+    }),
+  );
+  return { h, result };
+};
+
+test.each([
+  [["fresh", "reuse"], "fresh", true, "fresh"],
+  [["fresh", "reuse"], "reuse", true, "reuse"],
+  [["fresh", "reuse"], "reuse", false, "fresh"],
+  [["fork"], "fork", true, "fork"],
+] as const)(
+  "automatic launch with start modes %p and default %p, writer session %p, starts %p",
+  async (startModes, defaultStartMode, writerSession, startMode) => {
+    const { result } = await launchRevision([...startModes], defaultStartMode, writerSession);
+
+    expect(result).toMatchObject({ status: "completed", role: "writer", startMode });
+  },
+);
+
+test.each([
+  [["fork"], "fork", "No writer session is available to fork"],
+  [["reuse"], "reuse", "No Writer session in the task worktree is available to reuse"],
+] as const)(
+  "automatic launch with start modes %p skips without a session to continue",
+  async (startModes, defaultStartMode, reason) => {
+    const { h, result } = await launchRevision([...startModes], defaultStartMode, false);
+
+    expect(result).toMatchObject({ status: "skipped", role: "writer" });
+    expect(result.skipReason).toContain(reason);
+    expect(h.starts).toHaveLength(0);
+  },
+);

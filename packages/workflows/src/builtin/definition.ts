@@ -777,35 +777,31 @@ const builtinAutomations = [
     description:
       "Start the Planner workflow when a task becomes ready for implementation planning.",
     launchActionId: "planner_initial",
-    start: "launch_action",
   },
   {
     id: "startBuilder",
     label: "Start Builder",
     description: "Start or continue Builder implementation when planning is complete.",
     launchActionId: "build_implementation_start",
-    start: "launch_action",
   },
   {
     id: "startQa",
     label: "Start QA",
     description: "Start or continue QA review once implementation reaches AI review.",
     launchActionId: "qa_review",
-    start: "launch_action",
   },
   {
     id: "startReviewQaFeedbacks",
     label: "Start Review QA Feedbacks",
     description: "Resume Builder to address rejected QA findings at the root cause.",
     launchActionId: "build_after_qa_rejected",
-    start: "launch_action",
   },
   {
     id: "startGeneratePullRequest",
     label: "Start Generate Pull Request",
     description: "Fork from the latest Builder session to generate or update the pull request.",
     launchActionId: "build_pull_request_generation",
-    start: "latest_role_session",
+    startMode: "fork",
   },
 ] satisfies BuiltinAutomation[];
 

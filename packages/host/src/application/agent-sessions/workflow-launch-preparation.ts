@@ -311,7 +311,7 @@ const decideAutomaticLaunch = (
   },
 ) =>
   Effect.gen(function* () {
-    const automatic = workflow.automation(actionId);
+    const { startMode } = workflow.automation(actionId);
     const { role, startModes: allowedStartModes } = action;
     const records = yield* deps.tasks.agentSessionsList({ repoPath, taskId: request.taskId });
     const latest = records
@@ -324,7 +324,7 @@ const decideAutomaticLaunch = (
     };
     const configuredModel = () =>
       resolveConfiguredDefaultModel(deps, repoPath, config, role, request.workspaceId);
-    if (automatic.start === "latest_role_session") {
+    if (startMode === "fork") {
       if (!sourceSession)
         return {
           kind: "skipped" as const,
@@ -340,30 +340,39 @@ const decideAutomaticLaunch = (
       };
       return { kind: "decided" as const, decision };
     }
+    const canStartFresh = allowedStartModes.includes("fresh");
     // A role that writes a review starts each Autopilot review fresh when the setting asks for it.
-    const forceFreshQa =
+    const forceFresh =
+      canStartFresh &&
       alwaysStartQaReviewsFresh &&
       workflow.role(role).writes.some((code) => workflow.artifact(code)?.kind === "review");
-    const canReuse = allowedStartModes.includes("reuse");
+    const reuse = startMode === "reuse" && !forceFresh;
     const continuation =
-      canReuse || action.requiresWorktree
+      reuse || action.requiresWorktree
         ? yield* deps.worktrees.getTaskWorktree({ repoPath, taskId: request.taskId })
         : null;
+    const roleLabel = workflow.role(role).label;
     if (action.requiresWorktree && !continuation)
       return {
         kind: "skipped" as const,
-        reason: `${workflow.role(role).label} continuation cannot start until a task worktree exists for task ${request.taskId}.`,
+        reason: `${roleLabel} continuation cannot start until a task worktree exists for task ${request.taskId}.`,
       };
-    if (
-      !forceFreshQa &&
-      canReuse &&
-      continuation &&
-      sourceSession &&
-      normalizePathForComparison(sourceSession.workingDirectory) ===
-        normalizePathForComparison(continuation.workingDirectory)
-    ) {
-      const decision: WorkflowLaunchDecision = { startMode: "reuse", sourceSession };
-      return { kind: "decided" as const, decision };
+    if (reuse) {
+      if (
+        continuation &&
+        sourceSession &&
+        normalizePathForComparison(sourceSession.workingDirectory) ===
+          normalizePathForComparison(continuation.workingDirectory)
+      ) {
+        const decision: WorkflowLaunchDecision = { startMode: "reuse", sourceSession };
+        return { kind: "decided" as const, decision };
+      }
+      // An action that also starts fresh starts fresh when no session can continue the task.
+      if (!canStartFresh)
+        return {
+          kind: "skipped" as const,
+          reason: `No ${roleLabel} session in the task worktree is available to reuse for task ${request.taskId}.`,
+        };
     }
     const decision: WorkflowLaunchDecision = {
       startMode: "fresh",

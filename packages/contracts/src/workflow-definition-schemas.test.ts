@@ -146,7 +146,7 @@ const createDefinition = (): WorkflowDefinition => ({
       label: "Announce",
       description: "Starts the review session again.",
       launchActionId: "review-release",
-      start: "latest_role_session",
+      startMode: "reuse",
     },
   ],
   actionOrder: [{ when: true, actions: ["approve", "start-review", "view-notes"] }],

@@ -1,4 +1,5 @@
 import type {
+  AgentSessionStartMode,
   AgentWorkflowState,
   AgentWorkflows,
   CompiledWorkflowDefinition,
@@ -20,7 +21,11 @@ export type TaskWorkflowState = Definition["states"][number];
 export type TaskWorkflowArtifact = Definition["artifacts"][number];
 type AgentStep = Extract<Definition["steps"][number], { kind: "agent" }>;
 export type TaskWorkflowLaunchAction = AgentStep["launchActions"][number] & { role: string };
-export type TaskWorkflowAutomation = Definition["automations"][number] & { role: string };
+/** An automation with the role of its launch action and the start mode that Autopilot uses. */
+export type TaskWorkflowAutomation = Definition["automations"][number] & {
+  role: string;
+  startMode: AgentSessionStartMode;
+};
 
 /** The Autopilot signal and the source role that a committed transition reports. */
 export type TransitionCause = { signal?: string; sourceRole?: string };
@@ -162,9 +167,11 @@ export const createTaskWorkflow = (
   const automation = lookup(
     definition.id,
     "automation",
-    definition.automations.map(
-      (entry) => [entry.id, { ...entry, role: launchAction(entry.launchActionId).role }] as const,
-    ),
+    definition.automations.map((entry) => {
+      const launch = launchAction(entry.launchActionId);
+      const startMode = entry.startMode ?? launch.defaultStartMode;
+      return [entry.id, { ...entry, role: launch.role, startMode }] as const;
+    }),
   );
   const terminalStates = definition.states.filter(({ terminal }) => terminal).map(({ id }) => id);
   const terminalStateSet = new Set(terminalStates);

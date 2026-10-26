@@ -750,14 +750,31 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
       ),
     ),
   );
-  definition.automations.forEach((automation, index) =>
+  const launchStartModes = new Map(
+    definition.steps.flatMap((step) =>
+      step.kind === "agent"
+        ? step.launchActions.map((launch) => [launch.id, launch.startModes] as const)
+        : [],
+    ),
+  );
+  definition.automations.forEach((automation, index) => {
+    const path = `automations[${index}]`;
     checkReference(
       automation.launchActionId,
       launchActions,
       "launch actions",
-      `automations[${index}].launchActionId`,
-    ),
-  );
+      `${path}.launchActionId`,
+    );
+    const startModes = launchStartModes.get(automation.launchActionId);
+    if (
+      automation.startMode !== undefined &&
+      startModes &&
+      !startModes.includes(automation.startMode)
+    )
+      invalid(
+        `Start mode "${automation.startMode}" at ${path}.startMode is not a start mode of launch action "${automation.launchActionId}". Use ${startModes.join(", ")}.`,
+      );
+  });
   definition.actionOrder.forEach((rule, index) =>
     checkRule(rule, `actionOrder[${index}]`, actions),
   );

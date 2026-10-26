@@ -97,7 +97,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
         {
           id: "revise-draft",
           label: "Revise draft",
-          startModes: ["fresh", "reuse"],
+          startModes: ["fresh", "reuse", "fork"],
           defaultStartMode: "reuse",
           template: { kind: "kickoff", id: "kickoff.revise" },
           selectWhen: { artifact: "first-review", verdict: "changes" },
@@ -270,14 +270,13 @@ export const publicationDefinition = (): WorkflowDefinition => ({
       label: "Start the first review",
       description: "Starts the first review.",
       launchActionId: "review-first",
-      start: "launch_action",
     },
     {
       id: "startRevision",
       label: "Start the revision",
       description: "Forks the latest author session to revise the copy.",
       launchActionId: "revise-draft",
-      start: "latest_role_session",
+      startMode: "fork",
     },
   ],
   actionOrder: [

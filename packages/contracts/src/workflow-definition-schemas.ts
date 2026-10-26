@@ -246,13 +246,14 @@ export const workflowSignalDefinitionSchema = z.strictObject({
 });
 export type WorkflowSignalDefinition = z.infer<typeof workflowSignalDefinitionSchema>;
 
-/** An Autopilot action. It starts its launch action, or forks the latest session of its role. */
+/** An Autopilot action. It starts its launch action in one of the start modes of that action. */
 export const workflowAutomationDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   label: z.string(),
   description: z.string(),
   launchActionId: workflowIdSchema,
-  start: z.enum(["launch_action", "latest_role_session"]),
+  /** The default start mode of the launch action applies when this is omitted. */
+  startMode: agentSessionStartModeSchema.optional(),
 });
 export type WorkflowAutomationDefinition = z.infer<typeof workflowAutomationDefinitionSchema>;
 

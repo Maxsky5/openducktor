@@ -323,6 +323,19 @@ describe("workflow definition validation", () => {
     );
   });
 
+  test("rejects an automation start mode outside the launch action start modes", () => {
+    const definition = publicationDefinition();
+    definition.automations[0]!.startMode = "fork";
+    expect(() => createWorkflow(definition)).toThrow(
+      expect.objectContaining({
+        code: "invalid_definition",
+        message: expect.stringContaining(
+          'Start mode "fork" at automations[0].startMode is not a start mode of launch action "review-first"',
+        ),
+      }),
+    );
+  });
+
   test("rejects duplicate guard IDs in one event", () => {
     const definition = publicationDefinition();
     definition.events[4]!.guards.push({ id: "approved", when: true });
