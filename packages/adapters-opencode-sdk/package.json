@@ -14,7 +14,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
-    "@opencode/client": "2.0.32",
+    "@opencode/client": "2.1.3",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
