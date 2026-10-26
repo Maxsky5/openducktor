@@ -58,6 +58,9 @@ export const useBrowserSurfacePlacement = (
     return () => cancelAnimationFrame(frame);
   }, [slot]);
 
+  if (placement.visible && !slot?.visible) {
+    return { ...placement, visible: false };
+  }
   return placement;
 };
 
