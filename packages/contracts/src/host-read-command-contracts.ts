@@ -55,6 +55,8 @@ export const HOST_READ_COMMAND_NAMES = [
   "system_get_platform",
   "system_list_open_in_tools",
   "task_approval_context_get",
+  "task_artifact_read",
+  "task_artifacts_list",
   "task_ids_list",
   "task_metadata_get",
   "task_stop_impact_get",

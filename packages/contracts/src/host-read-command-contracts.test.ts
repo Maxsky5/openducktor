@@ -8,4 +8,7 @@ test("names only host commands that read, once each", () => {
   expect(isHostReadCommand("agent_runtime_load_session_history")).toBe(true);
   expect(isHostReadCommand("agent_session_message_submit")).toBe(false);
   expect(isHostReadCommand("agent_session_live_attach")).toBe(false);
+  expect(isHostReadCommand("task_artifacts_list")).toBe(true);
+  expect(isHostReadCommand("task_artifact_read")).toBe(true);
+  expect(isHostReadCommand("task_artifact_replace")).toBe(false);
 });
