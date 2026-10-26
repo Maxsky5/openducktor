@@ -26,9 +26,9 @@ export const QuestionSubmitFooter = ({
   onNext,
 }: QuestionSubmitFooterProps): ReactElement => {
   return (
-    <footer className="flex items-center justify-between gap-2 border-t border-input pt-1.5">
+    <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-input pt-1.5">
       <p className="text-[11px] text-muted-foreground">{agentQuestionCompletionText(isComplete)}</p>
-      <div className="flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {canCancel ? (
           <Button
             type="button"
