@@ -176,8 +176,11 @@ const createSessionHistoryFreshnessTracker = (
         const changed = applyHistoryEvent(workspaceState.sessions, envelope);
         switch (envelope.type) {
           case "snapshot": {
-            // A repeated connection snapshot is the transport's repair for an actual gap.
-            const resets = workspaceState.ready || envelope.historyReplayGap;
+            // A repeated connection snapshot is the transport's repair for an actual gap. A snapshot
+            // that the host pushes on the stream, as after a refresh, follows every earlier event.
+            const resets =
+              envelope.historyReplayGap === true ||
+              (envelope.isConnectionSnapshot === true && workspaceState.ready);
             if (resets) {
               workspaceState.epoch += 1;
               workspaceState.revisions.clear();

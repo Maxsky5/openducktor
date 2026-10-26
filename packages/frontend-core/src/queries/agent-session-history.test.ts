@@ -91,6 +91,34 @@ describe("agent session history queries", () => {
     }
   });
 
+  test("resets histories after a repeated connection snapshot, not after a host refresh snapshot", () => {
+    const client = new QueryClient();
+    const freshnessTracker = getSessionHistoryFreshnessTracker(client);
+    const resets: string[] = [];
+    const unsubscribe = freshnessTracker.subscribeWorkspaceResets((repoPath) =>
+      resets.push(repoPath),
+    );
+    const observation = freshnessTracker.observeWorkspace("/repo");
+    try {
+      observation.recordEvent(
+        createLiveSnapshotEnvelope({ sessions: [snapshot], isConnectionSnapshot: true }),
+      );
+      // A host refresh pushes a snapshot on the same stream, so no event before it is missing.
+      observation.recordEvent(
+        createLiveSnapshotEnvelope({ sessions: [{ ...snapshot, activity: "running" }] }),
+      );
+      expect(resets).toEqual([]);
+      observation.recordEvent(
+        createLiveSnapshotEnvelope({ sessions: [snapshot], isConnectionSnapshot: true }),
+      );
+      expect(resets).toEqual(["/repo"]);
+    } finally {
+      unsubscribe();
+      observation.close();
+      client.clear();
+    }
+  });
+
   test.each([
     ["session_upsert", "new-parent"],
     ["session_upsert", undefined],
