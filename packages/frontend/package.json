@@ -27,7 +27,7 @@
     "@openducktor/frontend-core": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "@pierre/diffs": "1.5.2",
+    "@pierre/diffs": "1.6.1",
     "@pierre/trees": "1.0.0-beta.6",
     "@radix-ui/react-checkbox": "^1.4.1",
     "@radix-ui/react-collapsible": "^1.2.1",
@@ -42,7 +42,7 @@
     "@radix-ui/react-switch": "^1.4.1",
     "@radix-ui/react-tabs": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
-    "@tanstack/react-query": "^5.104.4",
+    "@tanstack/react-query": "^5.104.5",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-code-block": "3.32.0",
     "@tiptap/extension-image": "3.32.0",
@@ -72,10 +72,10 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.14.6",
-    "react-router": "^8.4.0",
+    "react-resizable-panels": "^4.14.8",
+    "react-router": "^8.5.0",
     "react-syntax-highlighter": "^16.1.2",
-    "react-window": "^2.4.1",
+    "react-window": "^2.5.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
@@ -85,7 +85,7 @@
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0",
     "zod": "^4.6.7",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^21.0.4",
@@ -100,6 +100,6 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "bun-types": "^1.4.2",
     "tailwindcss": "^4.1.12",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   }
 }
