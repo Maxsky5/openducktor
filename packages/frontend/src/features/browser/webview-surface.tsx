@@ -1,5 +1,12 @@
 import { BROWSER_BLANK_URL } from "@openducktor/contracts";
-import { createElement, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  createElement,
+  type ReactElement,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { WebviewBrowserBridge } from "@/lib/shell-bridge";
@@ -14,6 +21,15 @@ const AGENT_PRESS_SETTLE_MS = 300;
 /** Ends the guard when the end of a press never comes, for example after a lost connection. */
 const AGENT_PRESS_LIMIT_MS = 10_000;
 
+type WebviewBrowserSurfaceProps = {
+  bridge: WebviewBrowserBridge;
+  channel: BrowserChannel;
+  focus: Pick<BrowserFocusRegistry, "registerPage">;
+  isShown: boolean;
+  tabId: string;
+  workspaceId: string;
+};
+
 /**
  * The `<webview>` of one browser tab. It starts blank, and its first `dom-ready` binds the guest
  * to the tab. The engine then takes control of the page and loads the tab URL, so the page never
@@ -26,14 +42,7 @@ export function WebviewBrowserSurface({
   isShown,
   tabId,
   workspaceId,
-}: {
-  bridge: WebviewBrowserBridge;
-  channel: BrowserChannel;
-  focus: Pick<BrowserFocusRegistry, "registerPage">;
-  isShown: boolean;
-  tabId: string;
-  workspaceId: string;
-}) {
+}: WebviewBrowserSurfaceProps): ReactElement {
   const [element, setElement] = useState<HTMLElement | null>(null);
   const bound = useRef(false);
   useAgentFocusGuard(element, channel, tabId, isShown);
@@ -92,7 +101,7 @@ const useAgentFocusGuard = (
   tabId: string,
   isShown: boolean,
 ): void => {
-  const shown = useEffectEvent(() => isShown);
+  const isShownNow = useEffectEvent(() => isShown);
   useEffect(() => {
     if (element === null) return;
     let guardUntil = 0;
@@ -102,13 +111,10 @@ const useAgentFocusGuard = (
       guardUntil = Date.now() + (message.pressing ? AGENT_PRESS_LIMIT_MS : AGENT_PRESS_SETTLE_MS);
     });
     const onFocusIn = (event: FocusEvent): void => {
+      const active = focusedElement();
       // A nested focus restore can finish before the original focusin event reaches this guard.
-      if (
-        event.target instanceof HTMLElement &&
-        event.target !== element &&
-        event.target === focusedElement()
-      ) {
-        userFocus = event.target;
+      if (active !== null && active !== element && event.target === active) {
+        userFocus = active;
       }
     };
     // The focus leaves for nothing, for example after a click on empty space.
@@ -118,7 +124,7 @@ const useAgentFocusGuard = (
       });
     };
     const onFocus = (): void => {
-      if (focusedElement() !== element || (shown() && Date.now() > guardUntil)) return;
+      if (focusedElement() !== element || (isShownNow() && Date.now() > guardUntil)) return;
       if (userFocus?.isConnected) {
         userFocus.focus({ preventScroll: true });
         return;
