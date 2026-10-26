@@ -24,7 +24,7 @@ export type OpencodeStreamEventLog = {
 export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
 export type OpencodeSdkAdapterOptions = {
   resolveCreationSettings: (scope: AgentSessionScope) => Promise<OpenCodeCreationSettings>;
-  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  /** The tools and workspace access of a workflow role in the task workflow of the session task. */
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   createClient?: ClientFactory;
   logEvent?: OpencodeEventLogger;

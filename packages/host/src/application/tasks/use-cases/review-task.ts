@@ -31,7 +31,7 @@ export const createTaskReviewUseCases = ({
 
       return yield* applyEffect(
         taskStore,
-        taskWorkflows.forRepo(repoPath),
+        taskWorkflows,
         { repoPath, taskId },
         "review.request_changes",
       );
@@ -42,7 +42,7 @@ export const createTaskReviewUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       const decision = yield* requireEffect(workflow, "review.approve", current);
       if (decision.kind === "unchanged") {
         return enrichTask(workflow, current);

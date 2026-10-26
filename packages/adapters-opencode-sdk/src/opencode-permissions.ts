@@ -191,7 +191,7 @@ export const installOpenCodePolicy = async (input: {
 }): Promise<void> => {
   const { client, detail, scope, creationSettings } = input;
   const policy = resolveOpencodeSessionPolicy(
-    { sessionScope: scope, repoPath: input.repoPath },
+    { sessionScope: scope },
     OPENCODE_RUNTIME_DESCRIPTOR,
     "install V2 session controls",
     input.resolveWorkflowRolePolicy,

@@ -7,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { type SQL, inArray, gte, or, notInArray } from "drizzle-orm";
 import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Effect } from "effect";
 import type { TaskRecord, TaskStoreListTasksInput } from "../../ports/task-repository-ports";
 import {
@@ -20,6 +21,7 @@ import {
   artifactSummary,
 } from "./sqlite-task-workflow-artifact-queries";
 import { getTaskRow, requireTaskRow, taskRows } from "./sqlite-task-queries";
+import { hostTerminalStates } from "./sqlite-task-repository-context";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
@@ -29,21 +31,21 @@ export const getTaskRecord = (
   session: TaskStoreSession,
   taskId: string,
   repoPath: string,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const row = yield* requireTaskRow(session, taskId, repoPath);
-    return yield* rowToTaskRecord(session, row, workflow);
+    return yield* rowToTaskRecord(session, row, taskWorkflows.forTask(row));
   });
 
 export const findTaskRecord = (
   session: TaskStoreSession,
   taskId: string,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const row = yield* getTaskRow(session, taskId);
-    return row === null ? null : yield* rowToTaskRecord(session, row, workflow);
+    return row === null ? null : yield* rowToTaskRecord(session, row, taskWorkflows.forTask(row));
   });
 
 /** A Kanban list hides tasks in terminal states after the done visible days. */
@@ -51,48 +53,44 @@ export const listTasksInDatabase = (
   session: TaskStoreSession,
   input: TaskStoreListTasksInput,
   now: () => Date,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (input.taskIds !== undefined) {
-      return yield* readChangedCards(session, input.taskIds, workflow);
+      return yield* readChangedCards(session, input.taskIds, taskWorkflows);
     }
     let where: SQL | undefined;
     if (input.doneVisibleDays !== undefined) {
       const cutoff = new Date(now().getTime() - input.doneVisibleDays * 24 * 60 * 60 * 1000);
-      const open = notInArray(tasks.status, [...workflow.terminalStates]);
+      const open = notInArray(tasks.status, hostTerminalStates(taskWorkflows));
       where = input.doneVisibleDays > 0 ? or(open, gte(tasks.updatedAt, cutoff)) : open;
     }
-    const rows = yield* taskRows(session, where);
-    const summaries = yield* artifactSummariesByTaskId(
-      session,
-      rows.map((row) => row.id),
-      workflow,
-    );
-    const cards = yield* Effect.forEach(rows, (row) =>
-      rowToTaskRecord(session, row, workflow, summaries.get(row.id)),
-    );
-    return cards;
+    return yield* rowsToTaskRecords(session, yield* taskRows(session, where), taskWorkflows);
   });
 
 /** Read full cards for changed tasks. */
 const readChangedCards = (
   session: TaskStoreSession,
   taskIds: readonly string[],
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (taskIds.length === 0) return [];
     const rows = yield* taskRows(session, inArray(tasks.id, [...taskIds]));
-    const summaries = yield* artifactSummariesByTaskId(
-      session,
-      rows.map((row) => row.id),
-      workflow,
+    return yield* rowsToTaskRecords(session, rows, taskWorkflows);
+  });
+
+const rowsToTaskRecords = (
+  session: TaskStoreSession,
+  rows: readonly TaskRow[],
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    const workflows = new Map(rows.map((row) => [row.id, taskWorkflows.forTask(row)]));
+    const summaries = yield* artifactSummariesByTaskId(session, workflows);
+    return yield* Effect.forEach(rows, (row) =>
+      rowToTaskRecord(session, row, taskWorkflows.forTask(row), summaries.get(row.id)),
     );
-    const cards = yield* Effect.forEach(rows, (row) =>
-      rowToTaskRecord(session, row, workflow, summaries.get(row.id)),
-    );
-    return cards;
   });
 
 const rowToTaskRecord = (

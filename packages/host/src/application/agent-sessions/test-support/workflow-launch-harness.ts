@@ -79,7 +79,7 @@ export const createLaunchHarness = async (
   } = {},
 ) => {
   const taskWorkflows = gates.taskWorkflows ?? builtinTaskWorkflows;
-  const workflow = taskWorkflows.forRepo("/repo");
+  const workflow = taskWorkflows.forNewTask("/repo");
   let task = taskCardFixture(
     {
       artifactSummary: workflow.emptyArtifactSummary(),

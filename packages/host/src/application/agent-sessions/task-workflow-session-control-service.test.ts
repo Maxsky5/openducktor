@@ -1,3 +1,4 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type {
@@ -73,6 +74,7 @@ const createAgentSessionCommandService = ({
     pauseForStop,
     turnPreparation: {
       context: () => Effect.succeed("Current host context"),
+      taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
       promptOverrides: () => Effect.succeed({}),
       model: (_target, selection) => Effect.succeed(selection),
     },

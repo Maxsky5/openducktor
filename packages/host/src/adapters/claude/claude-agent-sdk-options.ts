@@ -30,7 +30,7 @@ import type {
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import type { WorkflowRolePolicy } from "@openducktor/core";
-import { claudeWorkflowRole } from "./claude-agent-sdk-utils";
+import { claudeWorkflowScope } from "./claude-agent-sdk-utils";
 import { getDisabledTools } from "./claude-tool-availability";
 
 export type ClaudeAgentSdkOptionsDependencies = {
@@ -122,11 +122,9 @@ export const buildClaudeAgentSdkOptions = async ({
   session,
   sessionOptions,
 }: BuildClaudeAgentSdkOptionsInput): Promise<Options> => {
-  const workflowRole = claudeWorkflowRole(input);
+  const workflowScope = claudeWorkflowScope(input);
   const rolePolicy =
-    workflowRole === null
-      ? null
-      : serviceInput.resolveWorkflowRolePolicy({ repoPath: input.repoPath, role: workflowRole });
+    workflowScope === null ? null : serviceInput.resolveWorkflowRolePolicy(workflowScope);
   session.disabledTools = getDisabledTools(claudePolicy?.toolAvailability);
   const [mcpServers, resolvedSettings] = await Promise.all([
     buildClaudeMcpServers({

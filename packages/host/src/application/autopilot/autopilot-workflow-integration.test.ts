@@ -520,7 +520,7 @@ const createWorkflowHarness = async ({
             workspaceId: request.workspaceId,
             repoPath: request.repoPath,
             taskId: request.taskId,
-            role: taskWorkflows.forRepo(request.repoPath).automation(policy.actionId).role,
+            role: taskWorkflows.forTask({ id: request.taskId }).automation(policy.actionId).role,
           };
           const check = yield* policy.startCheck;
           if (!check.start) return { ...result, status: "skipped", skipReason: check.reason };

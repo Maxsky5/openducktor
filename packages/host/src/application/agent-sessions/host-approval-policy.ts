@@ -11,7 +11,6 @@ import { agentSessionRefKey, normalizeOdtWorkflowToolName } from "@openducktor/c
 import type { TaskWorkflowRole } from "@openducktor/workflows";
 import { Deferred, Effect, Exit, FiberSet, Scope } from "effect";
 import { HostValidationError, type HostError, errorMessage } from "../../effect/host-errors";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { requireWorkflowRole } from "../tasks/support/task-workflow-events";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
@@ -47,8 +46,10 @@ export const createHostApprovalPolicy = (deps: {
   >;
   readRoots: (repoPath: string) => Effect.Effect<AgentSessionAuthorizedRoot[], HostError>;
   definitions: RuntimeDefinitionsService;
-  taskWorkflows: TaskWorkflowResolver;
-  preparation: Pick<ReturnType<typeof createSessionTurnPreparation>, "promptOverrides">;
+  preparation: Pick<
+    ReturnType<typeof createSessionTurnPreparation>,
+    "promptOverrides" | "taskWorkflow"
+  >;
   reportFailure: (error: HostError) => Effect.Effect<void>;
 }) => {
   const workers = createHostOperationWorkers();
@@ -126,11 +127,17 @@ export const createHostApprovalPolicy = (deps: {
             deps.definitions,
             resolved.owner.runtimeKind,
           );
-          const workflow = deps.taskWorkflows.forRepo(root.repoPath);
-          const workflowRole =
-            root.sessionScope.kind === "workflow"
-              ? yield* requireWorkflowRole(workflow, root.sessionScope.role)
+          const scope = root.sessionScope;
+          const workflowSession =
+            scope.kind === "workflow"
+              ? {
+                  scope,
+                  workflow: yield* deps.preparation.taskWorkflow(root.repoPath, scope.taskId),
+                }
               : null;
+          const workflowRole = workflowSession
+            ? yield* requireWorkflowRole(workflowSession.workflow, workflowSession.scope.role)
+            : null;
           const reject =
             workflowRole !== null &&
             requiresReadOnlyApprovalRejection(workflowRole, resolved.request, descriptor);
@@ -151,13 +158,13 @@ export const createHostApprovalPolicy = (deps: {
           claims.set(key, claim);
           const work = Effect.gen(function* () {
             let message = input.message;
-            if (reject && root.sessionScope.kind === "workflow")
-              message = workflow.prompts.readOnlyRejection({
-                role: root.sessionScope.role,
-                overrides: yield* deps.preparation.promptOverrides({
-                  ...root,
-                  sessionScope: root.sessionScope,
-                }),
+            if (reject && workflowSession)
+              message = workflowSession.workflow.prompts.readOnlyRejection({
+                role: workflowSession.scope.role,
+                overrides: yield* deps.preparation.promptOverrides(
+                  root.repoPath,
+                  workflowSession.workflow,
+                ),
               });
             const replyInput: AgentSessionLiveReplyApprovalInput = {
               ...resolved.owner,

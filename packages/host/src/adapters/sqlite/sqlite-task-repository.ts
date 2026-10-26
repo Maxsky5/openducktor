@@ -31,7 +31,10 @@ import {
   requireTaskRow,
   taskReferenceCandidates,
 } from "./sqlite-task-queries";
-import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
+import {
+  hostTerminalStates,
+  type SqliteTaskRepositoryContextProvider,
+} from "./sqlite-task-repository-context";
 import {
   applyTaskPatch,
   deleteTasks,
@@ -86,9 +89,9 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.createArtifact",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           session.transaction("sqliteTaskRepository.createArtifact", (transaction) =>
-            createArtifactInDatabase(transaction, input, now(), workflow),
+            createArtifactInDatabase(transaction, input, now(), taskWorkflows),
           ),
       );
     },
@@ -96,9 +99,9 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.renameArtifact",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           session.transaction("sqliteTaskRepository.renameArtifact", (transaction) =>
-            renameArtifactInDatabase(transaction, input, now(), workflow),
+            renameArtifactInDatabase(transaction, input, now(), taskWorkflows),
           ),
       );
     },
@@ -106,9 +109,9 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.replaceArtifact",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           session.transaction("sqliteTaskRepository.replaceArtifact", (transaction) =>
-            replaceArtifactInDatabase(transaction, input, now(), workflow),
+            replaceArtifactInDatabase(transaction, input, now(), taskWorkflows),
           ),
       );
     },
@@ -116,9 +119,9 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.deleteArtifact",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           session.transaction("sqliteTaskRepository.deleteArtifact", (transaction) =>
-            deleteArtifactInDatabase(transaction, input, workflow),
+            deleteArtifactInDatabase(transaction, input, taskWorkflows),
           ),
       );
     },
@@ -166,7 +169,7 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.createTask",
-        ({ session, workspaceId, workflow }) =>
+        ({ session, workspaceId, taskWorkflows }) =>
           session.transaction("sqliteTaskRepository.createTask", (transaction) =>
             Effect.gen(function* () {
               const createdAt = now();
@@ -177,7 +180,7 @@ export const createSqliteTaskRepository = ({
                 task: input.task,
                 workspaceId,
               });
-              return yield* getTaskRecord(transaction, taskId, input.repoPath, workflow);
+              return yield* getTaskRecord(transaction, taskId, input.repoPath, taskWorkflows);
             }),
           ),
       );
@@ -207,7 +210,7 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.findTask",
-        ({ session, workflow }) => findTaskRecord(session, input.taskId, workflow),
+        ({ session, taskWorkflows }) => findTaskRecord(session, input.taskId, taskWorkflows),
       );
     },
     listTaskReferences(input) {
@@ -218,18 +221,21 @@ export const createSqliteTaskRepository = ({
       );
     },
     getTask(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.getTask", ({ session, workflow }) =>
-        getTaskRecord(session, input.taskId, input.repoPath, workflow),
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.getTask",
+        ({ session, taskWorkflows }) =>
+          getTaskRecord(session, input.taskId, input.repoPath, taskWorkflows),
       );
     },
     getTaskMetadata(input) {
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.getTaskMetadata",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           Effect.gen(function* () {
             const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
-            return yield* taskMetadata(session, row, workflow);
+            return yield* taskMetadata(session, row, taskWorkflows.forTask(row));
           }),
       );
     },
@@ -237,8 +243,8 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.listPullRequestSyncCandidates",
-        ({ session, workflow }) =>
-          listPullRequestSyncCandidatesInDatabase(session, workflow.terminalStates),
+        ({ session, taskWorkflows }) =>
+          listPullRequestSyncCandidatesInDatabase(session, hostTerminalStates(taskWorkflows)),
       );
     },
     listAgentSessionsForTasks(input) {
@@ -260,7 +266,7 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.listTasks",
-        ({ session, workflow }) => listTasksInDatabase(session, input, now, workflow),
+        ({ session, taskWorkflows }) => listTasksInDatabase(session, input, now, taskWorkflows),
       );
     },
     setDirectMerge(input) {
@@ -295,71 +301,66 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.saveWorkflowArtifact",
-        ({ session, workflow }) =>
-          Effect.gen(function* () {
-            const declared = workflow.artifact(input.code);
-            if (declared === undefined) {
-              return yield* new HostValidationError({
-                field: "code",
-                message: `Task workflow "${workflow.definition.id}" has no workflow artifact ${input.code}.`,
-                details: { code: input.code },
-              });
-            }
-            // A started commit records its status change, also when the caller is interrupted.
-            return yield* Effect.uninterruptible(
-              session
-                .transaction("sqliteTaskRepository.saveWorkflowArtifact", (transaction) =>
-                  Effect.gen(function* () {
-                    const previous = yield* requireTaskRow(
-                      transaction,
-                      input.taskId,
-                      input.repoPath,
-                    );
-                    const updatedAt = now();
-                    if (input.status !== undefined) {
-                      yield* updateTaskStatus(transaction, {
-                        status: input.status,
-                        taskId: input.taskId,
-                        updatedAt,
-                      });
-                    }
-                    const artifact = yield* insertWorkflowArtifact(transaction, {
-                      code: input.code,
-                      name: declared.label,
-                      markdown: input.markdown,
+        ({ session, taskWorkflows }) =>
+          // A started commit records its status change, also when the caller is interrupted.
+          Effect.uninterruptible(
+            session
+              .transaction("sqliteTaskRepository.saveWorkflowArtifact", (transaction) =>
+                Effect.gen(function* () {
+                  const previous = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
+                  const workflow = taskWorkflows.forTask(previous);
+                  const declared = workflow.artifact(input.code);
+                  if (declared === undefined) {
+                    return yield* new HostValidationError({
+                      field: "code",
+                      message: `Task workflow "${workflow.definition.id}" has no workflow artifact ${input.code}.`,
+                      details: { code: input.code },
+                    });
+                  }
+                  const updatedAt = now();
+                  if (input.status !== undefined) {
+                    yield* updateTaskStatus(transaction, {
+                      status: input.status,
                       taskId: input.taskId,
                       updatedAt,
-                      verdict: input.verdict,
-                      sourceTool: input.sourceTool,
-                      updatedBy: input.updatedBy,
                     });
-                    const task = yield* getTaskRecord(
-                      transaction,
-                      input.taskId,
-                      input.repoPath,
-                      workflow,
-                    );
-                    return { task, artifact, previousStatus: previous.status };
-                  }),
-                )
-                .pipe(
-                  Effect.flatMap(({ task, artifact, previousStatus }) =>
-                    recordCommittedTaskStatusChange({
-                      task,
-                      previousStatus,
-                      cause: input.cause,
-                    }).pipe(Effect.as({ task, artifact })),
-                  ),
+                  }
+                  const artifact = yield* insertWorkflowArtifact(transaction, {
+                    code: input.code,
+                    name: declared.label,
+                    markdown: input.markdown,
+                    taskId: input.taskId,
+                    updatedAt,
+                    verdict: input.verdict,
+                    sourceTool: input.sourceTool,
+                    updatedBy: input.updatedBy,
+                  });
+                  const task = yield* getTaskRecord(
+                    transaction,
+                    input.taskId,
+                    input.repoPath,
+                    taskWorkflows,
+                  );
+                  return { task, artifact, previousStatus: previous.status };
+                }),
+              )
+              .pipe(
+                Effect.flatMap(({ task, artifact, previousStatus }) =>
+                  recordCommittedTaskStatusChange({
+                    task,
+                    previousStatus,
+                    cause: input.cause,
+                  }).pipe(Effect.as({ task, artifact })),
                 ),
-            );
-          }),
+              ),
+          ),
       );
     },
     transitionTask(input) {
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.transitionTask",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           // A started commit records its status change, also when the caller is interrupted.
           Effect.uninterruptible(
             session
@@ -375,7 +376,7 @@ export const createSqliteTaskRepository = ({
                     transaction,
                     input.taskId,
                     input.repoPath,
-                    workflow,
+                    taskWorkflows,
                   );
                   return { task, previousStatus: previous.status, cause: input.cause };
                 }),
@@ -388,11 +389,11 @@ export const createSqliteTaskRepository = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskRepository.updateTask",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           session.transaction("sqliteTaskRepository.updateTask", (transaction) =>
             Effect.gen(function* () {
               yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-              return yield* applyTaskPatch(transaction, input, now(), workflow);
+              return yield* applyTaskPatch(transaction, input, now(), taskWorkflows);
             }),
           ),
       );

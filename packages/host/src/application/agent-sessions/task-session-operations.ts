@@ -139,7 +139,7 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
           );
           if (!input.forkPoint)
             yield* validateTaskSessionWorkflowAvailable(
-              taskWorkflows.forRepo(repoPath),
+              taskWorkflows.forTask(task),
               task,
               scope.role,
               repoPath,

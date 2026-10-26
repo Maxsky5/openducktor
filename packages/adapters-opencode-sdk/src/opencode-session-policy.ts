@@ -16,12 +16,9 @@ export type OpencodeSessionPolicy = {
     | { kind: "repository" };
 };
 
-/** A workflow session gets the permissions of its role in the task workflow of the repository. */
+/** A workflow session gets the permissions of its role in the task workflow of its task. */
 export const resolveOpencodeSessionPolicy = (
-  {
-    sessionScope,
-    repoPath,
-  }: { sessionScope?: AgentSessionScope | null | undefined; repoPath: string },
+  { sessionScope }: { sessionScope?: AgentSessionScope | null | undefined },
   runtimeDescriptor: RuntimeDescriptor,
   action: string,
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
@@ -33,7 +30,7 @@ export const resolveOpencodeSessionPolicy = (
     sessionScope.kind === "workflow"
       ? {
           permission: buildRoleScopedPermissionRules({
-            rolePolicy: resolveWorkflowRolePolicy({ repoPath, role: sessionScope.role }),
+            rolePolicy: resolveWorkflowRolePolicy(sessionScope),
             runtimeDescriptor,
           }),
           scope: { kind: "workflow", role: sessionScope.role },

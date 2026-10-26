@@ -1,5 +1,4 @@
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -153,7 +152,7 @@ test.each([
         listTasks: (input) =>
           db.store
             .listTasks(input)
-            .pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflow, tasks))),
+            .pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
         agentSessionsListForTasks: db.store.listAgentSessionsForTasks,
       },
       live,

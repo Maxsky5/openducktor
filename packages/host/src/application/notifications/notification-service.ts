@@ -139,7 +139,7 @@ export const createNotificationService = ({
         if (existing) yield* existing.observer.dispose();
         const observer = yield* createWorkspaceNotificationObserver({
           record,
-          workflow: taskWorkflows.forRepo(record.repoPath),
+          taskWorkflows,
           tasks,
           live,
           workspaceSessions,

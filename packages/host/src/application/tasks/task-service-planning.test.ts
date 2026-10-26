@@ -79,6 +79,7 @@ describe("createTaskService workflow artifact saves", () => {
     );
 
     expect(calls).toEqual([
+      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "save",
         input: {
@@ -199,7 +200,7 @@ describe("createTaskService workflow artifact saves", () => {
     );
 
     expect(error.message).toBe(message);
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([{ type: "get", input: { repoPath: "/repo", taskId: "task-1" } }]);
   });
 
   test("rejects a submit that its event does not admit, before a store write", async () => {

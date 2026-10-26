@@ -82,15 +82,14 @@ import type {
   PolicyBoundSessionRef,
 } from "@openducktor/contracts";
 
-/** The tools and workspace access of a workflow role. The task workflow of the repository defines them. */
+/** The tools and workspace access of a workflow role. The task workflow of the session task defines them. */
 export type WorkflowRolePolicy = {
   readonly tools: readonly AgentToolName[];
   readonly readOnly: boolean;
 };
-export type WorkflowRolePolicyResolver = (input: {
-  repoPath: string;
-  role: string;
-}) => WorkflowRolePolicy;
+export type WorkflowRolePolicyResolver = (
+  scope: Pick<AgentSessionWorkflowScope, "taskId" | "role">,
+) => WorkflowRolePolicy;
 
 export const workflowAgentSessionScope = (
   taskId: string,

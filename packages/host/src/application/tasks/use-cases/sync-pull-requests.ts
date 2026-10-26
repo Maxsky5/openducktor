@@ -115,7 +115,7 @@ export const createTaskPullRequestSyncUseCases = ({
               taskId: task.id,
             });
             const decision = yield* requireEffect(
-              taskWorkflows.forRepo(effectiveRepoPath),
+              taskWorkflows.forTask(current),
               "pull_request.merged",
               current,
             );
@@ -128,7 +128,7 @@ export const createTaskPullRequestSyncUseCases = ({
                   ...cleanupDependencies,
                   taskActivityGuard,
                   taskSessionLifecycleCoordinator,
-                  workflow: taskWorkflows.forRepo(effectiveRepoPath),
+                  workflow: taskWorkflows.forTask(current),
                 },
                 taskStore,
                 effectiveRepoPath,

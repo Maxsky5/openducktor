@@ -1,4 +1,4 @@
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -57,7 +57,6 @@ describe("host workflow approval policy", () => {
     let promptReads = 0;
     const faults: Array<string | null> = [];
     const policy = createHostApprovalPolicy({
-      taskWorkflows: builtinTaskWorkflows,
       live: {
         resolvePendingApproval: (input) =>
           Effect.succeed({
@@ -100,6 +99,7 @@ describe("host workflow approval policy", () => {
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
       preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
         promptOverrides: () =>
           Effect.suspend(() => {
             promptReads += 1;
@@ -159,7 +159,6 @@ describe("host workflow approval policy", () => {
     const calls: unknown[] = [];
     const failures: string[] = [];
     const policy = createHostApprovalPolicy({
-      taskWorkflows: builtinTaskWorkflows,
       live: {
         resolvePendingApproval: () =>
           Effect.succeed({ owner: child, root, request, runtimeId: "generation-1" }),
@@ -178,7 +177,10 @@ describe("host workflow approval policy", () => {
       },
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
-      preparation: { promptOverrides: () => Effect.succeed({}) },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+        promptOverrides: () => Effect.succeed({}),
+      },
       reportFailure: () => Effect.void,
     });
     try {
@@ -205,7 +207,6 @@ describe("host workflow approval policy", () => {
   test("keeps an issued uncertain reply reserved across repeated clients", async () => {
     let calls = 0;
     const policy = createHostApprovalPolicy({
-      taskWorkflows: builtinTaskWorkflows,
       live: {
         resolvePendingApproval: () =>
           Effect.succeed({ owner: child, root, request, runtimeId: "generation-1" }),
@@ -220,7 +221,10 @@ describe("host workflow approval policy", () => {
       },
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
-      preparation: { promptOverrides: () => Effect.succeed({}) },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+        promptOverrides: () => Effect.succeed({}),
+      },
       reportFailure: () => Effect.void,
     });
     try {
@@ -244,7 +248,6 @@ describe("host workflow approval policy", () => {
     const calls: string[] = [];
     const faults: Array<string | null> = [];
     const policy = createHostApprovalPolicy({
-      taskWorkflows: builtinTaskWorkflows,
       live: {
         resolvePendingApproval: () => Effect.succeed({ owner: child, root, request, runtimeId }),
         list: () => Effect.succeed([snapshot(), snapshot(root, undefined)]),
@@ -266,7 +269,10 @@ describe("host workflow approval policy", () => {
       },
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
-      preparation: { promptOverrides: () => Effect.succeed({}) },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+        promptOverrides: () => Effect.succeed({}),
+      },
       reportFailure: () => Effect.void,
     });
     try {

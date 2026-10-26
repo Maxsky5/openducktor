@@ -41,7 +41,7 @@ export const createArtifactUseCases = ({
         const artifacts = yield* taskStore.listArtifacts(scope);
         return {
           artifacts,
-          canManageFree: !taskWorkflows.forRepo(scope.repoPath).isTerminalState(task.status),
+          canManageFree: !taskWorkflows.forTask(task).isTerminalState(task.status),
         };
       });
     },

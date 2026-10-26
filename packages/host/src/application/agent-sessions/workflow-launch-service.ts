@@ -170,7 +170,8 @@ export const createWorkflowLaunchService = (
         );
     },
     initial: (request) =>
-      requireLaunchAction(deps.taskWorkflows.forRepo(request.repoPath), request).pipe(
+      // A missing task fails in the launch, which reports it in the result.
+      requireLaunchAction(deps.taskWorkflows.forTask({ id: request.taskId }), request).pipe(
         Effect.map(({ role }) => ({
           workspaceId: request.workspaceId,
           repoPath: request.repoPath,

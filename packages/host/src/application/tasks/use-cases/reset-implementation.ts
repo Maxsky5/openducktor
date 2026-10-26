@@ -51,7 +51,7 @@ export const createTaskImplementationResetUseCase = ({
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
       yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset implementation");
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       const decision = yield* requireEffectInput(
         "Implementation reset is",
         workflow,

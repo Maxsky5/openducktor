@@ -1,4 +1,4 @@
-import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import {
   directMergeRecordSchema,
   gitTargetBranchSchema,
@@ -142,7 +142,7 @@ export const applyTaskPatch = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["updateTask"]>[0],
   updatedAt: Date,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ) =>
   Effect.gen(function* () {
     const updates: Partial<TaskInsert> = {};
@@ -184,5 +184,5 @@ export const applyTaskPatch = (
         { taskId: input.taskId },
       );
     }
-    return yield* getTaskRecord(session, input.taskId, input.repoPath, workflow);
+    return yield* getTaskRecord(session, input.taskId, input.repoPath, taskWorkflows);
   });

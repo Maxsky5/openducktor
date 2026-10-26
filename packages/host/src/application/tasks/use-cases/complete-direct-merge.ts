@@ -46,7 +46,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           details: { repoPath, taskId },
         });
       const state = completionState.ensure(repoPath, taskId);
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       const completeEvent = yield* requireEffectEvent(workflow, "direct_merge.completed");
       const decision = workflow.decide(completeEvent, current);
       if (decision.kind === "unchanged") {
@@ -85,7 +85,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           completionState,
           taskActivityGuard,
           taskSessionLifecycleCoordinator,
-          taskWorkflows,
+          workflow,
         },
         { ...input, repoPath },
         merge,

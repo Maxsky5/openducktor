@@ -62,7 +62,7 @@ export const assertApprovalAllowed = ({
   }
   const scope = session.sessionScope;
   if (scope?.kind !== "workflow") return;
-  const rolePolicy = resolveWorkflowRolePolicy({ repoPath: route.ref.repoPath, role: scope.role });
+  const rolePolicy = resolveWorkflowRolePolicy(scope);
   const descriptor = OPENCODE_RUNTIME_DESCRIPTOR;
   const names = [request.action?.name, request.tool?.name].filter(
     (name): name is string => name !== undefined,

@@ -71,11 +71,11 @@ export const prepareWorkflowLaunch = (
   onReuse: (source: AgentSessionLiveRef) => void,
 ) =>
   Effect.gen(function* () {
-    const workflow = deps.taskWorkflows.forRepo(repoPath);
+    let task = yield* deps.taskReader.getTask({ repoPath, taskId: request.taskId });
+    const workflow = deps.taskWorkflows.forTask(task);
     const action = yield* requireLaunchAction(workflow, request);
     const actionId = action.id;
     const roleLabel = workflow.role(action.role).label;
-    let task = yield* deps.taskReader.getTask({ repoPath, taskId: request.taskId });
     yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
     const settings = yield* deps.settings.getSettingsSnapshot();
     const overrides = workflow.prompts.mergeOverrides({

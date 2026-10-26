@@ -49,7 +49,7 @@ export const executeSetTaskArtifact = (
       workspaceId,
       task.id,
     );
-    const workflow = context.taskWorkflows.forRepo(repoPath);
+    const workflow = context.taskWorkflows.forTask(task);
     const declared = workflow.artifact(input.code);
     if (declared) {
       yield* rejectFreeArtifactFields(input);
@@ -198,17 +198,16 @@ export const executeDeleteTaskArtifact = (
       ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
       toolBody,
     );
-    const workspaceRepoPath = yield* context.repoPathForWorkspace(parsed.workspaceId ?? "");
-    if (context.taskWorkflows.forRepo(workspaceRepoPath).artifact(parsed.code)) {
+    const { repoPath, task } = yield* context.taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
+    if (context.taskWorkflows.forTask(task).artifact(parsed.code)) {
       return yield* new HostValidationError({
         field: "code",
         message: `${parsed.code} is a workflow artifact. Only free artifacts can be deleted.`,
       });
     }
-    const { repoPath, task } = yield* context.taskScopeForWorkspace(
-      parsed.workspaceId ?? "",
-      parsed.taskId,
-    );
     yield* resolveArtifactWriter(
       context,
       "odt_delete_task_artifact",

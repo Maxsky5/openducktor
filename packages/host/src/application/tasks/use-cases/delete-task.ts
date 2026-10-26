@@ -39,7 +39,6 @@ export const createTaskDeleteUseCase = ({
   deleteTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const workflow = taskWorkflows.forRepo(repoPath);
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
@@ -49,7 +48,7 @@ export const createTaskDeleteUseCase = ({
         [taskId],
         "delete tasks",
       );
-      yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(yield* taskStore.getTask({ repoPath, taskId }));
 
       const targetTaskIds = [taskId];
       const repoConfig =
@@ -80,8 +79,7 @@ export const createTaskDeleteUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        workflow,
-        targetTaskSessions,
+        targetTaskSessions.map((entry) => ({ ...entry, workflow })),
       );
       yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
       const branchNames = yield* collectRelatedTaskBranches(

@@ -140,7 +140,6 @@ export const createNodeTaskSessionServices = ({
     live: agentSessionLiveStateService,
     readRoots: readSessionRootRefs,
     definitions: taskServiceInput.runtimeDefinitionsService,
-    taskWorkflows: taskServiceInput.taskWorkflows,
     preparation: turnPreparation,
     reportFailure: (error) =>
       eventServiceInput.onBackgroundFailure(toHostOperationError(error, "approval-policy.observe")),

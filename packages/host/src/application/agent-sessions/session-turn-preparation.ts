@@ -3,6 +3,7 @@ import type {
   AgentSessionModelSelection,
   RepoPromptOverrides,
 } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import {
   resolveSavedSessionModel,
   isSameSelection,
@@ -11,7 +12,11 @@ import {
   resolveSavedModelAlias,
 } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
@@ -35,27 +40,38 @@ export const createSessionTurnPreparation = (deps: {
         });
       return read.models.catalog;
     });
-  const settingsFor = (target: PreparationTarget) =>
+  const overridesFor = (repoPath: string, workflow: TaskWorkflow) =>
     Effect.gen(function* () {
-      const config = yield* deps.settings.getRepoConfigByRepoPath(target.repoPath);
+      const config = yield* deps.settings.getRepoConfigByRepoPath(repoPath);
       const settings = yield* deps.settings.getSettingsSnapshot();
-      return deps.taskWorkflows.forRepo(target.repoPath).prompts.mergeOverrides({
+      return workflow.prompts.mergeOverrides({
         globalOverrides: settings.globalPromptOverrides,
         repoOverrides: config.promptOverrides,
       });
     });
   return {
+    /** The task workflow of the task of a workflow session. */
+    taskWorkflow: (repoPath: string, taskId: string): Effect.Effect<TaskWorkflow, HostError> =>
+      deps.taskReader.getTask({ repoPath, taskId }).pipe(
+        Effect.map((task) => deps.taskWorkflows.forTask(task)),
+        Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context")),
+      ),
     promptOverrides: (
-      target: AgentMessageTarget,
-    ): Effect.Effect<RepoPromptOverrides, import("../../effect/host-errors").HostError> =>
-      settingsFor(target).pipe(
+      repoPath: string,
+      workflow: TaskWorkflow,
+    ): Effect.Effect<RepoPromptOverrides, HostError> =>
+      overridesFor(repoPath, workflow).pipe(
         Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context")),
       ),
     context: (target: PreparationTarget) =>
       Effect.gen(function* () {
         if (target.sessionScope.kind === "repository") return undefined;
-        const workflow = deps.taskWorkflows.forRepo(target.repoPath);
-        const overrides = yield* settingsFor(target);
+        const task = yield* deps.taskReader.getTask({
+          repoPath: target.repoPath,
+          taskId: target.sessionScope.taskId,
+        });
+        const workflow = deps.taskWorkflows.forTask(task);
+        const overrides = yield* overridesFor(target.repoPath, workflow);
         const overrideProblem = workflow.prompts.findOverrideProblem(overrides);
         if (overrideProblem !== undefined) {
           return yield* new HostValidationError({
@@ -63,10 +79,6 @@ export const createSessionTurnPreparation = (deps: {
             message: overrideProblem,
           });
         }
-        const task = yield* deps.taskReader.getTask({
-          repoPath: target.repoPath,
-          taskId: target.sessionScope.taskId,
-        });
         return workflow.prompts.systemPrompt({
           role: target.sessionScope.role,
           task: {

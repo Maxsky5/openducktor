@@ -1,4 +1,3 @@
-import { requireWorkflowIssueType } from "../tasks/support/task-workflow-events";
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
@@ -51,20 +50,27 @@ const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
       input,
     );
     const repoPath = yield* context.repoPathForWorkspace(parsed.workspaceId ?? "");
-    const workflow = context.taskWorkflows.forRepo(repoPath);
-    if (parsed.issueType !== undefined) yield* requireWorkflowIssueType(workflow, parsed.issueType);
-    if (
-      parsed.status !== undefined &&
-      (workflow.isTerminalState(parsed.status) ||
-        !workflow.definition.states.some(({ id }) => id === parsed.status))
-    ) {
+    // A filter value is valid when a task workflow of the host declares it.
+    const { workflows } = context.taskWorkflows;
+    const issueTypes = [...new Set(workflows.flatMap(({ issueTypes }) => issueTypes))];
+    if (parsed.issueType !== undefined && !issueTypes.includes(parsed.issueType)) {
+      return yield* new HostValidationError({
+        field: "issueType",
+        message: `Issue type ${parsed.issueType} is not in a task workflow. Use ${issueTypes.join(", ")}.`,
+        details: { issueType: parsed.issueType },
+      });
+    }
+    const openStates = workflows.flatMap(({ definition }) =>
+      definition.states.flatMap(({ id, terminal }) => (terminal ? [] : [id])),
+    );
+    if (parsed.status !== undefined && !openStates.includes(parsed.status)) {
       return yield* new HostValidationError({
         field: "status",
-        message: `Status ${parsed.status} is not an open state of task workflow "${workflow.definition.id}".`,
+        message: `Status ${parsed.status} is not an open state of a task workflow.`,
       });
     }
     const tasks = (yield* context.taskService.listTasks({ repoPath })).filter((task) => {
-      if (workflow.isTerminalState(task.status)) {
+      if (context.taskWorkflows.forTask(task).isTerminalState(task.status)) {
         return false;
       }
       if (parsed.priority !== undefined && task.priority !== parsed.priority) {
@@ -190,7 +196,7 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
-    const workflow = context.taskWorkflows.forRepo(repoPath);
+    const workflow = context.taskWorkflows.forTask(task);
     const listedArtifacts = parsed.codes.some((code) => !workflow.artifact(code))
       ? (yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id })).artifacts
       : [];

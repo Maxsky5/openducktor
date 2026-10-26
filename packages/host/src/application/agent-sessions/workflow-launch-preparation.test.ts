@@ -6,7 +6,7 @@ import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
 } from "@openducktor/workflows/test-support";
-import { reviewTaskWorkflows } from "../../test-support/task-workflows";
+import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import {
   type AutomaticLaunchInput,
   createLaunchHarness,
@@ -429,7 +429,7 @@ test("automatic launch checks the worktree of an action that needs it without re
   const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
   const launch = async (worktreeExists: boolean) => {
     const h = await createLaunchHarness("codex", {
-      taskWorkflows: { forRepo: () => workflow, workflows: [workflow] },
+      taskWorkflows: singleTaskWorkflow(workflow),
       task: { issueType: "article", status: "writing" },
     });
     h.setWorktreeExists(worktreeExists);
@@ -460,7 +460,7 @@ const launchRevision = async (
   );
   const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
   const h = await createLaunchHarness("codex", {
-    taskWorkflows: { forRepo: () => workflow, workflows: [workflow] },
+    taskWorkflows: singleTaskWorkflow(workflow),
     task: { issueType: "article", status: "writing" },
   });
   if (writerSession) h.addTaskSession("writer-1", { role: "writer" });

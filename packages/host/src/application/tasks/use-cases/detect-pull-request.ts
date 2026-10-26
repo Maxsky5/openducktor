@@ -30,7 +30,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         }),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       yield* requirePullRequestManagement(workflow, current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest !== undefined) {

@@ -368,7 +368,7 @@ Existing custom overrides remain active. Users must review, update, or disable o
 
 ### Permissions and pending input
 
-Each role of the task workflow lists its canonical `odt_*` tools. Adapters read the tools and workspace access of a session role through the `WorkflowRolePolicyResolver`. The runtime descriptor in `packages/contracts` maps the canonical tools to native aliases and lists native tools blocked for read-only roles. Adapters classify native tools and apply native permissions.
+Each role of the task workflow lists its canonical `odt_*` tools. Adapters read the tools and workspace access of a session role through the `WorkflowRolePolicyResolver`, with the task and role of the session scope. The runtime descriptor in `packages/contracts` maps the canonical tools to native aliases and lists native tools blocked for read-only roles. Adapters classify native tools and apply native permissions.
 
 Inherit native permissions and sandbox settings. Add session hooks through SDK options. Let unclassified tools use the native approval path. Shared code does not edit user settings or parse shell commands.
 

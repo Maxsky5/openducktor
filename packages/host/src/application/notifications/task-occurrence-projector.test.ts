@@ -1,6 +1,5 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
-import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
+import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 
@@ -28,7 +27,7 @@ describe("task occurrence projector", () => {
     ["ai_review", "qa"],
   ] as const)("routes Human Review from %s to its source role %s", (previousStatus, sourceRole) => {
     const projector = createTaskOccurrenceProjector({
-      workflow: builtinTaskWorkflow,
+      taskWorkflows: builtinTaskWorkflows,
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
@@ -54,7 +53,7 @@ describe("task occurrence projector", () => {
     ["human_review", "workflow.human_review", "qa"],
   ] as const)("projects a live transition to %s", (status, kind, preferredRole) => {
     const projector = createTaskOccurrenceProjector({
-      workflow: builtinTaskWorkflow,
+      taskWorkflows: builtinTaskWorkflows,
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
@@ -75,7 +74,7 @@ describe("task occurrence projector", () => {
 
   test("routes Closed to the exact Kanban details sheet", () => {
     const projector = createTaskOccurrenceProjector({
-      workflow: builtinTaskWorkflow,
+      taskWorkflows: builtinTaskWorkflows,
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
@@ -90,7 +89,7 @@ describe("task occurrence projector", () => {
 
   test("does not notify for unchanged status, metadata-only updates, or Open", () => {
     const projector = createTaskOccurrenceProjector({
-      workflow: builtinTaskWorkflow,
+      taskWorkflows: builtinTaskWorkflows,
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
@@ -100,7 +99,7 @@ describe("task occurrence projector", () => {
     expect(projector.projectChange(event("event-open", "open")).occurrences).toEqual([]);
 
     const newTaskProjector = createTaskOccurrenceProjector({
-      workflow: builtinTaskWorkflow,
+      taskWorkflows: builtinTaskWorkflows,
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
@@ -115,7 +114,7 @@ describe("task occurrence projector", () => {
 
 test("keeps repeated destinations within one mutation distinct and suppresses replay", () => {
   const projector = createTaskOccurrenceProjector({
-    workflow: builtinTaskWorkflow,
+    taskWorkflows: builtinTaskWorkflows,
     repoPath: "/repo",
     repositoryLabel: "Repo",
   });
@@ -138,7 +137,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
 
 test("accepts a silent event once so callers can skip its repeated ownership work", () => {
   const projector = createTaskOccurrenceProjector({
-    workflow: builtinTaskWorkflow,
+    taskWorkflows: builtinTaskWorkflows,
     repoPath: "/repo",
     repositoryLabel: "Repo",
   });
@@ -149,7 +148,7 @@ test("accepts a silent event once so callers can skip its repeated ownership wor
 
 test("projects the state notifications of a custom workflow", () => {
   const projector = createTaskOccurrenceProjector({
-    workflow: createReviewTaskWorkflow(),
+    taskWorkflows: reviewTaskWorkflows,
     repoPath: "/repo",
     repositoryLabel: "Repo",
   });

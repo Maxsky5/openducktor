@@ -1,4 +1,5 @@
 import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { randomUUID } from "node:crypto";
 import {
   freeArtifactCodeSchema,
@@ -26,10 +27,10 @@ export const createArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreScope & ArtifactStoreContent & { name: string; code?: string | undefined },
   updatedAt: Date,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireMutableTask(session, input, workflow);
+    const workflow = yield* requireMutableTask(session, input, taskWorkflows);
     yield* validateContentSize(input.content);
     const code = yield* pickCode(session, input, workflow);
     const row = {
@@ -58,10 +59,10 @@ export const renameArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreReference & { name: string },
   updatedAt: Date,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const previous = yield* requireFreeArtifact(session, input, workflow);
+    const previous = yield* requireFreeArtifact(session, input, taskWorkflows);
     const changes = { name: input.name, revision: previous.revision + 1, updatedAt };
     const artifact = yield* artifactMetadataFromRow({ ...previous, ...changes });
     yield* session.execute(
@@ -84,10 +85,10 @@ export const replaceArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreReference & ArtifactStoreContent & { name?: string | undefined },
   updatedAt: Date,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const previous = yield* requireFreeArtifact(session, input, workflow);
+    const previous = yield* requireFreeArtifact(session, input, taskWorkflows);
     yield* validateContentSize(input.content);
     const changes = {
       name: input.name ?? previous.name,
@@ -117,10 +118,10 @@ export const replaceArtifactInDatabase = (
 export const deleteArtifactInDatabase = (
   session: TaskStoreSession,
   input: ArtifactStoreReference,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireFreeArtifact(session, input, workflow);
+    yield* requireFreeArtifact(session, input, taskWorkflows);
     yield* session.execute(
       (database) =>
         database
@@ -196,14 +197,15 @@ const pickCode = (
     return code;
   });
 
-/** A task in a terminal state of its workflow is read-only. */
+/** A task in a terminal state of its workflow is read-only. Gives the workflow of the task. */
 const requireMutableTask = (
   session: TaskStoreSession,
   input: ArtifactStoreScope,
-  workflow: TaskWorkflow,
-): Effect.Effect<void, SqliteTaskStoreWriteError> =>
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskWorkflow, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const task = yield* requireTaskRow(session, input.taskId, input.repoPath);
+    const workflow = taskWorkflows.forTask(task);
     if (workflow.isTerminalState(task.status)) {
       return yield* new HostValidationError({
         message:
@@ -211,6 +213,7 @@ const requireMutableTask = (
         field: "taskId",
       });
     }
+    return workflow;
   });
 
 const validateContentSize = (content: Uint8Array): Effect.Effect<void, HostValidationError> =>
@@ -226,13 +229,13 @@ const validateContentSize = (content: Uint8Array): Effect.Effect<void, HostValid
 const requireFreeArtifact = (
   session: TaskStoreSession,
   input: ArtifactStoreReference,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<
   Pick<TaskArtifactRow, keyof typeof artifactMetadataSelection>,
   SqliteTaskStoreWriteError
 > =>
   Effect.gen(function* () {
-    yield* requireMutableTask(session, input, workflow);
+    yield* requireMutableTask(session, input, taskWorkflows);
     if (input.artifactId.startsWith(`workflow:${input.taskId}:`)) {
       return yield* new HostValidationError({
         message: "Use the workflow control of the artifact to change a workflow artifact.",

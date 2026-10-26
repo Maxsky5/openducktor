@@ -1,5 +1,5 @@
 import type { ExternalTaskSyncEvent, NotificationOccurrence } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 
 type TaskProjection = {
   accepted: boolean;
@@ -9,11 +9,11 @@ type TaskProjection = {
 export const createTaskOccurrenceProjector = ({
   repoPath,
   repositoryLabel,
-  workflow,
+  taskWorkflows,
 }: {
   repoPath: string;
   repositoryLabel: string;
-  workflow: TaskWorkflow;
+  taskWorkflows: TaskWorkflowResolver;
 }) => {
   let currentRepositoryLabel = repositoryLabel;
   const processedEvents = new Set<string>();
@@ -32,7 +32,9 @@ export const createTaskOccurrenceProjector = ({
       if (previousStatus === current.status) {
         continue;
       }
-      const notification = workflow.stateNotification(current.status, sourceRole);
+      const notification = taskWorkflows
+        .forTask(current)
+        .stateNotification(current.status, sourceRole);
       if (!notification) {
         continue;
       }

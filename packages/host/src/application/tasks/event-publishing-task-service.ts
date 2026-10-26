@@ -302,9 +302,9 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.resetImplementation(input),
         {
-          artifactChanges: () =>
+          artifactChanges: (task) =>
             taskWorkflows
-              .forRepo(input.repoPath)
+              .forTask(task)
               .reviewArtifactCodes.map((code) => workflowArtifactChange(input.taskId, code, true)),
         },
       ),

@@ -2010,6 +2010,7 @@ describe("createTaskService task mutations and reset", () => {
     const calls: unknown[] = [];
     const updatedTask = task({ id: "task-1", status: "ready_for_dev", issueType: "feature" });
     const taskStore: TaskStorePort = {
+      getTask: () => Effect.succeed(task({ id: "task-1", status: "ready_for_dev" })),
       createTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -2352,6 +2353,7 @@ describe("createTaskService task mutations and reset", () => {
 
   test("rejects generic transitions to closed", async () => {
     const taskStore: TaskStorePort = {
+      getTask: () => Effect.succeed(task({ id: "task-1" })),
       listTasks() {
         return Effect.die(new Error("should not list tasks"));
       },

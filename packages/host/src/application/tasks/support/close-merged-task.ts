@@ -1,4 +1,5 @@
 import type { DirectMergeRecord, TaskDirectMergeCompleteIntent } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Cause, Effect } from "effect";
 import {
   HostOperationError,
@@ -20,8 +21,8 @@ export const closeMergedTask = (
   services: ReturnType<typeof requireMergedTaskCleanupDependencies> &
     Pick<
       TaskServiceUseCaseInput,
-      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator" | "taskWorkflows"
-    > & { taskActivityGuard: TaskActivityGuardPort | undefined },
+      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator"
+    > & { taskActivityGuard: TaskActivityGuardPort | undefined; workflow: TaskWorkflow },
   input: TaskDirectMergeCompleteIntent,
   merge: DirectMergeRecord,
   state: TaskCompletionState,
@@ -43,10 +44,7 @@ export const closeMergedTask = (
             yield* completionState.publish(state);
             if (!state.observation.cleanupCompleted) {
               yield* cleanupDirectMergeTaskState(
-                {
-                  ...services,
-                  workflow: services.taskWorkflows.forRepo(repoPath),
-                },
+                services,
                 taskStore,
                 repoPath,
                 taskId,
@@ -69,7 +67,7 @@ export const closeMergedTask = (
             );
             state.observation.phase = "settled";
             yield* completionState.publish(state);
-            return enrichTask(services.taskWorkflows.forRepo(repoPath), task);
+            return enrichTask(services.workflow, task);
           }),
         ),
       );

@@ -73,7 +73,8 @@ export const createWorkflowArtifactUseCases = ({
   ): Effect.Effect<TaskMetadataArtifact, TaskServiceError> {
     return Effect.gen(function* () {
       const { repoPath, taskId, code } = input;
-      yield* requireWorkflowArtifact(taskWorkflows.forRepo(repoPath), code);
+      const task = yield* taskStore.getTask({ repoPath, taskId });
+      yield* requireWorkflowArtifact(taskWorkflows.forTask(task), code);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       return metadata.artifacts[code] ?? { markdown: "" };
     });
@@ -85,7 +86,8 @@ export const createWorkflowArtifactUseCases = ({
   ): Effect.Effect<WorkflowArtifactSaveResult, TaskServiceError> {
     return Effect.gen(function* () {
       const { repoPath, taskId, code, markdown, submit, sourceTool, updatedBy } = input;
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(current);
       const artifact = yield* requireWorkflowArtifact(workflow, code);
       yield* requireRoleWrites(workflow, code, updatedBy);
       const verdict = yield* requireVerdict(artifact, input.verdict, submit);
@@ -99,7 +101,6 @@ export const createWorkflowArtifactUseCases = ({
       };
       const eventId = submit ? workflow.artifactSubmitEvent(code, verdict?.id) : undefined;
       if (eventId !== undefined) {
-        const current = yield* taskStore.getTask({ repoPath, taskId });
         const decision = yield* requireTaskEventInput(
           `Saving the ${artifact.label} is`,
           workflow,

@@ -50,16 +50,18 @@ export const latestWorkflowArtifactRow = (
     return { ...row, markdown: row.markdown };
   });
 
-/** The summary has an entry for each workflow artifact. A stored code outside the workflow is left out. */
+/**
+ * The summary of a task has an entry for each artifact of its workflow. A stored code outside that
+ * workflow is left out.
+ */
 export const artifactSummariesByTaskId = (
   session: TaskStoreSession,
-  taskIds: readonly string[],
-  workflow: TaskWorkflow,
+  workflowsByTaskId: ReadonlyMap<string, TaskWorkflow>,
 ): Effect.Effect<Map<string, TaskArtifactSummary>, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const uniqueTaskIds = Array.from(new Set(taskIds));
+    const uniqueTaskIds = [...workflowsByTaskId.keys()];
     const summaries = new Map<string, TaskArtifactSummary>(
-      uniqueTaskIds.map((taskId) => [taskId, workflow.emptyArtifactSummary()]),
+      [...workflowsByTaskId].map(([taskId, workflow]) => [taskId, workflow.emptyArtifactSummary()]),
     );
     if (uniqueTaskIds.length === 0) {
       return summaries;
@@ -99,7 +101,10 @@ export const artifactSummariesByTaskId = (
 
     for (const row of rows) {
       const summary = summaries.get(row.taskId);
-      if (summary === undefined || workflow.artifact(row.code) === undefined) {
+      if (
+        summary === undefined ||
+        workflowsByTaskId.get(row.taskId)?.artifact(row.code) === undefined
+      ) {
         continue;
       }
       const state: TaskArtifactState = { present: true, updatedAt: toIso(row.updatedAt) };
@@ -115,7 +120,7 @@ export const artifactSummary = (
   workflow: TaskWorkflow,
 ): Effect.Effect<TaskArtifactSummary, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const summaries = yield* artifactSummariesByTaskId(session, [taskId], workflow);
+    const summaries = yield* artifactSummariesByTaskId(session, new Map([[taskId, workflow]]));
     return summaries.get(taskId) ?? workflow.emptyArtifactSummary();
   });
 

@@ -25,7 +25,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { StoredTask, TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type {
   AutomaticWorkflowLaunchStartCheck,
   WorkflowLaunchService,
@@ -88,8 +88,8 @@ const workspaceState = (repo: GlobalConfig["workspaces"][string]): WorkspaceView
  * service. All state stays in memory, so a host restart loses waiting attempts and outcomes.
  */
 export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
-  const stateTitle = (repoPath: string, status: string): string => {
-    const state = deps.taskWorkflows.forRepo(repoPath).state(status);
+  const stateTitle = (task: StoredTask, status: string): string => {
+    const state = deps.taskWorkflows.forTask(task).state(status);
     return state.title ?? state.label;
   };
   let phase: "pending" | "ready" | "stopped" = "pending";
@@ -176,7 +176,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       const latest = latestChanges.get(attempt.workspaceId)?.get(attempt.task.id);
       if (latest && latest.sequence !== attempt.sequence)
         return skip(
-          `The task moved to ${stateTitle(attempt.repoPath, latest.status)} before the action started.`,
+          `The task moved to ${stateTitle(attempt.task, latest.status)} before the action started.`,
         );
       return { start: true as const };
     });
@@ -221,7 +221,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
     workspace: WorkspaceView,
   ): Effect.Effect<string | null> => {
     const target = { repoPath: workspace.repoPath, repositoryLabel: workspace.workspaceName };
-    const workflow = deps.taskWorkflows.forRepo(workspace.repoPath);
+    const workflow = deps.taskWorkflows.forTask(outcome.task);
     const { role } = workflow.automation(outcome.actionId);
     const input = {
       launchAttemptId: outcome.outcomeId,

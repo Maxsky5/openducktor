@@ -6,11 +6,11 @@ import {
 } from "@openducktor/contracts";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import type { z } from "zod";
-import type { TaskWorkflowResolver } from "../ports/task-workflow-port";
+import { singleTaskWorkflow } from "../test-support/task-workflows";
 import { applyTaskWorkflowSettings } from "./workflow-settings";
 
 const review = createReviewTaskWorkflow();
-const reviewWorkflows: TaskWorkflowResolver = { forRepo: () => review, workflows: [review] };
+const reviewWorkflows = singleTaskWorkflow(review);
 
 const config = (input: Partial<z.input<typeof globalConfigSchema>> = {}) =>
   globalConfigSchema.parse({ version: 4, ...input });

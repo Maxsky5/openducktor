@@ -4,7 +4,7 @@ import { TaskAssetError, TaskCreatedAssetError } from "../../../effect/task-asse
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
 import { TaskPolicyError } from "../../../domain/task";
 import { requireTaskEvent, requireWorkflowIssueType } from "../support/task-workflow-events";
-import { applyTaskEvent, enrichTask } from "../support/task-workflow-helpers";
+import { commitTaskEvent, enrichTask } from "../support/task-workflow-helpers";
 import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
@@ -42,7 +42,7 @@ export const createTaskCrudUseCases = ({
   createTask(input) {
     return Effect.gen(function* () {
       const { repoPath, task, descriptionAssets } = input;
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forNewTask(repoPath);
       yield* requireWorkflowIssueType(workflow, task.issueType);
       const createInput: Parameters<typeof taskStore.createTask>[0] = {
         repoPath,
@@ -69,8 +69,10 @@ export const createTaskCrudUseCases = ({
   updateTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, patch, descriptionAssets } = input;
-      const workflow = taskWorkflows.forRepo(repoPath);
-      if (patch.issueType !== undefined) yield* requireWorkflowIssueType(workflow, patch.issueType);
+      if (patch.issueType !== undefined) {
+        const current = yield* taskStore.getTask({ repoPath, taskId });
+        yield* requireWorkflowIssueType(taskWorkflows.forTask(current), patch.issueType);
+      }
       const updateInput: Parameters<typeof taskStore.updateTask>[0] = { repoPath, taskId, patch };
       if (descriptionAssets) {
         updateInput.descriptionAssets = descriptionAssets;
@@ -80,14 +82,15 @@ export const createTaskCrudUseCases = ({
         .pipe(
           Effect.mapError((error) => preserveCommittedAssetMutation("update-task", taskId, error)),
         );
-      return enrichTask(workflow, updated);
+      return enrichTask(taskWorkflows.forTask(updated), updated);
     });
   },
 
   transitionTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, status } = input;
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(current);
       const eventId = workflow.statusEvent(status);
       if (eventId === undefined) {
         return yield* Effect.fail(
@@ -98,14 +101,15 @@ export const createTaskCrudUseCases = ({
           }),
         );
       }
-      return yield* applyTaskEvent(taskStore, workflow, { repoPath, taskId }, eventId);
+      return yield* commitTaskEvent(taskStore, workflow, { repoPath, taskId }, current, eventId);
     });
   },
 
   applyTaskEvent(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, eventId } = input;
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(current);
       const event = workflow.definition.events.find(({ id }) => id === eventId);
       const actionIds = workflow.definition.actions.flatMap((action) =>
         action.kind === "event" && action.eventId === eventId ? [action.id] : [],
@@ -124,7 +128,6 @@ export const createTaskCrudUseCases = ({
           details: { repoPath, taskId, eventId },
         });
       }
-      const current = yield* taskStore.getTask({ repoPath, taskId });
       const decision = yield* requireTaskEvent(workflow, eventId, current);
       const available = workflow.project(current).availableActions;
       if (!actionIds.some((actionId) => available.includes(actionId))) {
@@ -146,16 +149,17 @@ export const createTaskCrudUseCases = ({
   },
 
   applyStartEvent({ repoPath, taskId, eventId }) {
-    const workflow = taskWorkflows.forRepo(repoPath);
-    if (workflow.startEventRole(eventId) === undefined) {
-      return Effect.fail(
-        new HostValidationError({
+    return Effect.gen(function* () {
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(current);
+      if (workflow.startEventRole(eventId) === undefined) {
+        return yield* new HostValidationError({
           field: "eventId",
           message: `Event ${eventId} starts no step of task workflow "${workflow.definition.id}".`,
           details: { repoPath, taskId, eventId },
-        }),
-      );
-    }
-    return applyTaskEvent(taskStore, workflow, { repoPath, taskId }, eventId);
+        });
+      }
+      return yield* commitTaskEvent(taskStore, workflow, { repoPath, taskId }, current, eventId);
+    });
   },
 });

@@ -53,7 +53,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   processEnv?: NodeJS.ProcessEnv;
   historyStorage?: "memory" | "disk";
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
-  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  /** The tools and workspace access of a workflow role in the task workflow of the session task. */
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;

@@ -115,7 +115,9 @@ describe("createTaskService build start worktree handling", () => {
 
   test("preserves preparation validation errors", async () => {
     const calls: unknown[] = [];
-    const deps = createDependencies(calls, {});
+    const deps = createDependencies(calls, {
+      getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+    });
     const failure = new HostValidationError({ field: "repoPath", message: "invalid repository" });
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,

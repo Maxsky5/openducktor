@@ -24,7 +24,8 @@ const createStopImpactTaskStore = (
   sessionsByTaskId: Record<string, TestSession[]>,
   tasks = Object.keys(sessionsByTaskId).map((id) => task({ id })),
 ): TaskStorePort => ({
-  listTasks: () => Effect.succeed(tasks),
+  getTask: (input) =>
+    Effect.succeed(tasks.find(({ id }) => id === input.taskId) ?? task({ id: input.taskId })),
   getTaskMetadata(input) {
     return Effect.succeed(metadataWithSessions(sessionsByTaskId[input.taskId] ?? []));
   },
@@ -94,7 +95,7 @@ const createService = (
 };
 
 describe("getTaskStopImpact", () => {
-  test("previews zero without probing when tasks have no agent sessions", async () => {
+  test("previews no stoppable session without probing when tasks have no agent sessions", async () => {
     const countCalls: Array<{ sessionIds: string[]; sessionRoles: string[] }> = [];
     const service = createService({}, makeGuard(new Set(["live-1"]), countCalls));
 
@@ -106,7 +107,7 @@ describe("getTaskStopImpact", () => {
       }),
     );
 
-    expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 0 });
+    expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 1 });
     expect(countCalls).toEqual([]);
   });
 

@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { z } from "zod";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { reviewTaskWorkflows } from "../../test-support/task-workflows";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
 import {
@@ -26,10 +29,10 @@ afterEach(async () => {
   await harness.cleanup();
 });
 
-const service = () =>
+const service = (taskWorkflows: TaskWorkflowResolver = reviewTaskWorkflows) =>
   createTaskService({
     taskStore: harness.store,
-    taskWorkflows: reviewTaskWorkflows,
+    taskWorkflows,
     gitPort: createBuildStartGitPort({ calls: [] }),
     settingsConfig: createBuildSettingsConfig(new Set([harness.repoPath])),
     systemCommands: createBuildSystemCommands([]),
@@ -290,5 +293,60 @@ describe("task service with a custom task workflow", () => {
       service().applyStartEvent({ ...input, eventId: "start-writing" }),
     );
     expect(started.status).toBe("writing");
+  });
+});
+
+describe("task service with a workflow for each task", () => {
+  test("reads, moves, and hides each task with the workflow of that task", async () => {
+    const review = createReviewTaskWorkflow();
+    // The issue type stands for the stored workflow of a task.
+    const taskWorkflows: TaskWorkflowResolver = {
+      forTask: (task: { readonly id: string; readonly issueType?: string }) =>
+        task.issueType === "article" ? review : builtinTaskWorkflow,
+      forNewTask: () => builtinTaskWorkflow,
+      workflows: [builtinTaskWorkflow, review],
+    };
+    await harness.cleanup();
+    harness = await createSqliteTaskStoreHarness({ taskWorkflows });
+    const tasks = service(taskWorkflows);
+    const insert = (issueType: string, status: string) =>
+      Effect.runPromise(
+        harness.store.createTask({
+          repoPath: harness.repoPath,
+          task: { title: issueType, issueType, priority: 2 },
+          status,
+        }),
+      );
+    const article = await insert("article", "backlog");
+    const feature = await insert("feature", "open");
+
+    const cards = await Effect.runPromise(tasks.listTasks({ repoPath: harness.repoPath }));
+    const card = (id: string) => cards.find((entry) => entry.id === id);
+    expect(Object.keys(card(article.id)?.agentWorkflows ?? {})).toEqual(["writer", "editor"]);
+    expect(Object.keys(card(article.id)?.artifactSummary ?? {})).toEqual(["draft", "review"]);
+    expect(Object.keys(card(feature.id)?.artifactSummary ?? {})).toEqual([
+      "spec",
+      "plan",
+      "qaReport",
+    ]);
+
+    const input = (taskId: string) => ({ repoPath: harness.repoPath, taskId });
+    const moved = await Effect.runPromise(
+      tasks.transitionTask({ ...input(article.id), status: "writing" }),
+    );
+    expect(moved.status).toBe("writing");
+    const rejected = await Effect.runPromiseExit(
+      tasks.transitionTask({ ...input(feature.id), status: "writing" }),
+    );
+    expect(String(rejected)).toContain("task_transition cannot move tasks to writing");
+
+    await Effect.runPromise(tasks.closeTask(input(article.id)));
+    await Effect.runPromise(tasks.closeTask(input(feature.id)));
+    expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("shelved");
+    expect((await Effect.runPromise(tasks.findTask(input(feature.id))))?.status).toBe("closed");
+    const visible = await Effect.runPromise(
+      harness.store.listTasks({ repoPath: harness.repoPath, doneVisibleDays: 0 }),
+    );
+    expect(visible).toEqual([]);
   });
 });

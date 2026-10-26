@@ -130,7 +130,6 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       taskWorkflows,
     } = services;
     const { repoPath, taskId } = input;
-    const workflow = taskWorkflows.forRepo(repoPath);
     const mergeInput = input.input;
     const dependencies = yield* requireDependencies(() =>
       requireDirectMergeDependencies({
@@ -152,6 +151,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       "direct merge",
     );
     const current = yield* taskStore.getTask({ repoPath: effectiveRepoPath, taskId });
+    const workflow = taskWorkflows.forTask(current);
     const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
     yield* ensureNoDirectMergeEffect({
       operation: "direct_merge",
@@ -241,6 +241,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       dependencies,
       effectiveRepoPath,
       current,
+      workflow,
       approval,
       state,
       decision,

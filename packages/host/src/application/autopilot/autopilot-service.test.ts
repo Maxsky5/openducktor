@@ -174,7 +174,7 @@ const createAutopilotHarness = async ({
     listTasks: (input) =>
       publicationGate.pipe(
         Effect.andThen(store(input.repoPath).listTasks(input)),
-        Effect.map((tasks) => enrichTasks(builtinTaskWorkflow, tasks)),
+        Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks)),
       ),
     listTaskIds: (input) =>
       taskIdsGate.pipe(Effect.andThen(store(input.repoPath).listTaskIds(input))),

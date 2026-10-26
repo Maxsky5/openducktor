@@ -55,12 +55,7 @@ export const createTaskBuildStateUseCases = ({
           [taskId],
           "block build",
         );
-        return yield* applyEffect(
-          taskStore,
-          taskWorkflows.forRepo(repoPath),
-          { repoPath, taskId },
-          "build.blocked",
-        );
+        return yield* applyEffect(taskStore, taskWorkflows, { repoPath, taskId }, "build.blocked");
       }),
     );
   },
@@ -68,12 +63,7 @@ export const createTaskBuildStateUseCases = ({
   buildResumed(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      return yield* applyEffect(
-        taskStore,
-        taskWorkflows.forRepo(repoPath),
-        { repoPath, taskId },
-        "build.resumed",
-      );
+      return yield* applyEffect(taskStore, taskWorkflows, { repoPath, taskId }, "build.resumed");
     });
   },
 
@@ -84,7 +74,7 @@ export const createTaskBuildStateUseCases = ({
         requireBuildCompletedDependencies(settingsConfig, systemCommands, workspaceSettingsService),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
 
       const decision = yield* requireEffectInput(
         "build_completed is",

@@ -21,15 +21,10 @@ export const createTaskDirectMergeUseCase = (
 ): Pick<TaskServiceWithMutationProgress, "directMerge"> => ({
   directMerge(input) {
     return Effect.gen(function* () {
-      const {
-        taskStore,
-        completionState,
-        taskActivityGuard,
-        taskSessionLifecycleCoordinator,
-        taskWorkflows,
-      } = services;
+      const { taskStore, completionState, taskActivityGuard, taskSessionLifecycleCoordinator } =
+        services;
       const { taskId, input: mergeInput } = input;
-      const { dependencies, effectiveRepoPath, current, approval, state, decision } =
+      const { dependencies, effectiveRepoPath, current, workflow, approval, state, decision } =
         yield* prepareDirectMerge(services, input);
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -104,7 +99,7 @@ export const createTaskDirectMergeUseCase = (
                     completionState,
                     taskActivityGuard,
                     taskSessionLifecycleCoordinator,
-                    taskWorkflows,
+                    workflow,
                   },
                   { repoPath: effectiveRepoPath, taskId },
                   directMerge,
@@ -127,7 +122,7 @@ export const createTaskDirectMergeUseCase = (
                   : current;
               return {
                 outcome: "completed" as const,
-                task: enrichTask(taskWorkflows.forRepo(effectiveRepoPath), task),
+                task: enrichTask(workflow, task),
               };
             }),
           );

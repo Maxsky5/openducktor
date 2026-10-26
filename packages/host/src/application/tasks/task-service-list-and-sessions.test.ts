@@ -352,6 +352,7 @@ describe("createTaskService list and session reads", () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord();
     const taskStore: TaskStorePort = {
+      getTask: () => Effect.succeed(task({ id: "task-1" })),
       getTaskMetadata(input) {
         return Effect.sync(() => {
           calls.push(input);
@@ -473,6 +474,7 @@ describe("createTaskService list and session reads", () => {
   });
   test("returns an empty QA document when no report is present", async () => {
     const taskStore: TaskStorePort = {
+      getTask: () => Effect.succeed(task({ id: "task-1" })),
       getTaskMetadata() {
         return Effect.tryPromise({
           try: async () => {

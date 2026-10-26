@@ -25,16 +25,14 @@ export type CodexSessionScopePolicy =
       sessionScope: Extract<AgentSessionScope, { kind: "repository" }>;
     });
 
-/** A workflow session enables the tools of its role in the task workflow of the repository. */
+/** A workflow session enables the tools of its role in the task workflow of its task. */
 export const resolveCodexSessionScopePolicy = (
   {
     sessionScope,
     runtimePolicy,
-    repoPath,
   }: {
     sessionScope?: AgentSessionScope | null | undefined;
     runtimePolicy?: AgentSessionRuntimePolicy | undefined;
-    repoPath: string;
   },
   action: string,
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
@@ -55,7 +53,7 @@ export const resolveCodexSessionScopePolicy = (
           kind: "workflow",
           sessionScope,
           runtimePolicy: effectivePolicy,
-          enabledTools: [...resolveWorkflowRolePolicy({ repoPath, role: sessionScope.role }).tools],
+          enabledTools: [...resolveWorkflowRolePolicy(sessionScope).tools],
         };
   return withAgentSessionTitle(policy, sessionScope);
 };

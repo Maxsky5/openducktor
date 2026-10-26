@@ -119,7 +119,9 @@ export const readStringProp = (
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
 
-const claudeWorkflowScope = (input: ClaudeSessionInput): AgentSessionWorkflowScope | null => {
+export const claudeWorkflowScope = (
+  input: ClaudeSessionInput,
+): AgentSessionWorkflowScope | null => {
   const scope = claudeSessionScope(input);
   return scope?.kind === "workflow" ? scope : null;
 };

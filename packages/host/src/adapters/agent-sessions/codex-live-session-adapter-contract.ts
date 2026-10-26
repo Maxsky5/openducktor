@@ -82,7 +82,7 @@ export type CreateCodexLiveSessionAdapterPreparerInput = {
     repoPath: string;
     sessionScope: AgentSessionScope;
   }) => Effect.Effect<CodexEffectivePolicy, HostError>;
-  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  /** The tools and workspace access of a workflow role in the task workflow of the session task. */
   readonly resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   /** Resolves the managed MCP server of the workspace that owns a session repository. */
   readonly resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;

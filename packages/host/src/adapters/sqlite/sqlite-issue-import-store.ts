@@ -190,7 +190,7 @@ export const createSqliteIssueImportStore = ({
     return withDatabase(
       input.repoPath,
       "sqliteIssueImportStore.createImportedTask",
-      ({ session, workspaceId, workflow }) =>
+      ({ session, workspaceId, taskWorkflows }) =>
         session.transaction("sqliteIssueImportStore.createImportedTask", (transaction) =>
           Effect.gen(function* () {
             const existing = yield* linkedTask(transaction, input.sourceIssue);
@@ -225,7 +225,12 @@ export const createSqliteIssueImportStore = ({
                 { taskId },
               );
               if (inserted.length > 0) {
-                const task = yield* getTaskRecord(transaction, taskId, input.repoPath, workflow);
+                const task = yield* getTaskRecord(
+                  transaction,
+                  taskId,
+                  input.repoPath,
+                  taskWorkflows,
+                );
                 return { outcome: "created" as const, task };
               }
               const concurrent = yield* linkedTask(transaction, input.sourceIssue);

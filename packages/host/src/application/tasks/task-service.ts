@@ -391,7 +391,11 @@ const createTaskServiceImplementation = (
             [startInput.taskId],
             "start build",
           );
-          const role = yield* requireBuildStartRole(input.taskWorkflows.forRepo(canonicalRepoPath));
+          const task = yield* input.taskStore.getTask({
+            repoPath: canonicalRepoPath,
+            taskId: startInput.taskId,
+          });
+          const role = yield* requireBuildStartRole(input.taskWorkflows.forTask(task));
           const preparationInput: TaskSessionStartPreparationInput = {
             canonicalRepoPath,
             taskId: startInput.taskId,
@@ -402,12 +406,7 @@ const createTaskServiceImplementation = (
           let rollback = prepared.rollback;
           const completion = yield* Effect.gen(function* () {
             yield* taskSessionStart.complete(prepared, ({ repoPath, taskId, eventId }) =>
-              applyTaskEvent(
-                input.taskStore,
-                input.taskWorkflows.forRepo(canonicalRepoPath),
-                { repoPath, taskId },
-                eventId,
-              ),
+              applyTaskEvent(input.taskStore, input.taskWorkflows, { repoPath, taskId }, eventId),
             );
             // A committed build retains its worktree when cancellation arrives.
             rollback = () => Effect.void;

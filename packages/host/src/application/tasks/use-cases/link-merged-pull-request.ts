@@ -74,7 +74,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           linkedProviderId: metadata.pullRequest.providerId,
         });
       }
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       const closeEvent = yield* requireEffectEvent(workflow, "pull_request.merged");
       const closure = workflow.decide(closeEvent, current);
       if (closure.kind === "unchanged" && sameExistingPullRequest) {

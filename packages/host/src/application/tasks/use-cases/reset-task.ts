@@ -52,7 +52,7 @@ export const createTaskFullResetUseCase = ({
         "reset task",
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       const workflowRoles = workflowRoleIds(workflow);
       // A reset from the initial state keeps the status and still clears the task.
       const decision = yield* requireEffectInput("Task reset is", workflow, "task.reset", current, {

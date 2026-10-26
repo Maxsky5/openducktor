@@ -1,4 +1,4 @@
-import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type {
   AgentSessionScope,
   NotificationOccurrence,
@@ -41,7 +41,7 @@ type WorkspaceState = {
  */
 export const createWorkspaceNotificationObserver = ({
   record,
-  workflow,
+  taskWorkflows,
   tasks,
   live,
   workspaceSessions,
@@ -50,7 +50,7 @@ export const createWorkspaceNotificationObserver = ({
   recovered,
 }: {
   record: WorkspaceRecord;
-  workflow: TaskWorkflow;
+  taskWorkflows: TaskWorkflowResolver;
   tasks: Pick<TaskService, "listTasks" | "agentSessionsListForTasks">;
   live: Pick<AgentSessionLiveStateService, "attach">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listActive">;
@@ -73,7 +73,7 @@ export const createWorkspaceNotificationObserver = ({
       taskProjector: createTaskOccurrenceProjector({
         repoPath: record.repoPath,
         repositoryLabel: record.workspaceName,
-        workflow,
+        taskWorkflows,
       }),
       projector: createSessionOccurrenceProjector({
         repositoryLabel: record.workspaceName,

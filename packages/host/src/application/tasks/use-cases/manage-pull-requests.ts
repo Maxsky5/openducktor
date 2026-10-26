@@ -37,7 +37,7 @@ export const createTaskPullRequestManagementUseCases = ({
         }),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* requirePullRequestManagement(taskWorkflows.forRepo(repoPath), current);
+      yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest !== undefined) {
         return yield* new HostValidationError({
@@ -96,7 +96,7 @@ export const createTaskPullRequestManagementUseCases = ({
       });
       const approval = yield* loadOpenApprovalContext(
         dependencies,
-        taskWorkflows.forRepo(repoPath),
+        taskWorkflows.forTask(current),
         taskId,
         current,
         metadata,
@@ -166,7 +166,7 @@ export const createTaskPullRequestManagementUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* requirePullRequestManagement(taskWorkflows.forRepo(repoPath), current);
+      yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest === undefined) {
         return yield* new HostValidationError({

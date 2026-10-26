@@ -37,7 +37,7 @@ export const createTaskApprovalContextUseCase = ({
       );
 
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       yield* requireHumanReviewStatus(workflow, current);
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);

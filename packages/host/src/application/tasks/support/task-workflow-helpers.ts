@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
 import { TaskPolicyError } from "../../../domain/task";
@@ -28,12 +29,30 @@ import {
 /** Decides a named event for a task and commits its transition. A repeat returns the task. */
 export const applyTaskEvent = (
   taskStore: Pick<TaskStorePort, "getTask" | "transitionTask">,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
   input: { repoPath: string; taskId: string },
   eventId: string,
 ): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
   Effect.gen(function* () {
     const current = yield* taskStore.getTask(input);
+    return yield* commitTaskEvent(
+      taskStore,
+      taskWorkflows.forTask(current),
+      input,
+      current,
+      eventId,
+    );
+  });
+
+/** Decides a named event for a loaded task and commits its transition. */
+export const commitTaskEvent = (
+  taskStore: Pick<TaskStorePort, "transitionTask">,
+  workflow: TaskWorkflow,
+  input: { repoPath: string; taskId: string },
+  current: TaskRecord,
+  eventId: string,
+): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
+  Effect.gen(function* () {
     const decision = yield* requireTaskEvent(workflow, eventId, current);
     if (decision.kind === "unchanged") return enrichTask(workflow, current);
     const updated = yield* taskStore.transitionTask({
@@ -47,12 +66,13 @@ export const applyTaskEvent = (
 /** Decides the event of a host effect for a task and commits its transition. */
 export const applyEffect = (
   taskStore: Pick<TaskStorePort, "getTask" | "transitionTask">,
-  workflow: TaskWorkflow,
+  taskWorkflows: TaskWorkflowResolver,
   input: { repoPath: string; taskId: string },
   effect: HostEffect,
 ): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
   Effect.gen(function* () {
     const current = yield* taskStore.getTask(input);
+    const workflow = taskWorkflows.forTask(current);
     const decision = yield* requireEffect(workflow, effect, current);
     if (decision.kind === "unchanged") return enrichTask(workflow, current);
     const updated = yield* taskStore.transitionTask({
@@ -64,8 +84,10 @@ export const applyEffect = (
   });
 
 /** Adds the workflow projection to stored tasks. */
-export const enrichTasks = (workflow: TaskWorkflow, tasks: readonly TaskRecord[]): TaskCard[] =>
-  tasks.map((task) => enrichTask(workflow, task));
+export const enrichTasks = (
+  taskWorkflows: TaskWorkflowResolver,
+  tasks: readonly TaskRecord[],
+): TaskCard[] => tasks.map((task) => enrichTask(taskWorkflows.forTask(task), task));
 export const enrichTask = (workflow: TaskWorkflow, task: TaskRecord): TaskCard => ({
   ...task,
   ...workflow.project(task),

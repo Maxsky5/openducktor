@@ -51,8 +51,8 @@ const hostWorkflowIds = (workflows: readonly TaskWorkflow[]) => {
 };
 
 /**
- * Checks the settings that task workflows key, and adds the workflow defaults. Global settings
- * cover every task workflow of the host. Workspace settings follow the workflow of the workspace.
+ * Checks the settings that task workflows key, and adds the workflow defaults. Settings cover every
+ * task workflow of the host, because the tasks of one workspace can follow different workflows.
  * A key outside the workflows fails, so the user fixes the setting.
  */
 export const applyTaskWorkflowSettings = (
@@ -114,18 +114,21 @@ export const applyTaskWorkflowSettings = (
   });
 
   for (const [workspaceId, workspace] of Object.entries(config.workspaces)) {
-    const workflow = taskWorkflows.forRepo(workspace.repoPath);
-    const roles = new Set(ids(workflow.definition.roles));
     const field = `workspaces.${workspaceId}`;
-    requireKnownKeys(Object.keys(workspace.agentDefaults), roles, `${field}.agentDefaults`, "role");
+    requireKnownKeys(
+      Object.keys(workspace.agentDefaults),
+      host.roles,
+      `${field}.agentDefaults`,
+      "role",
+    );
     requireKnownKeys(
       Object.keys(workspace.promptOverrides),
-      new Set(ids(workflow.prompts.templates)),
+      host.templates,
       `${field}.promptOverrides`,
       "prompt template",
     );
     const activeRole = workspace.agentStudioState.activeTask?.role;
-    if (activeRole !== undefined && !roles.has(activeRole)) {
+    if (activeRole !== undefined && !host.roles.has(activeRole)) {
       invalid(`${field}.agentStudioState.activeTask.role`, `Unknown role "${activeRole}".`);
     }
   }

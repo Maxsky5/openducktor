@@ -1,4 +1,3 @@
-import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Deferred, Effect } from "effect";
 import path from "node:path";
@@ -39,9 +38,14 @@ export type SqliteTaskRepositoryContext = {
   repoPath: string;
   session: TaskStoreSession;
   workspaceId: string;
-  /** The task workflow of the repository. Terminal states hide tasks and lock their artifacts. */
-  workflow: TaskWorkflow;
+  /** Finds the workflow of a task row. Terminal states hide tasks and lock their artifacts. */
+  taskWorkflows: TaskWorkflowResolver;
 };
+
+/** A read of many tasks hides a task in a state that ends a task in a host workflow. */
+export const hostTerminalStates = (taskWorkflows: TaskWorkflowResolver): string[] => [
+  ...new Set(taskWorkflows.workflows.flatMap(({ terminalStates }) => terminalStates)),
+];
 
 export type SqliteTaskRepositoryContextProvider = <A>(
   repoPath: string,
@@ -187,7 +191,7 @@ export const createSqliteTaskRepositoryContextManager = ({
     Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceIdForRepoPath(repoPath);
       const databasePath = yield* resolveDatabasePath({ repoPath, workspaceId });
-      return { databasePath, repoPath, workspaceId, workflow: taskWorkflows.forRepo(repoPath) };
+      return { databasePath, repoPath, workspaceId, taskWorkflows };
     });
 
   const getSlot = (databasePath: string) => {
@@ -264,10 +268,7 @@ export const createSqliteTaskRepositoryContextManager = ({
   const listOpenTasksForWorktreeOwnership: SqliteTaskRepositoryContextManager["listOpenTasksForWorktreeOwnership"] =
     (scope) =>
       readForWorktreeOwnership(scope, "taskStore.worktreeOwners", (session) =>
-        readOpenTasksForWorktreeOwnership(
-          session,
-          taskWorkflows.forRepo(scope.repoPath).terminalStates,
-        ),
+        readOpenTasksForWorktreeOwnership(session, hostTerminalStates(taskWorkflows)),
       );
 
   const closeWorkspace = (

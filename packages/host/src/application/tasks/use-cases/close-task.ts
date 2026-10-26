@@ -41,7 +41,7 @@ export const createTaskCloseUseCase = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      const workflow = taskWorkflows.forRepo(repoPath);
+      const workflow = taskWorkflows.forTask(current);
       const decision = yield* requireEffect(workflow, "task.close", current);
       if (decision.kind === "unchanged") {
         return enrichTask(workflow, current);

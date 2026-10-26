@@ -27,7 +27,7 @@ const createServices = (
   const failures: unknown[] = [];
   const base = createTaskServiceWithMutationProgressTestDouble({
     listTasks: (input) =>
-      store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflow, tasks))),
+      store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
     transitionTask: (input) =>
       store.transitionTask(input).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
     ...overrides,

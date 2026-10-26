@@ -121,10 +121,13 @@ export const createTaskSessionStartPreparationService = ({
             workspaceSettingsService,
           ),
         );
+        // The caller holds the task lifecycle, so the task stays the same during the preparation.
+        const task = yield* taskStore.getTask({ repoPath: canonicalInputRepoPath, taskId });
+        const workflow = taskWorkflows.forTask(task);
         const descriptor = yield* resolveRuntimeDescriptorForTaskSession(
           dependencies.runtimeDefinitionsService,
           runtimeKind,
-          yield* requireWorkflowRole(taskWorkflows.forRepo(canonicalInputRepoPath), role),
+          yield* requireWorkflowRole(workflow, role),
         );
         // Fail before worktree setup when the shared runtime of this kind cannot accept work.
         yield* dependencies.runtimeRegistry.requireReady(descriptor.kind);
@@ -168,8 +171,6 @@ export const createTaskSessionStartPreparationService = ({
         let rollback: PreparedTaskWorktree["rollback"] = () => Effect.void;
         const prepared = yield* Effect.result(
           Effect.gen(function* () {
-            const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-            const workflow = taskWorkflows.forRepo(canonicalRepoPath);
             yield* validateTaskSessionWorkflowAvailable(workflow, task, role, canonicalRepoPath);
             const startEvent = workflow.roleStartEvent(role);
             if (startEvent !== undefined) yield* requireTaskEvent(workflow, startEvent, task);
@@ -238,7 +239,7 @@ export const createTaskSessionStartPreparationService = ({
           repoPath: prepared.canonicalRepoPath,
           taskId: prepared.task.id,
         });
-        const workflow = taskWorkflows.forRepo(prepared.canonicalRepoPath);
+        const workflow = taskWorkflows.forTask(task);
         const startEvent = workflow.roleStartEvent(prepared.role);
         if (startEvent === undefined) {
           yield* validateTaskSessionWorkflowAvailable(

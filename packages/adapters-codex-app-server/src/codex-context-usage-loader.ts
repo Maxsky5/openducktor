@@ -130,7 +130,7 @@ export class CodexContextUsageLoader {
       return retained;
     }
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      { sessionScope, runtimePolicy: session.runtimePolicy, repoPath: session.repoPath },
+      { sessionScope, runtimePolicy: session.runtimePolicy },
       "load Codex session context usage",
       this.deps.resolveWorkflowRolePolicy,
     );

@@ -164,7 +164,7 @@ export const createSqliteTaskAssetRegistry = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
-        ({ session, workspaceId, workflow }) =>
+        ({ session, workspaceId, taskWorkflows }) =>
           session.transaction(
             "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
             (transaction) =>
@@ -178,7 +178,7 @@ export const createSqliteTaskAssetRegistry = ({
                 });
                 yield* input.prepareFiles(taskId);
                 yield* insertAssets(transaction, taskId, input.assets);
-                return yield* getTaskRecord(transaction, taskId, input.repoPath, workflow);
+                return yield* getTaskRecord(transaction, taskId, input.repoPath, taskWorkflows);
               }),
           ),
       );
@@ -187,7 +187,7 @@ export const createSqliteTaskAssetRegistry = ({
       return withDatabase(
         input.repoPath,
         "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
-        ({ session, workflow }) =>
+        ({ session, taskWorkflows }) =>
           session.transaction(
             "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
             (transaction) =>
@@ -196,7 +196,7 @@ export const createSqliteTaskAssetRegistry = ({
                   transaction,
                   input.taskId,
                   input.repoPath,
-                  workflow,
+                  taskWorkflows,
                 );
                 const currentAssets = yield* transaction.execute(
                   (database) =>
@@ -243,8 +243,13 @@ export const createSqliteTaskAssetRegistry = ({
                     "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets.deleteAssets",
                   );
                 }
-                yield* applyTaskPatch(transaction, input, now(), workflow);
-                return yield* getTaskRecord(transaction, input.taskId, input.repoPath, workflow);
+                yield* applyTaskPatch(transaction, input, now(), taskWorkflows);
+                return yield* getTaskRecord(
+                  transaction,
+                  input.taskId,
+                  input.repoPath,
+                  taskWorkflows,
+                );
               }),
           ),
       );

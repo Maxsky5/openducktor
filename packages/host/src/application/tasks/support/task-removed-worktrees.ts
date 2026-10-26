@@ -25,6 +25,7 @@ export type RemovedWorktreeTarget = {
   task: TaskRecord;
   taskId: string;
   sessions: AgentSessionRecord[];
+  workflow: TaskWorkflow;
 };
 
 type RemovedWorktreeDependencies = {
@@ -38,7 +39,6 @@ type RemovedWorktreeDependencies = {
 const collectRemovedWorktreePaths = (
   { taskWorktreeService, ...dependencies }: RemovedWorktreeDependencies,
   operation: RemovedWorktreeOperation,
-  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   repoPath: string,
   targets: RemovedWorktreeTarget[],
@@ -53,12 +53,11 @@ const collectRemovedWorktreePaths = (
         dependencies,
         repoPath,
         managedWorktreeBasePath,
-        workflow,
         targets,
       );
     }
     if (operation === "reset_task") {
-      const paths = yield* Effect.forEach(targets, ({ taskId, sessions }) =>
+      const paths = yield* Effect.forEach(targets, ({ taskId, sessions, workflow }) =>
         collectResetWorktreePaths(
           dependencies,
           repoPath,
@@ -76,8 +75,8 @@ const collectRemovedWorktreePaths = (
       : dependencies;
     // Close returns early for a terminal task, so it removes nothing there.
     const paths = yield* Effect.forEach(
-      targets.filter(({ task }) => !workflow.isTerminalState(task.status)),
-      ({ task, sessions }) =>
+      targets.filter(({ task, workflow }) => !workflow.isTerminalState(task.status)),
+      ({ task, sessions, workflow }) =>
         collectCloseWorktreePaths(closeDependencies, repoPath, workflow, task, sessions),
     );
     return paths.flat();
@@ -90,7 +89,6 @@ const collectRemovedWorktreePaths = (
 export const countRemovedWorktrees = (
   dependencies: RemovedWorktreeDependencies,
   operation: RemovedWorktreeOperation,
-  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   repoPath: string,
   targets: RemovedWorktreeTarget[],
@@ -99,7 +97,6 @@ export const countRemovedWorktrees = (
     const paths = yield* collectRemovedWorktreePaths(
       dependencies,
       operation,
-      workflow,
       repoConfig,
       repoPath,
       targets,

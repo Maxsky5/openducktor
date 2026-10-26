@@ -377,7 +377,7 @@ export const createIssueImportService = ({
               return yield* runMutation(
                 input.repoPath,
                 Effect.gen(function* () {
-                  const workflow = taskWorkflows.forRepo(input.repoPath);
+                  const workflow = taskWorkflows.forNewTask(input.repoPath);
                   yield* requireWorkflowIssueType(workflow, review.issueType);
                   const created = yield* store.createImportedTask({
                     repoPath: input.repoPath,

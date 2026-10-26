@@ -112,7 +112,7 @@ type MergedTaskCleanupServices = {
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
   worktreeFiles?: WorktreeFilePort;
-  /** The task workflow of the repository. Its roles own the sessions and worktrees to clean. */
+  /** The task workflow of the task. Its roles own the sessions and worktrees to clean. */
   workflow: TaskWorkflow;
 };
 /**

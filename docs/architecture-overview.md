@@ -96,7 +96,7 @@ Connection rules:
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
 5. The shell calls the host command router.
 6. The host resolves the workspace, opens `<config-root>/task-stores/<workspaceId>/database.sqlite`, and reads through `TaskStorePort`.
-7. The host adds `available_actions` and `agent_workflows` from the task workflow of the repository.
+7. The host adds `available_actions` and `agent_workflows` from the task workflow of each task.
 8. TanStack Query caches the result. Frontend read models render columns and actions.
 
 The frontend renders `availableActions`. It does not derive transition rights from status. Host SQLite adapters own database paths, schema setup, records, and cache invalidation.
@@ -186,7 +186,7 @@ An event can name one host effect from `workflowEventEffectValues`, such as `bui
 
 The command of an effect decides its event once and branches on the decision, so a repeat needs no status check. `task_transition` sends the `status.set` event of its target state. `task_apply_event` sends the event of an available event action that has no effect. A role session start sends the start event of its step after it creates the session. `packages/host/src/application/tasks/support/task-workflow-events.ts` maps denials to typed errors and gives the store the signal and source role of each transition.
 
-`createTaskWorkflow` in `packages/workflows/src/task-workflow` gives the host one API for any workflow: task projection, event decisions, roles, artifacts, launch actions, automations, notifications, and prompts. Only `issueType` is a fact. Artifact states come from the task `artifactSummary`, keyed by artifact code. Host code reads the workflow of a repository through the `TaskWorkflowResolver` port. Runtime adapters read the tools and workspace access of a role through a `WorkflowRolePolicyResolver`.
+`createTaskWorkflow` in `packages/workflows/src/task-workflow` gives the host one API for any workflow: task projection, event decisions, roles, artifacts, launch actions, automations, notifications, and prompts. Only `issueType` is a fact. Artifact states come from the task `artifactSummary`, keyed by artifact code. Host code reads the workflow of a stored task with `forTask` and the workflow of a new task with `forNewTask` on the `TaskWorkflowResolver` port. Code that reads many tasks resolves the workflow of each task, and settings cover every workflow of the host. Runtime adapters read the tools and workspace access of a session role through a `WorkflowRolePolicyResolver`, which takes the task and role of the session scope.
 
 Settings follow the workflows of the host. A read adds the notification and Autopilot defaults of each workflow. A write fails for a role, prompt template, signal, automation, or notification kind outside them.
 

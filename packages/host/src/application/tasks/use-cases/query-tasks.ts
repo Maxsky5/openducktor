@@ -32,14 +32,12 @@ export const createTaskQueryUseCases = ({
       .findTask(input)
       .pipe(
         Effect.map((task) =>
-          task === null ? null : enrichTask(taskWorkflows.forRepo(input.repoPath), task),
+          task === null ? null : enrichTask(taskWorkflows.forTask(task), task),
         ),
       ),
   listTaskReferences: (input) => taskStore.listTaskReferences(input),
   listTasks: (input) =>
-    taskStore
-      .listTasks(input)
-      .pipe(Effect.map((tasks) => enrichTasks(taskWorkflows.forRepo(input.repoPath), tasks))),
+    taskStore.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(taskWorkflows, tasks))),
 
   listKanbanTasks(input) {
     return Effect.gen(function* () {
@@ -58,7 +56,7 @@ export const createTaskQueryUseCases = ({
         doneVisibleDays: settings.kanban.doneVisibleDays,
       });
 
-      return enrichTasks(taskWorkflows.forRepo(input.repoPath), tasks);
+      return enrichTasks(taskWorkflows, tasks);
     });
   },
 

@@ -222,14 +222,13 @@ export const collectDeleteWorktreePaths = (
   },
   repoPath: string,
   managedWorktreeBasePath: string,
-  workflow: TaskWorkflow,
-  targetTaskSessions: TaskSessionRecords[],
+  targetTaskSessions: (TaskSessionRecords & { workflow: TaskWorkflow })[],
 ) =>
   collectManagedTaskWorktreePaths(
     dependencies,
     repoPath,
     managedWorktreeBasePath,
-    targetTaskSessions.map((target) => ({
+    targetTaskSessions.map(({ workflow, ...target }) => ({
       ...target,
       sessionRoles: workflowRoleIds(workflow),
     })),

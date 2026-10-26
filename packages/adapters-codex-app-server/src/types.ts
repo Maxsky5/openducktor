@@ -216,7 +216,7 @@ type CodexAppServerAdapterBaseOptions = {
   resolveManagedMcpServer: ManagedMcpServerResolver;
   /** Compares native and saved directory paths without changing the saved session identity. */
   directoriesMatch: (left: string, right: string) => Promise<boolean>;
-  /** The tools and workspace access of a workflow role in the task workflow of the repository. */
+  /** The tools and workspace access of a workflow role in the task workflow of the session task. */
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   transportFactory: CodexJsonRpcTransportFactory;
   respondServerRequest?: CodexServerRequestResponder;
