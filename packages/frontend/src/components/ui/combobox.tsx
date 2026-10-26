@@ -77,6 +77,10 @@ type ComboboxOptionItemProps = {
   onSelectComplete: () => void;
 };
 
+type ComboboxGroupsProps = Omit<ComboboxOptionItemProps, "option"> & {
+  groups: RenderGroup[];
+};
+
 const comboboxTriggerValueVariants = cva("min-w-0 flex-1 pr-2 text-left", {
   variants: {
     wrap: {
@@ -214,6 +218,20 @@ function ComboboxOptionItem({
         )}
       />
     </CommandItem>
+  );
+}
+
+function ComboboxGroups({ groups, ...optionProps }: ComboboxGroupsProps): ReactElement {
+  return (
+    <>
+      {groups.map((group) => (
+        <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>
+          {group.options.map((option) => (
+            <ComboboxOptionItem key={option.value} option={option} {...optionProps} />
+          ))}
+        </CommandGroup>
+      ))}
+    </>
   );
 }
 
@@ -383,20 +401,13 @@ export function Combobox({
           />
           <CommandList ref={commandListRef} className={cn(!popoverAvoidCollisions && "min-h-0")}>
             <CommandEmpty>{emptyText}</CommandEmpty>
-            {groupsToRender.map((group) => (
-              <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>
-                {group.options.map((option) => (
-                  <ComboboxOptionItem
-                    key={option.value}
-                    option={option}
-                    value={value}
-                    shouldWrapOptionLabels={shouldWrapOptionLabels}
-                    onValueChange={onValueChange}
-                    onSelectComplete={() => handleOpenChange(false)}
-                  />
-                ))}
-              </CommandGroup>
-            ))}
+            <ComboboxGroups
+              groups={groupsToRender}
+              value={value}
+              shouldWrapOptionLabels={shouldWrapOptionLabels}
+              onValueChange={onValueChange}
+              onSelectComplete={() => handleOpenChange(false)}
+            />
           </CommandList>
         </Command>
         {footer}

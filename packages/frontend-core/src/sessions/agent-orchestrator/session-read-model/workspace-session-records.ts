@@ -111,7 +111,10 @@ export const applyWorkspaceSessionRecords = (
     }
     const next: AgentSessionState = {
       ...session,
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation:
+        session.sessionAssociation.kind === "repository"
+          ? session.sessionAssociation
+          : { kind: "repository" },
       title: workspaceSessionTitle(record),
       selectedModel: record.selectedModel ?? session.selectedModel,
     };

@@ -157,24 +157,28 @@ describe("notification delivery adapters", () => {
     expect(play).toHaveBeenCalledWith("navigate", { volume: 0.65 });
   });
 
-  test("unlocks Cuelume once from the first pointer or keyboard gesture", () => {
-    const play = mock((_sound?: string, _options?: { volume?: number }) => {});
-    const listeners = new Map<string, EventListener>();
-    const target = {
-      addEventListener(type: string, listener: EventListener) {
-        listeners.set(type, listener);
-      },
-      removeEventListener(type: string) {
-        listeners.delete(type);
-      },
-    } satisfies GestureTarget;
+  test.each(["pointerdown", "keydown"])(
+    "unlocks audio without playing a cue on the first %s gesture",
+    (gesture) => {
+      const unlock = mock(async () => true);
+      const listeners = new Map<string, EventListener>();
+      const target = {
+        addEventListener(type: string, listener: EventListener) {
+          listeners.set(type, listener);
+        },
+        removeEventListener(type: string) {
+          listeners.delete(type);
+        },
+      } satisfies GestureTarget;
 
-    const dispose = installCuelumeGestureUnlock({ play, target });
-    listeners.get("pointerdown")?.(new Event("pointerdown"));
-    listeners.get("keydown")?.(new Event("keydown"));
+      const dispose = installCuelumeGestureUnlock({ unlock, target });
+      const firstGesture = listeners.get(gesture);
+      firstGesture?.(new Event(gesture));
+      firstGesture?.(new Event(gesture));
 
-    expect(play).toHaveBeenCalledTimes(1);
-    expect(play.mock.calls[0]?.[1]?.volume).toBeGreaterThan(0);
-    dispose();
-  });
+      expect(unlock).toHaveBeenCalledTimes(1);
+      expect(listeners.size).toBe(0);
+      dispose();
+    },
+  );
 });

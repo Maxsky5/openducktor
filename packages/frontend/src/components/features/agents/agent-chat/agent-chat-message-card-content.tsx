@@ -12,7 +12,7 @@ import { AgentChatAssistantMessage } from "./agent-chat-assistant-message";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { Brain, Cpu, FileX, Hammer, LoaderCircle } from "lucide-react";
-import { Fragment, type ReactElement, type ReactNode } from "react";
+import { Fragment, type ReactElement, type ReactNode, useState } from "react";
 import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
 import { BrowserAnnotationMessageChips } from "@/features/browser-annotations/browser-annotation-message-chips";
 import { cn } from "@/lib/utils";
@@ -495,14 +495,20 @@ const SystemMessageDisclosure = ({
 }: {
   label: string;
   children: ReactNode;
-}): ReactElement => (
-  <details className="rounded border border-border">
-    <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      {label}
-    </summary>
-    <div className="border-t border-border p-2">{children}</div>
-  </details>
-);
+}): ReactElement => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <details
+      className="rounded border border-border"
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {label}
+      </summary>
+      {isOpen ? <div className="border-t border-border p-2">{children}</div> : null}
+    </details>
+  );
+};
 
 const renderSystemMessage = (
   message: AgentChatMessage,

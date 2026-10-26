@@ -52,15 +52,19 @@ describe("Workspace Session records in the shared read model", () => {
       reconcileWorkspaceSessionTargetFaults(new Map(), collection, [draft], "/repo").size,
     ).toBe(0);
   });
-  test("hydrates idle sessions without runtime evidence and uses durable titles", () => {
+  test("hydrates idle sessions once for unchanged records and uses durable titles", () => {
     const entry = record();
     const collection = applyWorkspaceSessionRecords(emptyAgentSessionCollection(), [entry]);
-    expect(getAgentSession(collection, workspaceSessionIdentity(entry))).toMatchObject({
+    const session = getAgentSession(collection, workspaceSessionIdentity(entry));
+    expect(session).toMatchObject({
       status: "idle",
       title: "Untitled session",
       historyLoadState: "not_requested",
       sessionAssociation: { kind: "repository" },
     });
+    const unchanged = applyWorkspaceSessionRecords(collection, [{ ...entry }]);
+    expect(unchanged).toBe(collection);
+    expect(getAgentSession(unchanged, workspaceSessionIdentity(entry))).toBe(session);
     expect(
       workspaceSessionTitle({ ...entry, generatedTitle: "Generated", manualTitle: "Manual" }),
     ).toBe("Manual");
