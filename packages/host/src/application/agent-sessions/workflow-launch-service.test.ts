@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { agentSessionLiveEnvelopeSchema } from "@openducktor/contracts";
+import {
+  agentSessionLiveEnvelopeSchema,
+  startupOperationSnapshotSchema,
+  type StartupOperationSnapshot,
+} from "@openducktor/contracts";
+import { createStartupProgressRecorder, CurrentStartupProgress } from "./session-startup-progress";
 import type {
   AgentSessionControlSendInput,
   AgentSessionLiveRef,
@@ -16,6 +21,8 @@ import {
 } from "./test-support/workflow-launch-harness";
 import { createNodeSessionLaunchControls } from "../../composition/node/node-session-launch-controls";
 import { agentSessionRefKey } from "@openducktor/core";
+import { createNodeSessionStartupTracker } from "../../composition/node/node-session-startup-progress";
+import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 
 const runtimeKinds: RuntimeKind[] = ["opencode", "codex", "claude"];
 const createdRef: AgentSessionLiveRef = {
@@ -25,6 +32,318 @@ const createdRef: AgentSessionLiveRef = {
   externalSessionId: "session-1",
 };
 const builderScope = { kind: "workflow" as const, taskId: "task", role: "build" as const };
+
+test("startup reports saved ownership, native preparation and accepted instruction from the host worker", async () => {
+  const h = await createLaunchHarness("codex");
+  const snapshots: StartupOperationSnapshot[] = [];
+  const progress = createStartupProgressRecorder(
+    {
+      context: { startupAttemptId: "attempt", operationId: "operation" },
+      hostInstanceId: "host",
+      workspaceId: "workspace",
+      repoPath: "/repo",
+      scope: { kind: "task", taskId: "task", role: "build" },
+    },
+    (snapshot) => snapshots.push(startupOperationSnapshotSchema.parse(snapshot)),
+    h.runtime.finalizeStartupPreparation,
+    () => Effect.void,
+  );
+  const result = await Effect.runPromise(
+    h.service
+      .launch(requestFor("codex"))
+      .pipe(Effect.provideService(CurrentStartupProgress, progress)),
+  );
+  expect(result.status).toBe("completed");
+  expect(result.startupProgress).toMatchObject({
+    phase: "completed",
+    ownership: {
+      state: "saved",
+      target: { kind: "task", record: { externalSessionId: "session-1" } },
+    },
+    prepared: { ref: createdRef },
+    instruction: { state: "accepted" },
+  });
+  expect(
+    result.startupProgress?.steps
+      .filter((step) => step.state === "completed")
+      .map((step) => step.id),
+  ).toEqual([
+    "request",
+    "checks",
+    "checkout",
+    "prepare",
+    "save",
+    "workflow",
+    "publish",
+    "handoff",
+    "instruction",
+  ]);
+  expect(
+    snapshots.some(
+      (snapshot) =>
+        snapshot.steps.some((step) => step.id === "instruction" && step.state === "running") &&
+        snapshot.ownership.state === "saved" &&
+        snapshot.prepared !== undefined,
+    ),
+  ).toBe(true);
+  expect(snapshots.map((snapshot) => snapshot.revision)).toEqual(
+    snapshots.map((_, index) => index + 1),
+  );
+});
+
+test("a failed tracked launch retains its saved session and unsent instruction without another preparation", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setPublishFailure();
+  const tracker = createNodeSessionStartupTracker({
+    hostInstanceId: "host",
+    eventBus: undefined,
+    taskWorkflows: builtinTaskWorkflows,
+    settings: {
+      getRepoConfig: () => Effect.succeed(h.config),
+      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
+    },
+    finalize: () => Effect.die(new Error("A failed launch must not prepare again")),
+    runtime: {
+      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+    },
+  });
+  const request = {
+    ...requestFor("codex"),
+    startup: { startupAttemptId: "attempt", operationId: "operation" },
+  };
+  const result = await Effect.runPromise(
+    tracker("agent_session_workflow_launch", request, h.service.launch(request)),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    session: { externalSessionId: "session-1" },
+    failure: { message: expect.stringContaining("Ownership publication failed") },
+    unsentInstruction: [{ kind: "text", text: expect.stringContaining("first instruction") }],
+    startupProgress: {
+      phase: "failed",
+      ownership: {
+        state: "saved",
+        target: { kind: "task", record: { externalSessionId: "session-1" } },
+      },
+    },
+  });
+  expect(result.startupProgress?.prepared).toBeUndefined();
+  expect(h.records).toHaveLength(1);
+  expect(h.sends).toHaveLength(0);
+});
+
+test("startup keeps a new task checkout when native Stop is acknowledged but remains unconfirmed", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setWorktreeExists(false);
+  h.setSaveFailure();
+  const tracker = createNodeSessionStartupTracker({
+    hostInstanceId: "host",
+    eventBus: undefined,
+    taskWorkflows: builtinTaskWorkflows,
+    settings: {
+      getRepoConfig: () => Effect.succeed(h.config),
+      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
+    },
+    finalize: h.runtime.finalizeStartupPreparation,
+    runtime: {
+      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: true }),
+    },
+  });
+  const request = {
+    ...requestFor("codex"),
+    startup: { startupAttemptId: "attempt", operationId: "operation" },
+  };
+  const result = await Effect.runPromise(
+    tracker("agent_session_workflow_launch", request, h.service.launch(request)),
+  );
+  expect(result.status).toBe("failed");
+  expect(result.failure?.message).toContain("did not confirm that session session-1 stopped");
+  expect(result.startupProgress?.steps).toContainEqual(
+    expect.objectContaining({
+      id: "stop-session",
+      state: "failed",
+      resources: [
+        {
+          kind: "worktree",
+          value: "/worktrees/task",
+          state: "retained",
+          nextAction: "Stop native session session-1 before removing its checkout.",
+        },
+      ],
+    }),
+  );
+  expect(h.stops).toContain("session-1");
+  expect(h.removedWorktrees).toHaveLength(0);
+  expect(h.deletedBranches).toHaveLength(0);
+});
+
+test("startup retains confirmed resource removal after task rollback settles", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setWorktreeExists(false);
+  h.setSaveFailure();
+  const tracker = createNodeSessionStartupTracker({
+    hostInstanceId: "host",
+    eventBus: undefined,
+    taskWorkflows: builtinTaskWorkflows,
+    settings: {
+      getRepoConfig: () => Effect.succeed(h.config),
+      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
+    },
+    finalize: h.runtime.finalizeStartupPreparation,
+    runtime: {
+      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+    },
+  });
+  const request = {
+    ...requestFor("codex"),
+    startup: { startupAttemptId: "attempt", operationId: "operation" },
+  };
+  const result = await Effect.runPromise(
+    tracker("agent_session_workflow_launch", request, h.service.launch(request)),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    startupProgress: {
+      phase: "failed",
+      steps: expect.arrayContaining([
+        expect.objectContaining({
+          id: "cleanup",
+          state: "completed",
+          resources: [
+            { kind: "worktree", value: "/worktrees/task", state: "removed" },
+            { kind: "branch", value: "odt/task-task", state: "removed" },
+          ],
+        }),
+      ]),
+    },
+  });
+  expect(h.removedWorktrees).toEqual(["/worktrees/task"]);
+  expect(h.deletedBranches).toEqual(["odt/task-task"]);
+});
+
+test.each(["write_start", "unknown_action"])(
+  "tracked startup uses task workflow validation for %s",
+  async (actionId) => {
+    const h = await createLaunchHarness("codex", {
+      taskWorkflows: reviewTaskWorkflows,
+      task: { issueType: "article", status: "backlog" },
+    });
+    const tracker = createNodeSessionStartupTracker({
+      hostInstanceId: "host",
+      eventBus: undefined,
+      taskWorkflows: {
+        ...reviewTaskWorkflows,
+        forNewTask: builtinTaskWorkflows.forNewTask,
+      },
+      settings: {
+        getRepoConfig: () => Effect.succeed(h.config),
+        getRepoConfigByRepoPath: () => Effect.succeed(h.config),
+      },
+      finalize: h.runtime.finalizeStartupPreparation,
+      runtime: {
+        probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+      },
+    });
+    const request: WorkflowLaunchRequest = {
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId,
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      startup: { startupAttemptId: "attempt", operationId: "operation" },
+    };
+    if (actionId === "unknown_action") {
+      const result = await Effect.runPromise(
+        Effect.result(tracker("agent_session_workflow_launch", request, h.service.launch(request))),
+      );
+      expect(result).toMatchObject({
+        _tag: "Failure",
+        failure: {
+          _tag: "HostValidationError",
+          field: "workflowLaunch",
+          message: expect.stringContaining(actionId),
+        },
+      });
+      return;
+    }
+    const result = await Effect.runPromise(
+      tracker("agent_session_workflow_launch", request, h.service.launch(request)),
+    );
+    expect(result).toMatchObject({
+      status: "completed",
+      role: "writer",
+      startupProgress: {
+        scope: { kind: "task", taskId: "task", role: "writer" },
+        phase: "completed",
+        ownership: {
+          state: "saved",
+          target: { kind: "task", record: { role: "writer", externalSessionId: "session-1" } },
+        },
+        prepared: { ref: createdRef },
+        instruction: { state: "accepted" },
+      },
+    });
+  },
+);
+
+test("tracked no-message repair finishes the same saved Builder under the task startup policy", async () => {
+  const h = await createLaunchHarness("codex");
+  const sourceSession = h.addTaskSession("saved-builder");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      startup: { startupAttemptId: "repair-attempt", operationId: "repair" },
+      policy: {
+        kind: "manual",
+        actionId: "build_implementation_start",
+        decision: { startMode: "reuse", sourceSession },
+      },
+      instruction: { kind: "none" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "completed",
+    session: { externalSessionId: "saved-builder" },
+  });
+  expect(h.getTask().status).toBe("in_progress");
+  expect(h.records.map((record) => record.externalSessionId)).toEqual(["saved-builder"]);
+  expect(h.resumes).toHaveLength(1);
+  expect(h.starts).toHaveLength(0);
+  expect(h.forks).toHaveLength(0);
+  expect(h.sends).toHaveLength(0);
+});
+
+test.each(["untracked", "instruction", "wrong-role", "wrong-target", "closed-task"] as const)(
+  "saved Builder repair keeps the existing policy for %s",
+  async (rejected) => {
+    const h = await createLaunchHarness("codex");
+    const sourceSession = h.addTaskSession("saved-builder", {
+      role: rejected === "wrong-role" ? "spec" : "build",
+    });
+    if (rejected === "wrong-target") sourceSession.externalSessionId = "missing-session";
+    if (rejected === "closed-task") h.setTaskStatus("closed");
+    const request: WorkflowLaunchRequest = {
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "build_implementation_start",
+        decision: { startMode: "reuse", sourceSession },
+      },
+      instruction:
+        rejected === "instruction"
+          ? { kind: "message", parts: [{ kind: "text", text: "Start again" }] }
+          : { kind: "none" },
+    };
+    if (rejected !== "untracked")
+      request.startup = { startupAttemptId: "repair-attempt", operationId: "repair" };
+    const result = await Effect.runPromise(h.service.launch(request));
+    expect(result.status).toBe("failed");
+    expect(h.resumes).toHaveLength(0);
+    expect(h.sends).toHaveLength(0);
+    expect(h.records).toHaveLength(1);
+  },
+);
 
 /** Lets forked launches reach their next wait point. */
 const yieldToFibers = Effect.gen(function* () {
@@ -861,7 +1180,7 @@ test("a task start completion failure after save publishes the saved record and 
     session: { externalSessionId: "session-1" },
     failure: { message: "Task transition failed" },
   });
-  expect(result.unsentInstruction).toBeUndefined();
+  expect(result.unsentInstruction).toEqual([{ kind: "text", text: "\n  first instruction\n" }]);
   expect(h.publications).toEqual(["agent-session-create"]);
   expect(h.records.map((record) => record.externalSessionId)).toEqual(["session-1"]);
   expect(h.stops).toEqual(["session-1"]);

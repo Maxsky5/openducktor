@@ -5,6 +5,8 @@ import { ActiveSessionProvider, CommandGateProvider } from "@/host-session/activ
 import type { ActiveHostSession } from "@/host-session/host-session-owner";
 import { ResourceFilesProvider } from "@/platform/resource-files-context";
 import { clearHostContentCaches } from "@/rich-content/lru-cache";
+import { StartupPresentationProvider } from "@/features/session-startup/startup-presentation";
+import { StartupProgressHost } from "@/features/session-startup/startup-progress-host";
 
 /**
  * Everything that belongs to one host connection. The owner unmounts this tree before it disposes
@@ -21,7 +23,12 @@ export function ConnectionTree({
       <ClientConnectionProvider connection={session.connection}>
         <CommandGateProvider>
           <ResourceFilesProvider connectionKey={session.sessionKey}>
-            <MobileAppStateProvider>{children}</MobileAppStateProvider>
+            <MobileAppStateProvider>
+              <StartupPresentationProvider>
+                {children}
+                <StartupProgressHost />
+              </StartupPresentationProvider>
+            </MobileAppStateProvider>
           </ResourceFilesProvider>
         </CommandGateProvider>
       </ClientConnectionProvider>

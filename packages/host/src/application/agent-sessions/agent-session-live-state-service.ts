@@ -10,7 +10,6 @@ import {
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
   isAgentSessionLiveStateEnvelope,
-  type RuntimeKind,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Clock, Effect } from "effect";
@@ -34,6 +33,9 @@ import { createLiveStateCoordinator } from "./live-state-coordinator";
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
 import { parseAdapterOutput, readAdapterSnapshots } from "./agent-session-live-validation";
 import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
+import { createStartupPreparationFinalizer } from "./startup-preparation-receipt";
+import { updateStartup } from "./session-startup-progress";
+import { createLiveSessionStartAdmission } from "./live-session-start-admission";
 
 export type {
   AgentSessionLiveEnvelopePublisher,
@@ -59,17 +61,10 @@ export const createAgentSessionLiveStateService = ({
   persistence,
   messageQueues,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
-  // Controls enter the shared runtime only while its current generation is ready.
-  const withStartAdmission =
-    <Input extends { repoPath: string; runtimeKind: RuntimeKind }, Success>(
-      operation: (input: Input) => Effect.Effect<Success, HostError>,
-    ) =>
-    (input: Input): Effect.Effect<Success, HostError> => {
-      const admitted = runtimeAdmission.admit(input.runtimeKind, operation(input));
-      return withProcessStartAdmission
-        ? withProcessStartAdmission(input.repoPath, admitted)
-        : admitted;
-    };
+  const withStartAdmission = createLiveSessionStartAdmission(
+    runtimeAdmission,
+    withProcessStartAdmission,
+  );
   const startedRoots = createStartedSessionRoots();
   const observedRepoPaths = new Set<string>();
   // Native events keep a restored repository current, so attachments do not read it again.
@@ -224,6 +219,9 @@ export const createAgentSessionLiveStateService = ({
         "agent-session-live.read",
       );
       if (parsed.type === "missing") return parsed;
+      yield* updateStartup((progress) =>
+        progress.expectPreparationRuntime(adapter.binding.runtimeId),
+      );
       return {
         ...parsed,
         session: executionEpisodes.snapshotWithEpisode(projectSnapshot(parsed.session)),
@@ -243,6 +241,9 @@ export const createAgentSessionLiveStateService = ({
       // A committed native change stays valid when the runtime detaches right after it.
       if (isCommitted(result)) return result;
       yield* lifecycle.requireAttached(adapter.binding);
+      yield* updateStartup((progress) =>
+        progress.expectPreparationRuntime(adapter.binding.runtimeId),
+      );
       return result;
     });
 
@@ -251,6 +252,14 @@ export const createAgentSessionLiveStateService = ({
     runtimeAdmission.admit(scope.runtimeKind, runControl(scope, control, isCommitted));
 
   const service: AgentSessionLiveStateService = {
+    finalizeStartupPreparation: createStartupPreparationFinalizer({
+      adapterRegistry,
+      coordinator,
+      read: readSession,
+      requireAttached: lifecycle.requireAttached,
+      publish: publishEnvelope,
+      sequence: () => liveStateSequence,
+    }),
     readStartedRoots: startedRoots.read,
     resolvePendingApproval: (input) =>
       adapterRegistry

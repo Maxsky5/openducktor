@@ -22,6 +22,9 @@ export type FeedbackState = {
   windows: string[];
   /** The open menus. A menu sits near its anchor, often under the toasts, so toasts wait for it. */
   menus: number;
+  /** Layout shared by the two in-app feedback stacks. These values stay in memory. */
+  toastStackHeight: number;
+  startupVisible: boolean;
 };
 
 /** Whether an open menu hides the toasts. */
@@ -39,7 +42,13 @@ const MAX_VISIBLE = 3;
  * reach it, because the app creates no notification runtime.
  */
 export const createFeedbackStore = () => {
-  const store = createStore<FeedbackState>(() => ({ messages: [], windows: [], menus: 0 }));
+  const store = createStore<FeedbackState>(() => ({
+    messages: [],
+    windows: [],
+    menus: 0,
+    toastStackHeight: 0,
+    startupVisible: false,
+  }));
   let nextId = 1;
   // The messages that a window showed. A toast that moves to another window, as when a sheet
   // closes, then shows there at once and does not enter a second time.
@@ -98,7 +107,24 @@ export const createFeedbackStore = () => {
   };
   /** Whether a window showed the toast of message `id` already. */
   const wasPresented = (id: string): boolean => presented.has(id);
-  return { store, feedback, dismiss, openWindow, openMenu, markPresented, wasPresented };
+  const setToastStackHeight = (toastStackHeight: number): void => {
+    if (store.getState().toastStackHeight !== toastStackHeight)
+      store.setState({ toastStackHeight });
+  };
+  const setStartupVisible = (startupVisible: boolean): void => {
+    if (store.getState().startupVisible !== startupVisible) store.setState({ startupVisible });
+  };
+  return {
+    store,
+    feedback,
+    dismiss,
+    openWindow,
+    openMenu,
+    markPresented,
+    wasPresented,
+    setToastStackHeight,
+    setStartupVisible,
+  };
 };
 
 export type FeedbackStore = ReturnType<typeof createFeedbackStore>;

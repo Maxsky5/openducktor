@@ -5,6 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { TaskSessionOwnershipCommittedError } from "./task-session-ownership-error";
 import { Effect } from "effect";
+import { startupStep, stopStartupSession } from "./session-startup-progress";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { failAfterRollback, rollbackFailureError } from "../tasks/support/task-worktree-rollback";
 import type { TaskServiceError } from "../tasks/task-service";
@@ -59,7 +60,7 @@ export const createStartTaskWorkflowSession =
             }
             if (summary) {
               const ref = toControlSessionRef(repoPath, summary);
-              yield* progress.stop(ref);
+              yield* stopStartupSession(ref, progress.stop(ref));
               yield* runtime.releaseSession(ref);
             }
             yield* prepared.rollback();
@@ -98,7 +99,10 @@ export const createStartTaskWorkflowSession =
           // Cancellation must retain the returned identity so cleanup can stop the session.
           const launched = yield* Effect.gen(function* () {
             yield* progress.checkCanceled();
-            summary = yield* runtime.startSession(runtimeInput);
+            summary = yield* startupStep(
+              { id: "prepare", label: "Prepare native session" },
+              runtime.startSession(runtimeInput),
+            );
             return summary;
           }).pipe(Effect.uninterruptible, Effect.result);
           if (launched._tag === "Failure") {
@@ -130,6 +134,7 @@ export const createStartTaskWorkflowSession =
           if (persisted._tag === "Failure") {
             if (persisted.failure instanceof TaskSessionOwnershipCommittedError) {
               stored = true;
+              progress.saved();
               return yield* Effect.fail(persisted.failure);
             }
             const storeFailure = persisted.failure;
@@ -143,7 +148,7 @@ export const createStartTaskWorkflowSession =
             };
             // The worktree rollback runs only after the runtime session stops.
             const ref = toControlSessionRef(repoPath, summary);
-            return yield* progress.stop(ref).pipe(
+            return yield* stopStartupSession(ref, progress.stop(ref)).pipe(
               Effect.andThen(runtime.releaseSession(ref)),
               Effect.mapError(
                 (cleanupFailure) =>
@@ -168,18 +173,24 @@ export const createStartTaskWorkflowSession =
             );
           }
           const completed = yield* Effect.result(
-            taskSessionStart.complete(prepared, (start) =>
-              writes.applyStartEvent(start).pipe(
-                Effect.map(({ task, publish }) => {
-                  publications.push(publish);
-                  return task;
-                }),
+            startupStep(
+              { id: "workflow", label: "Apply task workflow updates" },
+              taskSessionStart.complete(prepared, (start) =>
+                writes.applyStartEvent(start).pipe(
+                  Effect.map(({ task, publish }) => {
+                    publications.push(publish);
+                    return task;
+                  }),
+                ),
               ),
             ),
           );
           if (completed._tag === "Failure") {
             const stopped = yield* Effect.result(
-              progress.stop(toControlSessionRef(repoPath, summary)),
+              stopStartupSession(
+                toControlSessionRef(repoPath, summary),
+                progress.stop(toControlSessionRef(repoPath, summary)),
+              ),
             );
             // The saved ownership remains, so readers must still receive it.
             const published = yield* Effect.result(publishAll);
@@ -206,7 +217,10 @@ export const createStartTaskWorkflowSession =
         }).pipe(
           Effect.onInterrupt(() =>
             (stored && summary
-              ? progress.stop(toControlSessionRef(repoPath, summary))
+              ? stopStartupSession(
+                  toControlSessionRef(repoPath, summary),
+                  progress.stop(toControlSessionRef(repoPath, summary)),
+                )
               : cleanupUnstoredStart()
             ).pipe(Effect.orDie, Effect.asVoid),
           ),

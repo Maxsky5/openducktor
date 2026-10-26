@@ -17,9 +17,8 @@ import { Button } from "@/ui/button";
 import { EmptyState, LoadingState } from "@/ui/states";
 import { Callout } from "@/ui/callout";
 import { ResetImplementationConfirmation } from "../confirm/task-confirmations";
-import { MessageRetryNotices } from "../start-session/message-retry-notice";
 import { RepoSettingsFailure } from "../start-session/repo-settings-failure";
-import { SessionStartForm } from "../start-session/session-start-form";
+import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
@@ -142,19 +141,7 @@ function ApproveTaskContent({
     );
   }
   if (start?.open) {
-    return (
-      <GroupedSheet
-        title={start.title}
-        onClose={() => start.onOpenChange(false)}
-        closable={!start.isStarting}
-      >
-        <SessionStartForm
-          model={start}
-          branchesFailure={branchesFailure}
-          notices={<MessageRetryNotices taskId={task.id} />}
-        />
-      </GroupedSheet>
-    );
+    return <SessionStartSheet model={start} taskId={task.id} branchesFailure={branchesFailure} />;
   }
   if (resetImplementationModal) {
     // The confirmation opens above the sheet; the sheet keeps its frame below it.

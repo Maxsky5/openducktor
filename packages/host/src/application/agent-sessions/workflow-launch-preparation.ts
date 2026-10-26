@@ -149,7 +149,12 @@ export const prepareWorkflowLaunch = (
           });
     if (resolved.kind === "skipped") return resolved;
     const decision = resolved.decision;
-    if (!action.startModes.includes(decision.startMode))
+    const isRepair =
+      request.policy.kind === "manual" &&
+      request.instruction.kind === "none" &&
+      request.startup !== undefined &&
+      decision.startMode === "reuse";
+    if (!action.startModes.includes(decision.startMode) && !isRepair)
       return yield* launchValidationError(
         `Action '${actionId}' does not permit '${decision.startMode}'.`,
       );
@@ -262,7 +267,7 @@ const launchValidationError = (message: string) =>
 /** The launch action of a manual start, or the launch action of an Autopilot automation. */
 export const requireLaunchAction = (
   workflow: TaskWorkflow,
-  request: WorkflowLaunchAttemptRequest,
+  request: Pick<WorkflowLaunchAttemptRequest, "policy">,
 ): Effect.Effect<TaskWorkflowLaunchAction, HostValidationError> =>
   Effect.try({
     try: () =>

@@ -9,7 +9,7 @@ import { errorMessage } from "../lib/errors";
 
 type Listener = (envelope: AgentSessionLiveEnvelope) => void;
 type Observe = (input: AgentSessionLiveAttachInput, listener: Listener) => Promise<() => void>;
-type WorkspaceSessionLiveSource = {
+export type WorkspaceSessionLiveSource = {
   observeWorkspace: (input: AgentSessionLiveAttachInput, listener: Listener) => () => void;
   observeAgentSessionLive: Observe;
 };

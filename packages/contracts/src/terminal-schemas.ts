@@ -76,6 +76,22 @@ export const terminalExitSchema = z
   .strict();
 export type TerminalExit = z.infer<typeof terminalExitSchema>;
 
+export const terminalCommandResultSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("exited"),
+    exitCode: z.number().int().nullable(),
+    signal: z.string().nullable(),
+    outputTail: z.array(z.string()).readonly(),
+  }),
+  z.strictObject({ type: z.literal("closed"), outputTail: z.array(z.string()).readonly() }),
+  z.strictObject({
+    type: z.literal("failed"),
+    message: z.string(),
+    outputTail: z.array(z.string()).readonly(),
+  }),
+]);
+export type TerminalCommandResult = z.infer<typeof terminalCommandResultSchema>;
+
 export const terminalSummarySchema = z
   .object({
     terminalId: terminalIdSchema,
@@ -90,6 +106,7 @@ export const terminalSummarySchema = z
      * worktree-creation action. The terminal panel does not open for it.
      */
     startedBy: z.enum(["user", "host"]),
+    initialCommandResult: terminalCommandResultSchema.optional(),
   })
   .strict();
 export type TerminalSummary = z.infer<typeof terminalSummarySchema>;

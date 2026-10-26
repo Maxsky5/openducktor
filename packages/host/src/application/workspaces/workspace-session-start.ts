@@ -6,6 +6,7 @@ import type {
   WorkspaceSessionStartResult,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
+import { startupStep, updateStartup } from "../agent-sessions/session-startup-progress";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   createWorkspaceSessionRecordReader,
@@ -44,6 +45,9 @@ export const createWorkspaceSessionStart = (
       input,
       Effect.gen(function* () {
         const { ref, session } = yield* recordFor(input);
+        yield* updateStartup((progress) =>
+          progress.ownership({ state: "saved", target: { kind: "workspace", record: session } }),
+        );
         if (session.archivedAt !== null) {
           return yield* new HostValidationError({
             field: "sessionId",
@@ -53,8 +57,25 @@ export const createWorkspaceSessionStart = (
         if (session.externalSessionId !== null) {
           return { session, runtimeSession: null } satisfies WorkspaceSessionStartResult;
         }
-        yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, session.executionTarget);
-        yield* runtime.requireReady(session.runtimeKind);
+        yield* startupStep(
+          {
+            id: "checkout",
+            label: "Check saved checkout",
+            details: [session.executionTarget.workingDirectory],
+            resources: [
+              {
+                kind: "worktree",
+                value: session.executionTarget.workingDirectory,
+                state: "reused",
+              },
+            ],
+          },
+          validateWorkspaceSessionTarget(dependencies, ref.repoPath, session.executionTarget),
+        );
+        yield* startupStep(
+          { id: "checks", label: "Check runtime availability" },
+          runtime.requireReady(session.runtimeKind),
+        );
         return yield* Effect.uninterruptible(
           Effect.gen(function* () {
             const startTitle = runtimeTitle(session);
@@ -71,7 +92,10 @@ export const createWorkspaceSessionStart = (
             };
             if (workStartGuard) startInput.workStartGuard = workStartGuard;
             if (session.selectedModel !== null) startInput.model = session.selectedModel;
-            const runtimeSession = yield* live.startSession(startInput);
+            const runtimeSession = yield* startupStep(
+              { id: "prepare", label: "Prepare native session" },
+              live.startSession(startInput),
+            );
             const saved = yield* Effect.exit(
               Effect.gen(function* () {
                 if (
@@ -85,13 +109,22 @@ export const createWorkspaceSessionStart = (
                   });
                 }
                 yield* onStarted(runtimeSession);
-                return yield* store.bindRuntimeSession({
-                  ...ref,
-                  externalSessionId: runtimeSession.externalSessionId,
-                });
+                return yield* startupStep(
+                  { id: "save", label: "Save native session identity" },
+                  store.bindRuntimeSession({
+                    ...ref,
+                    externalSessionId: runtimeSession.externalSessionId,
+                  }),
+                );
               }),
             );
             if (Exit.isSuccess(saved)) {
+              yield* updateStartup((progress) =>
+                progress.ownership({
+                  state: "saved",
+                  target: { kind: "workspace", record: saved.value, runtimeSession },
+                }),
+              );
               if (titleSyncNeedsTurn(session.runtimeKind))
                 dependencies.markTitleSyncPending({
                   repoPath: ref.repoPath,

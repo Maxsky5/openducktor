@@ -54,9 +54,9 @@ describe("Workspace Session query cache", () => {
     try {
       const publish = listeners[0];
       if (!publish) throw new Error("Expected a workspace session subscription.");
-      publish(connectionReconnectedEvent(false));
+      publish(connectionReconnectedEvent(false, { hostChanged: false, missedEventNames: [] }));
       expect(client.getQueryState(key)?.isInvalidated).toBe(false);
-      publish(connectionReconnectedEvent(true));
+      publish(connectionReconnectedEvent(true, { hostChanged: false, missedEventNames: [] }));
       expect(client.getQueryState(key)?.isInvalidated).toBe(true);
     } finally {
       stop();

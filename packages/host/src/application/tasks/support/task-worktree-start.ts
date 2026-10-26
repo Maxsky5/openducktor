@@ -2,6 +2,8 @@ import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
+import { startupStep, updateStartup } from "../../agent-sessions/session-startup-progress";
+import { worktreeActionStep } from "../../actions/worktree-action-runner";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 import {
@@ -58,24 +60,54 @@ export const prepareNewTaskWorktree = (
   branch: string,
 ) =>
   Effect.gen(function* () {
+    yield* updateStartup((progress) => {
+      progress.step({
+        id: "checkout",
+        label: "Create task worktree",
+        state: "pending",
+        details: [worktreePath, branch],
+      });
+    });
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
 
     let createdTrackingRef: string | null = null;
     let createdTaskWorktree = false;
     const actionRun = dependencies.worktreeActions.createRun({ worktreePath, branch });
     const rollback = (): Effect.Effect<void, TaskStartRollbackError> =>
-      Effect.gen(function* () {
-        if (!createdTaskWorktree) return;
-        yield* actionRun.stopTerminals();
-        yield* rollbackFailedTaskWorktree(
-          dependencies,
-          canonicalRepoPath,
-          worktreePath,
-          branch,
-          createdTrackingRef,
-          worktreeBase,
-        );
-      });
+      startupStep(
+        {
+          id: "cleanup",
+          label: "Clean up new worktree",
+          resources: [
+            { kind: "worktree", value: worktreePath, state: "retained" },
+            { kind: "branch", value: branch, state: "retained" },
+          ],
+        },
+        Effect.gen(function* () {
+          if (!createdTaskWorktree) return;
+          yield* updateStartup((progress) => progress.phase("settling"));
+          yield* actionRun.stopTerminals();
+          yield* rollbackFailedTaskWorktree(
+            dependencies,
+            canonicalRepoPath,
+            worktreePath,
+            branch,
+            createdTrackingRef,
+            worktreeBase,
+          );
+          yield* updateStartup((progress) =>
+            progress.step({
+              id: "cleanup",
+              label: "Clean up new worktree",
+              state: "completed",
+              resources: [
+                { kind: "worktree", value: worktreePath, state: "removed" },
+                { kind: "branch", value: branch, state: "removed" },
+              ],
+            }),
+          );
+        }),
+      );
     const setupResult = yield* Effect.result(
       Effect.gen(function* () {
         const targetBranch = yield* effectiveTargetBranchForTask(
@@ -89,29 +121,66 @@ export const prepareNewTaskWorktree = (
           targetBranch,
           task.targetBranch === undefined,
         );
-        yield* dependencies.gitPort.createWorktree(
-          canonicalRepoPath,
-          worktreePath,
-          branch,
-          true,
-          startPoint.reference,
-        );
-        createdTaskWorktree = true;
-
-        if (startPoint.upstreamRemote) {
-          const upstreamSetup = yield* dependencies.gitPort.configureBranchUpstream(
+        yield* updateStartup((progress) => {
+          if (startPoint.upstreamRemote)
+            progress.step({
+              id: "upstream",
+              label: "Set branch upstream",
+              state: "pending",
+              details: [startPoint.upstreamRemote],
+            });
+          progress.step({
+            id: "copies",
+            label: "Copy configured files",
+            state: "pending",
+            details: repoConfig.worktreeCopyPaths,
+          });
+          for (const action of repoConfig.actions.items.filter((item) => item.runOnWorktreeCreate))
+            progress.step({ ...worktreeActionStep(action), state: "pending" });
+        });
+        yield* startupStep(
+          { id: "checkout", label: "Create task worktree", details: [worktreePath, branch] },
+          dependencies.gitPort.createWorktree(
             canonicalRepoPath,
             worktreePath,
             branch,
-            startPoint.upstreamRemote,
+            true,
+            startPoint.reference,
+          ),
+        );
+        createdTaskWorktree = true;
+        yield* updateStartup((progress) =>
+          progress.step({
+            id: "checkout",
+            label: "Create task worktree",
+            state: "completed",
+            resources: [
+              { kind: "worktree", value: worktreePath, state: "created" },
+              { kind: "branch", value: branch, state: "created" },
+            ],
+          }),
+        );
+
+        if (startPoint.upstreamRemote) {
+          const upstreamSetup = yield* startupStep(
+            { id: "upstream", label: "Set branch upstream", details: [startPoint.upstreamRemote] },
+            dependencies.gitPort.configureBranchUpstream(
+              canonicalRepoPath,
+              worktreePath,
+              branch,
+              startPoint.upstreamRemote,
+            ),
           );
           createdTrackingRef = upstreamSetup.createdTrackingRef;
         }
 
-        yield* dependencies.worktreeFiles.copyConfiguredPaths(
-          canonicalRepoPath,
-          worktreePath,
-          repoConfig.worktreeCopyPaths,
+        yield* startupStep(
+          { id: "copies", label: "Copy configured files", details: repoConfig.worktreeCopyPaths },
+          dependencies.worktreeFiles.copyConfiguredPaths(
+            canonicalRepoPath,
+            worktreePath,
+            repoConfig.worktreeCopyPaths,
+          ),
         );
 
         yield* actionRun.run({

@@ -1,7 +1,7 @@
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
-import { repoConfigSchema } from "@openducktor/contracts";
+import { repoConfigSchema, workspaceSessionStartResultSchema } from "@openducktor/contracts";
 import { hostInvokeFailureSchema } from "@openducktor/contracts";
 import { OpenCodeOperationError } from "@openducktor/adapters-opencode-sdk";
 import { Deferred, Effect } from "effect";
@@ -19,8 +19,15 @@ import {
   waitFor,
 } from "./test-support/workspace-session-runtime-persistence-harness";
 import { createWorkspaceSessionService } from "./workspace-session-service";
-import { toHostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
+import { createNodeSessionStartupTracker } from "../../composition/node/node-session-startup-progress";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
+import {
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../../interface/router/host-command-router";
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -32,6 +39,96 @@ describe("Workspace Session persistence through the shared command module", () =
   });
 
   const setup = () => createPersistenceHarness(database);
+
+  test.each(["publication", "preparation"] as const)(
+    "repairs the bound workspace session after startup %s fails",
+    async (failureStage) => {
+      const h = await createPersistenceHarness(database, "opencode", true);
+      let fail = true;
+      const config = repoConfigSchema.parse({
+        workspaceId: "fairnest",
+        workspaceName: "Fairnest",
+        repoPath: database.repoPath,
+      });
+      const failure = () =>
+        new HostOperationError({
+          operation: `test.${failureStage}`,
+          message: `Startup ${failureStage} failed`,
+        });
+      const router = toPromiseHostCommandRouter(
+        createEffectHostCommandRouter({
+          handlers: createWorkspaceSessionCommandHandlers(h.workspaceService(), () =>
+            fail && failureStage === "publication" ? Effect.fail(failure()) : Effect.void,
+          ),
+          trackCommand: createNodeSessionStartupTracker({
+            hostInstanceId: "host",
+            eventBus: undefined,
+            taskWorkflows: builtinTaskWorkflows,
+            settings: {
+              getRepoConfig: () => Effect.succeed(config),
+              getRepoConfigByRepoPath: () => Effect.succeed(config),
+            },
+            finalize: (ref, expectedRuntimeId) =>
+              fail && failureStage === "preparation"
+                ? Effect.fail(failure())
+                : h.live.finalizeStartupPreparation(ref, expectedRuntimeId),
+            runtime: {
+              probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+            },
+          }),
+        }),
+      );
+      try {
+        await expect(
+          router.invoke("workspace_session_start", {
+            workspaceId: h.storeRef.workspaceId,
+            sessionId: h.storeRef.sessionId,
+            startup: { startupAttemptId: "attempt", operationId: "initial" },
+          }),
+        ).rejects.toThrow(`Startup ${failureStage} failed`);
+        expect((await h.get()).externalSessionId).toBe(h.ref.externalSessionId);
+        fail = false;
+        const repaired = workspaceSessionStartResultSchema.parse(
+          await router.invoke("workspace_session_start", {
+            workspaceId: h.storeRef.workspaceId,
+            sessionId: h.storeRef.sessionId,
+            startup: { startupAttemptId: "attempt", operationId: "repair" },
+          }),
+        );
+        expect(repaired.runtimeSession).toMatchObject({
+          externalSessionId: h.ref.externalSessionId,
+          runtimeKind: h.ref.runtimeKind,
+          workingDirectory: h.ref.workingDirectory,
+        });
+        expect(repaired.startupProgress).toMatchObject({
+          phase: "completed",
+          prepared: { ref: h.ref, runtimeId: "runtime" },
+          ownership: {
+            state: "saved",
+            target: {
+              kind: "workspace",
+              record: { id: h.storeRef.sessionId, externalSessionId: h.ref.externalSessionId },
+            },
+          },
+        });
+        expect(h.starts).toHaveLength(1);
+        expect(h.inputs).toEqual([
+          expect.objectContaining({
+            resumeMode: "reattach",
+            externalSessionId: h.ref.externalSessionId,
+          }),
+        ]);
+        expect(
+          await Effect.runPromise(
+            h.store.listActive({ workspaceId: "fairnest", repoPath: database.repoPath }),
+          ),
+        ).toHaveLength(1);
+      } finally {
+        await Effect.runPromise(h.live.shutdownOperations());
+        await Effect.runPromise(h.persistence.shutdown());
+      }
+    },
+  );
 
   test("saves the native model choice when reopening a saved workspace chat", async () => {
     const nativeModel = {

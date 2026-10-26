@@ -31,7 +31,7 @@ export function useForkNavigation(ownerKey: string, visible = true) {
         !current.current.active ||
         current.current.revision !== revision
       )
-        return;
+        return false;
       void navigate(buildSessionNavigationHref(target), {
         state:
           target.kind === "task_session"
@@ -45,6 +45,7 @@ export function useForkNavigation(ownerKey: string, visible = true) {
               }
             : undefined,
       });
+      return true;
     };
   }, [navigate]);
 }

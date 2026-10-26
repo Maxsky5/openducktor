@@ -20,6 +20,12 @@ import {
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
 import type { SessionLaunchContext, SessionLaunchService } from "./session-launch-types";
 import { toControlSessionRef } from "./task-workflow-session-storage";
+import {
+  CurrentStartupProgress,
+  startupFailure,
+  updateStartup,
+  stopStartupSession,
+} from "./session-startup-progress";
 
 type Attempt<Request, Result extends SessionLaunchResult> = {
   request: Request;
@@ -124,6 +130,14 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
     send: (input, instruction) =>
       Effect.gen(function* () {
         yield* checkCanceled(attempt);
+        yield* updateStartup((progress) => {
+          progress.instruction({ state: "submitting" });
+          progress.step({
+            id: "instruction",
+            label: "Submit initial instruction",
+            state: "running",
+          });
+        });
         delete attempt.delivery;
         let sent = false;
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
@@ -137,6 +151,19 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         );
         if (reply._tag === "Success") {
           if (reply.success) attempt.result.acceptedMessage = reply.success;
+          yield* updateStartup((progress) => {
+            progress.instruction({ state: reply.success ? "accepted" : "queued" });
+            progress.step({
+              id: "instruction",
+              label: "Submit initial instruction",
+              state: "completed",
+              details: [
+                reply.success
+                  ? "The runtime accepted the instruction."
+                  : "The instruction is in the message queue.",
+              ],
+            });
+          });
           return;
         }
         const failure =
@@ -155,6 +182,21 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             !sent || failure instanceof AgentSessionMessageRejectedError
               ? { kind: "unsent", instruction }
               : { kind: "uncertain" };
+        yield* updateStartup((progress) => {
+          progress.instruction({
+            state: attempt.result.acceptedMessage
+              ? "accepted"
+              : attempt.delivery?.kind === "unsent"
+                ? "not_sent"
+                : "unknown",
+          });
+          progress.step({
+            id: "instruction",
+            label: "Submit initial instruction",
+            state: "failed",
+            failure: startupFailure("instruction", errorMessage(reply.failure)),
+          });
+        });
         return yield* Effect.fail(reply.failure);
       }),
   });
@@ -164,6 +206,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
       Effect.gen(function* () {
         const result = attempt.result;
         const outcome = yield* Effect.exit(restore(work));
+        yield* updateStartup((progress) => progress.phase("settling"));
         const cleanupErrors: string[] = [];
         if (attempt.session) {
           if (attempt.held) {
@@ -176,7 +219,12 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           const stopAfterCancel =
             result.acceptedMessage !== undefined || (attempt.session.created && !attempt.stopped);
           if (attempt.canceled && stopAfterCancel) {
-            const stopped = yield* Effect.result(deps.runtime.stopSession(attempt.session.ref));
+            const stopped = yield* Effect.result(
+              stopStartupSession(
+                attempt.session.ref,
+                deps.runtime.stopSession(attempt.session.ref),
+              ),
+            );
             if (stopped._tag === "Failure") cleanupErrors.push(stopped.failure.message);
           }
         }
@@ -213,6 +261,17 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             result.failure.cleanupErrors.push(reported.failure.message);
           else if (reported.success !== null) result.failure.noticeId = reported.success;
         }
+        yield* updateStartup((progress) => {
+          progress.settle(
+            result.status === "canceled"
+              ? "canceled"
+              : result.status === "failed"
+                ? "failed"
+                : "completed",
+            result.failure?.message,
+          );
+          result.startupProgress = progress.snapshot();
+        });
         yield* Deferred.succeed(attempt.done, structuredClone(result));
       }),
     );
@@ -236,21 +295,47 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           const target = deps.target?.(request);
           if (target) attempt.target = target;
           active.add(attempt);
+          const progress = yield* CurrentStartupProgress;
+          const ownerKey = deps.key(request);
+          if (owners.isActive(ownerKey)) {
+            progress?.phase("waiting");
+            progress?.step({
+              id: "waiting",
+              label: "Wait for the earlier session operation",
+              state: "waiting",
+            });
+          }
           attempt.worker = yield* Effect.forkDetach(
-            owners.run(deps.key(request), settle(attempt, deps.run(contextFor(attempt)))).pipe(
-              Effect.onExit((exit) =>
-                Effect.sync(() => active.delete(attempt)).pipe(
-                  // Settlement completes the result. This reports a worker that shutdown
-                  // interrupted while it waited in the queue.
-                  Effect.andThen(
-                    Exit.isFailure(exit)
-                      ? Deferred.failCause(attempt.done, exit.cause)
-                      : Effect.void,
+            owners
+              .run(
+                ownerKey,
+                settle(
+                  attempt,
+                  Effect.sync(() => {
+                    progress?.phase("running");
+                    if (progress?.snapshot().steps.some((step) => step.id === "waiting"))
+                      progress.step({
+                        id: "waiting",
+                        label: "Wait for the earlier session operation",
+                        state: "completed",
+                      });
+                  }).pipe(Effect.andThen(deps.run(contextFor(attempt)))),
+                ),
+              )
+              .pipe(
+                Effect.onExit((exit) =>
+                  Effect.sync(() => active.delete(attempt)).pipe(
+                    // Settlement completes the result. This reports a worker that shutdown
+                    // interrupted while it waited in the queue.
+                    Effect.andThen(
+                      Exit.isFailure(exit)
+                        ? Deferred.failCause(attempt.done, exit.cause)
+                        : Effect.void,
+                    ),
                   ),
                 ),
+                Effect.asVoid,
               ),
-              Effect.asVoid,
-            ),
           );
           return yield* restore(Deferred.await(attempt.done));
         }),

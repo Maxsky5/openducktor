@@ -34,8 +34,18 @@ describe("changesHeldOutcomes", () => {
   });
 
   test("reads again after a reconnect only when the replay missed events", () => {
-    expect(changesHeldOutcomes(connectionReconnectedEvent(true), "ws-1")).toBe(true);
-    expect(changesHeldOutcomes(connectionReconnectedEvent(false), "ws-1")).toBe(false);
+    expect(
+      changesHeldOutcomes(
+        connectionReconnectedEvent(true, { hostChanged: false, missedEventNames: [] }),
+        "ws-1",
+      ),
+    ).toBe(true);
+    expect(
+      changesHeldOutcomes(
+        connectionReconnectedEvent(false, { hostChanged: false, missedEventNames: [] }),
+        "ws-1",
+      ),
+    ).toBe(false);
     expect(changesHeldOutcomes(connectionStreamWarningEvent("Slow stream."), "ws-1")).toBe(false);
   });
 

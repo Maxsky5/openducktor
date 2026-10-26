@@ -141,7 +141,7 @@ Native HTTP requests can omit Origin; browser headers do not identify a device.
 
 ## Compatibility
 
-The current remote protocol is `2`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets.
+The current remote protocol is `3`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets.
 The protocol version is independent of app release versions.
 Hosts and clients can use different app versions when they share a protocol version and the client receives all required capabilities.
 A breaking change to required behavior needs a new remote protocol version.
@@ -172,7 +172,7 @@ Negotiation sends this client hello:
 ```json
 {
   "appVersion": "mobile-release",
-  "supportedProtocolVersions": [2],
+  "supportedProtocolVersions": [3],
   "requiredCapabilities": ["host.work.v1", "host.events.v1", "agent.live.v1", "terminal.v2", "work.resources.v1"],
   "optionalCapabilities": ["streams.heartbeat.v1"]
 }
@@ -209,6 +209,10 @@ The ID records compatibility, not device authorization; any reachable compatible
 | `GET R/terminal` | Upgrade to terminal protocol 2. |
 | `GET R/task-assets/{workspaceId}/{taskId}/{scope}/{assetId}` | Read a registered task asset. |
 | `GET R/local-attachment-preview?path={stagedPath}` | Resolve and read a staged attachment. |
+
+Startup progress uses `openducktor://session-startup-progress` on the SSE event name `startup`. Each event carries a cumulative operation snapshot. Its replay gap is separate from task, browser, and runtime events. Clients establish the event subscription before they send a tracked startup command.
+
+Remote protocol `3` also carries initial terminal command outcomes in terminal summaries. Terminal frames keep protocol `2`.
 
 Mutation requests require JSON.
 Command validation, workflow transitions, approvals, selected-runtime resolution, session ownership, and resource limits stay in host services.

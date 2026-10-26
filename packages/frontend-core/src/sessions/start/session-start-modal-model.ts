@@ -34,8 +34,15 @@ export type SessionStartModalConfirmDraft = Omit<
   "runInBackground"
 >;
 
+export type SessionStartDialogPhase =
+  | { kind: "choices" }
+  | { kind: "progress"; startupAttemptId: string };
+
 /** The state and handlers that a session start view shows. */
 export type SessionStartModalModel = {
+  phase: SessionStartDialogPhase;
+  onContinueInBackground: () => void;
+  onEditChoices: () => void;
   open: boolean;
   requestId?: string | undefined;
   kickoffPrompt?: string | undefined;

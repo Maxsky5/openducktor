@@ -9,6 +9,7 @@ import { applyAgentSessionLiveDelta } from "../agent-orchestrator/session-read-m
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { useChatSessionPreparation } from "./use-chat-session-preparation";
 import { SessionViewContext } from "../navigation/session-view-context";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const identity: AgentSessionIdentity = {
   runtimeKind: "claude",
@@ -18,9 +19,12 @@ const identity: AgentSessionIdentity = {
 
 const setup = (livePresence: "present" | "unobserved" = "present") => {
   const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient();
   store.replaceSession(createAgentSessionFixture({ ...identity, livePresence }));
   const wrapper = ({ children }: PropsWithChildren) => (
-    <AgentSessionsContext value={store}>{children}</AgentSessionsContext>
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>{children}</AgentSessionsContext>
+    </QueryClientProvider>
   );
   const remove = () =>
     store.setSessionCollection((current) =>

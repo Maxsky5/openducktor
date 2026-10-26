@@ -127,10 +127,10 @@ describe("browser tabs store", () => {
     harness.answer([]);
     await started;
     harness.nextRead();
-    harness.emit(connectionReconnectedEvent(true));
+    harness.emit(connectionReconnectedEvent(true, { hostChanged: false, missedEventNames: [] }));
     const answerOlder = harness.currentAnswer();
     harness.nextRead();
-    harness.emit(connectionReconnectedEvent(true));
+    harness.emit(connectionReconnectedEvent(true, { hostChanged: false, missedEventNames: [] }));
     const tab = createBrowserTabSummaryFixture();
 
     harness.answer([tab]);
@@ -186,9 +186,9 @@ describe("browser tabs store", () => {
     await started;
     harness.nextRead();
 
-    harness.emit(connectionReconnectedEvent(false));
+    harness.emit(connectionReconnectedEvent(false, { hostChanged: false, missedEventNames: [] }));
     expect(harness.reads()).toBe(1);
-    harness.emit(connectionReconnectedEvent(true));
+    harness.emit(connectionReconnectedEvent(true, { hostChanged: false, missedEventNames: [] }));
     harness.answer([]);
     await flush();
 
@@ -206,7 +206,7 @@ describe("browser tabs store", () => {
     await started;
     harness.nextRead();
 
-    harness.emit(connectionReconnectedEvent(true));
+    harness.emit(connectionReconnectedEvent(true, { hostChanged: false, missedEventNames: [] }));
     harness.emit({
       type: "tab_upserted",
       tab: createBrowserTabSummaryFixture({ revision: 2, url: "http://localhost:3000/live" }),

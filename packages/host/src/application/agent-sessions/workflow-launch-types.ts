@@ -9,7 +9,7 @@ import type { WorkflowLaunchPreparationDependencies } from "./workflow-launch-pr
 import type { AgentMessageDeliveryService } from "./agent-message-delivery-service";
 
 export type WorkflowLaunchDependencies = WorkflowLaunchPreparationDependencies & {
-  sessions: Pick<TaskSessionOperations, "start" | "fork" | "resume">;
+  sessions: Pick<TaskSessionOperations, "start" | "fork" | "resume" | "completeSavedStart">;
   messageDelivery: Pick<AgentMessageDeliveryService, "submit">;
   /** `sendUserMessage` must apply the normal workflow send policy. */
   runtime: SessionLaunchRuntimePort &

@@ -35,6 +35,9 @@ const existingSessionOption = (externalSessionId: string) => ({
 
 const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionStartModalModel => ({
   open: true,
+  phase: { kind: "choices" },
+  onContinueInBackground: noop,
+  onEditChoices: noop,
   title: "Start Builder session",
   description: "Pick a model and launch a session.",
   confirmLabel: "Start session",
@@ -142,6 +145,46 @@ const getFieldButton = (testId: string): HTMLButtonElement => {
 };
 
 describe("SessionStartModal", () => {
+  test("keeps the dialog mounted when choices become progress and guards dismissal until settlement", () => {
+    const connection = createTestClientConnection();
+    const startupAttemptId = connection.startupAttempts.begin({
+      origin: {
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        scope: { kind: "task", taskId: "task", role: "build" },
+      },
+      label: "Start Builder session",
+      presentation: "dialog",
+    });
+    const onOpenChange = mock(() => {});
+    const onContinueInBackground = mock(() => {});
+    const model = createModel({ onOpenChange, onContinueInBackground });
+    const view = renderWithoutConnection(
+      <QueryProvider connection={connection}>
+        <SessionStartModal model={model} />
+      </QueryProvider>,
+    );
+    try {
+      const dialog = view.getByRole("dialog");
+      view.rerender(
+        <QueryProvider connection={connection}>
+          <SessionStartModal
+            model={{ ...model, isStarting: true, phase: { kind: "progress", startupAttemptId } }}
+          />
+        </QueryProvider>,
+      );
+      expect(view.getByRole("dialog")).toBe(dialog);
+      expect(view.queryByRole("button", { name: "Start session" })).toBeNull();
+      expect(view.queryByRole("button", { name: "Close" })).toBeNull();
+      fireEvent.keyDown(dialog, { key: "Escape" });
+      expect(onOpenChange).not.toHaveBeenCalled();
+      fireEvent.click(view.getByRole("button", { name: "Continue in background" }));
+      expect(onContinueInBackground).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("places Effort beside Runtime and model without changing variant selection", () => {
     const view = render(<SessionStartModal model={createModel()} />);
     try {

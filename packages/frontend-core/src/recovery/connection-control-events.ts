@@ -8,6 +8,10 @@ export type ConnectionControlEvent =
       kind: typeof CONNECTION_RECONNECTED_EVENT_KIND;
       /** False when the replay delivered every event since the connection failed. */
       missedEvents: boolean;
+      /** True only after a previously known host process was replaced. */
+      hostChanged: boolean;
+      /** Event streams whose retained replay could not cover the gap. */
+      missedEventNames: readonly string[];
     }
   | {
       __openducktorConnectionControl: true;
@@ -15,10 +19,20 @@ export type ConnectionControlEvent =
       message?: string;
     };
 
-export const connectionReconnectedEvent = (missedEvents: boolean): ConnectionControlEvent => ({
+export type ReconnectionCoverage = {
+  hostChanged: boolean;
+  missedEventNames: readonly string[];
+};
+
+export const connectionReconnectedEvent = (
+  missedEvents: boolean,
+  coverage: ReconnectionCoverage,
+): ConnectionControlEvent => ({
   __openducktorConnectionControl: true,
   kind: CONNECTION_RECONNECTED_EVENT_KIND,
   missedEvents,
+  hostChanged: coverage.hostChanged,
+  missedEventNames: coverage.missedEventNames,
 });
 
 export const connectionStreamWarningEvent = (message?: string): ConnectionControlEvent => {

@@ -46,7 +46,10 @@ export type TaskViewTarget = Extract<SessionNavigationTarget, { kind: "task" | "
  * Opens a task view. `selected` names the repository when the user picked this exact session,
  * so the view can select it before the session list loads. The platform owns the route.
  */
-export type OpenTaskView = (target: TaskViewTarget, selected?: { repoPath: string }) => void;
+export type OpenTaskView = (
+  target: TaskViewTarget,
+  selected?: { repoPath: string },
+) => void | Promise<void>;
 
 type UseTaskSessionStartFlowArgs = {
   activeWorkspaceId: string | null;
@@ -140,13 +143,14 @@ export function useTaskSessionStartFlow({
   workspaceRepoPath,
   runSessionStartWorkflow,
 }: UseTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
-  const { feedback } = useClientConnection();
+  const { feedback, startupAttempts } = useClientConnection();
   const queryClient = useQueryClient();
   const isCurrentContext = useSessionStartContext(activeWorkspaceId);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, isSessionStarting, runSessionStartRequest } =
     useSessionStartModalRunner({
+      workspaceId: activeWorkspaceId,
       scopeKey: activeWorkspaceId,
       branches,
       favoriteState,
@@ -174,11 +178,11 @@ export function useTaskSessionStartFlow({
   );
 
   const openStartedSession = useCallback(
-    (intent: SessionStartFlowRequest, session: AgentSessionIdentity): void => {
+    (intent: SessionStartFlowRequest, session: AgentSessionIdentity): void | Promise<void> => {
       if (!activeWorkspaceId) {
         throw new Error("No active workspace is selected.");
       }
-      openTaskView({
+      return openTaskView({
         kind: "task_session",
         workspaceId: activeWorkspaceId,
         taskId: intent.taskId,
@@ -206,8 +210,9 @@ export function useTaskSessionStartFlow({
           taskSessions,
           selectedTask,
         }),
-        async ({ decision, runInBackground }) => {
+        async ({ decision, runInBackground, startupAttemptId }) => {
           const input: Parameters<typeof startKanbanSessionFlow>[0] = {
+            startupAttemptId,
             workspaceId: activeWorkspaceId,
             request: intent,
             decision,
@@ -218,7 +223,13 @@ export function useTaskSessionStartFlow({
             onPostStartMessageFailure,
             runSessionStartWorkflow,
             openStartedSession: (request, session) => {
-              if (isCurrentContext()) openStartedSession(request, session);
+              const attempt = startupAttempts.getAttempt(startupAttemptId);
+              if (
+                isCurrentContext() &&
+                attempt?.presentation === "dialog" &&
+                attempt.status.phase === "ready"
+              )
+                return openStartedSession(request, session);
             },
           };
           const session = await startKanbanSessionFlow(input);
@@ -237,6 +248,7 @@ export function useTaskSessionStartFlow({
       sessions,
       tasks,
       activeWorkspaceId,
+      startupAttempts,
     ],
   );
 

@@ -129,6 +129,12 @@ Launch rules:
 - A failed launch result carries `failure.noticeId` only when the host showed the failure in the live session. Without it, for example when the session could not resume, the browser shows and notifies the failure itself.
 - When the browser shows a Retry toast for a reported failure, the host notification goes out without its in-app toast.
 
+Explicit startup progress stays in connection memory. Host commands publish cumulative `openducktor://session-startup-progress` snapshots with an attempt ID, operation ID, host instance, revision, ordered steps, and saved-session ownership. Results and typed partial failures carry the same facts. Automatic launches and ordinary session selection do not create attempts.
+
+The shared startup owner subscribes before dispatch. A foreground setup dialog shows the attempt until preparation and any initial instruction settle. A background task start closes its dialog at submission and keeps progress in the app. Navigation changes presentation only. Workspace creation saves a draft, then prepares that record without a message before handoff. Failure keeps the saved record and its recovery actions.
+
+A prepared handoff names the exact native target, runtime instance, and live publication sequence. The destination preparation owner adopts it only after the existing repository live source covers that target. A relevant live gap, target removal, runtime replacement, or owner release invalidates this evidence. A temporary connection suspension does not start another session.
+
 Session rules:
 
 - `spec`, `planner`, and `qa` reject mutating permission requests. If the reply fails, keep the request open and emit a system error.

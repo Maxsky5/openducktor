@@ -9,6 +9,10 @@ import type { createNodeSessionLaunchControls } from "./node-session-launch-cont
 import type { createNodeMessageDelivery } from "./node-message-delivery";
 import type { createNodeTaskSessionServices } from "./node-task-session-services";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
+import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
+import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
+import { createTaskMergeStatusCommandHandlers } from "../../interface/commands/task-merge-status-command-handlers";
+import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 
 export const createNodeWorkflowCommandHandlers = ({
   launchControls,
@@ -20,6 +24,8 @@ export const createNodeWorkflowCommandHandlers = ({
   clientVersion,
   runtimeRegistry,
   adapterRegistry,
+  taskAssetStagingService,
+  taskWorktreeService,
 }: {
   launchControls: ReturnType<
     typeof createNodeSessionLaunchControls<
@@ -34,6 +40,8 @@ export const createNodeWorkflowCommandHandlers = ({
   clientVersion: Parameters<typeof previewModels>[3];
   runtimeRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["runtimeRegistry"];
   adapterRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["adapterRegistry"];
+  taskAssetStagingService: Parameters<typeof createTaskAssetCommandHandlers>[0];
+  taskWorktreeService: Parameters<typeof createTaskWorktreeCommandHandlers>[0];
 }) => ({
   ...createAgentSessionLiveCommandHandlers(launchControls.commands, messageDelivery),
   ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),
@@ -42,4 +50,8 @@ export const createNodeWorkflowCommandHandlers = ({
     previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
     createClaudeToolCatalogService({ runtimeRegistry, adapterRegistry }),
   ),
+  ...createTaskAssetCommandHandlers(taskAssetStagingService),
+  ...createTaskCommandHandlers(taskSessions.taskService),
+  ...createTaskMergeStatusCommandHandlers(taskSessions.mergeDetection),
+  ...createTaskWorktreeCommandHandlers(taskWorktreeService),
 });

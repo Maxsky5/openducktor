@@ -1,4 +1,5 @@
 import { resolveTaskSessionStartTarget } from "./task-session-start-target";
+import { startupStep } from "../../agent-sessions/session-startup-progress";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
@@ -179,11 +180,19 @@ export const createTaskSessionStartPreparationService = ({
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
                 const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
                 if (exists) {
-                  yield* validateExistingGitTaskWorktree(
-                    dependencies,
-                    canonicalRepoPath,
-                    worktreePath,
-                    taskId,
+                  yield* startupStep(
+                    {
+                      id: "checkout",
+                      label: "Reuse task worktree",
+                      details: [worktreePath],
+                      resources: [{ kind: "worktree", value: worktreePath, state: "reused" }],
+                    },
+                    validateExistingGitTaskWorktree(
+                      dependencies,
+                      canonicalRepoPath,
+                      worktreePath,
+                      taskId,
+                    ),
                   );
                 } else {
                   const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);

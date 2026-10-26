@@ -16,7 +16,7 @@ import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
 import { MessageRetryNotices } from "../start-session/message-retry-notice";
 import { RepoSettingsFailure } from "../start-session/repo-settings-failure";
-import { SessionStartForm } from "../start-session/session-start-form";
+import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { requestChangesRemove } from "./request-changes-remove";
@@ -91,19 +91,7 @@ function RequestChangesContent({
     );
   }
   if (start?.open) {
-    return (
-      <GroupedSheet
-        title={start.title}
-        onClose={() => start.onOpenChange(false)}
-        closable={!start.isStarting}
-      >
-        <SessionStartForm
-          model={start}
-          branchesFailure={branchesFailure}
-          notices={<MessageRetryNotices taskId={task.id} />}
-        />
-      </GroupedSheet>
-    );
+    return <SessionStartSheet model={start} taskId={task.id} branchesFailure={branchesFailure} />;
   }
   if (settings.error && !triggered) {
     return (

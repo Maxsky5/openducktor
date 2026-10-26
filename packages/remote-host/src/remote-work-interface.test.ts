@@ -137,7 +137,7 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
         })
       ).status,
     ).toBe(409);
-    const mismatch = await f.negotiate({ ...hello, supportedProtocolVersions: [1] });
+    const mismatch = await f.negotiate({ ...hello, supportedProtocolVersions: [2] });
     expect(mismatch.response.status).toBe(426);
     expect(mismatch.result.failure.updateSide).toBe("client");
     const missing = await f.negotiate({ ...hello, requiredCapabilities: ["future.required"] });

@@ -1,5 +1,5 @@
 import { type ReactElement, useCallback, useEffect, useId, useState } from "react";
-import { AccessibilityInfo, Platform, useWindowDimensions, View } from "react-native";
+import { AccessibilityInfo, Platform, ScrollView, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   FadeInUp,
@@ -23,6 +23,7 @@ import { Icon, type IconName } from "@/ui/icon";
 import { haptics } from "@/ui/haptics";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
+import { ModalStartupProgressHost } from "@/features/session-startup/startup-progress-host";
 import {
   type FeedbackMessage,
   type FeedbackStore,
@@ -193,13 +194,28 @@ function ToastStack({
 }): ReactElement | null {
   const messages = useStore(feedback.store, (state) => state.messages);
   const covered = useStore(feedback.store, toastsCoveredBy);
+  const startupVisible = useStore(feedback.store, (state) => state.startupVisible);
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  useEffect(() => () => feedback.setToastStackHeight(0), [feedback]);
   if (covered) return null;
+  const maxHeight = startupVisible
+    ? Math.max(0, (height - insets.top - insets.bottom - TOP_BAR_CLEARANCE - 80) * 0.35)
+    : undefined;
   return (
     <View pointerEvents="box-none" style={[styles.host, { top: insets.top + TOP_BAR_CLEARANCE }]}>
-      {messages.map((entry) => (
-        <FeedbackToast key={entry.id} entry={entry} feedback={feedback} exits={exits} />
-      ))}
+      <ScrollView
+        style={[styles.toastScroll, { maxHeight }]}
+        contentContainerStyle={styles.toastContent}
+        onLayout={(event) => feedback.setToastStackHeight(event.nativeEvent.layout.height)}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* The feedback store caps ordinary messages at three. */}
+        {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
+        {messages.map((entry) => (
+          <FeedbackToast key={entry.id} entry={entry} feedback={feedback} exits={exits} />
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -248,7 +264,12 @@ function AndroidModalToasts(): ReactElement | null {
   const shown = useStore(feedback.store, (state) => toastWindowOf(state) === id);
   // A closing modal slides out with its window while the root shows its toasts at once. A toast
   // that faded out in that window read as a second toast, so the toasts of a modal do not fade.
-  return shown ? <ToastStack feedback={feedback} exits={false} /> : null;
+  return shown ? (
+    <>
+      <ToastStack feedback={feedback} exits={false} />
+      <ModalStartupProgressHost />
+    </>
+  ) : null;
 }
 
 /**
@@ -274,6 +295,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.space.sm,
     alignItems: "center",
   },
+  toastScroll: { width: "100%", maxWidth: 520, flexGrow: 0 },
+  toastContent: { gap: theme.space.sm, alignItems: "center" },
   slot: { width: "100%", maxWidth: 520 },
   // `border bg-card shadow-xl`, as the desktop toast.
   toast: {

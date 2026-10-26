@@ -59,6 +59,10 @@ const terminalPageInboundSchema = z.discriminatedUnion("type", [
     platform: platformSchema.nullable(),
     /** False for an exited or lost terminal, and while host commands are closed. */
     inputEnabled: z.boolean(),
+    /** Trace output stays quiet until the user requests a text snapshot. */
+    screenReaderMode: z.boolean().optional(),
+    /** Reports a trace reader's position without changing the PTY. */
+    trackViewport: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal("terminal_output"),
@@ -82,6 +86,12 @@ const terminalPageInboundSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("terminal_paste"), text: textSchema.min(1) }),
   /** The Copy key. The page answers with `terminal_copy` when it has selected text. */
   z.strictObject({ type: z.literal("terminal_copy_selection") }),
+  z.strictObject({ type: z.literal("terminal_read_output") }),
+  z.strictObject({
+    type: z.literal("terminal_set_viewport"),
+    row: sequenceSchema,
+    follow: z.boolean(),
+  }),
   z.strictObject({ type: z.literal("terminal_focus") }),
   z.strictObject({ type: z.literal("terminal_blur") }),
 ]);
@@ -100,6 +110,13 @@ const terminalPageOutboundSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("terminal_selection"), hasSelection: z.boolean() }),
   /** The selected text, for the Copy key or a hardware copy shortcut. */
   z.strictObject({ type: z.literal("terminal_copy"), text: textSchema.min(1) }),
+  z.strictObject({ type: z.literal("terminal_output_text"), text: textSchema }),
+  z.strictObject({
+    type: z.literal("terminal_viewport"),
+    row: sequenceSchema,
+    follow: z.boolean(),
+    restored: z.boolean(),
+  }),
   /** Typed text used the held touch modifiers. */
   z.strictObject({ type: z.literal("terminal_modifiers_consumed") }),
   z.strictObject({ type: z.literal("terminal_error"), message: z.string().min(1).max(4_000) }),

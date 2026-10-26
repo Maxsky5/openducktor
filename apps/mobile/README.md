@@ -96,6 +96,14 @@ flowchart TD
 - A 3xx response is an invalid endpoint.
 - A certificate failure is permanent. The app never downgrades HTTPS to HTTP.
 
+### Session startup
+
+- Task and workspace startup use the connection's in-memory attempt owner. Each native trace shows the host's steps, failures, cleanup, and saved session. The app saves no startup history.
+- A foreground start keeps its guarded full sheet until preparation ends. Task starts can move the same trace to the startup overlay with Continue in background. Background task submission closes its sheet at once and never changes the current screen on completion. Workspace starts stay in their sheets.
+- The startup overlay uses the feedback window placement, with its own retention and count. Success expires after 10 elapsed seconds, including hidden time. Failed and canceled starts stay until dismissal or explicit recovery.
+- Hiding the app keeps the existing connection lifecycle and the user's startup choice. Foreground handoff waits until the app is visible. A lost result stays unconfirmed and never sends a replacement launch.
+- Action details show a separate read-only terminal page. It sends no input or resize. Read output as text takes a static accessible snapshot without announcing each output chunk. The action terminal keeps its initial command result after startup feedback expires.
+
 ### Runtime globals
 
 `src/platform/install-globals.ts` runs before all other app code. It supplies a streaming UTF-8 `TextDecoder`, a grapheme `Intl.Segmenter`, `Array.prototype.toSorted`, and `crypto` when Hermes or React Native does not have them. Then it checks every global and built-in that shared code needs, and startup stops with the name of each missing one.

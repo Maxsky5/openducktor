@@ -39,6 +39,7 @@ type BuildSessionStartModalRequestArgs = {
 };
 
 export type RunSessionStartWorkflowInput = {
+  startupAttemptId?: string;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
   isCurrent?: () => boolean;
@@ -118,6 +119,7 @@ type CreateSessionStartWorkflowRunnerArgs = {
   sendAgentMessage: SendAgentMessage;
   notifications?: SessionStartNotificationPublisher | undefined;
   createLaunchAttemptId?: () => string;
+  startupFeedback?: boolean;
 };
 
 export const createSessionStartWorkflowRunner = ({
@@ -127,6 +129,7 @@ export const createSessionStartWorkflowRunner = ({
   sendAgentMessage,
   notifications,
   createLaunchAttemptId = () => crypto.randomUUID(),
+  startupFeedback = false,
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
   return async (input) => {
     const launchAttemptId = createLaunchAttemptId();
@@ -137,6 +140,7 @@ export const createSessionStartWorkflowRunner = ({
       role: input.request.role,
     };
     if (input.task?.title) notificationInput.taskTitle = input.task.title;
+    if (startupFeedback) notificationInput.inAppFeedbackHandled = true;
     const reportNotificationFailure = (cause: unknown): void => {
       try {
         notifications?.reportFailure(cause, notificationInput);
@@ -167,14 +171,14 @@ export const createSessionStartWorkflowRunner = ({
     } catch (cause) {
       const startError = cause instanceof Error ? cause : new Error(String(cause));
       const feedbackHandled = await publishFailure(startError, notificationInput);
-      throw new SessionStartWorkflowError(startError, feedbackHandled);
+      throw new SessionStartWorkflowError(startError, startupFeedback || feedbackHandled);
     }
 
     const { postStartActionError } = result;
     const session = toAgentSessionIdentity(result);
     const notificationWithSession = { ...notificationInput, session };
     if (postStartActionError) {
-      if (result.retryPostStartMessage && input.onPostStartMessageFailure) {
+      if (!startupFeedback && result.retryPostStartMessage && input.onPostStartMessageFailure) {
         try {
           input.onPostStartMessageFailure(result);
           notificationWithSession.inAppFeedbackHandled = true;

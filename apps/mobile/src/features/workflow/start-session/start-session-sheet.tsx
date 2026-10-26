@@ -16,9 +16,10 @@ import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
-import { MessageRetryNotices } from "./message-retry-notice";
 import { RepoSettingsFailure } from "./repo-settings-failure";
-import { SessionStartForm } from "./session-start-form";
+import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
+import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
+import { SessionStartSheet } from "./session-start-sheet";
 
 const TITLE = "Start Session";
 
@@ -95,26 +96,7 @@ function StartSessionContent({
   // The action opens the start choices, or opens an existing session directly. A quick action
   // starts its launch action as the desktop quick actions do.
   const run = () => {
-    if (!task) return;
-    if (request.kind === "action") {
-      START_ACTIONS[request.action](flow, task.id);
-      return;
-    }
-    const { launch } = request;
-    if (launch === "build_pull_request_generation") {
-      flow.onPullRequestGenerate(task.id).catch((cause: unknown) =>
-        feedback.show("error", "The pull request session did not start.", {
-          description: errorMessage(cause),
-        }),
-      );
-      return;
-    }
-    void flow.startSessionIntent({
-      taskId: task.id,
-      role: getSessionLaunchAction(launch).role,
-      launchActionId: launch,
-      postStartAction: "kickoff",
-    });
+    if (task) runStartRequest(request, task.id, flow, feedback);
   };
   // The sheet closes when the start choices close.
   const triggered = useWorkflowSheetLifecycle({
@@ -124,24 +106,7 @@ function StartSessionContent({
     close: navigation.close,
   });
 
-  // Close, Android Back, and the swipe ask before they drop choices that the user changed. A
-  // failed start keeps the sheet and its choices, so the user can fix the cause and start again.
-  const confirmDiscard = useConfirmDiscard();
-  const [edited, setEdited] = useState(false);
-  const markEdited = useCallback(() => setEdited(true), []);
-  const asksBeforeClose = edited && modal?.open === true && !modal.isStarting;
-  // A confirmed discard lifts the Back guard before the sheet closes, as the task editor does.
-  const allowRemoval = usePreventRemove(asksBeforeClose, () => discard());
-  const discard = () => {
-    void confirmDiscard({
-      title: "Discard the Session Start?",
-      message: "Your choices are not saved.",
-    }).then((confirmed) => {
-      if (!confirmed) return;
-      allowRemoval();
-      modal?.onOpenChange(false);
-    });
-  };
+  const choicesClose = useStartChoicesClose(modal);
 
   if (!task) {
     return (
@@ -169,17 +134,63 @@ function StartSessionContent({
     );
   }
   return (
-    <GroupedSheet
-      title={modal.title}
-      onClose={asksBeforeClose ? discard : () => modal.onOpenChange(false)}
-      closable={!modal.isStarting}
-    >
-      <SessionStartForm
-        model={modal}
-        branchesFailure={branchesFailure}
-        notices={<MessageRetryNotices taskId={task.id} />}
-        onEdit={markEdited}
-      />
-    </GroupedSheet>
+    <SessionStartSheet
+      model={modal}
+      taskId={task.id}
+      branchesFailure={branchesFailure}
+      onClose={choicesClose.close}
+      onEdit={choicesClose.markEdited}
+    />
   );
 }
+
+const runStartRequest = (
+  request: StartRequest,
+  taskId: string,
+  flow: UseTaskSessionStartFlowResult,
+  feedback: ClientFeedback,
+): void => {
+  if (request.kind === "action") {
+    START_ACTIONS[request.action](flow, taskId);
+    return;
+  }
+  const { launch } = request;
+  if (launch === "build_pull_request_generation") {
+    flow.onPullRequestGenerate(taskId).catch((cause: unknown) =>
+      feedback.show("error", "The pull request session did not start.", {
+        description: errorMessage(cause),
+      }),
+    );
+    return;
+  }
+  void flow.startSessionIntent({
+    taskId,
+    role: getSessionLaunchAction(launch).role,
+    launchActionId: launch,
+    postStartAction: "kickoff",
+  });
+};
+
+const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
+  const confirmDiscard = useConfirmDiscard();
+  const [edited, setEdited] = useState(false);
+  const markEdited = useCallback(() => setEdited(true), []);
+  const asksBeforeClose =
+    modal?.phase.kind !== "progress" && edited && modal?.open === true && !modal.isStarting;
+  const allowRemoval = usePreventRemove(asksBeforeClose, () => close());
+  const close = () => {
+    if (!asksBeforeClose) {
+      modal?.onOpenChange(false);
+      return;
+    }
+    void confirmDiscard({
+      title: "Discard the Session Start?",
+      message: "Your choices are not saved.",
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      allowRemoval();
+      modal?.onOpenChange(false);
+    });
+  };
+  return { close, markEdited };
+};

@@ -10,6 +10,7 @@ import type { SessionStartFlowRequest } from "../../sessions/start/session-start
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type StartKanbanSessionFlowInput = {
+  startupAttemptId?: string;
   request: SessionStartFlowRequest;
   isCurrent?: () => boolean;
   decision: ResolvedSessionStartDecision;
@@ -20,7 +21,10 @@ type StartKanbanSessionFlowInput = {
   /** Shows the retry of a first message that did not reach the started session. */
   onPostStartMessageFailure: (result: SessionStartWorkflowResult) => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
-  openStartedSession: (intent: SessionStartFlowRequest, session: AgentSessionIdentity) => void;
+  openStartedSession: (
+    intent: SessionStartFlowRequest,
+    session: AgentSessionIdentity,
+  ) => void | Promise<void>;
 };
 
 export const startKanbanSessionFlow = async ({
@@ -33,6 +37,7 @@ export const startKanbanSessionFlow = async ({
   onPostStartMessageFailure,
   runSessionStartWorkflow,
   openStartedSession,
+  startupAttemptId,
 }: StartKanbanSessionFlowInput): Promise<SessionStartWorkflowResult> => {
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
   const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
@@ -41,6 +46,7 @@ export const startKanbanSessionFlow = async ({
     task,
     onPostStartMessageFailure,
   };
+  if (startupAttemptId) workflowInput.startupAttemptId = startupAttemptId;
   if (isCurrent) workflowInput.isCurrent = isCurrent;
   const workflow = await runSessionStartWorkflow(workflowInput);
   if (
@@ -55,7 +61,7 @@ export const startKanbanSessionFlow = async ({
   const conflictContextChanged =
     request.launchActionId === "build_rebase_conflict_resolution" && isCurrent && !isCurrent();
   if (!startInBackground && !conflictContextChanged) {
-    openStartedSession(request, workflow);
+    await openStartedSession(request, workflow);
   }
 
   return workflow;

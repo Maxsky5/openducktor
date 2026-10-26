@@ -17,6 +17,41 @@ const summary = (terminalId: string): TerminalSummary => ({
 });
 
 describe("terminalPresentationReducer", () => {
+  test("retains an action outcome discovered after the terminal was listed", () => {
+    const scopeKey = "/repo:task-1";
+    const terminal = summary("terminal-a");
+    const initial = terminalPresentationReducer(createTerminalPresentationState(), {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [terminal],
+    });
+    const outcome = {
+      type: "exited",
+      exitCode: 1,
+      signal: null,
+      outputTail: ["Build failed"],
+    } as const;
+    const settled = terminalPresentationReducer(initial, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [{ ...terminal, initialCommandResult: outcome }],
+    });
+    expect(settled.scopes[scopeKey]?.tabs).toMatchObject([
+      { summary: { initialCommandResult: outcome } },
+    ]);
+    const repeated = terminalPresentationReducer(settled, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [
+        { ...terminal, initialCommandResult: { ...outcome, outputTail: [...outcome.outputTail] } },
+      ],
+    });
+    expect(repeated).toBe(settled);
+  });
+
   test("preserves state identity when the host list has no material change", () => {
     const scopeKey = "/repo:task-1";
     const terminal = summary("terminal-a");

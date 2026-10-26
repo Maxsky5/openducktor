@@ -1368,6 +1368,66 @@ test("a mutation with a lost reply is not resent", async () => {
   }
 });
 
+test("a startup failure keeps progress and its existing typed validation detail", async () => {
+  const f = fixture();
+  const startupProgress = {
+    context: { startupAttemptId: "attempt", operationId: "create" },
+    hostInstanceId: "instance-1",
+    revision: 2,
+    workspaceId: "workspace",
+    repoPath: "/repo",
+    scope: { kind: "workspace" },
+    phase: "failed",
+    ownership: { state: "not_saved" },
+    steps: [
+      {
+        id: "checkout",
+        label: "Create checkout",
+        state: "failed",
+        details: ["Branch already exists."],
+      },
+    ],
+  } as const;
+  f.setMutation(async () =>
+    json(
+      {
+        error: "Choose another branch.",
+        failure: {
+          kind: "workspace_session_validation",
+          field: "worktree.branchName",
+          startupProgress,
+        },
+      },
+      400,
+    ),
+  );
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    const failure = await remote.client
+      .workspaceSessionStart({ workspaceId: "workspace", sessionId: "session" })
+      .catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({
+      failure: {
+        kind: "workspace_session_validation",
+        field: "worktree.branchName",
+        startupProgress,
+      },
+    });
+    expect(remote.readState().status).toBe("connected");
+    expect(
+      f.requests.filter((value) => value.endsWith("/invoke/workspace_session_start")),
+    ).toHaveLength(1);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
 test("a read during a manual retry waits for the new connection", async () => {
   const f = fixture();
   f.setMutation(async () => json([]));
@@ -1413,6 +1473,65 @@ test("a failed synchronization reconnects by itself", async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     expect(states.at(-1)?.status).toBe("connected");
     expect(attempts).toBe(2);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("replacement and scoped gaps survive failed synchronization until reported", async () => {
+  const f = fixture();
+  const request = f.transport.request;
+  let hostInstanceId = descriptor.hostInstanceId;
+  let gaps: string[] = [];
+  f.transport.request = async (method, url, headers, signal, body) => {
+    const host = { ...descriptor, hostInstanceId };
+    if (url === "https://host.example/remote") return json(host);
+    if (url.endsWith("/connections"))
+      return json({
+        status: "accepted",
+        host,
+        connectionId: crypto.randomUUID(),
+        protocolVersion: REMOTE_PROTOCOL_VERSION,
+        missingOptionalCapabilities: [],
+      });
+    if (url.endsWith("/events"))
+      return live(
+        signal,
+        frame("replay-complete", { hostChanged: false, gaps }) +
+          frame("notification-frame", {
+            type: "attached",
+            cursor: f.boundary,
+            reason: "new",
+            health: [],
+          }),
+      );
+    return request(method, url, headers, signal, body);
+  };
+  const observed: { hostChanged: boolean; gaps: string[] }[] = [];
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async (context) => {
+      observed.push({ hostChanged: context.hostChanged, gaps: context.hostReplay.gaps });
+      if (observed.length === 2) throw new Error("A repository owner could not restore.");
+    },
+  );
+  try {
+    await remote.connect();
+    hostInstanceId = "replacement";
+    gaps = ["startup", "agent-live:/repo"];
+    const failure = await remote.retry().catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({ failure: { code: "synchronization_failed" } });
+    gaps = [];
+    await remote.retry();
+    await remote.retry();
+    expect(observed).toEqual([
+      { hostChanged: false, gaps: [] },
+      { hostChanged: true, gaps: ["startup", "agent-live:/repo"] },
+      { hostChanged: true, gaps: ["startup", "agent-live:/repo"] },
+      { hostChanged: false, gaps: [] },
+    ]);
   } finally {
     await remote.disconnect();
   }

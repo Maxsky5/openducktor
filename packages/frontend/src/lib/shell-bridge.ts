@@ -146,6 +146,7 @@ export const createDisabledAppUpdateBridge = (state: DisabledAppUpdateState): Ap
 };
 
 export const createUnavailableShellBridge = (): ShellBridge => ({
+  subscribeStartupProgress: failUnavailable,
   subscribeWorkspaceProviderSetupUpdates: failUnavailable,
   client: createHostClient(unavailable),
   subscribeWorkspaceSessionUpdates: failUnavailable,

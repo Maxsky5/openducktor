@@ -1,7 +1,7 @@
 import type { AgentSessionForkPoint, AgentSessionWorkflowScope } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import type { AgentChatForkActions } from "@/components/features/agents/agent-chat/agent-chat-fork-context";
 import { useForkNavigation } from "@/components/features/agents/agent-chat/use-fork-navigation";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -14,7 +14,11 @@ import {
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { builtinRoleId } from "@openducktor/workflows";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+
+type TaskForkOwner = { active: boolean; attempts: Map<string, () => void> };
 
 export function useTaskSessionFork({
   repoPath,
@@ -32,6 +36,9 @@ export function useTaskSessionFork({
   const identity = useStableAgentSessionIdentity(inputIdentity);
   const { taskId, role } = scope;
   const queryClient = useQueryClient();
+  const connection = useClientConnection();
+  const location = useLocation();
+  const active = useSessionViewActive();
   const store = useAgentSessionsContext();
   const pending = useSessionForkRequests(queryClient);
   const ownerKey = JSON.stringify([
@@ -41,6 +48,15 @@ export function useTaskSessionFork({
     identity ? agentSessionIdentityKey(identity) : null,
   ]);
   const captureNavigation = useForkNavigation(ownerKey);
+  const forkOwner = useRef<TaskForkOwner>({ active: false, attempts: new Map() });
+  useLayoutEffect(() => {
+    const owner: TaskForkOwner = { active, attempts: new Map() };
+    forkOwner.current = owner;
+    return () => {
+      owner.active = false;
+      transferTaskForks(connection, owner);
+    };
+  }, [active, connection, location.key, ownerKey]);
   const [failure, setFailure] = useState<{ ownerKey: string; message: string } | null>(null);
   const actions = useMemo<AgentChatForkActions | null>(() => {
     if (!repoPath || !workspaceId || !identity) return null;
@@ -50,32 +66,29 @@ export function useTaskSessionFork({
       onFork: (point: AgentSessionForkPoint) => {
         if (disabledReason || pending.has(sessionForkRequestKey(repoPath, identity, point))) return;
         const open = captureNavigation();
+        const owner = forkOwner.current;
+        let registered = false;
         setFailure(null);
-        void forkTaskSession(queryClient, store, {
-          ...identity,
-          repoPath,
-          sessionScope: { kind: "workflow", taskId, role },
-          forkPoint: point,
-        })
-          .then((result) => {
-            if (result.syncWarning)
-              toast.warning("The fork was created", { description: result.syncWarning });
-            open(
-              {
-                kind: "task_session",
-                workspaceId,
-                taskId,
-                role: builtinRoleId(role),
-                identity: result.runtimeSession,
-              },
-              repoPath,
-            );
-          })
-          .catch((cause: unknown) => {
-            const message = errorMessage(cause);
-            setFailure({ ownerKey, message });
-            toast.error("Could not fork chat", { description: message });
-          });
+        void forkTaskSession(
+          queryClient,
+          store,
+          {
+            ...identity,
+            repoPath,
+            sessionScope: { kind: "workflow", taskId, role },
+            forkPoint: point,
+          },
+          {
+            workspaceId,
+            presentation: "inline",
+            onAttempt: (id) => {
+              registered = true;
+              observeTaskFork(connection, owner, id, open);
+            },
+          },
+        ).catch((cause: unknown) => {
+          if (!registered) setFailure({ ownerKey, message: errorMessage(cause) });
+        });
       },
     };
   }, [
@@ -90,6 +103,45 @@ export function useTaskSessionFork({
     ownerKey,
     taskId,
     role,
+    connection,
   ]);
   return { actions, error: failure?.ownerKey === ownerKey ? failure.message : null };
+}
+
+function transferTaskForks(connection: ClientConnection, owner: TaskForkOwner): void {
+  for (const [id, stop] of owner.attempts) {
+    stop();
+    connection.startupAttempts.continueInBackground(id);
+  }
+  owner.attempts.clear();
+}
+
+function observeTaskFork(
+  connection: ClientConnection,
+  owner: TaskForkOwner,
+  id: string,
+  open: ReturnType<ReturnType<typeof useForkNavigation>>,
+): void {
+  if (!owner.active) {
+    connection.startupAttempts.continueInBackground(id);
+    return;
+  }
+  const stop = connection.startupAttempts.subscribe(() => {
+    const attempt = connection.startupAttempts.getAttempt(id);
+    if (!attempt) {
+      stop();
+      owner.attempts.delete(id);
+      return;
+    }
+    if (!connection.startupAttempts.isReadyForHandoff(id) || attempt.presentation !== "inline")
+      return;
+    const target = attempt.navigationTarget;
+    if (target?.kind !== "task_session") return;
+    stop();
+    owner.attempts.delete(id);
+    if (owner.active && open(target, attempt.origin.repoPath))
+      connection.startupAttempts.handoff(id);
+    else connection.startupAttempts.continueInBackground(id);
+  });
+  owner.attempts.set(id, stop);
 }

@@ -14,6 +14,7 @@ export type TerminalCommandRun = {
   lineIndex: number;
   stopRequested: boolean;
   readonly result: Deferred.Deferred<TerminalCommandResult>;
+  onResult?: (result: TerminalCommandResult) => void;
 };
 
 export type TerminalSession = {
@@ -89,6 +90,9 @@ export const settleCommandRun = (
     };
   }
   Deferred.doneUnsafe(run.result, Effect.succeed(outcome));
+  session.summary.initialCommandResult = outcome;
+  run.onResult?.(outcome);
+  delete run.onResult;
 };
 
 /** Settles the command result after the screen parses the queued output. */

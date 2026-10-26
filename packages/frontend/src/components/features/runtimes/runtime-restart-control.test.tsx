@@ -191,6 +191,8 @@ describe("RuntimeRestartControl", () => {
         __openducktorConnectionControl: true,
         kind: "reconnected",
         missedEvents: true,
+        hostChanged: false,
+        missedEventNames: [],
       });
     });
     await waitFor(async () =>

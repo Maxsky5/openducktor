@@ -312,7 +312,7 @@ describe("createWorktreeActionRunner", () => {
       _tag: "WorktreeActionTimeoutError",
       outputTail: ["still installing"],
       message:
-        'Worktree action "install" did not finish within 5 minutes, so OpenDucktor stopped it.\nLast output:\nstill installing',
+        'Worktree action "install" did not finish within 5 minutes. Startup is stopping its terminal before cleanup.\nLast output:\nstill installing',
     });
     await Effect.runPromise(run.stopTerminals());
     expect(closeCalls(terminals)).toEqual(["close:terminal-install:true"]);
@@ -328,7 +328,7 @@ describe("createWorktreeActionRunner", () => {
       outputTail: [],
       cause: { _tag: "TerminalServiceError", message: "Terminal is gone." },
       message:
-        'Worktree action "install" did not finish within 5 minutes, so OpenDucktor stopped it. OpenDucktor could not read its last output: Terminal is gone.',
+        'Worktree action "install" did not finish within 5 minutes. Startup is stopping its terminal before cleanup. OpenDucktor could not read its last output: Terminal is gone.',
     });
   });
 

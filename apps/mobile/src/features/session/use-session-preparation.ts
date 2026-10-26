@@ -46,6 +46,7 @@ export function useSessionPreparation(
     });
   }, [chatId, host, identity, queryClient, repoPath, role, store, taskId, workspaceId]);
   return useChatSessionPreparation({
+    repoPath,
     identity,
     targetKey: JSON.stringify([workspaceId, target.sessionKey, chatId, taskId, role]),
     enabled: enabled && !target.readOnly && !chatArchived && owner.kind !== "none",

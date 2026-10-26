@@ -9,8 +9,9 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { useHostClient } from "../../connection/client-connection-react";
+import { useMemo, useRef, useState } from "react";
+import { useClientConnection } from "../../connection/client-connection-react";
+import { errorMessage } from "../../lib/errors";
 import { useMountedRef } from "../../lib/use-mounted-ref";
 import { useSingleFlightMutation } from "../../lib/use-single-flight";
 import { invalidateRepoBranchesQuery, repoBranchesQueryOptions } from "../../queries/git";
@@ -28,6 +29,12 @@ import {
 } from "./workspace-session-create-input";
 import { useExistingWorktreeChoice } from "./use-existing-worktree-choice";
 import { INITIAL_WORKSPACE_SESSION_WORKTREE } from "./workspace-session-worktree-rules";
+import { useAgentSessionsContext } from "../../sessions/session-contexts";
+import { projectWorkspaceSessionResult } from "./launch-workspace-session";
+import {
+  observeStartupPreparation,
+  releaseStartupPreparationAttempt,
+} from "../../sessions/startup/startup-prepared-handoff";
 
 /** The role choice that creates a chat without a Custom Agent Role. */
 export const NO_CUSTOM_AGENT_ROLE = "none";
@@ -54,12 +61,7 @@ export function useWorkspaceSessionCreateDefaults(workspaceId: string) {
   return { repoConfig, defaultModelSelection };
 }
 
-/**
- * The New chat form: name, Custom Agent Role, work location, new or existing worktree, and target
- * branch. It
- * builds the create request, sends it once, and updates the chat, terminal, and branch reads of
- * the workspace. `onCreated` runs only while the form is still mounted.
- */
+/** Creates and prepares one workspace session. Only the mounted source form can open it. */
 export function useWorkspaceSessionCreate({
   workspace,
   model,
@@ -70,9 +72,14 @@ export function useWorkspaceSessionCreate({
   model: WorkspaceSessionCreateModel;
   /** False while the form is hidden, so it reads no branches. */
   open?: boolean;
-  onCreated: (session: WorkspaceSession) => void;
+  onCreated: (session: WorkspaceSession, startupAttemptId: string) => void | Promise<void>;
 }) {
-  const host = useHostClient();
+  const connection = useClientConnection();
+  const { client: host } = connection.host;
+  const { startupAttempts } = connection;
+  const sessions = useAgentSessionsContext();
+  const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
+  const submittedInput = useRef<WorkspaceSessionCreateInput | null>(null);
   const queryClient = useQueryClient();
   const roles = useQuery(customAgentRolesQueryOptions());
   const [name, setName] = useState("");
@@ -94,17 +101,117 @@ export function useWorkspaceSessionCreate({
   const existing = useExistingWorktreeChoice(workspace.workspaceId, open, location);
   const mounted = useMountedRef();
   const create = useSingleFlightMutation({
-    mutationFn: (input: WorkspaceSessionCreateInput) => host.workspaceSessionCreate(input),
-    onSuccess: (result, input) => {
+    mutationFn: async (input: WorkspaceSessionCreateInput) => {
+      const retained = startupAttemptId ? startupAttempts.getAttempt(startupAttemptId) : null;
+      const saved =
+        retained?.ownership.state === "saved" && retained.ownership.target.kind === "workspace"
+          ? retained.ownership.target.record
+          : null;
+      if (retained && (!saved || retained.status.confirmation !== "current"))
+        throw new Error("Inspect the saved session before starting again.");
+      const startupWorkspace = retained
+        ? {
+            workspaceId: retained.origin.workspaceId,
+            repoPath: retained.origin.repoPath,
+          }
+        : workspace;
+      const id =
+        retained?.id ??
+        startupAttempts.begin({
+          origin: { ...startupWorkspace, scope: { kind: "workspace" } },
+          label: "Start workspace session",
+          presentation: "dialog",
+        });
+      setStartupAttemptId(id);
+      submittedInput.current = input;
+      try {
+        if (saved) releaseStartupPreparationAttempt(queryClient, id);
+        await observeStartupPreparation(queryClient, startupWorkspace.repoPath, id).catch(
+          (cause) => {
+            startupAttempts.rejectBeforeDispatch(id, errorMessage(cause));
+            throw cause;
+          },
+        );
+        let record = saved;
+        if (!record) {
+          const result = await startupAttempts.operation(
+            id,
+            (startup) => host.workspaceSessionCreate({ ...input, startup }),
+            { final: false },
+          );
+          record = result.session;
+          startupAttempts.setSaved(id, { state: "saved", target: { kind: "workspace", record } });
+          updateWorkspaceSessionQueries(queryClient, input.workspaceId, record);
+        }
+        const sessionId = record.id;
+        const result = await startupAttempts.operation(id, (startup) =>
+          host.workspaceSessionStart({
+            workspaceId: startupWorkspace.workspaceId,
+            sessionId,
+            startup,
+          }),
+        );
+        startupAttempts.setSaved(id, {
+          state: "saved",
+          target: {
+            kind: "workspace",
+            record: result.session,
+            ...(result.runtimeSession && { runtimeSession: result.runtimeSession }),
+          },
+        });
+        try {
+          projectWorkspaceSessionResult(
+            {
+              ...startupWorkspace,
+              record: result.session,
+              session: result.runtimeSession ?? undefined,
+            },
+            sessions,
+            queryClient,
+          );
+        } catch (cause) {
+          console.error("Cannot project the prepared workspace session.", cause);
+        }
+        if (!result.runtimeSession || !result.startupProgress?.prepared)
+          throw new Error(
+            "Session preparation is unconfirmed. Inspect the saved session before you try again.",
+          );
+        await startupAttempts.complete(id);
+        return { ...result, startupAttemptId: id };
+      } catch (cause) {
+        const attempt = startupAttempts.getAttempt(id);
+        if (attempt && !["failed", "canceled"].includes(attempt.status.phase))
+          startupAttempts.fail(id, errorMessage(cause), false);
+        throw cause;
+      }
+    },
+    onSuccess: async (result, input) => {
+      const attempt = startupAttempts.getAttempt(result.startupAttemptId);
       updateWorkspaceSessionQueries(queryClient, input.workspaceId, result.session);
       void invalidateTerminalList(queryClient, {
         kind: "workspace_session",
         workspaceId: input.workspaceId,
         sessionId: result.session.id,
-      });
-      if (input.location === "local_worktree")
-        void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
-      if (mounted.current) onCreated(result.session);
+      }).catch((cause) => console.error("Cannot refresh workspace session terminals.", cause));
+      if (input.location === "local_worktree" && attempt)
+        void invalidateRepoBranchesQuery(queryClient, attempt.origin.repoPath).catch((cause) =>
+          console.error("Cannot refresh workspace session branches.", cause),
+        );
+      if (
+        mounted.current &&
+        attempt?.status.phase === "ready" &&
+        attempt.origin.workspaceId === workspace.workspaceId &&
+        attempt.origin.repoPath === workspace.repoPath
+      ) {
+        try {
+          await onCreated(result.session, result.startupAttemptId);
+        } catch (cause) {
+          startupAttempts.setWarning(
+            result.startupAttemptId,
+            `The session is ready, but it did not open. ${errorMessage(cause)}`,
+          );
+        }
+      }
     },
     onError: (error, input) => {
       if (workspaceSessionValidationError(error))
@@ -135,6 +242,26 @@ export function useWorkspaceSessionCreate({
   const submit = (): void => {
     if (input) create.mutate(input);
   };
+  const dismissStartup = (): void => {
+    if (startupAttemptId) startupAttempts.dismiss(startupAttemptId);
+    setStartupAttemptId(null);
+  };
+  const editChoices = (): void => {
+    const attempt = startupAttemptId ? startupAttempts.getAttempt(startupAttemptId) : null;
+    if (attempt?.ownership.state !== "not_saved" || attempt.status.confirmation !== "current")
+      return;
+    dismissStartup();
+  };
+  const repairSavedSession = (): void => {
+    const attempt = startupAttemptId ? startupAttempts.getAttempt(startupAttemptId) : null;
+    if (
+      submittedInput.current &&
+      attempt?.ownership.state === "saved" &&
+      attempt.status.phase === "failed" &&
+      attempt.status.confirmation === "current"
+    )
+      create.mutate(submittedInput.current);
+  };
   // A changed location, worktree, or target clears the last failure, so its message cannot mislead.
   const selectLocation = (next: WorkspaceSessionCreateLocation): void => {
     create.reset();
@@ -153,6 +280,10 @@ export function useWorkspaceSessionCreate({
     existing.select(workingDirectory);
   };
   return {
+    startupAttemptId,
+    editChoices,
+    dismissStartup,
+    repairSavedSession,
     name,
     setName,
     roleId,

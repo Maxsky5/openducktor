@@ -8,9 +8,9 @@ export type RequestChangesRemove = "leave" | "back_to_feedback" | "confirm_disca
 
 export const requestChangesRemove = (
   feedback: { message: string } | null,
-  start: { open: boolean; isStarting: boolean } | null,
+  start: { open: boolean; isStarting: boolean; phase: { kind: "choices" | "progress" } } | null,
 ): RequestChangesRemove => {
   if (feedback === null || feedback.message.trim().length === 0) return "leave";
-  if (start?.isStarting) return "leave";
+  if (start?.isStarting || start?.phase.kind === "progress") return "leave";
   return start?.open ? "back_to_feedback" : "confirm_discard";
 };

@@ -158,6 +158,14 @@ export const createElectronShellBridge = (): ShellBridge => {
       dispose: () => {},
     },
     subscribeRunEvents: subscribeElectronEvent(electronApi, RUN_EVENT_CHANNEL),
+    subscribeStartupProgress: async (listener) =>
+      electronApi.subscribe(
+        "openducktor://session-startup-progress",
+        (payload: HostEventPayload<"openducktor://session-startup-progress">) =>
+          logListenerFailure(
+            listener({ channel: "openducktor://session-startup-progress", payload }),
+          ),
+      ),
     subscribeWorkspaceProviderSetupUpdates: async (listener) =>
       electronApi.subscribe("openducktor://workspace-provider-setup-updated", listener),
     subscribeAzureDevOpsConnectionUpdates: async (listener) =>

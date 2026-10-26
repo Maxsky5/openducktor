@@ -25,6 +25,7 @@ import {
   logListenerFailure,
   type RuntimeChangeListener,
   type TaskMergeStatusUpdateListener,
+  type StartupProgressListener,
   type TaskStreamFrame,
   type TaskStreamSubscription,
 } from "@openducktor/frontend-core/connection/host-connection";
@@ -53,6 +54,7 @@ import {
 } from "./local-host-errors";
 import {
   BROWSER_EVENT_STREAM_NAME,
+  STARTUP_EVENT_STREAM_NAME,
   hostEventStreamEventName,
   liveSessionStreamEventName,
 } from "@openducktor/remote-host/host-event-stream-name";
@@ -394,6 +396,7 @@ const getSseChannelEffect = (
                   connectionReconnectedEvent(
                     // A first connection has no cursor, so it cannot prove that nothing was missed.
                     !resumed || replay.hostChanged || gaps.has(registration.eventName),
+                    { hostChanged: replay.hostChanged, missedEventNames: replay.gaps },
                   ),
                 ),
             ),
@@ -630,6 +633,23 @@ export const subscribeLocalHostWorkspaceSessionUpdates = async (
     }),
   );
 };
+
+export const subscribeLocalHostStartupProgress = async (
+  listener: StartupProgressListener,
+): Promise<() => void> =>
+  runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(
+      "openducktor://session-startup-progress",
+      (event) => {
+        if (
+          isBrowserSseControlEvent(event) ||
+          event.channel === "openducktor://session-startup-progress"
+        )
+          return listener(event);
+      },
+      STARTUP_EVENT_STREAM_NAME,
+    ),
+  );
 
 export const subscribeLocalHostRuntimeChanges = async (
   listener: RuntimeChangeListener,

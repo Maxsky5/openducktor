@@ -417,7 +417,7 @@ export const createTerminalSessionProducer = ({
       startSession(summary, plan, null).pipe(Effect.map(createResponse)),
     startCommand: (
       summary: TerminalSummary,
-      { commandLines }: Pick<TerminalCommandRequest, "commandLines">,
+      { commandLines, onResult }: Pick<TerminalCommandRequest, "commandLines" | "onResult">,
       plans: TerminalCommandLaunchPlans,
     ): Effect.Effect<StartedCommandTerminal, TerminalServiceError> =>
       Effect.suspend(() => {
@@ -427,6 +427,7 @@ export const createTerminalSessionProducer = ({
           stopRequested: false,
           result: Deferred.makeUnsafe(),
         };
+        if (onResult) run.onResult = onResult;
         return startSession(summary, plans.shell, {
           lines: commandLines,
           plan: plans.command,

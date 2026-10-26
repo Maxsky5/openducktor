@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionStartupProgressEventSchema } from "./session-startup-schemas";
 import { agentSessionLiveEnvelopeSchema } from "./agent-session-live-schemas";
 import { autopilotRunEventSchema } from "./autopilot-schemas";
 import { browserHostEventSchema } from "./browser-tab-schemas";
@@ -8,6 +9,7 @@ import { taskMergeStatusSnapshotSchema } from "./task-merge-status-schemas";
 import { workspaceSessionSchema } from "./workspace-session-schemas";
 
 export const HOST_EVENT_CHANNELS = [
+  "openducktor://session-startup-progress",
   "openducktor://run-event",
   "openducktor://agent-session-live-event",
   "openducktor://workspace-session-updated",
@@ -21,6 +23,7 @@ export const HOST_EVENT_CHANNELS = [
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
 
 export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
+  sessionStartupProgressEventSchema,
   z.strictObject({
     channel: z.literal("openducktor://browser-event"),
     payload: browserHostEventSchema,

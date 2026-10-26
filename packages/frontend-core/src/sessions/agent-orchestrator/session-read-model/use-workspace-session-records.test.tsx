@@ -167,12 +167,24 @@ describe("Workspace Session metadata subscription", () => {
       expect(harness.getLatest().records.data?.[0]?.manualTitle).toBe("read-1");
       // A complete replay already delivered every update.
       await harness.run(() =>
-        emit({ __openducktorConnectionControl: true, kind: "reconnected", missedEvents: false }),
+        emit({
+          __openducktorConnectionControl: true,
+          kind: "reconnected",
+          hostChanged: false,
+          missedEventNames: [],
+          missedEvents: false,
+        }),
       );
       expect(harness.getLatest().subscriptionError).toBeNull();
       expect(reads).toBe(1);
       await harness.run(() =>
-        emit({ __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true }),
+        emit({
+          __openducktorConnectionControl: true,
+          kind: "reconnected",
+          hostChanged: false,
+          missedEventNames: [],
+          missedEvents: true,
+        }),
       );
       await harness.waitFor((state) => state.records.data?.[0]?.manualTitle === "read-2");
       expect(harness.getLatest().subscriptionError).toBeNull();

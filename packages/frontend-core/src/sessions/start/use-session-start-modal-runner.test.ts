@@ -16,6 +16,8 @@ import {
   useSessionStartModalRunner,
 } from "./use-session-start-modal-runner";
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
+import { startKanbanSessionFlow } from "../../tasks/workflow/kanban-session-start-actions";
+import type { RunSessionStartWorkflow } from "./session-start-orchestration";
 
 const REQUEST_CONTEXT = {
   launchActionId: "build_pull_request_generation",
@@ -377,79 +379,96 @@ describe("useSessionStartModalRunner", () => {
 });
 
 describe("useSessionStartModalRunner failures", () => {
-  test("keeps the modal open with its choices after a failed start", async () => {
-    const feedback = createFeedbackFake();
-    const harness = createHookHarness(
-      useSessionStartModalRunner,
-      {
-        favoriteState: {
-          favorites: [],
-          isLoading: false,
-          readError: null,
-          isMutationPending: false,
-          mutationError: null,
-          canMutate: false,
-          toggleFavorite: () => {},
-          retryRead: () => {},
-          retryMutation: () => {},
+  test.each(["dialog", "notification"] as const)(
+    "modal close dismisses only feedback still shown in its dialog (%s)",
+    async (presentation) => {
+      const feedback = createFeedbackFake();
+      const connection = createTestClientConnection({ feedback });
+      const harness = createHookHarness(
+        useSessionStartModalRunner,
+        {
+          favoriteState: {
+            favorites: [],
+            isLoading: false,
+            readError: null,
+            isMutationPending: false,
+            mutationError: null,
+            canMutate: false,
+            toggleFavorite: () => {},
+            retryRead: () => {},
+            retryMutation: () => {},
+          },
+          repoSettings: null,
+          workspaceRepoPath: "/repo",
         },
-        repoSettings: null,
-        workspaceRepoPath: "/repo",
-      },
-      {
-        connection: createTestClientConnection({ feedback }),
-        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
-          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-          loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
-        }),
-      },
-    );
-    const request = {
-      source: "agent_studio",
-      taskId: "TASK-1",
-      role: "build",
-      launchActionId: "build_implementation_start",
-      postStartAction: "kickoff",
-      selectedModel: SELECTED_MODEL,
-    } as const;
+        {
+          connection,
+          runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+            availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+            loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
+          }),
+        },
+      );
+      const request = {
+        source: "agent_studio",
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        postStartAction: "kickoff",
+        selectedModel: SELECTED_MODEL,
+      } as const;
 
-    await harness.mount();
-    await harness.run((runner) => {
-      void runner.runSessionStartRequest(request, async () => {
-        throw new Error("The host refused the start.");
-      });
-    });
-    await harness.waitFor((runner) => runner.sessionStartModal?.selectedModelSelection != null);
-    const requestId = harness.getLatest().sessionStartModal?.requestId;
+      await harness.mount();
+      try {
+        await harness.run((runner) => {
+          void runner.runSessionStartRequest(request, async () => {
+            throw new Error("The host refused the start.");
+          });
+        });
+        await harness.waitFor((runner) => runner.sessionStartModal?.selectedModelSelection != null);
+        const requestId = harness.getLatest().sessionStartModal?.requestId;
 
-    await harness.run(async (runner) => {
-      await runner.sessionStartModal?.onConfirm({
-        startMode: "fresh",
-        sourceSessionOptionValue: null,
-        runInBackground: false,
-      });
-    });
+        await harness.run(async (runner) => {
+          await runner.sessionStartModal?.onConfirm({
+            startMode: "fresh",
+            sourceSessionOptionValue: null,
+            runInBackground: false,
+          });
+        });
 
-    const modal = harness.getLatest().sessionStartModal;
-    expect(modal?.open).toBe(true);
-    expect(modal?.isStarting).toBe(false);
-    expect(modal?.requestId).toBe(requestId);
-    expect(modal?.selectedModelSelection).toEqual(
-      expect.objectContaining({
-        providerId: SELECTED_MODEL.providerId,
-        modelId: SELECTED_MODEL.modelId,
-      }),
-    );
-    expect(feedback.shownOf("error")).toEqual([
-      {
-        kind: "error",
-        message: "Failed to start the session.",
-        options: { description: "The host refused the start." },
-      },
-    ]);
-    await harness.unmount();
-  });
+        const modal = harness.getLatest().sessionStartModal;
+        expect(modal?.open).toBe(true);
+        expect(modal?.isStarting).toBe(false);
+        expect(modal?.requestId).toBe(requestId);
+        expect(modal?.selectedModelSelection).toEqual(
+          expect.objectContaining({
+            providerId: SELECTED_MODEL.providerId,
+            modelId: SELECTED_MODEL.modelId,
+          }),
+        );
+        expect(modal?.phase.kind).toBe("progress");
+        expect(feedback.shownOf("error")).toEqual([]);
+        if (modal?.phase.kind !== "progress") throw new Error("Startup progress is missing.");
+        const id = modal.phase.startupAttemptId;
+        await harness.run((runner) => {
+          if (presentation === "notification")
+            connection.startupAttempts.setPresentation(id, presentation);
+          runner.sessionStartModal?.onOpenChange(false);
+        });
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+        if (presentation === "notification")
+          expect(connection.startupAttempts.getAttempt(id)).toMatchObject({
+            presentation: "notification",
+            status: { phase: "failed", confirmation: "current" },
+            error: "The host refused the start.",
+          });
+        else expect(connection.startupAttempts.getAttempt(id)).toBeNull();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 });
 
 describe("assertRuntimeSupportsSelectedStartMode", () => {
@@ -854,3 +873,159 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
     }
   });
 }
+
+test.each(["submit", "continue"] as const)(
+  "a background %s frees the modal for another task while both launches keep their origin",
+  async (transfer) => {
+    const feedback = createFeedbackFake();
+    const connection = createTestClientConnection({ feedback });
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    const opened = mock(() => {});
+    const workflow = mock(async (input: Parameters<RunSessionStartWorkflow>[0]) => {
+      await (input.request.taskId === "TASK-1" ? first.promise : second.promise);
+      return {
+        externalSessionId: `native-${input.request.taskId}`,
+        runtimeKind: "codex" as const,
+        workingDirectory: "/repo/worktree",
+        postStartActionError: null,
+      };
+    });
+    const execute = mock(
+      async ({
+        request,
+        decision,
+        runInBackground,
+        startupAttemptId,
+      }: Parameters<
+        Parameters<ReturnType<typeof useSessionStartModalRunner>["runSessionStartRequest"]>[1]
+      >[0]) => {
+        return startKanbanSessionFlow({
+          workspaceId: "workspace",
+          request,
+          decision,
+          startInBackground: runInBackground,
+          tasks: [],
+          feedback: connection.feedback,
+          onPostStartMessageFailure: () => {},
+          runSessionStartWorkflow: workflow,
+          openStartedSession: () => {
+            if (connection.startupAttempts.getAttempt(startupAttemptId)?.presentation === "dialog")
+              opened();
+          },
+        });
+      },
+    );
+    const harness = createHookHarness(
+      useSessionStartModalRunner,
+      {
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: false,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
+        repoSettings: null,
+        workspaceRepoPath: "/repo",
+        workspaceId: "workspace",
+        scopeKey: "workspace",
+      },
+      {
+        connection,
+        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
+        }),
+      },
+    );
+    const request = {
+      source: "task_action",
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      postStartAction: "none",
+      selectedModel: SELECTED_MODEL,
+    } as const;
+    const input = {
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      runInBackground: true,
+    } as const;
+    let resultA!: Promise<Awaited<ReturnType<typeof startKanbanSessionFlow>> | undefined>;
+    let resultB!: Promise<Awaited<ReturnType<typeof startKanbanSessionFlow>> | undefined>;
+    await harness.mount();
+    try {
+      await harness.run((runner) => {
+        resultA = runner.runSessionStartRequest(request, execute);
+      });
+      await harness.waitFor((runner) =>
+        Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+      );
+      await harness.run((runner) => {
+        const confirm = runner.sessionStartModal?.onConfirm;
+        const choices = {
+          ...input,
+          runInBackground: transfer === "submit",
+        };
+        void confirm?.(choices);
+        void confirm?.(choices);
+      });
+      expect(execute).toHaveBeenCalledTimes(1);
+      if (transfer === "continue")
+        await harness.run((runner) => {
+          runner.sessionStartModal?.onContinueInBackground();
+        });
+      expect(harness.getLatest().sessionStartModal).toBeNull();
+      expect(harness.getLatest().isSessionStarting).toBe(false);
+      await harness.run((runner) => {
+        resultB = runner.runSessionStartRequest({ ...request, taskId: "TASK-2" }, execute);
+      });
+      await harness.waitFor((runner) =>
+        Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+      );
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm({ ...input, runInBackground: false });
+      });
+      expect(workflow).toHaveBeenCalledTimes(2);
+      const secondRequestId = harness.getLatest().sessionStartModal?.requestId;
+      expect(harness.getLatest().isSessionStarting).toBe(true);
+      expect(
+        connection.startupAttempts.getSnapshot().map((attempt) => attempt.origin.scope),
+      ).toEqual([
+        { kind: "task", taskId: "TASK-1", role: "build" },
+        { kind: "task", taskId: "TASK-2", role: "build" },
+      ]);
+      await harness.run(() => {
+        first.resolve();
+      });
+      expect((await resultA)?.externalSessionId).toBe("native-TASK-1");
+      expect(harness.getLatest().sessionStartModal?.requestId).toBe(secondRequestId);
+      expect(harness.getLatest().isSessionStarting).toBe(true);
+      await harness.run((runner) => {
+        expect(() => runner.runSessionStartRequest(request, execute)).toThrow(
+          "A session start is already in progress.",
+        );
+        runner.sessionStartModal?.onContinueInBackground();
+      });
+      expect(harness.getLatest().isSessionStarting).toBe(false);
+      await harness.run(() => {
+        second.resolve();
+      });
+      expect((await resultB)?.externalSessionId).toBe("native-TASK-2");
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(opened).not.toHaveBeenCalled();
+      expect(feedback.shownOf("error")).toEqual([]);
+    } finally {
+      first.resolve();
+      second.resolve();
+      await harness.unmount();
+      await connection.dispose();
+    }
+  },
+);

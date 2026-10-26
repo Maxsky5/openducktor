@@ -7,6 +7,7 @@ import type {
   AgentTranscriptModelSelection,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { startupStep, updateStartup } from "./session-startup-progress";
 import { TaskSessionOwnershipCommittedError } from "./task-session-ownership-error";
 import {
   HostValidationError,
@@ -36,8 +37,21 @@ export const toControlSessionRef = (
 export const storeWorkflowSession = <Saved, Failure>(
   save: (input: Parameters<TaskService["agentSessionUpsert"]>[0]) => Effect.Effect<Saved, Failure>,
   input: WorkflowSessionInput,
-): Effect.Effect<Saved, HostError> =>
-  save(workflowSessionRecord(input)).pipe(
+): Effect.Effect<Saved, HostError> => {
+  const record = workflowSessionRecord(input);
+  const ownership = {
+    state: "saved",
+    target: { kind: "task", record: record.session, runtimeSession: input.summary },
+  } as const;
+  return startupStep({ id: "save", label: "Save task session" }, save(record)).pipe(
+    Effect.tap(() => updateStartup((progress) => progress.ownership(ownership))),
+    Effect.tapError((failure) =>
+      updateStartup((progress) =>
+        progress.ownership(
+          failure instanceof TaskSessionOwnershipCommittedError ? ownership : { state: "unknown" },
+        ),
+      ),
+    ),
     Effect.mapError((cause) =>
       cause instanceof TaskSessionOwnershipCommittedError
         ? cause
@@ -47,6 +61,7 @@ export const storeWorkflowSession = <Saved, Failure>(
           }),
     ),
   );
+};
 
 export const findWorkflowSession = (
   records: readonly AgentSessionRecord[],
@@ -78,7 +93,12 @@ export const readStoredWorkflowSession = (
     Effect.flatMap((sessions) => {
       const stored = findWorkflowSession(sessions, scope.role, input);
       return stored
-        ? Effect.succeed(stored)
+        ? (operation === "read-resume"
+            ? updateStartup((progress) =>
+                progress.ownership({ state: "saved", target: { kind: "task", record: stored } }),
+              )
+            : Effect.void
+          ).pipe(Effect.as(stored))
         : Effect.fail(
             new HostValidationError({
               field: "externalSessionId",

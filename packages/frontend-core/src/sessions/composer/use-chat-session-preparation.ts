@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../../lib/errors";
 import { useStableAgentSessionIdentity } from "../../lib/use-stable-agent-session-identity";
 import { useSessionViewActive } from "../navigation/session-view-context";
 import { useAgentSessionsContext } from "../session-contexts";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
+import {
+  hasStartupPreparedHandoff,
+  subscribeStartupPreparations,
+} from "../startup/startup-prepared-handoff";
 
 type Attempt = {
   key: string;
@@ -16,21 +21,31 @@ type Attempt = {
 
 export function useChatSessionPreparation({
   identity: targetIdentity,
+  repoPath,
   targetKey,
   enabled,
   prepare,
 }: {
   identity: AgentSessionIdentity | null;
+  repoPath?: string | null;
   targetKey: string;
   enabled: boolean;
   prepare: () => Promise<void>;
 }): { ready: boolean; error: string | null } {
   const store = useAgentSessionsContext();
+  const queryClient = useQueryClient();
   const isActive = useSessionViewActive();
   const identity = useStableAgentSessionIdentity(targetIdentity);
   // Read only the presence, so streamed text does not render the caller again.
   const readPresence = () => store.getSessionSnapshot(identity)?.livePresence ?? "unobserved";
   const presence = useSyncExternalStore(store.subscribe, readPresence, readPresence);
+  const readPrepared = () =>
+    hasStartupPreparedHandoff(queryClient, identity && repoPath ? { ...identity, repoPath } : null);
+  const prepared = useSyncExternalStore(
+    (listener) => subscribeStartupPreparations(queryClient, listener),
+    readPrepared,
+    readPrepared,
+  );
   const [attempt, setAttempt] = useState(() => createAttempt(targetKey, enabled, prepare));
   const pendingPreparation = useRef<{ token: object; promise: Promise<void> } | null>(null);
   const changed =
@@ -52,7 +67,7 @@ export function useChatSessionPreparation({
     observe();
     return unsubscribe;
   }, [enabled, identity, prepare, presence, store, targetKey]);
-  const needsPreparation = enabled && isActive && !changed && attempt.result === null;
+  const needsPreparation = enabled && isActive && !changed && !prepared && attempt.result === null;
   useEffect(() => {
     if (!needsPreparation) return;
     let active = true;
@@ -74,8 +89,11 @@ export function useChatSessionPreparation({
     };
   }, [needsPreparation, prepare, token]);
   return useMemo(
-    () => preparationResult(enabled && !changed ? attempt : null, presence),
-    [attempt, changed, enabled, presence],
+    () =>
+      enabled && prepared
+        ? { ready: true, error: null }
+        : preparationResult(enabled && !changed ? attempt : null, presence),
+    [attempt, changed, enabled, presence, prepared],
   );
 }
 

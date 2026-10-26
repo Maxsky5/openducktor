@@ -14,6 +14,8 @@ import {
   type WorkspaceSessionArchivePreview,
   type AgentSessionModelSelection,
   type WorkspaceSessionStartResult,
+  type WorkspaceSessionStartInput,
+  workspaceSessionStartInputSchema,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
   type WorkspaceSessionRefInput,
@@ -98,8 +100,12 @@ export class HostWorkspaceSessionClient {
     return this.invoke("workspace_session_create", input, workspaceSessionCreateResultSchema);
   }
 
-  workspaceSessionStart(input: WorkspaceSessionRefInput): Promise<WorkspaceSessionStartResult> {
-    return this.invoke("workspace_session_start", input, workspaceSessionStartResultSchema);
+  workspaceSessionStart(input: WorkspaceSessionStartInput): Promise<WorkspaceSessionStartResult> {
+    return this.invoke(
+      "workspace_session_start",
+      workspaceSessionStartInputSchema.parse(input),
+      workspaceSessionStartResultSchema,
+    );
   }
 
   workspaceSessionFork(input: WorkspaceSessionForkInput): Promise<WorkspaceSessionForkResult> {

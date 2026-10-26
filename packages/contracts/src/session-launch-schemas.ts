@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { startupOperationSnapshotSchema } from "./session-startup-schemas";
 import {
   agentSessionControlSummarySchema,
   acceptedAgentInputSchema,
@@ -32,5 +33,6 @@ export const sessionLaunchResultSchema = z.strictObject({
     })
     .optional(),
   skipReason: z.string().optional(),
+  startupProgress: startupOperationSnapshotSchema.optional(),
 });
 export type SessionLaunchResult = z.infer<typeof sessionLaunchResultSchema>;

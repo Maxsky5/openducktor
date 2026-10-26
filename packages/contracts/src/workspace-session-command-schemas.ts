@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { agentSessionControlSummarySchema } from "./agent-session-control-schemas";
+import { startupOperationContextSchema } from "./session-startup-context-schemas";
+import { startupOperationSnapshotSchema } from "./session-startup-schemas";
+import { agentSessionControlSummarySchema } from "./agent-session-summary-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { workspaceIdSchema } from "./workspace-id-schemas";
 import { type GitTargetBranch, gitTargetBranchSchema, UPSTREAM_TARGET_BRANCH } from "./git-schemas";
@@ -78,6 +80,7 @@ export const WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE =
   "Tracked upstream is available only for the current checkout.";
 
 const workspaceSessionCreateFields = {
+  startup: startupOperationContextSchema.optional(),
   workspaceId: workspaceIdSchema,
   runtimeKind: runtimeKindSchema,
   selectedModel: agentSessionModelSelectionSchema.nullable(),
@@ -148,6 +151,7 @@ export type WorkspaceSessionCreateInput = z.infer<typeof workspaceSessionCreateI
 
 export const workspaceSessionCreateResultSchema = z.strictObject({
   session: workspaceSessionSchema,
+  startupProgress: startupOperationSnapshotSchema.optional(),
 });
 export type WorkspaceSessionCreateResult = z.infer<typeof workspaceSessionCreateResultSchema>;
 
@@ -164,13 +168,20 @@ export type WorkspaceSessionWorktreesListResult = z.infer<
   typeof workspaceSessionWorktreesListResultSchema
 >;
 
+export const workspaceSessionStartInputSchema = workspaceSessionRefInputSchema.extend({
+  startup: startupOperationContextSchema.optional(),
+});
+export type WorkspaceSessionStartInput = z.infer<typeof workspaceSessionStartInputSchema>;
+
 export const workspaceSessionStartResultSchema = z.strictObject({
   session: workspaceSessionSchema,
   runtimeSession: agentSessionControlSummarySchema.nullable(),
+  startupProgress: startupOperationSnapshotSchema.optional(),
 });
 export type WorkspaceSessionStartResult = z.infer<typeof workspaceSessionStartResultSchema>;
 
 export const workspaceSessionForkInputSchema = workspaceSessionRefInputSchema.extend({
+  startup: startupOperationContextSchema.optional(),
   forkPoint: agentSessionForkPointSchema,
   destination: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("same_folder") }),
@@ -187,6 +198,7 @@ export const workspaceSessionForkResultSchema = z.strictObject({
   record: workspaceSessionSchema,
   runtimeSession: agentSessionControlSummarySchema,
   syncWarning: z.string().trim().min(1).optional(),
+  startupProgress: startupOperationSnapshotSchema.optional(),
 });
 export type WorkspaceSessionForkResult = z.infer<typeof workspaceSessionForkResultSchema>;
 

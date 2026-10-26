@@ -70,6 +70,8 @@ export function subscribeElectronHostEvent(
           if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
         } else if (hostEvent.channel === "openducktor://task-merge-status-updated") {
           if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
+        } else if (hostEvent.channel === "openducktor://session-startup-progress") {
+          if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
         } else if (active[0] === hostEvent.channel) {
           active[1](hostEvent.payload);
         }

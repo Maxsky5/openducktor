@@ -6,6 +6,7 @@ import type {
   WorkflowLaunchResult,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { finalizeStartup, startupStep, updateStartup } from "./session-startup-progress";
 import type { TaskServiceError } from "../tasks/task-service";
 import { createSessionLaunchService } from "./session-launch-service";
 import type { SessionLaunchContext } from "./session-launch-types";
@@ -39,13 +40,13 @@ export const createWorkflowLaunchService = (
           return;
         }
       }
-      const { config, repoPath } = yield* resolveLaunchWorkspace(deps, request);
-      const prepared = yield* prepareWorkflowLaunch(
-        deps,
-        request,
-        repoPath,
-        config,
-        attempt.targetSession,
+      const { config, repoPath } = yield* startupStep(
+        { id: "request", label: "Check startup request" },
+        resolveLaunchWorkspace(deps, request),
+      );
+      const prepared = yield* startupStep(
+        { id: "checks", label: "Check task and runtime choices" },
+        prepareWorkflowLaunch(deps, request, repoPath, config, attempt.targetSession),
       );
       if (prepared.kind === "skipped") {
         attempt.skip(prepared.reason);
@@ -53,8 +54,10 @@ export const createWorkflowLaunchService = (
       }
       yield* attempt.checkCanceled();
       const { decision, action, model, systemPrompt, parts } = prepared;
-      if (request.instruction.kind === "message")
-        attempt.keepInstruction(request.instruction.parts);
+      if (parts !== undefined)
+        attempt.keepInstruction(
+          request.instruction.kind === "message" ? request.instruction.parts : parts,
+        );
       attempt.setResultFields({ startMode: decision.startMode });
       if (model) attempt.setResultFields({ model });
       const sessionScope = {
@@ -99,6 +102,12 @@ export const createWorkflowLaunchService = (
         const { source, live } = decision;
         session = { ...decision.sourceSession, startedAt: source.startedAt, status: "idle" };
         attempt.reusedSession(repoPath, session);
+        yield* updateStartup((progress) =>
+          progress.ownership({
+            state: "saved",
+            target: { kind: "task", record: source, runtimeSession: session },
+          }),
+        );
         if (live.type !== "live") {
           const resumeInput: AgentSessionControlResumeInput &
             import("@openducktor/core").AgentWorkStartOptions = {
@@ -110,7 +119,10 @@ export const createWorkflowLaunchService = (
             workStartGuard: { assertCurrent: attempt.assertCurrent },
           };
           if (model) resumeInput.model = model;
-          ({ session, publish } = yield* deps.sessions.resume(resumeInput));
+          ({ session, publish } = yield* startupStep(
+            { id: "prepare", label: "Resume native session" },
+            deps.sessions.resume(resumeInput),
+          ));
           attempt.reusedSession(repoPath, session);
         }
         if (model && model.speed !== source.selectedModel?.speed)
@@ -123,7 +135,7 @@ export const createWorkflowLaunchService = (
           });
       }
       if (publish) {
-        yield* publish;
+        yield* startupStep({ id: "publish", label: "Publish saved session" }, publish);
         const agentSessions = yield* deps.tasks.agentSessionsList({
           repoPath,
           taskId: request.taskId,
@@ -134,6 +146,14 @@ export const createWorkflowLaunchService = (
           agentSessions,
         });
       }
+      if (
+        request.policy.kind === "manual" &&
+        request.instruction.kind === "none" &&
+        request.startup !== undefined &&
+        decision.startMode === "reuse"
+      )
+        yield* deps.sessions.completeSavedStart({ repoPath, sessionScope, session });
+      yield* finalizeStartup(toControlSessionRef(repoPath, session));
       if (parts === undefined) return;
       const input: AgentSessionControlSendInput = {
         ...toControlSessionRef(repoPath, session),

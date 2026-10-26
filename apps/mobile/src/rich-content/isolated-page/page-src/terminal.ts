@@ -194,7 +194,7 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
     fontSize: message.fontSize,
     lineHeight: LINE_HEIGHT,
     scrollback: SCROLLBACK_ROWS,
-    screenReaderMode: true,
+    screenReaderMode: message.screenReaderMode ?? true,
     theme: themeOf(message.colors),
     linkHandler: {
       allowNonHttpProtocols: false,
@@ -223,6 +223,18 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
     if (!restoringScreen) post({ type: "terminal_resize", columns: cols, rows });
   });
   created.onSelectionChange(reportSelection);
+  let lastViewport: { row: number; follow: boolean } | null = null;
+  created.onScroll((row) => {
+    if (!latestConfiguration?.trackViewport) return;
+    const follow = row === created.buffer.active.baseY;
+    if (
+      (lastViewport?.follow && follow) ||
+      (lastViewport?.row === row && lastViewport.follow === follow)
+    )
+      return;
+    lastViewport = { row, follow };
+    post({ type: "terminal_viewport", row, follow, restored: false });
+  });
   // The page has no clipboard access. OSC 52 clipboard writes from programs stay ignored.
   created.parser.registerOscHandler(52, () => true);
   textInput = installTerminalTextInput(
@@ -404,6 +416,7 @@ type ConfigureMessage = Extract<TerminalPageInbound, { type: "terminal_configure
 
 const applyConfiguration = (current: Terminal, message: ConfigureMessage): void => {
   current.options.theme = themeOf(message.colors);
+  current.options.screenReaderMode = message.screenReaderMode ?? true;
   setInputEnabled(current, message.inputEnabled);
   if (current.options.fontSize !== message.fontSize) {
     current.options.fontSize = message.fontSize;
@@ -471,6 +484,29 @@ function receive(message: TerminalPageInbound): void {
       current.clearSelection();
       document.getSelection()?.removeAllRanges();
       return;
+    case "terminal_read_output": {
+      const buffer = current.buffer.active;
+      const lines: string[] = [];
+      for (let row = 0; row < buffer.length; row++)
+        lines.push(buffer.getLine(row)?.translateToString(true) ?? "");
+      post({
+        type: "terminal_output_text",
+        text: lines.join("\n").slice(-MAX_TERMINAL_PAGE_TEXT_LENGTH),
+      });
+      return;
+    }
+    case "terminal_set_viewport": {
+      if (message.follow) current.scrollToBottom();
+      else current.scrollToLine(message.row);
+      const { viewportY, baseY } = current.buffer.active;
+      post({
+        type: "terminal_viewport",
+        row: viewportY,
+        follow: viewportY === baseY,
+        restored: true,
+      });
+      return;
+    }
     case "terminal_focus":
       current.focus();
       return;

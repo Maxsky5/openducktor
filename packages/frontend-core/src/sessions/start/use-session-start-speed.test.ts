@@ -32,6 +32,9 @@ const createModel = (
 ): SessionStartModalModel =>
   // SAFETY: The speed hook reads only the fields that this fixture sets.
   ({
+    phase: { kind: "choices" },
+    onContinueInBackground: () => {},
+    onEditChoices: () => {},
     open: true,
     requestId: "request-1",
     selectedStartMode: "reuse",

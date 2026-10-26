@@ -163,7 +163,13 @@ describe("createHostRuntimeStatusOwner", () => {
       hasBaseline: false,
     });
 
-    harness.emit({ __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true });
+    harness.emit({
+      __openducktorConnectionControl: true,
+      kind: "reconnected",
+      hostChanged: false,
+      missedEventNames: [],
+      missedEvents: true,
+    });
     expect(harness.owner.getConnection().streamError).toBeNull();
     await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(2));
     harness.lastBaseline().resolve(snapshot("host-1", []));
@@ -191,7 +197,13 @@ describe("createHostRuntimeStatusOwner", () => {
       kind: "stream-warning",
       message: "Connection lost.",
     });
-    harness.emit({ __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true });
+    harness.emit({
+      __openducktorConnectionControl: true,
+      kind: "reconnected",
+      hostChanged: false,
+      missedEventNames: [],
+      missedEvents: true,
+    });
     await waitForExpectation(() => expect(harness.runtimeStatus).toHaveBeenCalledTimes(3));
     await refresh;
 
@@ -259,6 +271,8 @@ describe("createHostRuntimeStatusOwner", () => {
           listener({
             __openducktorConnectionControl: true,
             kind: "reconnected",
+            hostChanged: false,
+            missedEventNames: [],
             missedEvents: true,
           });
           return () => {};
@@ -589,7 +603,13 @@ describe("createHostRuntimeStatusOwner", () => {
       kind: "stream-warning",
       message: "Lost.",
     });
-    harness.emit({ __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true });
+    harness.emit({
+      __openducktorConnectionControl: true,
+      kind: "reconnected",
+      hostChanged: false,
+      missedEventNames: [],
+      missedEvents: true,
+    });
     unsubscribe();
     harness.emit({ type: "runtime_impact_changed", runtimeKinds: ["opencode"] });
 

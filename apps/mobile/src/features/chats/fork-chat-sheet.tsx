@@ -6,6 +6,9 @@ import type {
 } from "@openducktor/contracts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
+import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
@@ -27,8 +30,8 @@ import {
   workspaceSessionForkInput,
 } from "@openducktor/frontend-core/workspace-sessions/fork/workspace-session-fork-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
-import { type ReactElement, useState } from "react";
+import { useNavigation, usePreventRemove, useRouter } from "expo-router";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
@@ -45,6 +48,10 @@ import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import type { ForkChatSheetParams } from "./chat-sheet-params";
 import { useChatRecord } from "./use-chat-record";
+import { StartupTrace } from "@/features/session-startup/startup-trace";
+import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
+import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
+import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
 
 const TITLE = "Fork Chat";
 
@@ -183,25 +190,66 @@ const useForkChatCommand = (
   const router = useRouter();
   const queryClient = useQueryClient();
   const store = useAgentSessionsContext();
-  const { feedback } = useClientConnection();
+  const { startupAttempts } = useClientConnection();
+  const mounted = useMountedRef();
+  const navigation = useNavigation();
+  const visibleHandoff = useVisibleHandoff();
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const attempt = useStartupAttempt(attemptId);
+  useEffect(
+    () => () => {
+      if (attemptId && startupAttempts.getAttempt(attemptId)?.presentation === "dialog")
+        startupAttempts.dismiss(attemptId);
+    },
+    [attemptId, startupAttempts],
+  );
   const pendingRequests = useSessionForkRequests(queryClient);
   const [failure, setFailure] = useState<Error | null>(null);
   const source = workspaceSessionIdentity(record);
   const pending =
     source !== null &&
     pendingRequests.has(sessionForkRequestKey(workspace.repoPath, source, { messageId }));
+  const running = pending || startupIsPending(attempt);
+  const allowRemoval = usePreventRemove(running, () => {});
+  const closed = useRef(false);
+  const close = useCallback(() => {
+    if (closed.current) return;
+    closed.current = true;
+    allowRemoval();
+    router.back();
+  }, [allowRemoval, router]);
+  useStartupSheetClose(attemptId, close);
+  useRepairedStartupHandoff(attempt);
+  useEffect(() => {
+    if (attemptId && !attempt) close();
+  }, [attempt, attemptId, close]);
   const submit = (input: WorkspaceSessionForkInput) => {
     if (pending || !source) return;
     setFailure(null);
-    void forkWorkspaceSession(queryClient, store, workspace.repoPath, source, input).then(
+    let submittedAttemptId: string | null = null;
+    void forkWorkspaceSession(queryClient, store, workspace.repoPath, source, input, {
+      presentation: "dialog",
+      onAttempt: (id) => {
+        submittedAttemptId = id;
+        setAttemptId(id);
+      },
+    }).then(
       (result) => {
-        if (result.syncWarning)
-          feedback.show("warning", FORK_CHAT_TEXT.forkedWithWarning, {
-            description: result.syncWarning,
-          });
-        const child = workspaceSessionIdentity(result.record);
-        router.back();
-        if (child) router.push(routes.session(sessionParams(workspace.workspaceId, child)));
+        visibleHandoff(() => {
+          if (
+            !mounted.current ||
+            !navigation.isFocused() ||
+            !submittedAttemptId ||
+            !startupAttempts.isReadyForHandoff(submittedAttemptId) ||
+            startupAttempts.getAttempt(submittedAttemptId)?.presentation !== "dialog"
+          )
+            return;
+          const child = workspaceSessionIdentity(result.record);
+          if (!child) return;
+          close();
+          router.push(routes.session(sessionParams(workspace.workspaceId, child)));
+          startupAttempts.handoff(submittedAttemptId);
+        });
       },
       (cause: unknown) =>
         setFailure(cause instanceof Error ? cause : new Error(errorMessage(cause))),
@@ -210,6 +258,13 @@ const useForkChatCommand = (
   return {
     hasSource: source !== null,
     pending,
+    running,
+    attemptId,
+    editChoices: () => {
+      if (attemptId) startupAttempts.dismiss(attemptId);
+      setAttemptId(null);
+      setFailure(null);
+    },
     failure,
     clearFailure: () => setFailure(null),
     submit,
@@ -251,6 +306,14 @@ function ForkChatForm({
   });
   const blockedReason = forkBlockedReason(gate.open, command.hasSource);
   const note = pending ? null : (blockedReason ?? (input ? null : "Enter a worktree name."));
+  if (command.attemptId)
+    return (
+      <SheetScreen title={TITLE} closable={!command.running}>
+        <Screen background="sheet">
+          <StartupTrace attemptId={command.attemptId} onEditChoices={command.editChoices} />
+        </Screen>
+      </SheetScreen>
+    );
   return (
     <SheetScreen title={TITLE} closable={!pending}>
       <Screen background="sheet">

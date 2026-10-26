@@ -36,7 +36,7 @@ import {
   type AgentSessionControlReleaseInput,
   type AgentSessionResumeIntent,
   type AgentSessionControlStopInput,
-  type AgentSessionControlSummary,
+  type AgentSessionStartupResult,
   type AgentSessionControlUpdateModelInput,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
@@ -59,7 +59,7 @@ import {
   agentSessionResumeIntentSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
-  agentSessionControlSummarySchema,
+  agentSessionStartupResultSchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
@@ -109,11 +109,11 @@ export class HostAgentSessionLiveClient {
 
   async agentSessionControlStart(
     input: AgentRepositorySessionStartInput,
-  ): Promise<AgentSessionControlSummary> {
+  ): Promise<AgentSessionStartupResult> {
     return this.invokeFn(
       "agent_session_control_start",
       agentRepositorySessionStartInputSchema.parse(input),
-      agentSessionControlSummarySchema,
+      agentSessionStartupResultSchema,
     );
   }
 
@@ -126,21 +126,21 @@ export class HostAgentSessionLiveClient {
   }
   async agentSessionWorkflowStart(
     input: AgentWorkflowSessionStartInput,
-  ): Promise<AgentSessionControlSummary> {
+  ): Promise<AgentSessionStartupResult> {
     return this.invokeFn(
       "agent_session_workflow_start",
       agentWorkflowSessionStartInputSchema.parse(input),
-      agentSessionControlSummarySchema,
+      agentSessionStartupResultSchema,
     );
   }
 
   async agentSessionControlResume(
     input: AgentSessionResumeIntent,
-  ): Promise<AgentSessionControlSummary> {
+  ): Promise<AgentSessionStartupResult> {
     return this.invokeFn(
       "agent_session_control_resume",
       agentSessionResumeIntentSchema.parse(input),
-      agentSessionControlSummarySchema,
+      agentSessionStartupResultSchema,
     );
   }
 
@@ -156,11 +156,11 @@ export class HostAgentSessionLiveClient {
 
   async agentSessionControlFork(
     input: AgentSessionControlForkInput,
-  ): Promise<AgentSessionControlSummary> {
+  ): Promise<AgentSessionStartupResult> {
     return this.invokeFn(
       "agent_session_control_fork",
       agentSessionControlForkInputSchema.parse(input),
-      agentSessionControlSummarySchema,
+      agentSessionStartupResultSchema,
     );
   }
 

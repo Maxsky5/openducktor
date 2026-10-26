@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { startupOperationSnapshotSchema } from "./session-startup-schemas";
 import { runtimeQueryFailureSchema } from "./runtime-query-failure-schemas";
 import {
   acceptedAgentUserMessageSchema,
@@ -44,67 +45,81 @@ export type AgentSessionResumeFailure = z.infer<typeof agentSessionResumeFailure
 
 export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
   z.strictObject({
+    kind: z.literal("session_startup"),
+    startupProgress: startupOperationSnapshotSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
     kind: z.literal("session_operation"),
     observation: sessionOperationObservationSchema,
   }),
-  z.strictObject({ kind: z.literal("workflow_intent_rejected") }),
   z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("workflow_intent_rejected"),
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
     kind: z.literal("runtime_operation"),
     runtimeOperationFailure: runtimeOperationFailureSchema,
   }),
   z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
     kind: z.literal("agent_session_command_accepted"),
     sessionRef: agentSessionLiveRefSchema,
     acceptedCommand: acceptedAgentCommandSchema,
   }),
   z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
     kind: z.literal("workspace_session_validation"),
     field: z.enum(["worktree.name", "worktree.branchName"]),
   }),
   z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
     kind: z.literal("agent_session_message_accepted"),
     sessionRef: agentSessionLiveRefSchema,
     acceptedMessage: acceptedAgentUserMessageSchema,
     stage: z.enum(["live_update", "record_message"]),
   }),
   z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
     kind: z.literal("workspace_session_confirmation"),
     field: z.literal("confirmStop"),
   }),
-  z
-    .object({ kind: z.literal("runtime_query"), runtimeQueryFailure: runtimeQueryFailureSchema })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("terminal"),
-      terminalFailure: terminalFailureSchema,
-    })
-    .strict(),
-  z.strictObject({ kind: z.literal("browser"), browserFailure: browserFailureSchema }),
-  z
-    .object({
-      kind: z.literal("task_asset"),
-      taskAssetFailure: taskAssetFailureSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("session_history"),
-      sessionHistoryFailure: sessionHistoryFailureSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("agent_session_resume"),
-      agentSessionResumeFailure: agentSessionResumeFailureSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("workspace_text_file_write"),
-      workspaceTextFileWriteFailure: workspaceTextFileWriteFailureSchema,
-    })
-    .strict(),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("runtime_query"),
+    runtimeQueryFailure: runtimeQueryFailureSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("terminal"),
+    terminalFailure: terminalFailureSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("browser"),
+    browserFailure: browserFailureSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("task_asset"),
+    taskAssetFailure: taskAssetFailureSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("session_history"),
+    sessionHistoryFailure: sessionHistoryFailureSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("agent_session_resume"),
+    agentSessionResumeFailure: agentSessionResumeFailureSchema,
+  }),
+  z.strictObject({
+    startupProgress: startupOperationSnapshotSchema.optional(),
+    kind: z.literal("workspace_text_file_write"),
+    workspaceTextFileWriteFailure: workspaceTextFileWriteFailureSchema,
+  }),
 ]);
 export type HostInvokeFailure = z.infer<typeof hostInvokeFailureSchema>;
 

@@ -7,6 +7,7 @@ import {
   workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
+import { startupStep, updateStartup } from "../agent-sessions/session-startup-progress";
 import { HostResourceError, HostValidationError } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
@@ -76,11 +77,23 @@ export const createWorkspaceSessionCreate =
             updatedAt: now,
             archivedAt: null,
           };
-          const saved = yield* dependencies.store.create({
-            workspaceId: input.workspaceId,
-            repoPath,
-            session,
-          });
+          const saved = yield* startupStep(
+            { id: "save", label: "Save workspace session" },
+            dependencies.store
+              .create({
+                workspaceId: input.workspaceId,
+                repoPath,
+                session,
+              })
+              .pipe(
+                Effect.tapError(() =>
+                  updateStartup((progress) => progress.ownership({ state: "unknown" })),
+                ),
+              ),
+          );
+          yield* updateStartup((progress) =>
+            progress.ownership({ state: "saved", target: { kind: "workspace", record: saved } }),
+          );
           return { session: saved } satisfies WorkspaceSessionCreateResult;
         });
       return yield* withWorkspaceSessionTarget(

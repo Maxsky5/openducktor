@@ -15,7 +15,7 @@ export const withWorktreeRefresh =
         kind: "task",
         repoPath: request.repoPath,
         taskId: request.taskId,
-      });
+      }).catch((cause) => console.error("Cannot refresh the workflow terminals.", cause));
       return outcome;
     } finally {
       // A failed launch can still create a worktree.
