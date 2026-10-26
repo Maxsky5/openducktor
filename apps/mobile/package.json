@@ -8,6 +8,7 @@
     "start": "bun run build:page && expo start",
     "ios": "bun run build:page && expo run:ios",
     "android": "bun run build:page && expo run:android",
+    "android:release": "bun run build:page && expo run:android --variant release --no-bundler",
     "native": "expo prebuild --clean",
     "build": "bun run build:page && expo export --platform ios --platform android --output-dir dist",
     "build:page": "bun run scripts/build-isolated-page.ts",
