@@ -35,6 +35,7 @@ import { StartupDialogProgress } from "@/features/session-startup/session-startu
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { cn } from "@/lib/utils";
 
 type WorkspaceSessionCreateDialogProps = {
   open?: boolean;
@@ -87,11 +88,11 @@ export function WorkspaceSessionCreateDialog({
       }}
     >
       <DialogContent
-        className={
-          startupAttemptId
-            ? "my-0 h-[min(36rem,calc(100dvh-2rem))] gap-0 p-0 sm:max-w-2xl"
-            : "my-0 gap-0 p-0 sm:max-w-2xl"
-        }
+        className={cn(
+          "my-0 gap-0 p-0 sm:max-w-2xl",
+          startupAttemptId &&
+            "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))] max-w-lg overflow-hidden sm:max-w-lg",
+        )}
         closeButton={starting ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}
         onEscapeKeyDown={(event) => {
@@ -101,9 +102,15 @@ export function WorkspaceSessionCreateDialog({
           if (starting) event.preventDefault();
         }}
       >
-        <DialogHeader className="border-b border-border px-6 py-4">
+        <DialogHeader
+          className={cn("border-b border-border px-6 py-4", startupAttemptId && "px-4 py-3")}
+        >
           <DialogTitle>New chat</DialogTitle>
-          <DialogDescription>Choose where the agent works and how it starts.</DialogDescription>
+          <DialogDescription className={cn(startupAttemptId && "sr-only")}>
+            {startupAttemptId
+              ? "Follow session startup progress."
+              : "Choose where the agent works and how it starts."}
+          </DialogDescription>
         </DialogHeader>
         {startupAttemptId ? (
           <StartupDialogProgress

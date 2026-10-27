@@ -220,7 +220,11 @@ test("opening a saved failed fork closes its real dialog and retains the same fe
       status: { phase: "failed" },
       operations: original.operations,
     });
-    expect(view.getByRole("region", { name: "Session startup notifications" })).toBeDefined();
+    expect(
+      await view.findByRole("region", { name: "Session startup notifications" }),
+    ).toBeDefined();
+    fireEvent.click(await view.findByRole("button", { name: "View progress" }));
+    await view.findByRole("list", { name: "Session startup steps" });
     expect(view.getByText("Save forked session")).toBeDefined();
     expect(fork).toHaveBeenCalledTimes(1);
     expect(completed).toEqual([]);

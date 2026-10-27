@@ -31,7 +31,7 @@ export function StartupDialogProgress({
   }, [open, released, transferred]);
   return (
     <>
-      <DialogBody className="flex min-h-0 flex-col overflow-hidden px-6 py-5">
+      <DialogBody className="flex min-h-0 flex-col overflow-hidden px-4 py-3">
         <Trace
           attempt={attempt}
           openAfterRecovery={shouldOpenRecoveredTask(attempt, open, hasFailed)}
@@ -97,33 +97,30 @@ function Footer({
   onContinueInBackground,
   onEditChoices,
   onRepairSavedSession,
-}: StartupDialogActions & { attempt: StartupAttempt | null }): ReactElement {
+}: StartupDialogActions & { attempt: StartupAttempt | null }): ReactElement | null {
   const pending = !attempt || startupIsPending(attempt);
-  if (pending)
+  if (pending) {
+    if (!onContinueInBackground) return null;
     return (
-      <DialogFooter className="mt-0 min-h-20 items-center justify-between border-t border-border px-6 py-4 sm:justify-between">
-        <p className="text-xs text-muted-foreground">
-          You can follow command output in the step details.
-        </p>
-        {onContinueInBackground ? (
-          <Button type="button" variant="secondary" onClick={onContinueInBackground}>
-            Continue in background
-          </Button>
-        ) : null}
+      <DialogFooter className="mt-0 min-h-13 items-center border-t border-border px-4 py-2">
+        <Button type="button" size="sm" variant="secondary" onClick={onContinueInBackground}>
+          Continue in background
+        </Button>
       </DialogFooter>
     );
+  }
   return (
-    <DialogFooter className="mt-0 min-h-20 items-center justify-between border-t border-border px-6 py-4 sm:justify-between">
-      <Button type="button" variant="outline" onClick={onClose}>
+    <DialogFooter className="mt-0 min-h-13 items-center justify-between border-t border-border px-4 py-2 sm:justify-between">
+      <Button type="button" size="sm" variant="outline" onClick={onClose}>
         Close
       </Button>
       {onEditChoices && attempt?.ownership.state === "not_saved" ? (
-        <Button type="button" variant="secondary" onClick={onEditChoices}>
+        <Button type="button" size="sm" variant="secondary" onClick={onEditChoices}>
           Edit choices
         </Button>
       ) : null}
       {onRepairSavedSession && canRepairSavedWorkspace(attempt) ? (
-        <Button type="button" variant="secondary" onClick={onRepairSavedSession}>
+        <Button type="button" size="sm" variant="secondary" onClick={onRepairSavedSession}>
           Retry session preparation
         </Button>
       ) : null}

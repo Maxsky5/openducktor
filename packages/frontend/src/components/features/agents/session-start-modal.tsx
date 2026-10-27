@@ -35,15 +35,81 @@ import {
   type SessionStartModalModel,
   type SessionStartSourceOption,
 } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
-import { useSessionStartKickoffDraft } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
+import {
+  type SessionStartKickoffDraft,
+  useSessionStartKickoffDraft,
+} from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
+import { cn } from "@/lib/utils";
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
-  const {
+  const { open, title, description, isStarting, onOpenChange } = model;
+  const kickoffDraft = useSessionStartKickoffDraft({
+    requestId: model.requestId,
     open,
-    title,
-    description,
+    prompt: model.kickoffPrompt,
+  });
+  const speed = useSessionStartSpeed(model);
+  const showingProgress = model.phase.kind === "progress";
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (isStarting) {
+          return;
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent
+        className={cn(
+          "sm:max-w-2xl",
+          showingProgress &&
+            "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))] max-w-lg overflow-hidden p-0 sm:max-w-lg",
+        )}
+        closeButton={isStarting ? null : undefined}
+        onEscapeKeyDown={(event) => {
+          if (isStarting) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (isStarting) event.preventDefault();
+        }}
+      >
+        <DialogHeader className={cn(showingProgress && "border-b border-border px-4 py-3")}>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className={cn(showingProgress && "sr-only")}>
+            {showingProgress ? "Follow session startup progress." : description}
+          </DialogDescription>
+        </DialogHeader>
+
+        {model.phase.kind === "progress" ? (
+          <StartupDialogProgress
+            open={open}
+            startupAttemptId={model.phase.startupAttemptId}
+            onClose={() => onOpenChange(false)}
+            onContinueInBackground={model.onContinueInBackground}
+            onEditChoices={model.onEditChoices}
+          />
+        ) : (
+          <SessionStartForm model={model} kickoffDraft={kickoffDraft} speed={speed} />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SessionStartForm({
+  model,
+  kickoffDraft,
+  speed,
+}: {
+  model: SessionStartModalModel;
+  kickoffDraft: SessionStartKickoffDraft;
+  speed: ReturnType<typeof useSessionStartSpeed>;
+}): ReactElement {
+  const {
     confirmLabel,
     backgroundConfirmLabel = "Run in background",
     cancelLabel = "Cancel",
@@ -71,13 +137,6 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm,
   } = model;
 
-  const kickoffDraft = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open,
-    prompt: model.kickoffPrompt,
-  });
-
-  const { control: speed, change: speedChange } = useSessionStartSpeed(model);
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const availability = resolveSessionStartAvailability(model, {
@@ -94,7 +153,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const confirmInput = buildSessionStartConfirmDraft({
     model,
     requiresExistingSession,
-    speedChange,
+    speedChange: speed.change,
     kickoffPrompt: kickoffDraft.value,
   });
   const handleConfirm = (): void => {
@@ -114,126 +173,85 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     isReuseMode,
     isSelectionCatalogLoading,
   });
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (isStarting) {
-          return;
-        }
-        onOpenChange(nextOpen);
-      }}
-    >
-      <DialogContent
-        className={
-          model.phase.kind === "progress"
-            ? "h-[min(36rem,calc(100dvh-2rem))] sm:max-w-2xl"
-            : "sm:max-w-2xl"
-        }
-        closeButton={isStarting ? null : undefined}
-        onEscapeKeyDown={(event) => {
-          if (isStarting) event.preventDefault();
-        }}
-        onPointerDownOutside={(event) => {
-          if (isStarting) event.preventDefault();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-
-        {model.phase.kind === "progress" ? (
-          <StartupDialogProgress
-            open={open}
-            startupAttemptId={model.phase.startupAttemptId}
-            onClose={() => onOpenChange(false)}
-            onContinueInBackground={model.onContinueInBackground}
-            onEditChoices={model.onEditChoices}
+    <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+      <DialogBody className="pt-2 pb-4">
+        <fieldset className="space-y-5" disabled={isStarting}>
+          <StartModeField
+            availableStartModes={availableStartModes}
+            hasExistingSessionOptions={hasExistingSessionOptions}
+            selectedStartMode={selectedStartMode}
+            onSelectStartMode={onSelectStartMode}
           />
-        ) : (
-          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
-            <DialogBody className="pt-2 pb-4">
-              <fieldset className="space-y-5" disabled={isStarting}>
-                <StartModeField
-                  availableStartModes={availableStartModes}
-                  hasExistingSessionOptions={hasExistingSessionOptions}
-                  selectedStartMode={selectedStartMode}
-                  onSelectStartMode={onSelectStartMode}
-                />
 
-                {requiresExistingSession ? (
-                  <ExistingSessionField
-                    disabled={isStarting || !hasExistingSessionOptions}
-                    existingSessionOptions={existingSessionOptions}
-                    selectedSourceSessionValue={selectedSourceSessionValue}
-                    onSelectSourceSessionValue={onSelectSourceSessionValue}
-                  />
-                ) : null}
-
-                {showTargetBranchSelector ? (
-                  <TargetBranchField
-                    disabled={isStarting || targetBranchOptions.length === 0}
-                    error={model.targetBranchError ?? null}
-                    selectedTargetBranch={selectedTargetBranch}
-                    targetBranchOptions={targetBranchOptions}
-                    onSelectTargetBranch={onSelectTargetBranch}
-                  />
-                ) : null}
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
-                    <p className="text-sm font-medium text-foreground">Runtime and model</p>
-                    <SessionStartModelPicker model={model} />
-                  </div>
-                  <ModelVariantFields
-                    speed={speed}
-                    isSelectionCatalogLoading={isSelectionCatalogLoading}
-                    selectedModelSelection={selectedModelSelection}
-                    selectedVariant={selectedVariant}
-                    supportsVariants={supportsVariants}
-                    variantDisabled={variantDisabled}
-                    variantOptions={variantOptions}
-                    onSelectVariant={onSelectVariant}
-                  />
-                </div>
-
-                {supportsProfiles ? (
-                  <RuntimeProfileField
-                    runtimeProfileOptions={runtimeProfileOptions}
-                    disabled={runtimeProfileDisabled}
-                    helperText={runtimeProfileHelperText}
-                    selectedProfileId={selectedProfileId}
-                    onSelectRuntimeProfile={onSelectRuntimeProfile}
-                  />
-                ) : null}
-
-                <SessionStartKickoffField
-                  draft={kickoffDraft}
-                  disabled={isStarting}
-                  loading={model.isKickoffPromptLoading}
-                  error={model.kickoffPromptError}
-                  onRetry={model.onRetryKickoffPrompt}
-                />
-              </fieldset>
-            </DialogBody>
-
-            <SessionStartModalFooter
-              allowRunInBackground={allowRunInBackground}
-              backgroundConfirmLabel={backgroundConfirmLabel}
-              cancelLabel={cancelLabel}
-              confirmDisabled={confirmDisabled}
-              confirmLabel={confirmLabel}
-              confirmInput={confirmInput}
-              isStarting={isStarting}
-              onConfirm={onConfirm}
-              onOpenChange={onOpenChange}
+          {requiresExistingSession ? (
+            <ExistingSessionField
+              disabled={isStarting || !hasExistingSessionOptions}
+              existingSessionOptions={existingSessionOptions}
+              selectedSourceSessionValue={selectedSourceSessionValue}
+              onSelectSourceSessionValue={onSelectSourceSessionValue}
             />
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+          ) : null}
+
+          {showTargetBranchSelector ? (
+            <TargetBranchField
+              disabled={isStarting || targetBranchOptions.length === 0}
+              error={model.targetBranchError ?? null}
+              selectedTargetBranch={selectedTargetBranch}
+              targetBranchOptions={targetBranchOptions}
+              onSelectTargetBranch={onSelectTargetBranch}
+            />
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
+              <p className="text-sm font-medium text-foreground">Runtime and model</p>
+              <SessionStartModelPicker model={model} />
+            </div>
+            <ModelVariantFields
+              speed={speed.control}
+              isSelectionCatalogLoading={isSelectionCatalogLoading}
+              selectedModelSelection={selectedModelSelection}
+              selectedVariant={selectedVariant}
+              supportsVariants={supportsVariants}
+              variantDisabled={variantDisabled}
+              variantOptions={variantOptions}
+              onSelectVariant={onSelectVariant}
+            />
+          </div>
+
+          {supportsProfiles ? (
+            <RuntimeProfileField
+              runtimeProfileOptions={runtimeProfileOptions}
+              disabled={runtimeProfileDisabled}
+              helperText={runtimeProfileHelperText}
+              selectedProfileId={selectedProfileId}
+              onSelectRuntimeProfile={onSelectRuntimeProfile}
+            />
+          ) : null}
+
+          <SessionStartKickoffField
+            draft={kickoffDraft}
+            disabled={isStarting}
+            loading={model.isKickoffPromptLoading}
+            error={model.kickoffPromptError}
+            onRetry={model.onRetryKickoffPrompt}
+          />
+        </fieldset>
+      </DialogBody>
+
+      <SessionStartModalFooter
+        allowRunInBackground={allowRunInBackground}
+        backgroundConfirmLabel={backgroundConfirmLabel}
+        cancelLabel={cancelLabel}
+        confirmDisabled={confirmDisabled}
+        confirmLabel={confirmLabel}
+        confirmInput={confirmInput}
+        isStarting={isStarting}
+        onConfirm={onConfirm}
+        onOpenChange={onOpenChange}
+      />
+    </form>
   );
 }
 

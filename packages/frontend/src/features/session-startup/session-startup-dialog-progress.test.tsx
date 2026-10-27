@@ -213,7 +213,11 @@ test.each([
         expect(retained).toMatchObject({ id, presentation: "notification", status: { phase } });
         expect(retained?.operations).toEqual(original?.operations);
         if (kind === "task") expect(retained?.instruction?.state).toBe("not_sent");
-        expect(view.getByRole("region", { name: "Session startup notifications" })).toBeDefined();
+        expect(
+          await view.findByRole("region", { name: "Session startup notifications" }),
+        ).toBeDefined();
+        fireEvent.click(await view.findByRole("button", { name: "View progress" }));
+        await view.findByRole("list", { name: "Session startup steps" });
         expect(view.getByText("Create worktree")).toBeDefined();
         expect(retry).not.toHaveBeenCalled();
         await act(async () => {
@@ -229,7 +233,7 @@ test.each([
         });
         expect(retry).toHaveBeenCalledTimes(1);
         expect(mutation).not.toHaveBeenCalled();
-        fireEvent.click(view.getByRole("button", { name: "Dismiss session startup" }));
+        fireEvent.click(view.getByRole("button", { name: "Close toast" }));
         expect(connection.startupAttempts.getAttempt(id)).toBeNull();
       }
       expect(mutation).not.toHaveBeenCalled();

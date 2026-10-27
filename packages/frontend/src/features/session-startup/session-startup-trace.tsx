@@ -1,13 +1,5 @@
 import type { StartupStep } from "@openducktor/contracts";
-import {
-  Check,
-  ChevronDown,
-  Circle,
-  CircleDashed,
-  LoaderCircle,
-  Minus,
-  OctagonAlert,
-} from "lucide-react";
+import { Check, Circle, CircleDashed, LoaderCircle, Minus, OctagonAlert } from "lucide-react";
 import {
   lazy,
   type ReactElement,
@@ -25,11 +17,20 @@ import {
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { terminalCommandResultNotice } from "@/features/terminals/terminal-command-result";
-import { BUILTIN_ROLE_LABELS, builtinRoleId } from "@openducktor/workflows";
 import { startupPresentation, type StartupPresentation } from "./startup-presentation";
+import {
+  Trace,
+  TraceCollapsible,
+  TraceCollapsibleContent,
+  TraceCollapsibleTrigger,
+  TraceDescription,
+  TraceIcon,
+  TraceLine,
+  TraceTitle,
+} from "@/components/ui/trace";
+import { startupOrigin, startupProgress, startupStepFailed } from "./startup-summary";
 
 const StartupActionOutput = lazy(() =>
   import("./startup-action-output").then((module) => ({ default: module.StartupActionOutput })),
@@ -58,100 +59,101 @@ export function StartupTrace({
   attempt,
   className,
   onOpen,
+  showHeader = true,
 }: {
   attempt: StartupAttempt;
   className?: string;
   onOpen?: () => void;
+  showHeader?: boolean;
 }): ReactElement {
   const connection = useClientConnection();
   const presentation = startupPresentation(connection, attempt.id);
-  const scroll = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLElement>(null);
   const rows = attempt.operations.flatMap((operation) =>
     operation.steps.map((step) => ({ step, id: `${operation.context.operationId}:${step.id}` })),
   );
-  const instruction = attempt.instruction;
-  const current = rows.findLast((row) => ["waiting", "running", "failed"].includes(row.step.state));
+  const progress = startupProgress(attempt);
+  const repeatedError = rows.some(
+    ({ step }) =>
+      step.failure &&
+      (attempt.error === step.failure.message ||
+        attempt.error === `${step.failure.message} ${step.failure.nextAction}`),
+  );
   useLayoutEffect(() => {
     if (scroll.current) scroll.current.scrollTop = presentation.scrollTop;
   }, [presentation]);
-
   return (
     <div
-      className={cn("flex min-h-0 min-w-0 flex-col gap-4", className)}
+      className={cn("flex min-h-0 min-w-0 flex-col gap-3", className)}
       data-startup-attempt={attempt.id}
     >
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
-            {phaseLabels[attempt.status.phase]}
-            {current ? ` · ${current.step.label}` : ""}
+      {showHeader ? (
+        <div className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
+          <p title={attempt.origin.repoPath} className="min-w-0 truncate">
+            {startupOrigin(attempt)}
           </p>
-          <p className="mt-1 break-words text-xs text-muted-foreground">{attempt.label}</p>
-          <p className="mt-1 break-words text-xs text-muted-foreground">
-            {attempt.origin.scope.kind === "task"
-              ? `Task ${attempt.origin.scope.taskId} · ${BUILTIN_ROLE_LABELS[builtinRoleId(attempt.origin.scope.role)]}`
-              : "Workspace chat"}{" "}
-            · <span className="font-mono">{attempt.origin.repoPath}</span>
+          <p role="status" aria-live="polite" aria-atomic="true" className="shrink-0 tabular-nums">
+            <span className="sr-only">{phaseLabels[attempt.status.phase]}. </span>
+            {progress.total
+              ? `${progress.completed} of ${progress.total} steps`
+              : phaseLabels[attempt.status.phase]}
           </p>
         </div>
-        {attempt.status.phase === "ready" ? (
-          <Badge variant="secondary">
-            <Check aria-hidden="true" />
-            Ready
-          </Badge>
-        ) : null}
-      </div>
-      {attempt.status.confirmation === "unconfirmed" ? (
-        <p
-          role="status"
-          className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground"
-        >
-          Startup is not confirmed. Known progress stays here while the connection recovers. Inspect
-          the session before you try again.
-        </p>
       ) : null}
-      <div
+      <section
         ref={scroll}
+        aria-label="Session startup details"
+        tabIndex={0}
         onScroll={(event) => {
           presentation.scrollTop = event.currentTarget.scrollTop;
         }}
-        className="min-h-0 max-h-[48dvh] overflow-y-auto overscroll-contain pr-2 [overflow-anchor:none]"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none]"
       >
-        <ol aria-label="Session startup steps" className="min-w-0">
-          {rows.length ? (
-            rows.map(({ step, id }) => (
-              <StartupStepRow key={id} step={step} rowId={id} presentation={presentation} />
-            ))
-          ) : (
-            <li className="flex items-center gap-3 text-sm">
-              {attempt.status.phase === "submitting" ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  className="size-4 shrink-0 motion-safe:animate-spin"
-                />
-              ) : null}
-              {attempt.status.phase === "submitting"
-                ? "Submitting request"
-                : "No startup steps were reported."}
-            </li>
-          )}
-        </ol>
-      </div>
-      {instruction?.state === "queued" ? (
-        <p className="text-sm text-muted-foreground">The initial instruction is queued.</p>
-      ) : null}
-      {instruction?.state === "unknown" ? (
-        <p className="text-sm text-warning-surface-foreground">
-          Instruction delivery is not confirmed. Inspect the session before sending it again.
-        </p>
-      ) : null}
-      {attempt.error ? (
-        <p role="alert" className="break-words text-sm text-destructive">
-          {attempt.error}
-        </p>
-      ) : null}
-      <StartupSavedSession attempt={attempt} presentation={presentation} onOpen={onOpen} />
-      <StartupRecoveryActions attempt={attempt} />
+        {attempt.status.confirmation === "unconfirmed" ? (
+          <p
+            role="status"
+            className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-xs text-warning-surface-foreground"
+          >
+            Startup is not confirmed. Inspect the saved session before starting or sending again.
+          </p>
+        ) : null}
+        <Trace>
+          <ul aria-label="Session startup steps" className="flex min-w-0 flex-col gap-1">
+            {rows.length ? (
+              rows.map(({ step, id }) => (
+                <StartupStepRow key={id} step={step} rowId={id} presentation={presentation} />
+              ))
+            ) : (
+              <li className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+                {attempt.status.phase === "submitting" ? (
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="size-4 shrink-0 motion-safe:animate-spin"
+                  />
+                ) : null}
+                {attempt.status.phase === "submitting"
+                  ? "Submitting request"
+                  : "No startup steps were reported."}
+              </li>
+            )}
+          </ul>
+        </Trace>
+        {attempt.error && !repeatedError ? (
+          <p role="alert" className="mt-2 break-words text-xs text-destructive">
+            {attempt.error}
+          </p>
+        ) : null}
+        {attempt.instruction?.state === "queued" ? (
+          <p className="text-xs text-muted-foreground">The initial instruction is queued.</p>
+        ) : null}
+        {attempt.instruction?.state === "unknown" ? (
+          <p className="text-xs text-warning-surface-foreground">
+            Instruction delivery is unconfirmed. Inspect the session before sending again.
+          </p>
+        ) : null}
+        <StartupSavedSession attempt={attempt} presentation={presentation} onOpen={onOpen} />
+        <StartupRecoveryActions attempt={attempt} />
+      </section>
     </div>
   );
 }
@@ -166,57 +168,60 @@ function StartupStepRow({
   presentation: StartupPresentation;
 }): ReactElement {
   const [expanded, setExpanded] = useState(() => presentation.expandedSteps.has(rowId));
-  const action = step.action;
+  const row = useRef<HTMLLIElement>(null);
+  const reveal = useRef(false);
+  useLayoutEffect(() => {
+    // Only an explicit expansion moves the viewport. Stream updates keep the reader's place.
+    if (!expanded || !reveal.current) return;
+    reveal.current = false;
+    const frame = requestAnimationFrame(() => row.current?.scrollIntoView({ block: "start" }));
+    return () => cancelAnimationFrame(frame);
+  }, [expanded]);
   const hasDetails = hasStepDetails(step);
-  const { status, actionFailed, stateLabel } = stepPresentation(step);
+  const { status, stateLabel, traceStatus } = stepPresentation(step);
   const Icon = status.icon;
-
+  const failed = startupStepFailed(step);
+  const line = (
+    <TraceLine
+      {...(traceStatus ? { status: traceStatus } : {})}
+      className={cn(
+        "min-h-7 w-full",
+        step.state === "completed" && !failed && "text-foreground/80",
+      )}
+    >
+      <TraceIcon>
+        <Icon className={cn("size-3.5", step.state === "running" && "motion-safe:animate-spin")} />
+      </TraceIcon>
+      <TraceTitle className="flex-1 text-[13px]">{step.label}</TraceTitle>
+      {stateLabel === "Completed" ? (
+        <span className="sr-only">Completed</span>
+      ) : (
+        <TraceDescription className="text-[11px]">{stateLabel}</TraceDescription>
+      )}
+    </TraceLine>
+  );
   return (
-    <li className="relative min-w-0 pb-5 pl-8 last:pb-0 before:absolute before:bottom-0 before:left-[9px] before:top-6 before:w-px before:bg-border last:before:hidden">
-      <span
-        className={cn(
-          "absolute left-0 top-0.5 flex size-5 items-center justify-center rounded-full bg-card",
-          (step.state === "failed" || actionFailed) && "text-destructive",
-        )}
-      >
-        <Icon
-          aria-hidden="true"
-          className={cn("size-4", step.state === "running" && "motion-safe:animate-spin")}
-        />
-      </span>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <p className="min-w-0 break-words text-sm font-medium">{step.label}</p>
-        <span className="shrink-0 text-xs text-muted-foreground">{stateLabel}</span>
-      </div>
-      {step.failure ? (
-        <p className="mt-1 break-words text-sm text-destructive">{step.failure.message}</p>
-      ) : null}
+    <li ref={row} className="min-w-0 scroll-mt-1">
       {hasDetails ? (
-        <details
+        <TraceCollapsible
           open={expanded}
-          onToggle={(event) => {
-            const next = event.currentTarget.open;
+          onOpenChange={(next) => {
+            reveal.current = next;
             setExpanded(next);
             if (next) presentation.expandedSteps.add(rowId);
             else presentation.expandedSteps.delete(rowId);
           }}
-          className="mt-1.5 min-w-0"
         >
-          <summary className="w-fit cursor-pointer list-none rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <span className="flex items-center gap-1">
-              <ChevronDown aria-hidden="true" className={cn("size-3", !expanded && "-rotate-90")} />
-              {action ? "Command and output" : "Details"}
-            </span>
-          </summary>
-          <div className="mt-2 flex min-w-0 flex-col gap-2 text-xs text-muted-foreground">
+          <TraceCollapsibleTrigger className="w-full">{line}</TraceCollapsibleTrigger>
+          <TraceCollapsibleContent className="flex flex-col gap-2 text-xs">
             {step.details.map((detail, index) => (
               <p key={`${index}-${detail}`} className="break-words whitespace-pre-wrap">
                 {detail}
               </p>
             ))}
-            {action ? (
+            {step.action ? (
               <StartupActionDetails
-                action={action}
+                action={step.action}
                 expanded={expanded}
                 presentation={presentation}
               />
@@ -228,9 +233,25 @@ function StartupStepRow({
                 {resource.nextAction ? ` ${resource.nextAction}` : ""}
               </p>
             ))}
-            {step.failure ? <p>{step.failure.nextAction}</p> : null}
-          </div>
-        </details>
+            {step.failure ? (
+              <>
+                <p className="max-h-32 overflow-y-auto break-words whitespace-pre-wrap">
+                  {step.failure.message}
+                </p>
+                <p>{step.failure.nextAction}</p>
+              </>
+            ) : null}
+          </TraceCollapsibleContent>
+        </TraceCollapsible>
+      ) : (
+        <div>{line}</div>
+      )}
+      {step.failure && !expanded ? (
+        <p className="mb-1 ml-6 break-words text-xs text-destructive">
+          {step.action?.result
+            ? terminalCommandResultNotice(step.action.result).text
+            : step.failure.message}
+        </p>
       ) : null}
     </li>
   );
@@ -248,14 +269,17 @@ function hasStepDetails(step: StartupStep): boolean {
 function stepPresentation(step: StartupStep) {
   const action = step.action;
   const result = action?.result;
-  const actionFailed = result && !terminalCommandSucceeded(result);
-  const displayState = actionFailed ? "failed" : step.state;
-  const status = stepStates[displayState];
+  const failed = startupStepFailed(step);
+  const status = stepStates[failed ? "failed" : step.state];
   const stateLabel =
     action && !action.waitBeforeAgentStart && !result && step.state === "completed"
       ? "Started"
       : status.label;
-  return { status, actionFailed, stateLabel };
+  let traceStatus: "running" | "error" | "pending" | undefined;
+  if (failed) traceStatus = "error";
+  else if (step.state === "running") traceStatus = "running";
+  else if (step.state === "pending" || step.state === "not_run") traceStatus = "pending";
+  return { status, stateLabel, traceStatus };
 }
 
 function StartupActionDetails({
@@ -285,7 +309,13 @@ function StartupActionDetails({
         </p>
       ) : null}
       {expanded && action.terminalId ? (
-        <Suspense fallback={<p>Loading command output…</p>}>
+        <Suspense
+          fallback={
+            <p className="h-58" role="status">
+              Loading command output…
+            </p>
+          }
+        >
           <StartupActionOutput terminalId={action.terminalId} presentation={presentation} />
         </Suspense>
       ) : null}
@@ -317,18 +347,25 @@ function StartupSavedSession({
   const saved = ownership.target;
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         <Button
           type="button"
           size="sm"
-          variant="outline"
+          variant="ghost"
+          className="h-7 px-2 text-xs text-muted-foreground"
           onClick={presentation.inspection.toggle}
           aria-expanded={inspect}
         >
           Inspect saved session
         </Button>
         {onOpen && canOpenStartupSession(attempt) ? (
-          <Button type="button" size="sm" variant="outline" onClick={onOpen}>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-7 px-2 text-xs"
+            onClick={onOpen}
+          >
             Open session
           </Button>
         ) : null}
@@ -353,13 +390,13 @@ function StartupSavedSession({
   );
 }
 
-function StartupRecoveryActions({ attempt }: { attempt: StartupAttempt }): ReactElement {
+export function StartupRecoveryActions({ attempt }: { attempt: StartupAttempt }): ReactElement {
   const [actionError, setActionError] = useState<string | null>(null);
   const pending = startupIsPending(attempt);
   return (
     <>
       {!pending && attempt.recoveryActions?.length ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {attempt.recoveryActions.map((action) => (
             <Button
               key={action.kind}

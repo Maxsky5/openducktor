@@ -14,8 +14,14 @@ import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/ag
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { hasStartupPreparedHandoff } from "@openducktor/frontend-core/sessions/startup/startup-prepared-handoff";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { InlineStartup } from "@/features/session-startup/inline-session-startup";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { QueryProvider } from "@/test-utils/query-provider";
+import {
+  createWorkspaceRecordFixture,
+  createWorkspaceStateFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { useTaskSessionFork } from "./use-task-session-fork";
 
 const SOURCE_HREF = "/sessions?workspace=workspace&kind=task&task=task&session=source&agent=build";
@@ -116,6 +122,7 @@ function createForkHarness({
   const connection = createTestClientConnection({ host, scheduleTask: () => () => {} });
   const live = createStartupLiveSourceFake(connection.queryClient);
   const store = createAgentSessionsStore("/repo");
+  const workspace = createWorkspaceRecordFixture({ workspaceId: "workspace", repoPath: "/repo" });
   function Source({ source }: { source: string }) {
     const { actions, error } = useTaskSessionFork({
       repoPath: "/repo",
@@ -184,7 +191,16 @@ function createForkHarness({
     <MemoryRouter initialEntries={[SOURCE_HREF]}>
       <QueryProvider connection={connection}>
         <AgentSessionsContext value={store}>
-          <Harness />
+          <WorkspaceStateContext
+            value={createWorkspaceStateFixture({
+              activeWorkspace: workspace,
+              workspaces: [workspace],
+            })}
+          >
+            <WorkspacePreviewTransitionGuardProvider>
+              <Harness />
+            </WorkspacePreviewTransitionGuardProvider>
+          </WorkspaceStateContext>
         </AgentSessionsContext>
       </QueryProvider>
     </MemoryRouter>,
@@ -221,7 +237,9 @@ test("a reply fork shows inline progress and opens the exact child once before r
   try {
     fireEvent.click(harness.view.getByRole("button", { name: "Fork reply" }));
     await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
-    expect(harness.view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+    expect(
+      harness.view.getByRole("button", { name: /View progress$/, expanded: false }),
+    ).toBeDefined();
     expect(harness.view.getByLabelText("Current location").textContent).toBe(SOURCE_HREF);
     await harness.finish();
     await waitFor(
@@ -238,7 +256,7 @@ test("a reply fork shows inline progress and opens the exact child once before r
         workingDirectory: "/repo/worktrees/task",
       }),
     ).toBe(true);
-    expect(harness.view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(harness.view.queryByRole("button", { name: /View progress$/ })).toBeNull();
   } finally {
     await harness.dispose();
   }
@@ -251,7 +269,9 @@ test.each(["Leave page", "Switch source session", "Hide view"])(
     try {
       fireEvent.click(harness.view.getByRole("button", { name: "Fork reply" }));
       await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
-      expect(harness.view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+      expect(
+        harness.view.getByRole("button", { name: /View progress$/, expanded: false }),
+      ).toBeDefined();
       const id = harness.connection.startupAttempts.getSnapshot()[0]?.id;
       if (!id) throw new Error("Fork attempt is missing.");
       fireEvent.click(harness.view.getByRole("button", { name: action }));
@@ -288,6 +308,7 @@ test("repair opens the retained fork once without another fork request", async (
     fireEvent.click(harness.view.getByRole("button", { name: "Fork reply" }));
     await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
     await harness.finish();
+    fireEvent.click(harness.view.getByRole("button", { name: /View progress$/, expanded: false }));
     fireEvent.click(
       await harness.view.findByRole(
         "button",
@@ -320,6 +341,9 @@ test.each(["fork", "repair"] as const)(
       await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
       if (operation === "repair") {
         await harness.finish();
+        fireEvent.click(
+          harness.view.getByRole("button", { name: /View progress$/, expanded: false }),
+        );
         fireEvent.click(
           await harness.view.findByRole(
             "button",

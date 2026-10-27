@@ -6,3 +6,31 @@
   /* A strong ease-out for UI that enters, leaves, or settles. */
   --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+@keyframes trace-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@utility shimmer {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  animation: trace-shimmer 2s linear infinite;
+}
+
+@utility shimmer-none {
+  color: inherit;
+  background-image: none;
+  animation: none;
+}

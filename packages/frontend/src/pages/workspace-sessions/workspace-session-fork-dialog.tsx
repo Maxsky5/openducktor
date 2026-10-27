@@ -38,6 +38,7 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { useWorkspaceForkHandoff } from "./use-workspace-fork-handoff";
+import { cn } from "@/lib/utils";
 
 export function WorkspaceSessionForkDialog({
   open,
@@ -129,11 +130,11 @@ export function WorkspaceSessionForkDialog({
       }}
     >
       <DialogContent
-        className={
-          startupAttemptId
-            ? "my-0 h-[min(36rem,calc(100dvh-2rem))] gap-0 p-0 sm:max-w-2xl"
-            : "my-0 gap-0 p-0 sm:max-w-2xl"
-        }
+        className={cn(
+          "my-0 gap-0 p-0 sm:max-w-2xl",
+          startupAttemptId &&
+            "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))] max-w-lg overflow-hidden sm:max-w-lg",
+        )}
         closeButton={starting ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}
         onEscapeKeyDown={(event) => {
@@ -143,9 +144,13 @@ export function WorkspaceSessionForkDialog({
           if (starting) event.preventDefault();
         }}
       >
-        <DialogHeader className="border-b border-border px-6 py-4">
+        <DialogHeader
+          className={cn("border-b border-border px-6 py-4", startupAttemptId && "px-4 py-3")}
+        >
           <DialogTitle>{FORK_CHAT_TEXT.title}</DialogTitle>
-          <DialogDescription>{FORK_CHAT_TEXT.description}</DialogDescription>
+          <DialogDescription className={cn(startupAttemptId && "sr-only")}>
+            {startupAttemptId ? "Follow session startup progress." : FORK_CHAT_TEXT.description}
+          </DialogDescription>
         </DialogHeader>
         {startupAttemptId ? (
           <StartupDialogProgress

@@ -89,11 +89,12 @@ function StartupStack(): ReactElement | null {
 
 const styles = StyleSheet.create((theme) => ({
   host: { position: "absolute", left: theme.space.md, right: theme.space.md, alignItems: "center" },
-  stack: { width: "100%", maxWidth: 520, flexShrink: 1 },
+  stack: { width: "100%", maxWidth: 520, flexGrow: 0, flexShrink: 1 },
   content: { gap: theme.space.sm },
   card: {
     overflow: "hidden",
     borderRadius: theme.radius.xl,
+    borderCurve: "continuous",
     borderWidth: 1,
     borderColor: theme.desktop.border,
     backgroundColor: theme.desktop.card,

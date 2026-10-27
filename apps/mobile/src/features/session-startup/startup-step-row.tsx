@@ -28,11 +28,13 @@ const STEP_ICONS = {
 export function StartupStepRow({
   attemptId,
   step,
+  last,
   expanded,
   toggle,
 }: {
   attemptId: string;
   step: StartupStep;
+  last: boolean;
   expanded: boolean;
   toggle: () => void;
 }): ReactElement {
@@ -42,40 +44,33 @@ export function StartupStepRow({
   const displayState = result && !terminalCommandSucceeded(result) ? "failed" : step.state;
   return (
     <View style={styles.step}>
-      <View style={styles.marker}>
+      {last ? null : <View pointerEvents="none" style={styles.line} />}
+      <Touchable
+        feedback="opacity"
+        onPress={toggle}
+        disabled={!hasDetails}
+        dimWhenDisabled={false}
+        accessibilityRole={hasDetails ? "button" : "text"}
+        accessibilityState={hasDetails ? { expanded } : undefined}
+        accessibilityLabel={`${step.label}. ${STEP_LABELS[displayState]}`}
+        style={styles.stepHeading}
+      >
         <Icon
           name={STEP_ICONS[displayState]}
           size={16}
           color={displayState === "failed" ? "red" : "secondaryLabel"}
         />
-        <View style={styles.line} />
-      </View>
+        <Text variant="subhead" weight="medium" style={styles.stepName}>
+          {step.label}
+        </Text>
+        <Text variant="caption1" tone="secondary">
+          {STEP_LABELS[displayState]}
+        </Text>
+        {hasDetails ? (
+          <Icon name={expanded ? "chevron-up" : "chevron-down"} size={16} color="secondaryLabel" />
+        ) : null}
+      </Touchable>
       <View style={styles.stepBody}>
-        <Touchable
-          feedback="opacity"
-          onPress={toggle}
-          disabled={!hasDetails}
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          accessibilityLabel={`${step.label}. ${STEP_LABELS[displayState]}`}
-          style={styles.stepHeading}
-        >
-          <View style={styles.stepName}>
-            <Text variant="subhead" weight="medium">
-              {step.label}
-            </Text>
-            <Text variant="caption1" tone="secondary">
-              {STEP_LABELS[displayState]}
-            </Text>
-          </View>
-          {hasDetails ? (
-            <Icon
-              name={expanded ? "chevron-up" : "chevron-down"}
-              size={16}
-              color="secondaryLabel"
-            />
-          ) : null}
-        </Touchable>
         {step.failure ? (
           <Text variant="footnote" tone="red" selectable>
             {step.failure.message}
@@ -136,11 +131,22 @@ function StartupStepDetails({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  step: { flexDirection: "row", gap: theme.space.sm },
-  marker: { width: 20, alignItems: "center", gap: theme.space.xs, paddingTop: theme.space.xs },
-  line: { width: 1, flex: 1, minHeight: 12, backgroundColor: theme.desktop.border },
-  stepBody: { flex: 1, minWidth: 0, gap: theme.space.xs },
-  stepHeading: { flexDirection: "row", alignItems: "center", gap: theme.space.sm, minHeight: 44 },
-  stepName: { flex: 1, gap: 2 },
-  details: { gap: theme.space.sm, paddingVertical: theme.space.sm },
+  step: { minWidth: 0 },
+  line: {
+    position: "absolute",
+    left: 7.5,
+    top: theme.touchTarget / 2 + 8,
+    bottom: -theme.touchTarget / 2 + 8,
+    width: 1,
+    backgroundColor: theme.desktop.border,
+  },
+  stepBody: { paddingLeft: 24, gap: theme.space.xs },
+  stepHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.sm,
+    minHeight: theme.touchTarget,
+  },
+  stepName: { flex: 1, minWidth: 0 },
+  details: { gap: theme.space.xs, paddingBottom: theme.space.sm },
 }));

@@ -1,18 +1,37 @@
-import { DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";
-import { X } from "lucide-react";
-import { type ReactElement, useEffect } from "react";
+import { Check, LoaderCircle, OctagonAlert } from "lucide-react";
+import { type CSSProperties, type ReactElement, useEffect, useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
+import {
+  canOpenStartupSession,
+  startupIsPending,
+} from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StartupTrace } from "./session-startup-trace";
-import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { Toaster } from "@/components/ui/sonner";
+import { StartupRecoveryActions, StartupTrace } from "./session-startup-trace";
 import { useOpenStartupSession } from "./use-open-startup-session";
-import { retainStartupPresentations } from "./startup-presentation";
+import { retainStartupPresentations, startupPresentation } from "./startup-presentation";
+import {
+  startupActivity,
+  startupIssue,
+  startupOrigin,
+  startupProgress,
+  startupTitle,
+} from "./startup-summary";
+
+const startupToasterStyle: CSSProperties & Record<`--${string}`, string> = {
+  "--width": "min(24rem, calc(100vw - 2rem))",
+  height: "calc(100dvh - 2rem)",
+  maxHeight: "calc(100dvh - 2rem)",
+  overflowY: "auto",
+  pointerEvents: "none",
+};
 
 export function StartupNotifications(): ReactElement | null {
   const connection = useClientConnection();
+  const toasterId = useId();
   const { startupAttempts } = connection;
   const attempts = useStartupAttempts();
   useEffect(
@@ -31,47 +50,156 @@ export function StartupNotifications(): ReactElement | null {
   const notifications = attempts.filter((attempt) => attempt.presentation === "notification");
   if (!notifications.length) return null;
   return (
-    <DismissableLayerBranch>
-      <section
-        aria-label="Session startup notifications"
-        className="pointer-events-none fixed right-4 top-16 z-[65] flex max-h-[calc(100dvh-6rem)] w-[26rem] max-w-[calc(100vw-2rem)] flex-col gap-3 overflow-y-auto overscroll-contain pb-4 [&>*]:pointer-events-auto"
-      >
-        {notifications.map((attempt) => (
-          <StartupNotice key={attempt.id} attempt={attempt} />
-        ))}
-      </section>
-    </DismissableLayerBranch>
+    <>
+      <Toaster
+        id={toasterId}
+        customAriaLabel="Session startup notifications"
+        position="top-right"
+        offset={16}
+        mobileOffset={16}
+        expand
+        visibleToasts={notifications.length}
+        hotkey={[]}
+        style={startupToasterStyle}
+        className="overscroll-contain [&>[data-sonner-toast]]:pointer-events-auto"
+      />
+      {notifications.map((attempt) => (
+        <StartupNotice key={attempt.id} attempt={attempt} toasterId={toasterId} />
+      ))}
+    </>
   );
 }
 
-function StartupNotice({ attempt }: { attempt: StartupAttempt }): ReactElement {
+function StartupNotice({
+  attempt,
+  toasterId,
+}: {
+  attempt: StartupAttempt;
+  toasterId: string;
+}): null {
   const connection = useClientConnection();
   const { openSession, openError } = useOpenStartupSession(attempt);
-  return (
-    <Card className="relative bg-card shadow-xl">
-      <CardHeader className="pr-12">
-        <CardTitle>Session startup</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <StartupTrace attempt={attempt} onOpen={openSession} />
-        {openError ? (
-          <p role="alert" className="mt-3 break-words text-sm text-destructive">
-            {openError}
-          </p>
-        ) : null}
-      </CardContent>
-      {!startupIsPending(attempt) ? (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="absolute right-2 top-2"
-          aria-label="Dismiss session startup"
-          onClick={() => connection.startupAttempts.dismiss(attempt.id)}
-        >
-          <X aria-hidden="true" />
-        </Button>
-      ) : null}
-    </Card>
+  const [expanded, setExpanded] = useState(() => {
+    const presentation = startupPresentation(connection, attempt.id);
+    return (
+      presentation.detailsOpen ||
+      presentation.expandedSteps.size > 0 ||
+      presentation.inspection.getSnapshot()
+    );
+  });
+  const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
+  const [contentHeight, setContentHeight] = useState(0);
+  const measuredHeight = useRef(0);
+  useEffect(() => {
+    if (!contentElement) return;
+    const observer = new ResizeObserver(() => {
+      const height = contentElement.getBoundingClientRect().height;
+      if (height === measuredHeight.current) return;
+      measuredHeight.current = height;
+      setContentHeight(height);
+    });
+    observer.observe(contentElement);
+    return () => observer.disconnect();
+  }, [contentElement]);
+  const toastId = `session-startup:${attempt.id}`;
+  useEffect(
+    () => () => {
+      toast.dismiss(toastId);
+    },
+    [connection, toastId],
   );
+  useEffect(() => {
+    const pending = startupIsPending(attempt);
+    const activity = startupActivity(attempt);
+    const issue = startupIssue(attempt);
+    const progress = startupProgress(attempt);
+    let progressLabel = "View progress";
+    if (expanded) progressLabel = "Hide progress";
+    else if (attempt.status.phase === "ready") progressLabel = "Details";
+    let icon = <OctagonAlert aria-hidden="true" className="size-4" />;
+    if (pending)
+      icon = <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />;
+    else if (attempt.status.phase === "ready")
+      icon = <Check aria-hidden="true" className="size-4" />;
+    toast(startupTitle(attempt), {
+      id: toastId,
+      toasterId,
+      duration: Infinity,
+      dismissible: !pending,
+      closeButton: !pending,
+      icon,
+      onDismiss: () => connection.startupAttempts.dismiss(attempt.id),
+      classNames: {
+        toast: "!items-start",
+        content: "w-full",
+      },
+      description: (
+        <div ref={setContentElement} className="flex min-w-0 flex-col gap-2">
+          <p className="break-words">{startupOrigin(attempt)}</p>
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            {activity ? <span>{activity}</span> : null}
+            {progress.total > 0 ? (
+              <span className="shrink-0 tabular-nums">
+                {progress.completed}/{progress.total} steps
+              </span>
+            ) : null}
+          </p>
+          {!expanded && attempt.status.confirmation === "unconfirmed" ? (
+            <p className="text-warning-surface-foreground">
+              Startup is not confirmed. Inspect the session before you try again.
+            </p>
+          ) : null}
+          {!expanded && issue ? (
+            <p role="alert" className="break-words text-destructive">
+              {issue}
+            </p>
+          ) : null}
+          {expanded ? (
+            <div className="h-52 min-h-0 overflow-hidden">
+              <StartupTrace
+                attempt={attempt}
+                onOpen={openSession}
+                showHeader={false}
+                className="h-full"
+              />
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {!expanded && canOpenStartupSession(attempt) ? (
+              <Button
+                type="button"
+                size="xs"
+                variant={attempt.status.phase === "ready" ? "default" : "outline"}
+                onClick={() => void openSession()}
+              >
+                Open session
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              aria-expanded={expanded}
+              onClick={() =>
+                setExpanded((currentExpanded) => {
+                  const next = !currentExpanded;
+                  startupPresentation(connection, attempt.id).detailsOpen = next;
+                  return next;
+                })
+              }
+            >
+              {progressLabel}
+            </Button>
+          </div>
+          {!expanded ? <StartupRecoveryActions attempt={attempt} /> : null}
+          {openError ? (
+            <p role="alert" className="break-words text-destructive">
+              {openError}
+            </p>
+          ) : null}
+        </div>
+      ),
+    });
+  }, [attempt, connection, contentHeight, expanded, openError, openSession, toastId, toasterId]);
+  return null;
 }

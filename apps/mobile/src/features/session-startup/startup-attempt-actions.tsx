@@ -4,72 +4,80 @@ import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/st
 import type { ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { Button } from "@/ui/button";
+import { Button, type ButtonProps } from "@/ui/button";
 
-export function StartupAttemptActions({
-  attempt,
-  onContinueInBackground,
-  onEditChoices,
-  onRepairSavedSession,
-}: {
+type StartupAttemptActionsProps = {
   attempt: StartupAttempt;
   onContinueInBackground?: (() => void) | undefined;
   onEditChoices?: (() => void) | undefined;
   onRepairSavedSession?: (() => void) | undefined;
-}): ReactElement {
+  progressExpanded: boolean;
+  onToggleProgress?: (() => void) | undefined;
+};
+
+export function StartupAttemptActions(props: StartupAttemptActionsProps): ReactElement | null {
   const connection = useClientConnection();
-  const attemptId = attempt.id;
-  const phase = attempt.status.phase;
-  const running = startupIsPending(attempt);
+  const actions = startupActionButtons(props, () =>
+    connection.startupAttempts.dismiss(props.attempt.id),
+  );
+  if (actions.length === 0) return null;
   return (
     <View style={styles.actions}>
-      {!running
-        ? attempt.recoveryActions?.map((action) => (
-            <Button
-              key={action.kind}
-              label={action.label}
-              variant="outline"
-              command
-              onPress={() => {
-                void action.run();
-              }}
-            />
-          ))
-        : null}
-      {!running && attempt.ownership.state === "not_saved" && onEditChoices ? (
-        <Button label="Edit choices" variant="outline" onPress={onEditChoices} />
-      ) : null}
-      {!running &&
-      phase === "failed" &&
-      attempt.ownership.state === "saved" &&
-      onRepairSavedSession ? (
-        <Button
-          label="Retry preparation"
-          variant="outline"
-          command
-          onPress={onRepairSavedSession}
-        />
-      ) : null}
-      {running && onContinueInBackground ? (
-        <Button
-          label="Continue in background"
-          variant="outline"
-          onPress={onContinueInBackground}
-          fill
-        />
-      ) : null}
-      {!running && attempt.presentation !== "dialog" ? (
-        <Button
-          label="Dismiss"
-          variant="plain"
-          size="sm"
-          onPress={() => connection.startupAttempts.dismiss(attemptId)}
-        />
-      ) : null}
+      {actions.map((action) => (
+        <Button key={action.label} variant="outline" size="sm" style={styles.action} {...action} />
+      ))}
     </View>
   );
 }
 
+function startupActionButtons(
+  {
+    attempt,
+    onContinueInBackground,
+    onEditChoices,
+    onRepairSavedSession,
+    progressExpanded,
+    onToggleProgress,
+  }: StartupAttemptActionsProps,
+  dismiss: () => void,
+): ButtonProps[] {
+  const phase = attempt.status.phase;
+  const running = startupIsPending(attempt);
+  const actions: ButtonProps[] = [];
+  if (onToggleProgress)
+    actions.push({
+      label: progressExpanded ? "Hide progress" : "View progress",
+      trailingIcon: progressExpanded ? "chevron-up" : "chevron-down",
+      variant: "plain",
+      onPress: onToggleProgress,
+    });
+  if (running) {
+    if (onContinueInBackground)
+      actions.push({ label: "Continue in background", onPress: onContinueInBackground });
+  } else {
+    for (const action of attempt.recoveryActions ?? [])
+      actions.push({
+        label: action.label,
+        command: true,
+        onPress: () => {
+          void action.run();
+        },
+      });
+    if (attempt.ownership.state === "not_saved" && onEditChoices)
+      actions.push({ label: "Edit choices", onPress: onEditChoices });
+    if (phase === "failed" && attempt.ownership.state === "saved" && onRepairSavedSession)
+      actions.push({ label: "Retry preparation", command: true, onPress: onRepairSavedSession });
+    if (attempt.presentation !== "dialog")
+      actions.push({
+        label: "Dismiss",
+        variant: "plain",
+        onPress: dismiss,
+      });
+  }
+  return actions;
+}
+
 const styles = StyleSheet.create((theme) => ({
   actions: { flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm },
+  action: { minHeight: theme.touchTarget },
 }));

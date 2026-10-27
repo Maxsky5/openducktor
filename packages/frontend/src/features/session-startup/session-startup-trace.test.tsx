@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { StartupOperationSnapshot } from "@openducktor/contracts";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, within } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
@@ -58,12 +58,11 @@ test("keeps the same rows and expanded details as startup fails and dependent wo
   );
   try {
     const list = view.getByRole("list", { name: "Session startup steps" });
-    const checkout = list.firstElementChild;
-    const details = checkout?.querySelector("details");
-    if (!details) throw new Error("Checkout details are missing.");
+    const checkout = within(list).getAllByRole("listitem")[0]!;
+    const details = within(checkout).getByRole("button", { name: /Create worktree.*Completed/ });
+    expect(details.getAttribute("aria-expanded")).toBe("false");
     await act(async () => {
-      details.open = true;
-      fireEvent(details, new Event("toggle"));
+      fireEvent.click(details);
     });
     const snapshot = progress();
     snapshot.revision = 2;
@@ -90,8 +89,11 @@ test("keeps the same rows and expanded details as startup fails and dependent wo
         />
       </QueryProvider>,
     );
-    expect(list.firstElementChild).toBe(checkout);
-    expect(details.open).toBe(true);
+    expect(within(list).getAllByRole("listitem")[0]).toBe(checkout);
+    expect(within(checkout).getByRole("button", { name: /Create worktree.*Completed/ })).toBe(
+      details,
+    );
+    expect(details.getAttribute("aria-expanded")).toBe("true");
     expect(view.getByText("Created /worktrees/task on branch odt/task.")).toBeDefined();
     expect(view.getByText("Install dependencies exited with code 1.")).toBeDefined();
     expect(view.getByText("Did not run")).toBeDefined();
@@ -108,13 +110,11 @@ test("preserves details and reading position when the same attempt moves to a no
       <StartupTrace attempt={current} />
     </QueryProvider>,
   );
-  const details = view.getByRole("list").querySelector("details");
-  if (!details) throw new Error("Checkout details are missing.");
+  const details = view.getByRole("button", { name: /Create worktree.*Completed/ });
   await act(async () => {
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
+    fireEvent.click(details);
   });
-  const scroll = view.getByRole("list").parentElement!;
+  const scroll = view.getByRole("region", { name: "Session startup details" });
   scroll.scrollTop = 37;
   fireEvent.scroll(scroll);
   view.unmount();
@@ -124,8 +124,13 @@ test("preserves details and reading position when the same attempt moves to a no
     </QueryProvider>,
   );
   try {
-    expect(notice.getByRole("list").querySelector("details")?.open).toBe(true);
-    expect(notice.getByRole("list").parentElement?.scrollTop).toBe(37);
+    expect(
+      notice
+        .getByRole("button", { name: /Create worktree.*Completed/ })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(notice.getByText("Created /worktrees/task on branch odt/task.")).toBeDefined();
+    expect(notice.getByRole("region", { name: "Session startup details" }).scrollTop).toBe(37);
     expect(document.activeElement?.closest("[data-startup-attempt]")).toBeNull();
   } finally {
     notice.unmount();
@@ -156,7 +161,8 @@ test("shows an asynchronous action as failed when a signal accompanies exit code
     </QueryProvider>,
   );
   try {
-    expect(view.getByText("Failed")).toBeDefined();
+    const details = view.getByRole("button", { name: /Install dependencies.*Failed/ });
+    fireEvent.click(details);
     expect(view.queryByText("Completed")).toBeNull();
     expect(view.getByText("Command ended with signal SIGTERM.")).toBeDefined();
   } finally {
