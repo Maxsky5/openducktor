@@ -309,6 +309,7 @@ export class CodexAppServerAdapter
           this.runtimeClients.clientForRuntime(runtimeId),
           childThreadId,
           scope,
+          options.directoriesMatch,
         ),
       updateThreadStatus: (
         runtimeId: string,
@@ -727,10 +728,18 @@ export class CodexAppServerAdapter
         cause,
       });
     }
-    if (
-      thread.id !== input.externalSessionId ||
-      !(await this.options.directoriesMatch(thread.cwd, input.workingDirectory))
-    ) {
+    const threadMatches =
+      thread.id === input.externalSessionId &&
+      (await this.options
+        .directoriesMatch(thread.cwd, input.workingDirectory)
+        .catch((cause: unknown) => {
+          throw interruptedTurnResumeError({
+            reason: "identity_mismatch",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          });
+        }));
+    if (!threadMatches) {
       throw interruptedTurnResumeError({
         reason: "identity_mismatch",
         message: `Codex thread '${input.externalSessionId}' does not match the stored working directory '${input.workingDirectory}'.`,
@@ -1090,6 +1099,7 @@ export class CodexAppServerAdapter
       session,
       runtime,
       threadInventory: this.threadInventory,
+      directoriesMatch: this.options.directoriesMatch,
       readRunningTurnModel: (threadId, turnId) =>
         this.runtimeEvents.readRunningTurnModel(runtime.runtimeId, threadId, turnId),
       prepareImageGenerations: this.options.prepareImageGenerations,
