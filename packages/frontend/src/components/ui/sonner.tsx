@@ -1,12 +1,26 @@
 import { DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";
 import type { CSSProperties } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { ArrowUpRight } from "lucide-react";
 
 const themeStyle: CSSProperties & Record<`--${string}`, string> = {
   "--normal-bg": "var(--card)",
   "--normal-text": "var(--foreground)",
   "--normal-border": "var(--border)",
 };
+
+export const notificationClassNames = {
+  toast: "!flex-col !items-stretch",
+  content: "w-full",
+  actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
+};
+
+export const notificationOpenLabel = (
+  <span className="inline-flex items-center justify-center gap-2">
+    Open
+    <ArrowUpRight className="size-3.5" aria-hidden={true} />
+  </span>
+);
 
 export function Toaster({ style, ...props }: ToasterProps) {
   return (

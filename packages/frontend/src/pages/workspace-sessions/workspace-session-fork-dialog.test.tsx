@@ -10,7 +10,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { act, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createTestClientConnection,
@@ -221,13 +221,27 @@ test("opening a saved failed same-folder fork retains feedback and session inspe
       status: { phase: "failed" },
       operations: original.operations,
     });
-    expect(await view.findByRole("region", { name: /^Notifications/ })).toBeDefined();
-    expect(view.queryByRole("button", { name: "View progress" })).toBeNull();
-    expect(view.queryByText(/\d+\/\d+ steps/)).toBeNull();
-    fireEvent.click(await view.findByRole("button", { name: "Details" }));
-    const inspect = await view.findByRole("button", { name: "Inspect saved session" });
-    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
-    expect(view.queryByText("Save forked session")).toBeNull();
+    const notifications = within(await view.findByRole("region", { name: /^Notifications/ }));
+    const details = await notifications.findByRole("button", { name: "Details" });
+    const toast = details.closest<HTMLElement>("[data-sonner-toast]");
+    if (!toast) throw new Error("The startup notification is missing.");
+    const notification = within(toast);
+    expect(notification.queryByRole("button", { name: "View progress" })).toBeNull();
+    expect(notification.queryByText(/\d+\/\d+ steps/)).toBeNull();
+    const reopen = notification.getByRole("button", { name: "Open" });
+    expect(reopen.hasAttribute("data-action")).toBe(true);
+    await act(async () => {
+      fireEvent.click(reopen);
+    });
+    expect(toast.getAttribute("data-removed")).not.toBe("true");
+    expect(connection.startupAttempts.getAttempt(original.id)).toMatchObject({
+      presentation: "notification",
+      status: { phase: "failed" },
+    });
+    fireEvent.click(details);
+    const inspect = await notification.findByRole("button", { name: "Inspect saved session" });
+    expect(notification.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(notification.queryByText("Save forked session")).toBeNull();
     fireEvent.click(inspect);
     expect(view.getByText("saved-child")).toBeDefined();
     expect(fork).toHaveBeenCalledTimes(1);

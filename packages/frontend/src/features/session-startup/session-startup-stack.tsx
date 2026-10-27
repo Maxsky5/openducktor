@@ -10,7 +10,7 @@ import {
   startupIsPending,
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { Button } from "@/components/ui/button";
-import { Toaster } from "@/components/ui/sonner";
+import { notificationClassNames, notificationOpenLabel, Toaster } from "@/components/ui/sonner";
 import { StartupRecoveryActions, StartupTrace } from "./session-startup-trace";
 import { useOpenStartupSession } from "./use-open-startup-session";
 import { retainStartupPresentations, startupPresentation } from "./startup-presentation";
@@ -133,8 +133,9 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
       setDetailsOpen(next);
     };
     toast(
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <span>{startupTitle(attempt)}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="flex shrink-0 items-center">{icon}</span>
+        <span className="min-w-0 flex-1">{startupTitle(attempt)}</span>
         <div className="flex shrink-0 items-center gap-1">
           {hasTrace && (pending || !expanded) ? (
             <span className="text-xs font-normal text-muted-foreground tabular-nums">
@@ -163,12 +164,18 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
         duration: Infinity,
         dismissible: !pending,
         closeButton: !pending,
-        icon,
+        icon: null,
         onDismiss: () => connection.startupAttempts.dismiss(attempt.id),
-        classNames: {
-          toast: "!items-start",
-          content: "w-full",
-        },
+        classNames: notificationClassNames,
+        action: canOpenStartupSession(attempt)
+          ? {
+              label: notificationOpenLabel,
+              onClick: (event) => {
+                event.preventDefault();
+                void openSession();
+              },
+            }
+          : undefined,
         description: (
           <div ref={setContentElement} className="flex min-w-0 flex-col gap-2">
             <p className="break-words">{startupOrigin(attempt)}</p>
@@ -191,21 +198,10 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
               >
                 <StartupTrace
                   attempt={attempt}
-                  onOpen={openSession}
                   showHeader={false}
                   className={hasTrace ? "max-h-52" : ""}
                 />
               </div>
-            ) : null}
-            {!expanded && canOpenStartupSession(attempt) ? (
-              <Button
-                type="button"
-                size="xs"
-                variant={attempt.status.phase === "ready" ? "default" : "outline"}
-                onClick={() => void openSession()}
-              >
-                Open session
-              </Button>
             ) : null}
             {!expanded ? <StartupRecoveryActions attempt={attempt} /> : null}
             {openError ? (

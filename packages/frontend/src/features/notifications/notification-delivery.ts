@@ -4,11 +4,11 @@ import type {
   NotificationOccurrence,
 } from "@openducktor/contracts";
 import { play as playCuelume, type SoundName, unlock as unlockCuelume } from "cuelume";
-import { ArrowUpRight } from "lucide-react";
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 import type { NotificationCopy } from "@openducktor/frontend-core/notifications/notification-copy";
 import { notificationCueSounds } from "./notification-sound";
+import { notificationClassNames, notificationOpenLabel } from "@/components/ui/sonner";
 
 type SonnerNotificationOptions = {
   id: string;
@@ -46,18 +46,9 @@ export const createSonnerNotificationAdapter = ({
       description: copy.body,
       duration: 10_000,
       closeButton: true,
-      classNames: {
-        toast: "!flex-col !items-stretch",
-        content: "w-full",
-        actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
-      },
+      classNames: notificationClassNames,
       action: {
-        label: createElement(
-          "span",
-          { className: "inline-flex items-center justify-center gap-2" },
-          "Open",
-          createElement(ArrowUpRight, { className: "size-3.5", "aria-hidden": true }),
-        ),
+        label: notificationOpenLabel,
         onClick: () => {
           void navigate(occurrence.navigationTarget);
         },

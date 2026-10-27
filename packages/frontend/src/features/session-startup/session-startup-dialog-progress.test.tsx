@@ -231,23 +231,30 @@ test.each([
         expect(retained?.operations).toEqual(original?.operations);
         if (kind === "task") expect(retained?.instruction?.state).toBe("not_sent");
         expect(await view.findByRole("region", { name: /^Notifications/ })).toBeDefined();
-        await view.findByRole("list", { name: "Session startup steps" });
-        expect(view.getByText("Create worktree")).toBeDefined();
+        const steps = await view.findByRole("list", { name: "Session startup steps" });
+        const toast = steps.closest<HTMLElement>("[data-sonner-toast]");
+        if (!toast) throw new Error("The startup notification is missing.");
+        const notification = within(toast);
+        expect(notification.getByText("Create worktree")).toBeDefined();
         expect(retry).not.toHaveBeenCalled();
+        const open = notification.getByRole("button", { name: "Open" });
+        expect(open.hasAttribute("data-action")).toBe(true);
+        expect(notification.queryByRole("button", { name: "Open session" })).toBeNull();
         await act(async () => {
-          fireEvent.click(view.getByRole("button", { name: "Open session" }));
+          fireEvent.click(open);
         });
         expect(connection.startupAttempts.getAttempt(id)).toEqual(retained);
+        expect(toast.getAttribute("data-removed")).not.toBe("true");
         await act(async () => {
           fireEvent.click(
-            view.getByRole("button", {
+            notification.getByRole("button", {
               name: kind === "task" ? "Retry message" : "Retry session preparation",
             }),
           );
         });
         expect(retry).toHaveBeenCalledTimes(1);
         expect(mutation).not.toHaveBeenCalled();
-        fireEvent.click(view.getByRole("button", { name: "Close toast" }));
+        fireEvent.click(notification.getByRole("button", { name: "Close toast" }));
         expect(connection.startupAttempts.getAttempt(id)).toBeNull();
       }
       expect(mutation).not.toHaveBeenCalled();
