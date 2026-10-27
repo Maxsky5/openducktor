@@ -281,7 +281,10 @@ export const createStartupAttemptStore = (
     async operation<T extends { startupProgress?: StartupOperationSnapshot | undefined }>(
       id: string,
       perform: (context: StartupOperationContext) => Promise<T>,
-      { final = true }: { final?: boolean } = {},
+      {
+        final = true,
+        beforeDispatch,
+      }: { final?: boolean; beforeDispatch?: () => Promise<void> } = {},
     ): Promise<T> {
       const entry = entries.get(id);
       if (!entry || disposed) throw new Error("The session start is no longer available.");
@@ -301,12 +304,19 @@ export const createStartupAttemptStore = (
       let dispatched = false;
       try {
         await ensureSubscribed();
-        if (!entries.has(id) || disposed) throw new Error("The session start connection changed.");
+        if (entries.get(id) !== entry || disposed)
+          throw new Error("The session start connection changed.");
+        if (beforeDispatch) {
+          await beforeDispatch();
+          if (entries.get(id) !== entry || disposed)
+            throw new Error("The session start connection changed.");
+        }
         dispatched = true;
         const result = await perform(context);
         if (result.startupProgress) accept(result.startupProgress);
         return result;
       } catch (cause) {
+        if (entries.get(id) !== entry || disposed) throw cause;
         const progress =
           cause instanceof HostInvokeError ? cause.failure?.startupProgress : undefined;
         if (progress) accept(progress);

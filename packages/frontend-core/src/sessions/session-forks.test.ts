@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
+  AgentSessionLiveEnvelope,
   AgentWorkflowSessionForkResult,
   WorkspaceSession,
   WorkspaceSessionForkResult,
@@ -18,6 +19,12 @@ import { createSessionMessagesState } from "./agent-orchestrator/support/message
 import { forkTaskSession, forkWorkspaceSession } from "./session-forks";
 import { createStartupLiveSourceFake } from "../test-support/startup-live-source-fake";
 import { HostInvokeError } from "@openducktor/host-client";
+import { createWorkspaceSessionLiveSource } from "../workspace-activity/workspace-session-live-source";
+import { createLiveSnapshotEnvelope } from "../test-support/agent-session-live-fixture";
+import {
+  registerStartupLiveSource,
+  retainStartupPreparationWorkspaces,
+} from "./startup/startup-prepared-handoff";
 
 const connections: ReturnType<typeof createTestClientConnection>[] = [];
 afterEach(async () => {
@@ -153,11 +160,12 @@ describe("session forks", () => {
     },
   );
 
-  test("repairs a saved child through that record without repeating the fork", async () => {
+  test("claims one repair while a closed workspace waits to reopen and prepares the saved child", async () => {
     let forkCalls = 0;
     const startIds: string[] = [];
     const child = workspaceRecord("child");
     const runtimeSession = { ...taskResult().runtimeSession, externalSessionId: "child" };
+    let emit!: (envelope: AgentSessionLiveEnvelope) => void;
     const connection = createForkConnection({
       client: {
         workspaceSessionFork: async (input) => {
@@ -181,24 +189,56 @@ describe("session forks", () => {
         workspaceSessionStart: async (input) => {
           startIds.push(input.sessionId);
           if (!input.startup) throw new Error("Missing repair startup context");
+          const ref = {
+            repoPath: "/repo",
+            runtimeKind: runtimeSession.runtimeKind,
+            externalSessionId: runtimeSession.externalSessionId,
+            workingDirectory: runtimeSession.workingDirectory,
+          };
+          emit({
+            type: "session_upsert",
+            sequence: 2,
+            session: {
+              ref,
+              activity: "idle",
+              startedAt: runtimeSession.startedAt,
+              title: "Child",
+              pendingApprovals: [],
+              pendingQuestions: [],
+              contextUsage: null,
+            },
+          });
           return {
             session: child,
             runtimeSession,
-            startupProgress: live.prepared({
+            startupProgress: {
               context: input.startup,
+              hostInstanceId: "host",
+              revision: 1,
               workspaceId: "workspace",
               repoPath: "/repo",
-              scope: { kind: "workspace", sessionId: "child" },
+              scope: { kind: "workspace" as const, sessionId: "child" },
+              phase: "completed" as const,
+              steps: [],
               ownership: {
-                state: "saved",
-                target: { kind: "workspace", record: child, runtimeSession },
+                state: "saved" as const,
+                target: { kind: "workspace" as const, record: child, runtimeSession },
               },
-            }),
+              prepared: { ref, runtimeId: "runtime", liveStateSequence: 2 },
+            },
           };
         },
       },
     });
-    const live = createStartupLiveSourceFake(connection.queryClient);
+    const source = createWorkspaceSessionLiveSource(
+      async (_input, listener) => {
+        emit = listener;
+        return () => {};
+      },
+      async () => createLiveSnapshotEnvelope({ sequence: 1, sessions: [] }),
+    );
+    registerStartupLiveSource(connection.queryClient, source);
+    let close = source.observeWorkspace({ repoPath: "/repo" }, () => {});
     let id = "";
     try {
       await forkWorkspaceSession(
@@ -224,9 +264,21 @@ describe("session forks", () => {
     const attempt = connection.startupAttempts.getAttempt(id);
     expect(attempt?.ownership.state).toBe("saved");
     expect(attempt?.recoveryActions?.map((action) => action.kind)).toEqual(["repair"]);
-    await attempt?.recoveryActions?.[0]?.run();
+    close();
+    retainStartupPreparationWorkspaces(connection.queryClient, []);
+    const repair = attempt!.recoveryActions![0]!.run;
+    const first = repair();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = repair();
+    expect(startIds).toEqual([]);
+    const pending = connection.startupAttempts.getAttempt(id);
+    close = source.observeWorkspace({ repoPath: "/repo" }, () => {});
+    await Promise.all([first, second]);
+    close();
     expect(forkCalls).toBe(1);
     expect(startIds).toEqual(["child"]);
+    expect(pending?.status.phase).toBe("submitting");
+    expect(pending?.recoveryActions).toBeUndefined();
     expect(connection.startupAttempts.getAttempt(id)?.status.phase).toBe("ready");
     expect(
       connection.startupAttempts.getAttempt(id)?.operations.map((operation) => operation.phase),

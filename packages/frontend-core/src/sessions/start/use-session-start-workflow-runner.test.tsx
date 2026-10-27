@@ -21,6 +21,10 @@ import { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runn
 import { createAgentOperationsFixture } from "../../test-support/agent-operations-fixture";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import type { AgentMessageSendReceipt } from "../../types/agent-orchestrator";
+import {
+  registerStartupLiveSource,
+  retainStartupPreparationWorkspaces,
+} from "../startup/startup-prepared-handoff";
 
 const createConnection = (client: Partial<HostClient>): ClientConnection => {
   const connection = createTestClientConnection({
@@ -98,6 +102,7 @@ test.each([
   { outcome: "acknowledged", invalidatedAt: "none" },
   { outcome: "acknowledged", invalidatedAt: "retry" },
   { outcome: "accepted", invalidatedAt: "repair" },
+  { outcome: "accepted", invalidatedAt: "observation" },
 ] as const)(
   "repairs the saved workflow and retains $outcome retry with preparation invalidated at $invalidatedAt",
   async ({ outcome, invalidatedAt }) => {
@@ -190,9 +195,30 @@ test.each([
       });
       const id = connection.startupAttempts.getSnapshot()[0]!.id;
       expect(connection.startupAttempts.getAttempt(id)?.recoveryActions?.[0]?.kind).toBe("repair");
+      if (invalidatedAt === "observation") {
+        retainStartupPreparationWorkspaces(connection.queryClient, []);
+        registerStartupLiveSource(connection.queryClient, {
+          observeWorkspace: () => () => {},
+          observeAgentSessionLive: async () => {
+            throw new Error("Reopen the workspace to observe session progress.");
+          },
+        });
+      }
       await act(async () => {
-        await connection.startupAttempts.getAttempt(id)?.recoveryActions?.[0]?.run();
+        const repair = connection.startupAttempts.getAttempt(id)?.recoveryActions?.[0]?.run();
+        if (invalidatedAt === "observation")
+          expect(connection.startupAttempts.getAttempt(id)?.status.phase).toBe("submitting");
+        await repair;
       });
+      if (invalidatedAt === "observation") {
+        expect(requests).toHaveLength(1);
+        const failed = connection.startupAttempts.getAttempt(id);
+        expect(failed?.ownership).toEqual({ state: "saved", target: { kind: "task", record } });
+        expect(failed?.status).toEqual({ phase: "failed", confirmation: "current" });
+        expect(failed?.error).toBe("Reopen the workspace to observe session progress.");
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+        return;
+      }
       expect(requests).toHaveLength(2);
       expect(requests[1]).toMatchObject({
         policy: {

@@ -39,15 +39,20 @@ export function installStartupSessionRepair(
           return;
         const target = current.ownership.target;
         releaseStartupPreparationAttempt(queryClient, id);
+        const operationOptions = {
+          beforeDispatch: () => observeStartupPreparation(queryClient, current.origin.repoPath, id),
+        };
         try {
-          await observeStartupPreparation(queryClient, current.origin.repoPath, id);
           if (target.kind === "workspace") {
-            const result = await attempts.operation(id, (startup) =>
-              connection.host.client.workspaceSessionStart({
-                workspaceId: current.origin.workspaceId,
-                sessionId: target.record.id,
-                startup,
-              }),
+            const result = await attempts.operation(
+              id,
+              (startup) =>
+                connection.host.client.workspaceSessionStart({
+                  workspaceId: current.origin.workspaceId,
+                  sessionId: target.record.id,
+                  startup,
+                }),
+              operationOptions,
             );
             attempts.setSaved(id, {
               state: "saved",
@@ -76,16 +81,23 @@ export function installStartupSessionRepair(
           } else {
             const scope = current.origin.scope;
             if (scope.kind !== "task") return;
-            const result = await attempts.operation(id, (startup) =>
-              connection.host.client.agentSessionControlResume({
-                repoPath: current.origin.repoPath,
-                runtimeKind: target.record.runtimeKind,
-                externalSessionId: target.record.externalSessionId,
-                workingDirectory: target.record.workingDirectory,
-                sessionScope: { kind: "workflow", taskId: scope.taskId, role: target.record.role },
-                resumeMode: "reattach",
-                startup,
-              }),
+            const result = await attempts.operation(
+              id,
+              (startup) =>
+                connection.host.client.agentSessionControlResume({
+                  repoPath: current.origin.repoPath,
+                  runtimeKind: target.record.runtimeKind,
+                  externalSessionId: target.record.externalSessionId,
+                  workingDirectory: target.record.workingDirectory,
+                  sessionScope: {
+                    kind: "workflow",
+                    taskId: scope.taskId,
+                    role: target.record.role,
+                  },
+                  resumeMode: "reattach",
+                  startup,
+                }),
+              operationOptions,
             );
             if (!result.startupProgress?.prepared)
               throw new Error("Session preparation is unconfirmed. Inspect the saved session.");

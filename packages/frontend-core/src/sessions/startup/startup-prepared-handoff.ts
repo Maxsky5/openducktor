@@ -77,13 +77,18 @@ export async function observeStartupPreparation(
       });
     evidence = entry;
   }
+  const existing = owner.attempts.get(startupAttemptId);
+  const attempt = existing ?? { repoPath, epoch: 0, runtimes: new Map<RuntimeKind, number>() };
+  if (!existing) owner.attempts.set(startupAttemptId, attempt);
   await evidence.ready;
-  if (!owner.attempts.has(startupAttemptId))
-    owner.attempts.set(startupAttemptId, {
-      repoPath,
-      epoch: evidence.epoch,
-      runtimes: new Map(owner.runtimeEpochs),
-    });
+  if (owner.released || evidence.closed || owner.attempts.get(startupAttemptId) !== attempt)
+    throw new Error(
+      "Session preparation is no longer observed. Inspect the saved session before starting it again.",
+    );
+  if (!existing) {
+    attempt.epoch = evidence.epoch;
+    attempt.runtimes = new Map(owner.runtimeEpochs);
+  }
 }
 
 /** Wait for ordered live evidence, without a second native preparation or a replacement launch. */

@@ -102,27 +102,29 @@ export function installWorkflowStartupRecovery({
         const record = current.ownership.target.record;
         releaseStartupPreparationAttempt(queryClient, id);
         try {
-          await observeStartupPreparation(queryClient, request.repoPath, id);
-          const outcome = await attempts.operation(id, (startup) =>
-            host.agentSessionWorkflowLaunch({
-              workspaceId: request.workspaceId,
-              repoPath: request.repoPath,
-              taskId: request.taskId,
-              startup,
-              policy: {
-                kind: "manual",
-                actionId: request.policy.actionId,
-                decision: {
-                  startMode: "reuse",
-                  sourceSession: {
-                    runtimeKind: record.runtimeKind,
-                    externalSessionId: record.externalSessionId,
-                    workingDirectory: record.workingDirectory,
+          const outcome = await attempts.operation(
+            id,
+            (startup) =>
+              host.agentSessionWorkflowLaunch({
+                workspaceId: request.workspaceId,
+                repoPath: request.repoPath,
+                taskId: request.taskId,
+                startup,
+                policy: {
+                  kind: "manual",
+                  actionId: request.policy.actionId,
+                  decision: {
+                    startMode: "reuse",
+                    sourceSession: {
+                      runtimeKind: record.runtimeKind,
+                      externalSessionId: record.externalSessionId,
+                      workingDirectory: record.workingDirectory,
+                    },
                   },
                 },
-              },
-              instruction: { kind: "none" },
-            }),
+                instruction: { kind: "none" },
+              }),
+            { beforeDispatch: () => observeStartupPreparation(queryClient, request.repoPath, id) },
           );
           try {
             projectWorkflowLaunch(sessions, queryClient, outcome);

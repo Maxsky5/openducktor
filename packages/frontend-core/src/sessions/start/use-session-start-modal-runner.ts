@@ -199,6 +199,7 @@ export function useSessionStartModalRunner({
         pendingRunRef.current = null;
         closeStartModal();
       }
+      if (confirmationsRef.current.get(run.scopeKey) !== run) run.cancel();
       releaseConfirmation(run);
     },
     [closeStartModal, releaseConfirmation, startupAttempts],
@@ -206,8 +207,14 @@ export function useSessionStartModalRunner({
 
   useEffect(
     () => () => {
+      const pendingRun = pendingRunRef.current;
+      pendingRunRef.current = null;
+      if (pendingRun?.startupAttemptId)
+        startupAttempts.continueInBackground(pendingRun.startupAttemptId);
+      pendingRun?.cancel();
       for (const run of confirmationsRef.current.values())
-        if (run.startupAttemptId) startupAttempts.continueInBackground(run.startupAttemptId);
+        if (run !== pendingRun && run.startupAttemptId)
+          startupAttempts.continueInBackground(run.startupAttemptId);
     },
     [startupAttempts],
   );
@@ -337,6 +344,13 @@ export function useSessionStartModalRunner({
           request: requestContext,
         });
         const outcome = startupAttempts.getAttempt(attemptId);
+        if (
+          startupIsPending(outcome) &&
+          (outcome?.operations.length !== 0 || outcome.status.confirmation === "unconfirmed")
+        ) {
+          pendingRun.cancel();
+          return;
+        }
         if (outcome?.status.phase === "failed" || outcome?.status.phase === "canceled") {
           if (pendingRunRef.current !== pendingRun) settle();
           return;

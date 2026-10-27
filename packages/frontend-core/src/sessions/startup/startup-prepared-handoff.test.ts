@@ -13,6 +13,7 @@ import {
   registerStartupLiveSource,
   releaseStartupPreparationAttempt,
   releaseStartupPreparations,
+  retainStartupPreparationWorkspaces,
 } from "./startup-prepared-handoff";
 import { hostRuntimeStatusQueryKeys } from "../../queries/host-runtime-status";
 import type { HostStatusSnapshot } from "../../types/diagnostics";
@@ -204,6 +205,65 @@ test("owner release settles a pending handoff and cannot recreate preparation", 
   });
   h.send({ type: "session_upsert", sequence: 10, session: live });
   expect(hasStartupPreparedHandoff(h.client, ref)).toBe(false);
+});
+
+test.each(["attempt", "repository", "owner"] as const)(
+  "late source readiness cannot restore a released %s observation",
+  async (release) => {
+    const client = new QueryClient();
+    clients.push(client);
+    const readiness = Promise.withResolvers<() => void>();
+    registerStartupLiveSource(client, {
+      observeWorkspace: () => () => {},
+      observeAgentSessionLive: async (_input, listener) => {
+        listener({ type: "session_upsert", sequence: 10, session: live });
+        return readiness.promise;
+      },
+    });
+    const observation = observeStartupPreparation(client, "/repo", "attempt").catch(
+      (cause: unknown) => cause,
+    );
+    if (release === "attempt") releaseStartupPreparationAttempt(client, "attempt");
+    else if (release === "repository") retainStartupPreparationWorkspaces(client, []);
+    else releaseStartupPreparations(client);
+    readiness.resolve(() => {});
+    expect(await observation).toMatchObject({
+      message: expect.stringContaining("no longer observed"),
+    });
+    await expect(adoptStartupPreparedHandoff(client, progress())).rejects.toThrow(
+      "no longer observed",
+    );
+    expect(hasStartupPreparedHandoff(client, ref)).toBe(false);
+  },
+);
+
+test("a new observation captures the ready source baseline and runtime", async () => {
+  const client = new QueryClient();
+  clients.push(client);
+  const readiness = Promise.withResolvers<() => void>();
+  let receive!: (envelope: AgentSessionLiveEnvelope) => void;
+  registerStartupLiveSource(client, {
+    observeWorkspace: () => () => {},
+    observeAgentSessionLive: async (_input, listener) => {
+      receive = listener;
+      return readiness.promise;
+    },
+  });
+  client.setQueryData(hostRuntimeStatusQueryKeys.snapshot, runtimeStatus("old-runtime", 1));
+  const observation = observeStartupPreparation(client, "/repo", "attempt");
+  receive({
+    type: "snapshot",
+    repoPath: "/repo",
+    sequence: 10,
+    sessions: [live],
+    messageQueues: [],
+    historyReplayGap: true,
+  });
+  client.setQueryData(hostRuntimeStatusQueryKeys.snapshot, runtimeStatus("runtime", 2));
+  readiness.resolve(() => {});
+  await observation;
+  await adoptStartupPreparedHandoff(client, progress());
+  expect(isStartupPreparedHandoffCurrent(client, "attempt", progress().prepared!)).toBe(true);
 });
 
 test("an unavailable status read keeps an already confirmed preparation", async () => {

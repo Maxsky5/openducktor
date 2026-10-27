@@ -10,6 +10,7 @@ import {
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { createRuntimeCatalogFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import {
   buildSessionStartModalDecision,
   requireSourceSessionRuntimeKind,
@@ -18,6 +19,7 @@ import {
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 import { startKanbanSessionFlow } from "../../tasks/workflow/kanban-session-start-actions";
 import type { RunSessionStartWorkflow } from "./session-start-orchestration";
+import { observeStartupPreparation } from "../startup/startup-prepared-handoff";
 
 const REQUEST_CONTEXT = {
   launchActionId: "build_pull_request_generation",
@@ -469,6 +471,165 @@ describe("useSessionStartModalRunner failures", () => {
       }
     },
   );
+});
+
+test.each([
+  { outcome: "unconfirmed", leave: "dialog" },
+  { outcome: "unconfirmed", leave: "background" },
+  { outcome: "unconfirmed", leave: "unmount" },
+  { outcome: "failed", leave: "background" },
+  { outcome: "failed", leave: "unmount" },
+] as const)("retains $outcome startup feedback through $leave", async ({ outcome, leave }) => {
+  const connection = createTestClientConnection();
+  const live = createStartupLiveSourceFake(connection.queryClient);
+  const harness = createHookHarness(
+    useSessionStartModalRunner,
+    {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+      workspaceId: "workspace",
+    },
+    {
+      connection,
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => runtimeCatalogFixture,
+      }),
+    },
+  );
+  const record = {
+    ...sourceSession("started"),
+    role: "build" as const,
+    startedAt: "2026-10-27T00:00:00.000Z",
+    selectedModel: { ...SELECTED_MODEL, runtimeKind: "opencode" as const },
+  };
+  const execute = mock(async ({ startupAttemptId }: { startupAttemptId: string }) => {
+    await observeStartupPreparation(connection.queryClient, "/repo", startupAttemptId);
+    const result = await connection.startupAttempts.operation(
+      startupAttemptId,
+      async (context) => ({
+        startupProgress: {
+          ...live.prepared({
+            context,
+            workspaceId: "workspace",
+            repoPath: "/repo",
+            scope: { kind: "task", taskId: "TASK-1", role: "build" },
+            ownership: {
+              state: "saved",
+              target: {
+                kind: "task",
+                record,
+                runtimeSession: { ...record, status: "idle" },
+              },
+            },
+          }),
+          phase: outcome === "failed" ? ("failed" as const) : ("completed" as const),
+          steps: [{ id: "save", label: "Save session", state: "completed" as const, details: [] }],
+        },
+      }),
+    );
+    if (outcome === "unconfirmed") {
+      live.remove(result.startupProgress.prepared!.ref);
+      await connection.startupAttempts.complete(startupAttemptId);
+    } else connection.startupAttempts.fail(startupAttemptId, "The workflow update failed.");
+    return record;
+  });
+  let callerPromise!: Promise<typeof record | undefined>;
+  let callerSettled = false;
+  let callerResult: typeof record | undefined;
+  let unmounted = false;
+  await harness.mount();
+  try {
+    await harness.run((runner) => {
+      callerPromise = runner.runSessionStartRequest(
+        {
+          source: "agent_studio",
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          postStartAction: "none",
+          selectedModel: SELECTED_MODEL,
+        },
+        execute,
+      );
+      void callerPromise.then((result) => {
+        callerSettled = true;
+        callerResult = result;
+      });
+    });
+    await harness.waitFor((runner) =>
+      Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+    );
+    const requestId = harness.getLatest().sessionStartModal?.requestId;
+    await harness.run(async (runner) => {
+      await runner.sessionStartModal?.onConfirm({
+        startMode: "fresh",
+        sourceSessionOptionValue: null,
+        runInBackground: false,
+      });
+    });
+    const attempt = connection.startupAttempts.getSnapshot()[0];
+    if (!attempt) throw new Error("Startup progress is missing.");
+    const modal = harness.getLatest().sessionStartModal;
+    expect(modal?.open).toBe(true);
+    expect(modal?.requestId).toBe(requestId);
+    expect(modal?.phase).toEqual({ kind: "progress", startupAttemptId: attempt.id });
+    expect(modal?.isStarting).toBe(outcome === "unconfirmed");
+    expect(attempt).toMatchObject({
+      presentation: "dialog",
+      ownership: { state: "saved", target: { record } },
+      status: {
+        phase: outcome === "unconfirmed" ? "running" : "failed",
+        confirmation: outcome === "unconfirmed" ? "unconfirmed" : "current",
+      },
+    });
+    expect(connection.startupAttempts.isReadyForHandoff(attempt.id)).toBe(false);
+    if (outcome === "unconfirmed") {
+      expect(callerSettled).toBe(true);
+      expect(callerResult).toBeUndefined();
+    }
+    if (leave === "dialog") {
+      await harness.run((runner) => runner.sessionStartModal?.onOpenChange(false));
+      expect(harness.getLatest().sessionStartModal?.open).toBe(true);
+      expect(connection.startupAttempts.getAttempt(attempt.id)?.presentation).toBe("dialog");
+    } else {
+      if (leave === "background") {
+        await harness.run((runner) => runner.sessionStartModal?.onContinueInBackground());
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+      } else {
+        await harness.unmount();
+        unmounted = true;
+      }
+      expect(connection.startupAttempts.getAttempt(attempt.id)).toMatchObject({
+        presentation: "notification",
+        ownership: attempt.ownership,
+        operations: [
+          expect.objectContaining({
+            steps: [{ id: "save", label: "Save session", state: "completed", details: [] }],
+          }),
+        ],
+        error: attempt.error,
+      });
+      expect(callerSettled).toBe(true);
+      expect(callerResult).toBeUndefined();
+    }
+    expect(execute).toHaveBeenCalledTimes(1);
+  } finally {
+    if (!unmounted) await harness.unmount();
+    await connection.dispose();
+  }
 });
 
 describe("assertRuntimeSupportsSelectedStartMode", () => {

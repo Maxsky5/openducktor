@@ -125,6 +125,59 @@ test("registers feedback before dispatch and keeps command order across a backgr
   store.dispose();
 });
 
+test("claims repair before observation and preserves its saved target when observation fails", async () => {
+  const { store, id, admit } = harness();
+  const ownership = {
+    state: "saved" as const,
+    target: { kind: "workspace" as const, record: savedRecord() },
+  };
+  store.setSaved(id, ownership);
+  store.fail(id, "Preparation failed");
+  store.setRecoveryActions(id, [{ kind: "repair", label: "Retry preparation", run: () => {} }]);
+  const perform = mock(async () => ({}));
+  const observation = mock(async () => {
+    throw new Error("Reopen the workspace to observe session progress.");
+  });
+  const command = store.operation(id, perform, { beforeDispatch: observation });
+  expect(store.getAttempt(id)?.status).toEqual({ phase: "submitting", confirmation: "current" });
+  expect(store.getAttempt(id)?.recoveryActions).toBeUndefined();
+  expect(observation).not.toHaveBeenCalled();
+  admit();
+  const failure = await command.catch((cause: unknown) => cause);
+  expect(failure).toMatchObject({ message: "Reopen the workspace to observe session progress." });
+  expect(perform).not.toHaveBeenCalled();
+  expect(store.getAttempt(id)?.ownership).toEqual(ownership);
+  expect(store.getAttempt(id)?.status).toEqual({ phase: "failed", confirmation: "current" });
+  store.dispose();
+});
+
+test.each(["release", "dispose"] as const)(
+  "%s during observation blocks repair dispatch and retains no attempt",
+  async (release) => {
+    const { store, id, admit } = harness();
+    const observation = Promise.withResolvers<void>();
+    const beforeDispatch = mock(() => observation.promise);
+    const perform = mock(async () => ({}));
+    const command = store
+      .operation(id, perform, { beforeDispatch })
+      .catch((cause: unknown) => cause);
+    admit();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(beforeDispatch).toHaveBeenCalledTimes(1);
+      store[release](id);
+      observation.resolve();
+      expect(await command).toMatchObject({ message: "The session start connection changed." });
+      expect(perform).not.toHaveBeenCalled();
+      expect(store.getSnapshot()).toEqual([]);
+    } finally {
+      observation.resolve();
+      await command;
+      store.dispose();
+    }
+  },
+);
+
 test("only startup coverage loss marks outstanding work unconfirmed and host replacement releases it", async () => {
   const { store, id, admit, event } = harness();
   let context!: StartupOperationContext;
