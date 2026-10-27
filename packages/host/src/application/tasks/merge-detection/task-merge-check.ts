@@ -4,23 +4,12 @@ import { branchReflogEntryKind, rebaseBaseOid } from "../../../domain/task";
 import type { GitPort, GitPortError, GitReflogEntry, GitRefTip } from "../../../ports/git-port";
 
 /**
- * Whether a branch got a commit of its own after its creation. `unknown` means the branch has no
- * reflog: Git maintenance expires old reflog entries, so an empty reflog is a normal case. The
- * result depends only on the branch and its tip, so a caller can keep it while the tip stays.
+ * Whether a branch got a commit of its own after its creation. `unknown` means that the reflog ends
+ * before the creation entry: Git maintenance expires old reflog entries, so an empty or a partial
+ * reflog is a normal case. The result depends only on the branch and its tip, so a caller can keep
+ * it while the tip stays.
  */
 export type OwnCommit = "own" | "none" | "unknown";
-
-/** The own commit result of a branch from its reflog. It runs Git only for a reset entry. */
-export const ownCommitOf = (
-  gitPort: GitPort,
-  gitRepoPath: string,
-  reflog: readonly GitReflogEntry[],
-): Effect.Effect<OwnCommit, GitPortError> =>
-  reflog.length === 0
-    ? Effect.succeed("unknown")
-    : hasOwnCommit(gitPort, gitRepoPath, reflog).pipe(
-        Effect.map((own): OwnCommit => (own ? "own" : "none")),
-      );
 
 /**
  * Whether the target tip holds the work of a task branch. A merge commit, a fast-forward, a rebase
@@ -46,7 +35,7 @@ export const branchMergeResult = (
   }
   // The target holds every branch commit after a merge commit or a fast-forward.
   if (unmergedCommitCount === 0) {
-    // Without reflog entries, the branch can be one that never got a commit. It has nothing to
+    // Without the whole reflog, the branch can be one that never got a commit. It has nothing to
     // merge, so it is not merged.
     return ownCommit === "own"
       ? { kind: "merged", checkedAt, branchOid }
@@ -59,22 +48,27 @@ export const branchMergeResult = (
 };
 
 /**
- * Whether the branch still has a commit that it got after its creation. A reset sets the branch to
+ * The own commit result of a branch from its reflog, newest entry first. The branch has its own
+ * commit when it still holds a commit that it got after its creation. A reset sets the branch to
  * its tip, so a commit before the newest reset stays only when that tip holds it. A rebase before
  * that reset replaced the earlier commits, so the rebase counts when the tip holds a commit that
  * the rebase made on its base: a tip inside the rebased history, or a tip that holds the rebase.
  */
-const hasOwnCommit = (gitPort: GitPort, gitRepoPath: string, entries: readonly GitReflogEntry[]) =>
+export const ownCommitOf = (
+  gitPort: GitPort,
+  gitRepoPath: string,
+  reflog: readonly GitReflogEntry[],
+): Effect.Effect<OwnCommit, GitPortError> =>
   Effect.gen(function* () {
     let resetTip: string | undefined;
-    for (const entry of entries) {
+    for (const entry of reflog) {
       const kind = branchReflogEntryKind(entry.subject);
-      if (kind === "creation") return false;
+      if (kind === "creation") return "none";
       if (kind === "reset") {
         resetTip ??= entry.oid;
       } else if (kind === "commit") {
-        if (resetTip === undefined) return true;
-        if (yield* gitPort.isAncestor(gitRepoPath, entry.oid, resetTip)) return true;
+        if (resetTip === undefined) return "own";
+        if (yield* gitPort.isAncestor(gitRepoPath, entry.oid, resetTip)) return "own";
       } else if (kind === "rebase" && resetTip !== undefined) {
         const base = rebaseBaseOid(entry.subject);
         if (base === undefined) continue;
@@ -85,9 +79,9 @@ const hasOwnCommit = (gitPort: GitPort, gitRepoPath: string, entries: readonly G
             ? entry.oid
             : undefined;
         if (older !== undefined && !(yield* gitPort.isAncestor(gitRepoPath, older, base))) {
-          return true;
+          return "own";
         }
       }
     }
-    return false;
+    return "unknown";
   });

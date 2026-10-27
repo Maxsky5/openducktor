@@ -457,11 +457,15 @@ describe("task merge detection service", () => {
     ).toMatchObject({ kind: "not_merged", unmergedCommitCount: 0 });
   });
 
-  test("a branch without reflog entries is checked from its commits, with no failure", async () => {
-    const result = async (contained: boolean, mergedTree: string) => {
+  test("a branch without its whole reflog is checked from its commits, with no failure", async () => {
+    const result = async (
+      contained: boolean,
+      mergedTree: string,
+      reflog: Map<string, GitReflogEntry[]> = new Map(),
+    ) => {
       const harness = createHarness({
         gitPort: {
-          readReflogs: () => Effect.succeed(new Map()),
+          readReflogs: () => Effect.succeed(reflog),
           countCommitsAhead: () =>
             Effect.succeed(new Map([["refs/heads/odt/task-1", contained ? 0 : 2]])),
           mergeTreeOids: (_repoPath: string, pairs: readonly unknown[]) =>
@@ -482,6 +486,17 @@ describe("task merge detection service", () => {
     expect((await result(false, "other-tree")).status?.result).toMatchObject({
       kind: "not_merged",
       unmergedCommitCount: 2,
+    });
+    // Maintenance can expire only the older entries, so a reflog without its creation entry is
+    // checked the same way.
+    const partial = new Map([
+      [
+        "refs/heads/odt/task-1",
+        [{ oid: "branch-1", subject: "merge main: Merge made by the 'ort' strategy." }],
+      ],
+    ]);
+    expect((await result(false, "target-tree", partial)).status?.result).toMatchObject({
+      kind: "merged",
     });
   });
 

@@ -135,7 +135,7 @@ A task is a candidate when its status is `in_progress`, `blocked`, `ai_review`, 
 
 The task sync loop runs a pass for each open workspace every five minutes, after its pull request sync. `task_merge_status_check` runs a pass on request: Check again in the approval modal, and Check merged tasks in the command palette for one or all open workspaces. A pass fetches each target remote through the [shared remote fetch](git-comparison.md#remote-fetch).
 
-A branch is merged when it has a commit of its own and the target holds its work. The target holds the work when it contains the branch tip, or when a merge of the branch into the target gives the target tree, as after a rebase or squash merge. The branch reflog gives the own commits: the `commit`, `cherry-pick`, `revert`, and `am` entries that the branch still holds after its resets and rebases. When Git maintenance has expired the reflog, commits that the target lacks count as own work, and a tip that the target holds is not merged.
+A branch is merged when it has a commit of its own and the target holds its work. The target holds the work when it contains the branch tip, or when a merge of the branch into the target gives the target tree, as after a rebase or squash merge. The branch reflog gives the own commits: the `commit`, `cherry-pick`, `revert`, and `am` entries that the branch still holds after its resets and rebases. When Git maintenance has expired the older reflog entries, so that the creation entry is missing, commits that the target lacks count as own work, and a tip that the target holds is not merged.
 
 Merge detection needs Git 2.41 or later. A failed check keeps the last result with the failure, and the next pass tries again.
 
