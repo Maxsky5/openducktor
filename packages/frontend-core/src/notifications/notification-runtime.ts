@@ -62,7 +62,7 @@ export const createNotificationRuntime = ({
 }) => {
   const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
   const activeHealth = new Map<string, NotificationHealth>();
-  const localErrorPublications = new Set<string>();
+  const localPublications = new Set<string>();
   // Session errors that another view already shows, and the in-app toasts shown for errors.
   const handledErrorIds = new Set<string>();
   const shownErrorToasts = new Map<string, string>();
@@ -222,7 +222,7 @@ export const createNotificationRuntime = ({
         occurrenceId: await boundNotificationOccurrenceId(rawOccurrence.occurrenceId),
       });
 
-      if (localErrorMessage !== undefined) localErrorPublications.add(occurrence.occurrenceId);
+      localPublications.add(occurrence.occurrenceId);
       const selected = await publishAction(occurrence);
       recoverCoordinationFailure("publication");
       return await dispatch(
@@ -235,13 +235,13 @@ export const createNotificationRuntime = ({
       reportCoordinationFailure("publication", occurrence, cause);
       return false;
     } finally {
-      if (localErrorMessage !== undefined) localErrorPublications.delete(occurrence.occurrenceId);
+      localPublications.delete(occurrence.occurrenceId);
     }
   };
 
   return {
-    publish(rawOccurrence: NotificationOccurrence): void {
-      void publishAndWait(rawOccurrence);
+    publish(rawOccurrence: NotificationOccurrence, inAppFeedbackHandled = false): void {
+      void publishAndWait(rawOccurrence, undefined, inAppFeedbackHandled);
     },
     publishAndWait,
     /**
@@ -293,7 +293,7 @@ export const createNotificationRuntime = ({
             return;
           }
           const { occurrence, settings } = frame.selected;
-          if (!localErrorPublications.has(occurrence.occurrenceId))
+          if (!localPublications.has(occurrence.occurrenceId))
             void dispatchHostOccurrence(occurrence, settings).catch((cause) =>
               reportCoordinationFailure("publication", occurrence, cause),
             );
@@ -306,7 +306,7 @@ export const createNotificationRuntime = ({
         })
         .catch(reportStreamFailure);
       const stopOccurrences = bridge.subscribeOccurrences((occurrence, settings) => {
-        if (localErrorPublications.has(occurrence.occurrenceId)) return;
+        if (localPublications.has(occurrence.occurrenceId)) return;
         void dispatchHostOccurrence(occurrence, settings).catch((cause) =>
           reportCoordinationFailure("publication", occurrence, cause),
         );

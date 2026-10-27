@@ -129,6 +129,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
             ...input,
             roleLabel: BUILTIN_ROLE_LABELS[input.role],
           }),
+          input.inAppFeedbackHandled,
         );
       },
       async publishSessionError(input, localErrorMessage) {
