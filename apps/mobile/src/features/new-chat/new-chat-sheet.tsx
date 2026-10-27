@@ -9,6 +9,7 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { startupShowsProgress } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import {
   useWorkspaceSessionCreate,
   useWorkspaceSessionCreateDefaults,
@@ -68,6 +69,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
   });
   const attemptId = form.startupAttemptId;
   const attempt = useStartupAttempt(attemptId);
+  const showProgress = startupShowsProgress(attempt);
   const branchPrefix = repoConfig.data?.branchPrefix;
   const request = buildNewChatRequest({
     workspaceId: workspace.workspaceId,
@@ -85,7 +87,8 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
     hostError: form.worktreeError,
     input: form.input,
   });
-  const starting = form.create.isPending || startupIsPending(attempt);
+  const starting =
+    form.create.isPending || startupIsPending(attempt) || (attemptId !== null && !showProgress);
   const edited = newChatFormEdited({
     name: form.name,
     roleId: form.roleId,
@@ -99,7 +102,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
     if (attemptId && !attempt) close();
   }, [attempt, attemptId, close]);
 
-  if (attemptId)
+  if (attemptId && showProgress)
     return (
       <SheetScreen
         title="New Chat"
@@ -126,10 +129,10 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
           note={request.blockedReason && !starting ? request.blockedReason : null}
           primary={
             <CreateChatButton
-              creating={form.create.isPending}
+              creating={starting}
               disabled={request.input === null || !gate.open}
               onCreate={() => {
-                if (request.input) form.submit();
+                if (!starting && request.input) form.submit();
               }}
             />
           }

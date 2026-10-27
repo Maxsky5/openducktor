@@ -571,7 +571,7 @@ test("uses the task modal label-to-control gap for every form field", async () =
   }
 });
 
-test("a current-checkout creation keeps simple status and failure feedback until Edit choices", async () => {
+test("a current-checkout creation keeps disabled choices pending and failure feedback until Edit choices", async () => {
   let rejectCreation!: (cause: Error) => void;
   let created = 0;
   let closed = 0;
@@ -590,11 +590,19 @@ test("a current-checkout creation keeps simple status and failure feedback until
   try {
     await selectModel(view);
     const name = view.getByLabelText("Name optional");
+    const submit = view.getByRole("button", { name: "Create chat" });
+    const form = submit.closest("form");
     fireEvent.change(name, { target: { value: "Retained session" } });
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+      fireEvent.click(submit);
     });
-    expect(view.getByText("Submitting request")).toBeDefined();
+    expect(view.getByLabelText("Name optional")).toBe(name);
+    expect(view.getByRole("button", { name: "Creating chat…" })).toBe(submit);
+    expect(submit.closest("form")).toBe(form);
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.querySelector("svg")).not.toBeNull();
+    expect(name.closest("fieldset")?.disabled).toBe(true);
+    expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
     expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
     await act(async () => {
@@ -798,8 +806,11 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       manualTitle: "My session",
       targetBranch: { remote: "origin", branch: "main" },
     });
-    expect(view.queryByLabelText("Name optional")).toBeNull();
-    expect(view.queryByRole("button", { name: "Create chat" })).toBeNull();
+    expect(view.getByLabelText("Name optional").closest("fieldset")?.disabled).toBe(true);
+    expect(view.getByRole("button", { name: "Creating chat…" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
     expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     const startup = requests[0]?.startup;
     if (!startup) throw new Error("Creation startup context is missing.");

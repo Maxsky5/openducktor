@@ -1,6 +1,7 @@
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { startupShowsProgress } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import type { ReactElement } from "react";
 import { StartupTrace } from "@/features/session-startup/startup-trace";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
@@ -21,20 +22,27 @@ export function SessionStartSheet({
 }): ReactElement {
   const attemptId = model.phase.kind === "progress" ? model.phase.startupAttemptId : null;
   const attempt = useStartupAttempt(attemptId);
+  const showProgress = startupShowsProgress(attempt);
+  const isStarting =
+    model.isStarting || startupIsPending(attempt) || (attemptId !== null && !showProgress);
   return (
     <GroupedSheet
       title={model.title}
       onClose={onClose ?? (() => model.onOpenChange(false))}
-      closable={!model.isStarting && !startupIsPending(attempt)}
+      closable={!isStarting}
     >
-      {attemptId ? (
+      {attemptId && showProgress ? (
         <StartupTrace
           attemptId={attemptId}
           onEditChoices={model.onEditChoices}
           onContinueInBackground={model.onContinueInBackground}
         />
       ) : (
-        <SessionStartForm model={model} branchesFailure={branchesFailure} onEdit={onEdit} />
+        <SessionStartForm
+          model={{ ...model, isStarting }}
+          branchesFailure={branchesFailure}
+          onEdit={onEdit}
+        />
       )}
     </GroupedSheet>
   );

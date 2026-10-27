@@ -40,23 +40,32 @@ import {
   useSessionStartKickoffDraft,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
-import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
+  useStartupDialogAttempt,
+  useStartupDialogClose,
+} from "@/features/session-startup/use-startup-dialog-attempt";
+import {
+  startupShowsProgress,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
 import { cn } from "@/lib/utils";
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
-  const { open, title, description, isStarting, onOpenChange } = model;
+  const { open, title, description, onOpenChange } = model;
   const kickoffDraft = useSessionStartKickoffDraft({
     requestId: model.requestId,
     open,
     prompt: model.kickoffPrompt,
   });
   const speed = useSessionStartSpeed(model);
-  const showingProgress = model.phase.kind === "progress";
-  const attempt = useStartupAttempt(
+  const startup = useStartupDialogAttempt(
     model.phase.kind === "progress" ? model.phase.startupAttemptId : null,
   );
+  const { attempt, hasFailed } = startup;
+  useStartupDialogClose(startup, open, () => onOpenChange(false));
+  const showingProgress = hasFailed || startupShowsProgress(attempt);
+  const isStarting = model.isStarting || (model.phase.kind === "progress" && !showingProgress);
   const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
 
   return (
@@ -90,7 +99,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
           </DialogDescription>
         </DialogHeader>
 
-        {model.phase.kind === "progress" ? (
+        {model.phase.kind === "progress" && showingProgress ? (
           <StartupDialogProgress
             open={open}
             startupAttemptId={model.phase.startupAttemptId}
@@ -138,10 +147,10 @@ function SessionStartForm({
     onSelectRuntimeProfile,
     onSelectVariant,
     allowRunInBackground = false,
-    isStarting,
     onOpenChange,
     onConfirm,
   } = model;
+  const isStarting = model.isStarting || model.phase.kind === "progress";
 
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
@@ -163,7 +172,7 @@ function SessionStartForm({
     kickoffPrompt: kickoffDraft.value,
   });
   const handleConfirm = (): void => {
-    if (confirmDisabled) {
+    if (isStarting || confirmDisabled) {
       return;
     }
     onConfirm({ ...confirmInput, runInBackground: false });
@@ -254,6 +263,9 @@ function SessionStartForm({
         confirmLabel={confirmLabel}
         confirmInput={confirmInput}
         isStarting={isStarting}
+        onContinueInBackground={
+          model.phase.kind === "progress" ? model.onContinueInBackground : undefined
+        }
         onConfirm={onConfirm}
         onOpenChange={onOpenChange}
       />
@@ -464,6 +476,7 @@ type SessionStartModalFooterProps = {
   confirmLabel: string;
   confirmInput: SessionStartModalConfirmDraft;
   isStarting: boolean;
+  onContinueInBackground?: (() => void) | undefined;
   onConfirm: (input?: SessionStartModalConfirmInput) => void;
   onOpenChange: (nextOpen: boolean) => void;
 };
@@ -476,6 +489,7 @@ function SessionStartModalFooter({
   confirmLabel,
   confirmInput,
   isStarting,
+  onContinueInBackground,
   onConfirm,
   onOpenChange,
 }: SessionStartModalFooterProps): ReactElement {
@@ -495,16 +509,20 @@ function SessionStartModalFooter({
           <Button
             type="button"
             variant="secondary"
-            disabled={confirmDisabled}
-            onClick={() => onConfirm({ ...confirmInput, runInBackground: true })}
+            disabled={!onContinueInBackground && confirmDisabled}
+            onClick={
+              onContinueInBackground ??
+              (() => onConfirm({ ...confirmInput, runInBackground: true }))
+            }
           >
-            {isStarting ? <LoaderCircle className="size-4 animate-spin" /> : null}
-            {backgroundConfirmLabel}
+            {onContinueInBackground ? "Continue in background" : backgroundConfirmLabel}
           </Button>
         ) : null}
-        <Button type="submit" disabled={confirmDisabled}>
-          {isStarting ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          {confirmLabel}
+        <Button type="submit" disabled={confirmDisabled || isStarting} aria-busy={isStarting}>
+          {isStarting ? (
+            <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />
+          ) : null}
+          {isStarting ? "Starting..." : confirmLabel}
         </Button>
       </div>
     </DialogFooter>

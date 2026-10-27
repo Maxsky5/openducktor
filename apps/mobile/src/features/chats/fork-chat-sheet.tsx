@@ -9,6 +9,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { startupShowsProgress } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
@@ -117,7 +118,7 @@ function ForkChatForm({
   const [worktree, setWorktree] = useState<WorkspaceSessionWorktreeInput>(() =>
     initialForkWorktree(record),
   );
-  const { pending, failure } = command;
+  const { running, failure } = command;
   const fieldError = workspaceSessionValidationError(failure);
   const branchPrefix = config.data?.branchPrefix;
   const input = workspaceSessionForkInput({
@@ -129,8 +130,8 @@ function ForkChatForm({
     branchPrefix,
   });
   const blockedReason = forkBlockedReason(gate.open, command.hasSource);
-  const note = pending ? null : (blockedReason ?? (input ? null : "Enter a worktree name."));
-  if (command.attemptId)
+  const note = running ? null : (blockedReason ?? (input ? null : "Enter a worktree name."));
+  if (command.attemptId && command.showProgress)
     return (
       <SheetScreen title={TITLE} closable={!command.running}>
         <Screen background="sheet">
@@ -139,17 +140,17 @@ function ForkChatForm({
       </SheetScreen>
     );
   return (
-    <SheetScreen title={TITLE} closable={!pending}>
+    <SheetScreen title={TITLE} closable={!running}>
       <Screen background="sheet">
         <ActionForm
           note={note}
           primary={
             <Button
-              label={pending ? "Forking Chat" : "Fork Chat"}
+              label={running ? "Forking Chat" : "Fork Chat"}
               size="lg"
-              loading={pending}
+              loading={running}
               command
-              disabled={pending || blockedReason !== null || input === null}
+              disabled={running || blockedReason !== null || input === null}
               accessibilityHint="Creates the chat and opens it."
               onPress={() => {
                 if (input && !blockedReason) command.submit(input);
@@ -169,7 +170,7 @@ function ForkChatForm({
           ) : null}
           <FormBody>
             <FormLead text={FORK_CHAT_TEXT.description} />
-            <ForkLocation destination={destination} onChange={setDestination} disabled={pending} />
+            <ForkLocation destination={destination} onChange={setDestination} disabled={running} />
             <SourceFolder record={record} />
             {destination === "new_worktree" ? (
               <NewWorktreeFields
@@ -180,7 +181,7 @@ function ForkChatForm({
                 }}
                 defaultBranch={newWorktreeBranchState(worktree, branchPrefix).defaultBranch}
                 fieldError={fieldError}
-                disabled={pending}
+                disabled={running}
               />
             ) : null}
           </FormBody>
@@ -221,7 +222,8 @@ const useForkChatCommand = (
   const pending =
     source !== null &&
     pendingRequests.has(sessionForkRequestKey(workspace.repoPath, source, { messageId }));
-  const running = pending || startupIsPending(attempt);
+  const showProgress = startupShowsProgress(attempt);
+  const running = pending || startupIsPending(attempt) || (attemptId !== null && !showProgress);
   const allowRemoval = usePreventRemove(running, () => {});
   const closed = useRef(false);
   const close = useCallback(() => {
@@ -236,7 +238,7 @@ const useForkChatCommand = (
     if (attemptId && !attempt) close();
   }, [attempt, attemptId, close]);
   const submit = (input: WorkspaceSessionForkInput) => {
-    if (pending || !source) return;
+    if (running || !source) return;
     setFailure(null);
     let submittedAttemptId: string | null = null;
     void forkWorkspaceSession(queryClient, store, workspace.repoPath, source, input, {
@@ -271,6 +273,7 @@ const useForkChatCommand = (
     hasSource: source !== null,
     pending,
     running,
+    showProgress,
     attemptId,
     editChoices: () => {
       if (attemptId) startupAttempts.dismiss(attemptId);

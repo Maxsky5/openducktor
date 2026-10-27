@@ -211,15 +211,10 @@ export function SessionStartForm({
       note={blockedReason}
       secondary={
         model.allowRunInBackground ? (
-          <Button
-            label={titleCase(model.backgroundConfirmLabel ?? "Run in background")}
-            variant="gray"
-            size="lg"
-            command
+          <SessionStartBackgroundButton
+            model={model}
             disabled={confirmDisabled}
-            accessibilityHint="Starts the session and keeps this screen."
-            onPress={() => confirm(true)}
-            fill
+            onConfirm={() => confirm(true)}
           />
         ) : null
       }
@@ -296,6 +291,38 @@ export function SessionStartForm({
         ) : null}
       </FormBody>
     </ActionForm>
+  );
+}
+
+function SessionStartBackgroundButton({
+  model,
+  disabled,
+  onConfirm,
+}: {
+  model: SessionStartModalModel;
+  disabled: boolean;
+  onConfirm: () => void;
+}): ReactElement {
+  const submitted = model.phase.kind === "progress";
+  return (
+    <Button
+      label={
+        submitted
+          ? "Continue in Background"
+          : titleCase(model.backgroundConfirmLabel ?? "Run in background")
+      }
+      variant="gray"
+      size="lg"
+      command={!submitted}
+      disabled={!submitted && disabled}
+      accessibilityHint={
+        submitted
+          ? "Keeps the session start running and closes this sheet."
+          : "Starts the session and keeps this screen."
+      }
+      onPress={submitted ? model.onContinueInBackground : onConfirm}
+      fill
+    />
   );
 }
 

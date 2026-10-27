@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useMemo, useSyncExternalStore } from "react";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type {
   StartupAttempt,
@@ -11,7 +11,7 @@ type DialogAttemptSnapshot = {
   hasFailed: boolean;
 };
 
-export function useStartupDialogAttempt(id: string) {
+export function useStartupDialogAttempt(id: string | null) {
   const { startupAttempts } = useClientConnection();
   const observer = useMemo(
     () => createDialogAttemptObserver(startupAttempts, id),
@@ -20,8 +20,20 @@ export function useStartupDialogAttempt(id: string) {
   return useSyncExternalStore(observer.subscribe, observer.getSnapshot, observer.getSnapshot);
 }
 
-function createDialogAttemptObserver(attempts: StartupAttemptStore, id: string) {
-  const initial = attempts.getAttempt(id);
+export function useStartupDialogClose(
+  { attempt, released }: DialogAttemptSnapshot,
+  open: boolean,
+  onClose: () => void,
+): void {
+  const close = useEffectEvent(onClose);
+  const transferred = attempt?.presentation === "notification";
+  useEffect(() => {
+    if (open && (released || transferred)) close();
+  }, [open, released, transferred]);
+}
+
+function createDialogAttemptObserver(attempts: StartupAttemptStore, id: string | null) {
+  const initial = id ? attempts.getAttempt(id) : null;
   let snapshot: DialogAttemptSnapshot = {
     attempt: initial,
     released: false,
@@ -30,6 +42,7 @@ function createDialogAttemptObserver(attempts: StartupAttemptStore, id: string) 
   return {
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => {
+      if (!id) return () => {};
       const update = () => {
         const attempt = attempts.getAttempt(id);
         if (attempt === snapshot.attempt || (!attempt && snapshot.released)) return;

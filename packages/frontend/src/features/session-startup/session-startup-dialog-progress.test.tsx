@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { StartupDialogProgress } from "./session-startup-dialog-progress";
 import { AppToaster, StartupNotifications } from "./session-startup-stack";
 import { useOpenStartupSession } from "./use-open-startup-session";
+import { useStartupDialogAttempt, useStartupDialogClose } from "./use-startup-dialog-attempt";
 
 test.each([
   ["workspace", "failed"],
@@ -167,6 +168,11 @@ test.each([
     function Harness() {
       const [open, setOpen] = useState(true);
       const location = useLocation();
+      const close = () => {
+        closed();
+        setOpen(false);
+      };
+      useStartupDialogClose(useStartupDialogAttempt(id), open, close);
       return (
         <>
           <output aria-label="Current location">
@@ -180,14 +186,7 @@ test.each([
               <DialogHeader>
                 <DialogTitle>Startup</DialogTitle>
               </DialogHeader>
-              <StartupDialogProgress
-                open={open}
-                startupAttemptId={id}
-                onClose={() => {
-                  closed();
-                  setOpen(false);
-                }}
-              />
+              <StartupDialogProgress open={open} startupAttemptId={id} onClose={close} />
             </DialogContent>
           </Dialog>
         </>

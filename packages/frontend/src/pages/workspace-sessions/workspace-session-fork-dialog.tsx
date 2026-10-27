@@ -35,9 +35,15 @@ import { NewWorktreeBranchFields, WorktreeNameField } from "./workspace-session-
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import {
+  useStartupDialogAttempt,
+  useStartupDialogClose,
+} from "@/features/session-startup/use-startup-dialog-attempt";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
+  startupShowsProgress,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { useWorkspaceForkHandoff } from "./use-workspace-fork-handoff";
 import { cn } from "@/lib/utils";
 
@@ -74,15 +80,18 @@ export function WorkspaceSessionForkDialog({
   );
   const [failure, setFailure] = useState<Error | null>(null);
   const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
-  const attempt = useStartupAttempt(startupAttemptId);
+  const startup = useStartupDialogAttempt(startupAttemptId);
+  const { attempt } = startup;
   const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
+  const showingProgress = startupShowsProgress(attempt);
   const observeHandoff = useWorkspaceForkHandoff({
     workspace,
     sourceSessionId: record.id,
     open,
     onForked,
   });
-  const starting = pending || startupIsPending(attempt);
+  const starting =
+    pending || startupIsPending(attempt) || Boolean(startupAttemptId && !showingProgress);
   const worktreeError = workspaceSessionValidationError(failure);
   const formError = worktreeError ? null : failure;
   const { name: folderName, directory } = forkSourceFolder(record);
@@ -119,6 +128,7 @@ export function WorkspaceSessionForkDialog({
       connection.startupAttempts.dismiss(startupAttemptId);
     onClose();
   };
+  useStartupDialogClose(startup, open, close);
   const editChoices = () => {
     if (startupAttemptId) connection.startupAttempts.dismiss(startupAttemptId);
     setStartupAttemptId(null);
@@ -132,11 +142,10 @@ export function WorkspaceSessionForkDialog({
       }}
     >
       <DialogContent
-        className={cn(
-          "my-0 gap-0 p-0 sm:max-w-2xl",
-          startupAttemptId && "max-w-lg overflow-hidden sm:max-w-lg",
-          hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
-        )}
+        className={cn("my-0 gap-0 p-0 sm:max-w-2xl", {
+          "max-w-lg overflow-hidden sm:max-w-lg": showingProgress,
+          "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]": hasTrace,
+        })}
         closeButton={starting ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}
         onEscapeKeyDown={(event) => {
@@ -147,14 +156,14 @@ export function WorkspaceSessionForkDialog({
         }}
       >
         <DialogHeader
-          className={cn("border-b border-border px-6 py-4", startupAttemptId && "px-4 py-3")}
+          className={cn("border-b border-border px-6 py-4", showingProgress && "px-4 py-3")}
         >
           <DialogTitle>{FORK_CHAT_TEXT.title}</DialogTitle>
-          <DialogDescription className={cn(startupAttemptId && "sr-only")}>
-            {startupAttemptId ? "Follow session startup progress." : FORK_CHAT_TEXT.description}
+          <DialogDescription className={cn(showingProgress && "sr-only")}>
+            {showingProgress ? "Follow session startup progress." : FORK_CHAT_TEXT.description}
           </DialogDescription>
         </DialogHeader>
-        {startupAttemptId ? (
+        {startupAttemptId && showingProgress ? (
           <StartupDialogProgress
             open={open}
             startupAttemptId={startupAttemptId}
@@ -169,12 +178,12 @@ export function WorkspaceSessionForkDialog({
               submit();
             }}
           >
-            <fieldset disabled={pending} className="contents">
+            <fieldset disabled={starting} className="contents">
               <DialogBody className="flex flex-col gap-4 px-6 py-4">
                 <WorkspaceSessionWorkLocationField
                   value={destination}
                   onValueChange={setDestination}
-                  disabled={pending}
+                  disabled={starting}
                   ariaLabel={FORK_CHAT_TEXT.locationLabel}
                   options={[
                     {
@@ -223,14 +232,14 @@ export function WorkspaceSessionForkDialog({
                     <WorktreeNameField
                       value={worktree}
                       onChange={changeWorktree}
-                      disabled={pending}
+                      disabled={starting}
                       error={worktreeError}
                     />
                     <NewWorktreeBranchFields
                       workspace={workspace}
                       value={worktree}
                       onChange={changeWorktree}
-                      disabled={pending}
+                      disabled={starting}
                       error={worktreeError}
                       alwaysExpanded
                     />
@@ -241,7 +250,7 @@ export function WorkspaceSessionForkDialog({
                 ) : null}
               </DialogBody>
               <ForkFooter
-                pending={pending}
+                pending={starting}
                 error={formError}
                 disabledReason={disabledReason}
                 canSubmit={input !== null}
@@ -284,8 +293,14 @@ function ForkFooter({
         <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending || disabledReason !== null || !canSubmit}>
-          {pending ? <LoaderCircle className="animate-spin" /> : null}
+        <Button
+          type="submit"
+          disabled={pending || disabledReason !== null || !canSubmit}
+          aria-busy={pending}
+        >
+          {pending ? (
+            <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />
+          ) : null}
           {pending ? FORK_CHAT_TEXT.confirming : FORK_CHAT_TEXT.confirm}
         </Button>
       </div>

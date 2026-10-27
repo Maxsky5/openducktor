@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useEffectEvent, useRef } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
@@ -23,12 +23,7 @@ export function StartupDialogProgress({
   startupAttemptId: string;
   open: boolean;
 }): ReactElement {
-  const { attempt, released, hasFailed } = useStartupDialogAttempt(startupAttemptId);
-  const closeDialog = useEffectEvent(actions.onClose);
-  const transferred = attempt?.presentation === "notification";
-  useEffect(() => {
-    if (open && (released || transferred)) closeDialog();
-  }, [open, released, transferred]);
+  const { attempt, hasFailed } = useStartupDialogAttempt(startupAttemptId);
   return (
     <>
       <DialogBody className="flex min-h-0 flex-col overflow-hidden px-4 py-3">

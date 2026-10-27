@@ -33,9 +33,15 @@ import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fie
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import {
+  useStartupDialogAttempt,
+  useStartupDialogClose,
+} from "@/features/session-startup/use-startup-dialog-attempt";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
+  startupShowsProgress,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { cn } from "@/lib/utils";
 
 type WorkspaceSessionCreateDialogProps = {
@@ -71,9 +77,12 @@ export function WorkspaceSessionCreateDialog({
     },
   });
   const { create, startupAttemptId, editChoices, dismissStartup } = form;
-  const attempt = useStartupAttempt(startupAttemptId);
+  const startup = useStartupDialogAttempt(startupAttemptId);
+  const { attempt } = startup;
   const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
-  const starting = create.isPending || startupIsPending(attempt);
+  const showingProgress = startupShowsProgress(attempt);
+  const starting =
+    create.isPending || startupIsPending(attempt) || Boolean(startupAttemptId && !showingProgress);
   const close = () => {
     if (
       !startupAttemptId ||
@@ -82,6 +91,7 @@ export function WorkspaceSessionCreateDialog({
       dismissStartup();
     onClose();
   };
+  useStartupDialogClose(startup, open, close);
   return (
     <Dialog
       open={open}
@@ -92,7 +102,7 @@ export function WorkspaceSessionCreateDialog({
       <DialogContent
         className={cn(
           "my-0 gap-0 p-0 sm:max-w-2xl",
-          startupAttemptId && "max-w-lg overflow-hidden sm:max-w-lg",
+          showingProgress && "max-w-lg overflow-hidden sm:max-w-lg",
           hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
         )}
         closeButton={starting ? null : undefined}
@@ -105,16 +115,16 @@ export function WorkspaceSessionCreateDialog({
         }}
       >
         <DialogHeader
-          className={cn("border-b border-border px-6 py-4", startupAttemptId && "px-4 py-3")}
+          className={cn("border-b border-border px-6 py-4", showingProgress && "px-4 py-3")}
         >
           <DialogTitle>New chat</DialogTitle>
-          <DialogDescription className={cn(startupAttemptId && "sr-only")}>
-            {startupAttemptId
+          <DialogDescription className={cn(showingProgress && "sr-only")}>
+            {showingProgress
               ? "Follow session startup progress."
               : "Choose where the agent works and how it starts."}
           </DialogDescription>
         </DialogHeader>
-        {startupAttemptId ? (
+        {startupAttemptId && showingProgress ? (
           <StartupDialogProgress
             open={open}
             startupAttemptId={startupAttemptId}
@@ -129,6 +139,7 @@ export function WorkspaceSessionCreateDialog({
             repoConfig={repoConfig}
             workspace={workspace}
             onClose={close}
+            starting={starting}
           />
         )}
       </DialogContent>
@@ -142,12 +153,14 @@ function WorkspaceSessionCreateForm({
   repoConfig,
   workspace,
   onClose,
+  starting,
 }: {
   form: ReturnType<typeof useWorkspaceSessionCreate>;
   model: ReturnType<typeof useWorkspaceSessionCreateModelPicker>;
   repoConfig: ReturnType<typeof useWorkspaceSessionCreateDefaults>["repoConfig"];
   workspace: ActiveWorkspace;
   onClose: () => void;
+  starting: boolean;
 }): ReactElement {
   const {
     name,
@@ -175,10 +188,10 @@ function WorkspaceSessionCreateForm({
       className="flex min-h-0 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
-        submit();
+        if (!starting) submit();
       }}
     >
-      <fieldset disabled={create.isPending} className="contents">
+      <fieldset disabled={starting} className="contents">
         <DialogBody className="flex flex-col gap-3 px-6 py-4">
           <div className="grid gap-1.5">
             <Label htmlFor="workspace-session-name">
@@ -193,7 +206,7 @@ function WorkspaceSessionCreateForm({
               maxLength={WORKSPACE_SESSION_MANUAL_TITLE_LIMIT}
             />
           </div>
-          <WorkspaceSessionModelFields model={model} disabled={create.isPending} />
+          <WorkspaceSessionModelFields model={model} disabled={starting} />
           {repoConfig.isError && (
             <div role="alert">
               <p className="text-sm text-destructive">
@@ -214,7 +227,7 @@ function WorkspaceSessionCreateForm({
                 triggerAriaLabelledBy="workspace-session-role"
                 value={roleId}
                 onValueChange={setRoleId}
-                disabled={create.isPending || roles.isPending || roles.isError}
+                disabled={starting || roles.isPending || roles.isError}
                 options={[
                   { value: NO_CUSTOM_AGENT_ROLE, label: "No role" },
                   ...(roles.data ?? []).map((role) => ({ value: role.id, label: role.name })),
@@ -238,7 +251,7 @@ function WorkspaceSessionCreateForm({
           <WorkspaceSessionWorkLocationField
             value={location}
             onValueChange={selectLocation}
-            disabled={create.isPending}
+            disabled={starting}
             options={[
               {
                 value: "local_repo_root",
@@ -263,7 +276,7 @@ function WorkspaceSessionCreateForm({
           {location === "existing_worktree" && (
             <WorkspaceSessionExistingWorktreeField
               choice={existing}
-              disabled={create.isPending}
+              disabled={starting}
               onChange={selectExistingWorktree}
             />
           )}
@@ -272,14 +285,14 @@ function WorkspaceSessionCreateForm({
             defaultTarget={defaultTarget}
             allowUpstream={location === "local_repo_root"}
             branches={branches}
-            disabled={create.isPending}
+            disabled={starting}
             onChange={pickTarget}
           />
           {location === "local_worktree" && (
             <WorkspaceSessionWorktreeFields
               workspace={workspace}
               value={worktree}
-              disabled={create.isPending}
+              disabled={starting}
               branches={branches}
               error={worktreeError}
               onChange={changeWorktree}
@@ -295,9 +308,9 @@ function WorkspaceSessionCreateForm({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={create.isPending || input === null}>
-            {create.isPending && <LoaderCircle className="animate-spin" />}
-            {create.isPending ? "Creating chat…" : "Create chat"}
+          <Button type="submit" disabled={starting || input === null} aria-busy={starting}>
+            {starting && <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />}
+            {starting ? "Creating chat…" : "Create chat"}
           </Button>
         </DialogFooter>
       </fieldset>

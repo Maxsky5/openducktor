@@ -2,6 +2,22 @@ import type { StartupOperationSnapshot, StartupStep } from "@openducktor/contrac
 import { terminalCommandSucceeded } from "../../terminals/terminal-command-result";
 import type { StartupAttempt } from "./startup-attempt-store";
 
+export function startupShowsProgress(attempt: StartupAttempt | null): boolean {
+  return (
+    attempt !== null &&
+    (startupTraceRows(attempt).length > 0 ||
+      startupFailureRows(attempt).length > 0 ||
+      attempt.operations.some(
+        (operation) => operation.phase === "failed" || operation.phase === "canceled",
+      ) ||
+      attempt.status.phase === "failed" ||
+      attempt.status.phase === "canceled" ||
+      attempt.status.confirmation === "unconfirmed" ||
+      attempt.instruction?.state === "unknown" ||
+      Boolean(attempt.error))
+  );
+}
+
 export function startupTraceRows(attempt: StartupAttempt): { id: string; step: StartupStep }[] {
   if (!attempt.operations.some(createdWorktree)) return [];
 

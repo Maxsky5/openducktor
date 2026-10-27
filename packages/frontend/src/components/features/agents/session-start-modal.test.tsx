@@ -145,7 +145,7 @@ const getFieldButton = (testId: string): HTMLButtonElement => {
 };
 
 describe("SessionStartModal", () => {
-  test("keeps the dialog mounted when choices become progress and guards dismissal until settlement", () => {
+  test("keeps choices mounted while pending and shows progress after a worktree is created", async () => {
     const connection = createTestClientConnection();
     const startupAttemptId = connection.startupAttempts.begin({
       origin: {
@@ -166,6 +166,8 @@ describe("SessionStartModal", () => {
     );
     try {
       const dialog = view.getByRole("dialog");
+      const submit = view.getByRole("button", { name: "Start session" });
+      const form = submit.closest("form");
       view.rerender(
         <QueryProvider connection={connection}>
           <SessionStartModal
@@ -174,14 +176,97 @@ describe("SessionStartModal", () => {
         </QueryProvider>,
       );
       expect(view.getByRole("dialog")).toBe(dialog);
-      expect(view.queryByRole("button", { name: "Start session" })).toBeNull();
+      expect(view.getByRole("button", { name: "Starting..." })).toBe(submit);
+      expect(submit.closest("form")).toBe(form);
+      expect(submit.hasAttribute("disabled")).toBe(true);
+      expect(submit.getAttribute("aria-busy")).toBe("true");
+      expect(submit.querySelector("svg")).not.toBeNull();
+      expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
+      expect(
+        view.getByTestId("session-start-model-picker-field").closest("fieldset")?.disabled,
+      ).toBe(true);
       expect(view.queryByRole("button", { name: "Close" })).toBeNull();
       fireEvent.keyDown(dialog, { key: "Escape" });
       expect(onOpenChange).not.toHaveBeenCalled();
       fireEvent.click(view.getByRole("button", { name: "Continue in background" }));
       expect(onContinueInBackground).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await connection.startupAttempts.operation(startupAttemptId, async (context) => ({
+          startupProgress: {
+            context,
+            hostInstanceId: "host",
+            revision: 1,
+            workspaceId: "workspace",
+            repoPath: "/repo",
+            scope: { kind: "task", taskId: "task", role: "build" },
+            phase: "running",
+            ownership: { state: "not_saved" },
+            steps: [
+              {
+                id: "checkout",
+                label: "Create worktree",
+                state: "completed",
+                details: [],
+                resources: [{ kind: "worktree", value: "/repo/worktree", state: "created" }],
+              },
+            ],
+          },
+        }));
+      });
+      expect(view.getByRole("dialog")).toBe(dialog);
+      expect(view.queryByRole("button", { name: "Start session" })).toBeNull();
+      expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+      expect(view.getByText("Create worktree")).toBeDefined();
     } finally {
       view.unmount();
+      await connection.dispose();
+    }
+  });
+
+  test("keeps recovery mounted while retrying a client failure without a worktree trace", async () => {
+    const connection = createTestClientConnection();
+    const startupAttemptId = connection.startupAttempts.begin({
+      origin: {
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        scope: { kind: "task", taskId: "task", role: "build" },
+      },
+      label: "Start Builder session",
+      presentation: "dialog",
+    });
+    const view = renderWithoutConnection(
+      <QueryProvider connection={connection}>
+        <SessionStartModal model={createModel({ phase: { kind: "progress", startupAttemptId } })} />
+      </QueryProvider>,
+    );
+    try {
+      await act(async () => {
+        connection.startupAttempts.fail(startupAttemptId, "The start request failed. Retry it.");
+      });
+      const recovery = view.getByRole("region", { name: "Session startup details" });
+      expect(view.getByRole("alert").textContent).toContain("The start request failed. Retry it.");
+      await act(async () => {
+        await connection.startupAttempts.operation(startupAttemptId, async (context) => ({
+          startupProgress: {
+            context,
+            hostInstanceId: "host",
+            revision: 1,
+            workspaceId: "workspace",
+            repoPath: "/repo",
+            scope: { kind: "task", taskId: "task", role: "build" },
+            phase: "running",
+            ownership: { state: "not_saved" },
+            steps: [{ id: "runtime", label: "Prepare runtime", state: "running", details: [] }],
+          },
+        }));
+      });
+      expect(view.getByRole("region", { name: "Session startup details" })).toBe(recovery);
+      expect(view.queryByTestId("session-start-model-picker-field")).toBeNull();
+      expect(view.queryByRole("alert")).toBeNull();
+      expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    } finally {
+      view.unmount();
+      await connection.dispose();
     }
   });
 

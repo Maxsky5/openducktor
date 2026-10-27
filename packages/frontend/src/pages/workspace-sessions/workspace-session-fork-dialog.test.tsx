@@ -254,7 +254,6 @@ test("opening a saved failed same-folder fork retains feedback and session inspe
 
 test.each([
   ["fork", "automatic"],
-  ["fork", "manual"],
   ["repair", "automatic"],
   ["repair", "manual"],
 ] as const)(
@@ -353,10 +352,18 @@ test.each([
       expect(harness.completed).toEqual([]);
       expect(harness.closed()).toBe(0);
       expect(harness.view.getByRole("dialog")).toBeDefined();
-      const open = harness.view.getByRole("button", { name: "Open session" });
+      if (operation === "fork") {
+        expect(
+          harness.view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled"),
+        ).toBe(true);
+        expect(
+          harness.view.getByRole("radio", { name: "Same folder" }).closest("fieldset")?.disabled,
+        ).toBe(true);
+        expect(harness.view.queryByRole("region", { name: "Session startup details" })).toBeNull();
+      }
       if (handoff === "manual") {
         await act(async () => {
-          fireEvent.click(open);
+          fireEvent.click(harness.view.getByRole("button", { name: "Open session" }));
         });
         expect(harness.view.getByLabelText("Current location").textContent).toBe(
           "/sessions?workspace=workspace&kind=workspace&session=ready-child",
@@ -402,8 +409,10 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
     expect(view.getByText("/worktrees/source-feature")).toBeDefined();
     expect(view.getByText("source-feature")).toBeDefined();
     expect(view.getByText("odt/source-feature")).toBeDefined();
+    const submit = view.getByRole("button", { name: "Fork chat" });
+    const form = submit.closest("form");
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Fork chat" }));
+      fireEvent.click(submit);
     });
     expect(calls).toEqual([
       {
@@ -413,7 +422,14 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
         destination: { kind: "same_folder" },
       },
     ]);
-    expect(view.getByText("Submitting request")).toBeDefined();
+    expect(view.getByRole("button", { name: "Forking chat…" })).toBe(submit);
+    expect(submit.closest("form")).toBe(form);
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.querySelector("svg")).not.toBeNull();
+    expect(view.getByRole("radio", { name: "Same folder" }).closest("fieldset")?.disabled).toBe(
+      true,
+    );
+    expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
     expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
     expect(view.queryByRole("button", { name: "Fork chat" })).toBeNull();
@@ -467,8 +483,10 @@ test("new worktree uses New chat defaults and validation and keeps inputs after 
       name: "retry-fork",
       branchName: "feature/alternate",
     });
-    expect(view.queryByLabelText("Worktree name")).toBeNull();
-    expect(view.queryByLabelText("Branch name optional")).toBeNull();
+    expect(view.getByLabelText("Worktree name")).toBe(name);
+    expect(view.getByLabelText("Branch name optional")).toBe(branch);
+    expect(name.closest("fieldset")?.disabled).toBe(true);
+    expect(view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled")).toBe(true);
     await act(async () => {
       reject(new Error("Claude refused the fork point. Load another reply."));
     });
