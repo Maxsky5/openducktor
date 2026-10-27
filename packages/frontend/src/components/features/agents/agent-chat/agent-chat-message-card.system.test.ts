@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { buildSessionPolicyNoticeMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-notice-messages";
@@ -140,7 +140,7 @@ describe("AgentChatMessageCard system messages", () => {
   test.each([
     { label: "Show system prompt", prefix: "System prompt:\n\n" },
     { label: "Show instruction update", prefix: AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX },
-  ])("renders $label content only while open", async ({ label, prefix }) => {
+  ])("keeps $label searchable with lazy Markdown", async ({ label, prefix }) => {
     const rendered = render(
       createMessageCardElement({
         message: {
@@ -156,7 +156,22 @@ describe("AgentChatMessageCard system messages", () => {
       const summary = rendered.getByText(label, { selector: "summary" });
       const disclosure = summary.closest("details");
       expect(disclosure?.open).toBe(false);
-      expect(disclosure?.children).toHaveLength(1);
+      expect(disclosure?.textContent).toContain(
+        "Always **validate tool inputs** before execution.",
+      );
+      expect(disclosure?.querySelector("strong")).toBeNull();
+
+      if (!disclosure) throw new Error("Expected the system disclosure");
+      await act(async () => {
+        disclosure.open = true;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(disclosure.querySelector("strong") === null).toBe(true);
+      expect(disclosure.textContent).toContain("Always **validate tool inputs** before execution.");
+      await act(async () => {
+        disclosure.open = false;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
 
       fireEvent.click(summary);
       await waitFor(() => {
@@ -170,7 +185,10 @@ describe("AgentChatMessageCard system messages", () => {
       fireEvent.click(summary);
       await waitFor(() => {
         expect(disclosure?.open).toBe(false);
-        expect(disclosure?.children).toHaveLength(1);
+        expect(disclosure?.textContent).toContain(
+          "Always **validate tool inputs** before execution.",
+        );
+        expect(disclosure?.querySelector("strong")).toBeNull();
       });
 
       fireEvent.click(summary);
@@ -185,7 +203,7 @@ describe("AgentChatMessageCard system messages", () => {
     }
   });
 
-  test("wraps long unbroken system prose when its disclosure opens", async () => {
+  test("keeps closed system prose searchable and wraps it when opened", async () => {
     const rendered = render(
       createMessageCardElement({
         message: {
@@ -198,6 +216,10 @@ describe("AgentChatMessageCard system messages", () => {
     );
 
     try {
+      const disclosure = rendered.container.querySelector("details");
+      expect(disclosure?.open).toBe(false);
+      expect(disclosure?.textContent).toContain(LONG_TRANSCRIPT_SAMPLE);
+      expect(disclosure?.querySelector("p")).toBeNull();
       fireEvent.click(rendered.getByText("Show system message", { selector: "summary" }));
       await waitFor(() => {
         expect(rendered.container.querySelector("p")?.textContent).toBe(LONG_TRANSCRIPT_SAMPLE);

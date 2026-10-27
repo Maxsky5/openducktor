@@ -491,21 +491,39 @@ const ToolMessageBody = ({
 
 const SystemMessageDisclosure = ({
   label,
+  text,
   children,
 }: {
   label: string;
+  text: string;
   children: ReactNode;
 }): ReactElement => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isBodyMounted, setIsBodyMounted] = useState(false);
   return (
     <details
       className="rounded border border-border"
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        if (!event.currentTarget.open) setIsBodyMounted(false);
+      }}
     >
-      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <summary
+        className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClickCapture={(event) => {
+          // SAFETY: This summary is a direct child of the details element above.
+          const disclosure = event.currentTarget.parentElement as HTMLDetailsElement;
+          setIsBodyMounted(!disclosure.open);
+        }}
+      >
         {label}
       </summary>
-      {isOpen ? <div className="border-t border-border p-2">{children}</div> : null}
+      <div
+        className={cn(
+          "border-t border-border p-2",
+          !isBodyMounted && "whitespace-pre-wrap break-words",
+        )}
+      >
+        {isBodyMounted ? children : text}
+      </div>
     </details>
   );
 };
@@ -518,14 +536,14 @@ const renderSystemMessage = (
   const instructions = resolveInstructionsMessage(message, systemPromptBody);
   if (instructions) {
     return (
-      <SystemMessageDisclosure label={instructions.toggleLabel}>
+      <SystemMessageDisclosure label={instructions.toggleLabel} text={instructions.markdown}>
         <AgentChatMarkdownRenderer markdown={instructions.markdown} variant="compact" />
       </SystemMessageDisclosure>
     );
   }
   if (message.role !== "system" || sessionRuntimeKind !== "opencode") return null;
   return (
-    <SystemMessageDisclosure label="Show system message">
+    <SystemMessageDisclosure label="Show system message" text={message.content}>
       <AgentChatTranscriptProse className="leading-6 text-foreground">
         {message.content}
       </AgentChatTranscriptProse>
