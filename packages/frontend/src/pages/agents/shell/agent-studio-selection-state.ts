@@ -1,4 +1,3 @@
-import type { AgentRole } from "@openducktor/core";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   agentSessionIdentityKey,
@@ -8,6 +7,7 @@ import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate,
 } from "../query-sync/agent-studio-navigation";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export type AgentStudioSelectionState = {
   taskId: string;

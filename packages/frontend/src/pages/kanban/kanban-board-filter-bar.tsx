@@ -1,9 +1,4 @@
-import {
-  type AppPlatform,
-  type IssueType,
-  issueTypeSchema,
-  type TaskPriority,
-} from "@openducktor/contracts";
+import { type AppPlatform, type TaskPriority } from "@openducktor/contracts";
 import { Blocks, Flag, Tag, X } from "lucide-react";
 import {
   type ReactElement,
@@ -30,6 +25,10 @@ import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
 import { readDevicePlatform } from "@/lib/device-platform";
 import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
+import {
+  BUILTIN_ISSUE_TYPE_IDS,
+  type BuiltinIssueTypeId as IssueType,
+} from "@openducktor/workflows";
 
 type KanbanBoardFilterBarProps = {
   filter: KanbanBoardFilterModel;
@@ -121,7 +120,7 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
 }
 
 /** The menus use the words of the card badges. */
-const ISSUE_TYPE_OPTIONS: KanbanFilterOption<IssueType>[] = issueTypeSchema.options.map(
+const ISSUE_TYPE_OPTIONS: KanbanFilterOption<IssueType>[] = BUILTIN_ISSUE_TYPE_IDS.map(
   (issueType) => {
     const { label, icon: Icon, iconClassName } = ISSUE_TYPE_STYLES[issueType];
     return { value: issueType, label, icon: <Icon className={cn("size-3.5", iconClassName)} /> };

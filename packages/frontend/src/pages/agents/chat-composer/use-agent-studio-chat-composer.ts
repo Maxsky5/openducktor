@@ -3,7 +3,6 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentRole,
   AgentRuntimeCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -62,6 +61,7 @@ import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;

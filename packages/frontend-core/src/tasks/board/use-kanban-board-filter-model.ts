@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { create } from "zustand";
 import {
@@ -18,6 +17,7 @@ export type KanbanBoardFilterModel = {
   onChange: (patch: Partial<KanbanBoardFilter>) => void;
   onClear: () => void;
 };
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 /**
  * The board filter model of one workspace, and the loaded tasks that match it, in their input

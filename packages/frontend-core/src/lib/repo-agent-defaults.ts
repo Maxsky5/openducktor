@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_IDS, BUILTIN_MODEL_DEFAULT_ROLE_LABELS } from "@openducktor/workflows";
 import type { RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { RepoSettingsInput } from "../types/session-slices";
@@ -16,15 +17,8 @@ export type ModelDefaultDraft = RepoAgentDefaultDraft & { runtimeKind: RuntimeKi
 
 export type RuntimeBoundModelSelection = AgentModelSelection & { runtimeKind: RuntimeKind };
 
-const REPO_AGENT_DEFAULT_LABELS = {
-  spec: "Specification",
-  planner: "Planner",
-  build: "Builder",
-  qa: "QA",
-} satisfies Record<RepoAgentDefaultRole, string>;
-
 export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): string => {
-  return `${REPO_AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
+  return `${BUILTIN_MODEL_DEFAULT_ROLE_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
 };
 
 export const REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR =
@@ -58,7 +52,7 @@ export const prepareModelDefaultsForSave = (draft: {
   agentDefaults: Partial<Record<RepoAgentDefaultRole, RepoAgentDefaultDraft | null | undefined>>;
 }): Pick<SettingsRepoConfig, "defaultModel" | "agentDefaults"> => {
   const agentDefaults: Partial<Record<RepoAgentDefaultRole, RuntimeBoundModelSelection>> = {};
-  for (const role of ["spec", "planner", "build", "qa"] as const) {
+  for (const role of BUILTIN_ROLE_IDS) {
     const selection = normalizeRepoAgentDefaultForSave(role, draft.agentDefaults[role]);
     if (selection) agentDefaults[role] = selection;
   }

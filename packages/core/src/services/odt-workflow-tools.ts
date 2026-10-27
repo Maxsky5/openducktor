@@ -5,11 +5,7 @@ import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
-import {
-  AGENT_ROLE_TOOL_POLICY,
-  type AgentRole,
-  type AgentToolName,
-} from "../types/agent-orchestrator";
+import type { AgentToolName } from "../types/agent-orchestrator";
 
 export const ODT_WORKFLOW_TOOL_NAMES =
   ODT_WORKFLOW_AGENT_TOOL_NAMES satisfies readonly AgentToolName[];
@@ -91,43 +87,4 @@ export const toOdtWorkflowToolDisplayName = (
 ): string => {
   const normalized = normalizeOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical);
   return normalized ? normalized.slice(4) : toolName;
-};
-
-export const buildRoleScopedOdtToolSelection = (
-  role: AgentRole,
-  options?: {
-    runtimeToolIds?: readonly string[];
-    includeCanonicalDefaults?: boolean;
-    workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical;
-  },
-) => {
-  const allowed = new Set(AGENT_ROLE_TOOL_POLICY[role]);
-  const selection: Record<string, boolean> = {};
-  const includeCanonicalDefaults = options?.includeCanonicalDefaults ?? true;
-
-  if (includeCanonicalDefaults) {
-    for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
-      selection[workflowTool] = allowed.has(workflowTool);
-      // Runtime descriptor aliases are trusted policy inputs, not discovery fallbacks.
-      // Include them even when runtime tool discovery omits ODT tools so role policy
-      // remains stable for every known way the runtime can expose a workflow tool.
-      for (const alias of options?.workflowToolAliasesByCanonical?.[workflowTool] ?? []) {
-        selection[alias] = allowed.has(workflowTool);
-      }
-    }
-  }
-
-  for (const toolId of options?.runtimeToolIds ?? []) {
-    const normalizedTool = resolveOdtWorkflowToolNameForAuthorization(
-      toolId,
-      options?.workflowToolAliasesByCanonical,
-    );
-    if (!normalizedTool) {
-      continue;
-    }
-    const trimmedToolId = toolId.trim();
-    selection[trimmedToolId] = allowed.has(normalizedTool);
-  }
-
-  return selection satisfies Record<string, boolean>;
 };

@@ -31,7 +31,9 @@ export const createCodexSessionImportAdapter = (
       } while (pageToken);
     },
     inspectSession: async (input) => {
-      const policy = await Effect.runPromise(resolvePolicy({ kind: "repository" }));
+      const policy = await Effect.runPromise(
+        resolvePolicy({ repoPath: input.repoPath, sessionScope: { kind: "repository" } }),
+      );
       const handle = await controller.openExistingSession({
         ...input,
         runtimeKind: "codex",

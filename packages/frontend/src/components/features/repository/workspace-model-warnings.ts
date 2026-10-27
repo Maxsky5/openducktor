@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_IDS, BUILTIN_MODEL_DEFAULT_ROLE_LABELS } from "@openducktor/workflows";
 import { toPrimaryAgentOptions } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
@@ -29,10 +30,9 @@ export const getModelWarnings = (
   );
   const entries = [
     ["Default Model", draft.defaultModel],
-    ["Specification", draft.agentDefaults.spec],
-    ["Planner", draft.agentDefaults.planner],
-    ["Builder", draft.agentDefaults.build],
-    ["QA", draft.agentDefaults.qa],
+    ...BUILTIN_ROLE_IDS.map(
+      (role) => [BUILTIN_MODEL_DEFAULT_ROLE_LABELS[role], draft.agentDefaults[role]] as const,
+    ),
   ] as const;
   for (const [label, entry] of entries) {
     if (!entry?.runtimeKind || !entry.providerId.trim() || !entry.modelId.trim()) {

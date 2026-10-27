@@ -34,10 +34,8 @@ export const withoutTaskMutationProgress = (
       discardTaskMutationProgress(taskService.resetTask(input)).pipe(
         Effect.map(({ task }) => task),
       ),
-    qaApproved: (input) => taskService.qaApproved(input).pipe(Effect.map(({ task }) => task)),
-    qaRejected: (input) => taskService.qaRejected(input).pipe(Effect.map(({ task }) => task)),
-    setPlan: (input) => discardTaskMutationProgress(taskService.setPlan(input)),
-    setSpec: (input) => discardTaskMutationProgress(taskService.setSpec(input)),
+    workflowArtifactSave: (input) =>
+      discardTaskMutationProgress(taskService.workflowArtifactSave(input)),
     updateTask: (input) => discardTaskMutationProgress(taskService.updateTask(input)),
   };
 };

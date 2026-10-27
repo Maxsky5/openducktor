@@ -1,11 +1,10 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { useCallback, useMemo } from "react";
-import { firstLaunchAction } from "@openducktor/frontend-core/sessions/start/session-start-prompts";
 import {
-  resolveBuildContinuationLaunchAction,
-  type SessionLaunchActionId,
-} from "@openducktor/frontend-core/lib/session-launch-actions";
+  resolveSessionContinuationLaunchAction,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import { useCallback, useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { inactiveRuntimeReadinessTarget } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
@@ -217,10 +216,7 @@ export function useAgentStudioSelectedSessionView({
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;
   const transcriptState = selectedSessionViewProjection.transcriptState;
 
-  const launchActionId: SessionLaunchActionId =
-    selection.role === "build"
-      ? resolveBuildContinuationLaunchAction(selectedTask)
-      : firstLaunchAction(selection.role);
+  const launchActionId = resolveSessionContinuationLaunchAction(selection.role, selectedTask);
 
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,

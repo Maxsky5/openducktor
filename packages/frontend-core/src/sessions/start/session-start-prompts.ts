@@ -1,23 +1,18 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import {
   type AgentKickoffTemplateId,
-  type AgentRole,
   type BuildAgentKickoffPromptInput,
   buildAgentKickoffPrompt,
-} from "@openducktor/core";
-import {
-  defaultSessionLaunchActionForRole,
   getSessionLaunchAction,
-  getSessionLaunchActionsForRole,
-  SESSION_LAUNCH_ACTIONS,
-  type SessionLaunchActionId,
-} from "../../lib/session-launch-actions";
+  type BuiltinIssueTypeId as IssueType,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 
 type TaskPromptContext = {
   title?: string;
-  issueType?: "task" | "feature" | "bug" | "epic";
+  issueType?: IssueType;
   status?: string;
-  qaRequired?: boolean;
   description?: string;
 };
 
@@ -29,28 +24,6 @@ type SharedPromptOptions = {
 type SessionStartKickoffPromptOptions = SharedPromptOptions & {
   git?: BuildAgentKickoffPromptInput["git"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
-};
-
-export const LAUNCH_ACTIONS_BY_ROLE = {
-  spec: getSessionLaunchActionsForRole("spec").map((action) => action.id),
-  planner: getSessionLaunchActionsForRole("planner").map((action) => action.id),
-  build: getSessionLaunchActionsForRole("build").map((action) => action.id),
-  qa: getSessionLaunchActionsForRole("qa").map((action) => action.id),
-} satisfies Record<AgentRole, SessionLaunchActionId[]>;
-
-export const LAUNCH_ACTION_LABELS = {
-  spec_initial: SESSION_LAUNCH_ACTIONS.spec_initial.label,
-  planner_initial: SESSION_LAUNCH_ACTIONS.planner_initial.label,
-  build_implementation_start: SESSION_LAUNCH_ACTIONS.build_implementation_start.label,
-  build_after_qa_rejected: SESSION_LAUNCH_ACTIONS.build_after_qa_rejected.label,
-  build_after_human_request_changes: SESSION_LAUNCH_ACTIONS.build_after_human_request_changes.label,
-  build_pull_request_generation: SESSION_LAUNCH_ACTIONS.build_pull_request_generation.label,
-  build_rebase_conflict_resolution: SESSION_LAUNCH_ACTIONS.build_rebase_conflict_resolution.label,
-  qa_review: SESSION_LAUNCH_ACTIONS.qa_review.label,
-} satisfies Record<SessionLaunchActionId, string>;
-
-export const firstLaunchAction = (role: AgentRole): SessionLaunchActionId => {
-  return defaultSessionLaunchActionForRole(role);
 };
 
 export const kickoffPromptForTemplate = (
@@ -86,9 +59,9 @@ export const kickoffPromptForLaunchAction = (
   taskId: string,
   options?: SessionStartKickoffPromptOptions,
 ): string => {
-  const templateId = getSessionLaunchAction(actionId).kickoffTemplateId;
-  if (!templateId) {
+  const { template } = getSessionLaunchAction(actionId);
+  if (template.kind !== "kickoff") {
     throw new Error(`Launch action "${actionId}" does not define a kickoff prompt.`);
   }
-  return kickoffPromptForTemplate(role, templateId, taskId, options);
+  return kickoffPromptForTemplate(role, template.id, taskId, options);
 };

@@ -2,7 +2,6 @@ import {
   directMergeRecordSchema,
   gitTargetBranchSchema,
   pullRequestSchema,
-  type QaWorkflowVerdict,
   type TaskMetadataArtifact,
   type TaskMetadataPayload,
   taskMetadataPayloadSchema,
@@ -19,6 +18,7 @@ import {
   type WorkflowArtifactRow,
 } from "./sqlite-task-workflow-artifact-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskRow, TaskStoreSession } from "./sqlite-task-store-schema";
 
 const toIso = (value: Date | null): string | undefined => {
@@ -28,36 +28,27 @@ const toIso = (value: Date | null): string | undefined => {
   return value.toISOString();
 };
 
-const toMetadataArtifact = (row: WorkflowArtifactRow | null): TaskMetadataArtifact => ({
-  markdown: row?.markdown ?? "",
-  revision: row?.revision,
-  updatedAt: toIso(row?.updatedAt ?? null),
-});
-
-const toQaMetadataArtifact = (
-  row: WorkflowArtifactRow | null,
-): TaskMetadataPayload["qaReport"] | undefined => {
-  if (!row) {
-    return undefined;
-  }
-  const verdict: QaWorkflowVerdict =
-    row.verdict === "approved" || row.verdict === "rejected" ? row.verdict : "not_reviewed";
-  return {
+const toMetadataArtifact = (row: WorkflowArtifactRow): TaskMetadataArtifact => {
+  const artifact: TaskMetadataArtifact = {
     markdown: row.markdown,
     revision: row.revision,
     updatedAt: toIso(row.updatedAt),
-    verdict,
   };
+  if (row.verdict !== null) artifact.verdict = row.verdict;
+  return artifact;
 };
 
 export const taskMetadata = (
   session: TaskStoreSession,
   row: TaskRow,
+  workflow: TaskWorkflow,
 ): Effect.Effect<TaskMetadataPayload, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const spec = yield* latestWorkflowArtifactRow(session, row.id, "spec");
-    const plan = yield* latestWorkflowArtifactRow(session, row.id, "implementation_plan");
-    const qaReport = yield* latestWorkflowArtifactRow(session, row.id, "qa_report");
+    const artifacts: Record<string, TaskMetadataArtifact> = {};
+    for (const { id: code } of workflow.definition.artifacts) {
+      const artifactRow = yield* latestWorkflowArtifactRow(session, row.id, code);
+      if (artifactRow) artifacts[code] = toMetadataArtifact(artifactRow);
+    }
     const agentSessions = yield* agentSessionsFromRow(row);
     const directMerge = yield* optionalJsonFromRow(row, "directMergeJson", (value) =>
       decodeWithSchema(directMergeRecordSchema, value, "direct_merge_json", { taskId: row.id }),
@@ -72,11 +63,9 @@ export const taskMetadata = (
       taskMetadataPayloadSchema,
       {
         agentSessions,
+        artifacts,
         directMerge,
-        plan: toMetadataArtifact(plan),
         pullRequest,
-        qaReport: toQaMetadataArtifact(qaReport),
-        spec: toMetadataArtifact(spec),
         targetBranch,
       },
       "task metadata read model",

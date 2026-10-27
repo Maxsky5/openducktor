@@ -7,8 +7,7 @@ import {
   requirePullRequestSyncDependencies,
 } from "../support/required-task-dependencies";
 import { completeTaskClosure } from "../support/task-closure";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
-import { taskListWithCurrent } from "../support/task-workflow-helpers";
+import { requireEffect } from "../support/task-workflow-events";
 import { cleanupMergedTaskState } from "../support/task-worktree-cleanup";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
@@ -22,6 +21,7 @@ export const createTaskPullRequestSyncUseCases = ({
   gitPort,
   gitProviderResolver,
   taskStore,
+  taskWorkflows,
   settingsConfig,
   taskActivityGuard,
   taskSessionLifecycleCoordinator,
@@ -90,7 +90,8 @@ export const createTaskPullRequestSyncUseCases = ({
             linkedProviderId: updated.record.providerId,
           });
 
-          if (updated.record.state === "merged" && task.status !== "closed") {
+          // Sync candidates exclude closed tasks.
+          if (updated.record.state === "merged") {
             const cleanupDependencies = yield* requireDependencies(() =>
               requireMergedTaskCleanupDependencies(
                 {
@@ -109,15 +110,26 @@ export const createTaskPullRequestSyncUseCases = ({
               pullRequest: updated.record,
             });
             changedTaskIds.add(task.id);
-            const { current, currentTasks } = yield* taskListWithCurrent(
-              taskStore,
-              effectiveRepoPath,
-              task.id,
+            const current = yield* taskStore.getTask({
+              repoPath: effectiveRepoPath,
+              taskId: task.id,
+            });
+            const decision = yield* requireEffect(
+              taskWorkflows.forTask(current),
+              "pull_request.merged",
+              current,
             );
-            yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
+            if (decision.kind === "unchanged") {
+              continue;
+            }
             yield* completeTaskClosure({
               cleanup: cleanupMergedTaskState(
-                { ...cleanupDependencies, taskActivityGuard, taskSessionLifecycleCoordinator },
+                {
+                  ...cleanupDependencies,
+                  taskActivityGuard,
+                  taskSessionLifecycleCoordinator,
+                  workflow: taskWorkflows.forTask(current),
+                },
                 taskStore,
                 effectiveRepoPath,
                 task.id,
@@ -127,6 +139,7 @@ export const createTaskPullRequestSyncUseCases = ({
               gitPort: cleanupDependencies.gitPort,
               operation: "sync merged pull request",
               repoPath: effectiveRepoPath,
+              decision,
               taskId: task.id,
               taskSessionLifecycleCoordinator,
               taskStore,

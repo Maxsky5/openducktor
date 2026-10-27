@@ -1,5 +1,4 @@
 import type {
-  AgentRole,
   AgentSessionLiveRef,
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
@@ -51,7 +50,7 @@ export const storeWorkflowSession = <Saved, Failure>(
 
 export const findWorkflowSession = (
   records: readonly AgentSessionRecord[],
-  role: AgentRole,
+  role: string,
   ref: Pick<AgentSessionRecord, "externalSessionId" | "runtimeKind" | "workingDirectory">,
 ): AgentSessionRecord | undefined =>
   records.find(

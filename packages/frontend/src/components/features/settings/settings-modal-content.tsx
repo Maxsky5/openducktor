@@ -1,3 +1,4 @@
+import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { SettingsRemoteAccessSection } from "./settings-remote-access-section";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
@@ -9,11 +10,7 @@ import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
-import type {
-  PromptRoleTabId,
-  RepositorySectionId,
-  SettingsSectionId,
-} from "./settings-modal-constants";
+import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { PromptOverridesSection } from "./settings-prompt-overrides-section";
 import { SettingsRepositoryContent } from "./settings-repository-content";
 import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
@@ -23,16 +20,16 @@ import { SettingsCustomAgentRolesSection } from "./settings-custom-agent-roles-s
 type SettingsModalContentProps = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
-  globalPromptRoleTab: PromptRoleTabId;
-  repoPromptRoleTab: PromptRoleTabId;
+  globalPromptRoleTab: BuiltinPromptRoleTabId;
+  repoPromptRoleTab: BuiltinPromptRoleTabId;
   selectedReusablePromptId: string | null;
   selectedCustomAgentRoleId: string | null;
   onSelectedCustomAgentRoleIdChange: (next: string | null) => void;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   onRepositorySectionChange: (next: RepositorySectionId) => void;
-  onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
-  onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
+  onGlobalPromptRoleTabChange: (next: BuiltinPromptRoleTabId) => void;
+  onRepoPromptRoleTabChange: (next: BuiltinPromptRoleTabId) => void;
   onSelectedReusablePromptIdChange: (next: string | null) => void;
   contentFocusRequest?: SettingsContentFocusRequest | null;
   onContentFocusRequestHandled?: (request: SettingsContentFocusRequest) => void;

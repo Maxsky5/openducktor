@@ -23,6 +23,7 @@ export type CodexSessionRuntimeSnapshotReaderDeps = {
   pendingInput: CodexPendingInputState;
   asyncQuestions: CodexAsyncQuestionState;
   hasActiveTurn: (externalSessionId: string) => boolean;
+  directoriesMatch: (left: string, right: string) => Promise<boolean>;
 };
 
 const directoriesFromInput = (directories: readonly string[] | undefined): Set<string> =>
@@ -40,15 +41,16 @@ const questionsForSession = (
 const toLocalRuntimeSnapshot = async (
   deps: CodexSessionRuntimeSnapshotReaderDeps,
   session: CodexSessionState,
+  inventory: CodexThreadInventory,
   input?: ReadSessionRuntimeSnapshotInput,
 ): Promise<AgentSessionRuntimeSnapshot> => {
-  const inventory = await deps.threadInventory.read(
-    deps.runtimeClients.clientForRuntime(session.runtimeId),
-    session.runtimeId,
-  );
+  const thread = inventory.threadsById.get(session.threadId);
   const refreshInput: Parameters<typeof toRefreshedRuntimeSnapshot>[0] = {
     session,
     inventory,
+    directoryMatch: thread
+      ? await deps.directoriesMatch(thread.cwd, session.workingDirectory)
+      : false,
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
       session.threadId,
       session.runtimeId,
@@ -90,16 +92,11 @@ export const listCodexSessionRuntimeSnapshots = async (
   const inventoryByRuntimeId = new Map<string, Promise<CodexThreadInventory>>();
   const localSnapshots = await Promise.all(
     localSessions.map(async (session) =>
-      toRefreshedRuntimeSnapshot({
+      toLocalRuntimeSnapshot(
+        deps,
         session,
-        inventory: await readRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
-        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
-          session.threadId,
-          session.runtimeId,
-        ),
-        pendingQuestions: questionsForSession(deps, session.runtimeId, session.threadId),
-        hasActiveTurn: deps.hasActiveTurn(session.threadId),
-      }),
+        await readRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
+      ),
     ),
   );
   return localSnapshots;
@@ -111,7 +108,11 @@ export const readCodexSessionRuntimeSnapshot = async (
 ): Promise<AgentSessionRuntimeSnapshot> => {
   const session = deps.sessions.get(input.externalSessionId);
   if (session) {
-    return toLocalRuntimeSnapshot(deps, session, input);
+    const inventory = await deps.threadInventory.read(
+      deps.runtimeClients.clientForRuntime(session.runtimeId),
+      session.runtimeId,
+    );
+    return toLocalRuntimeSnapshot(deps, session, inventory, input);
   }
 
   const { client, runtimeId } = await deps.runtimeClients.resolve(
@@ -123,7 +124,7 @@ export const readCodexSessionRuntimeSnapshot = async (
     return missingRuntimeSnapshot(input);
   }
   const snapshot = inventory.threadsById.get(input.externalSessionId) ?? null;
-  if (!snapshot || snapshot.cwd !== input.workingDirectory) {
+  if (!snapshot || !(await deps.directoriesMatch(snapshot.cwd, input.workingDirectory))) {
     return missingRuntimeSnapshot(input);
   }
   return toRuntimeSnapshotFromThread(snapshot, input, {

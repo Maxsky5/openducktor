@@ -1,4 +1,4 @@
-import type { TaskCard as TaskCardData } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCardData } from "@openducktor/workflows";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { Fragment, memo, type ReactElement, useCallback } from "react";
 import { type DimensionValue, View } from "react-native";

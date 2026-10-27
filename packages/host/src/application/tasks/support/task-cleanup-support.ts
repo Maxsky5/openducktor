@@ -1,9 +1,8 @@
+import type { TaskWorkflow } from "@openducktor/workflows";
 import {
   type AgentSessionRecord,
   DEFAULT_BRANCH_PREFIX,
   type RepoConfig,
-  type TaskCard,
-  type TaskStatus,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
@@ -20,10 +19,9 @@ import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
-export const implementationSessionRoleNames = ["build", "qa"] as const;
-const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
-const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
-export const workflowCleanupSessionRoles = new Set<string>(workflowCleanupSessionRoleNames);
+/** The roles of the task workflow. Cleanup stops and removes only their sessions. */
+export const workflowRoleIds = (workflow: TaskWorkflow): Set<string> =>
+  new Set(workflow.definition.roles.map(({ id }) => id));
 export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];
@@ -31,6 +29,7 @@ export type TaskSessionRecords = {
 export const collectSessionsUsingCanonicalWorktree = (
   gitPort: GitPort,
   settingsConfig: SettingsConfigPort,
+  workflow: TaskWorkflow,
   sessions: AgentSessionRecord[],
   canonicalWorktreePath: string,
 ) =>
@@ -41,7 +40,7 @@ export const collectSessionsUsingCanonicalWorktree = (
       ? normalizePathForComparison(yield* gitPort.canonicalizePath(canonicalWorktreePath))
       : null;
     for (const session of sessions) {
-      if (implementationSessionRoles.has(session.role.trim())) {
+      if (workflow.worktreeRoles.includes(session.role.trim())) {
         guarded.push(session);
       } else if (
         canonical &&
@@ -61,26 +60,6 @@ export const managedWorktreeBaseForRepoConfig = (
   repoConfig.worktreeBasePath !== undefined
     ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
     : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-export const collectTaskDeleteTargets = (
-  tasks: TaskCard[],
-  taskId: string,
-  deleteSubtasks: boolean,
-): TaskCard[] => {
-  const targetIds = new Set([taskId]);
-  if (deleteSubtasks) {
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const task of tasks) {
-        if (task.parentId && targetIds.has(task.parentId) && !targetIds.has(task.id)) {
-          targetIds.add(task.id);
-          changed = true;
-        }
-      }
-    }
-  }
-  return tasks.filter((task) => targetIds.has(task.id));
-};
 export const isRelatedTaskBranch = (
   branchName: string,
   branchPrefix: string,
@@ -243,15 +222,15 @@ export const collectDeleteWorktreePaths = (
   },
   repoPath: string,
   managedWorktreeBasePath: string,
-  targetTaskSessions: TaskSessionRecords[],
+  targetTaskSessions: (TaskSessionRecords & { workflow: TaskWorkflow })[],
 ) =>
   collectManagedTaskWorktreePaths(
     dependencies,
     repoPath,
     managedWorktreeBasePath,
-    targetTaskSessions.map((target) => ({
+    targetTaskSessions.map(({ workflow, ...target }) => ({
       ...target,
-      sessionRoles: workflowCleanupSessionRoles,
+      sessionRoles: workflowRoleIds(workflow),
     })),
     "delete",
   );
@@ -436,17 +415,6 @@ export const taskHasSessionsForRoles = (
 ): boolean => sessions.some((session) => roles.has(session.role.trim()));
 
 export const selectWorkflowCleanupSessionRecords = (
+  workflow: TaskWorkflow,
   sessions: AgentSessionRecord[],
-): AgentSessionRecord[] =>
-  sessions.filter((session) => workflowCleanupSessionRoles.has(session.role.trim()));
-export const resetImplementationRollbackStatus = (task: TaskCard): TaskStatus => {
-  if (task.artifactSummary.plan.has) {
-    return "ready_for_dev";
-  }
-  if (task.artifactSummary.spec.has) {
-    return "spec_ready";
-  }
-  return "open";
-};
-export const replaceTaskInList = (tasks: TaskCard[], updated: TaskCard): TaskCard[] =>
-  tasks.map((task) => (task.id === updated.id ? updated : task));
+): AgentSessionRecord[] => sessions.filter((session) => workflow.hasRole(session.role.trim()));

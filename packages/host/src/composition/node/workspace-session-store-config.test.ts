@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
@@ -24,6 +25,7 @@ test("does not import Issues into SQLite when a custom Task store is active", as
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
   };
   const services = createNodeTaskAssetServices({
+    taskWorkflows: builtinTaskWorkflows,
     assertOwnershipReadAdmitted: () => Effect.void,
     configDir: { root, scope: "test" },
     configuredTaskStore: createTaskStoreTestDouble({}),
@@ -55,13 +57,13 @@ test("does not import Issues into SQLite when a custom Task store is active", as
         services.issueImportStore.createImportedTask({
           repoPath,
           sourceIssue,
+          status: "open",
           task: {
             title: "Issue 42",
             description: "Body",
             issueType: "task",
             priority: 2,
             labels: [],
-            aiReviewEnabled: true,
           },
         }),
       ),
@@ -90,6 +92,7 @@ test("custom config session ownership and import do not read other installations
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
   };
   const services = createNodeTaskAssetServices({
+    taskWorkflows: builtinTaskWorkflows,
     assertOwnershipReadAdmitted: () => Effect.void,
     configDir: { root: configDir, scope: "dev" },
     processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
@@ -161,6 +164,7 @@ test("ownership reads reject removal and stale configured scopes without recreat
   });
   const admission = createWorkspaceAdmissionService({ workspaceSettingsService: settings });
   const services = createNodeTaskAssetServices({
+    taskWorkflows: builtinTaskWorkflows,
     configDir: { root, scope: "test" },
     assertWorkspaceAdmitted: admission.assertTaskStoreAccess,
     assertOwnershipReadAdmitted: admission.assertTaskStoreOwnershipReadAccess,

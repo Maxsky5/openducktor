@@ -2,14 +2,14 @@ import {
   gitTargetBranchSchema,
   pullRequestSchema,
   sourceIssueReferenceSchema,
-  type TaskCard,
   type TaskArtifactSummary,
   taskCardSchema,
 } from "@openducktor/contracts";
-import { type SQL, inArray, gte, ne, or } from "drizzle-orm";
+import { type SQL, inArray, gte, or, notInArray } from "drizzle-orm";
+import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Effect } from "effect";
-import { deriveAvailableActions } from "../../domain/task/task-action-policy";
-import type { TaskStoreListTasksInput } from "../../ports/task-repository-ports";
+import type { TaskRecord, TaskStoreListTasksInput } from "../../ports/task-repository-ports";
 import {
   decodeWithSchema,
   labelsFromRow,
@@ -21,133 +21,84 @@ import {
   artifactSummary,
 } from "./sqlite-task-workflow-artifact-queries";
 import { getTaskRow, requireTaskRow, taskRows } from "./sqlite-task-queries";
+import { hostTerminalStates } from "./sqlite-task-repository-context";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
-export const getTaskCard = (
+const taskRecordSchema = taskCardSchema.omit({ availableActions: true, agentWorkflows: true });
+
+export const getTaskRecord = (
   session: TaskStoreSession,
   taskId: string,
   repoPath: string,
-): Effect.Effect<TaskCard, SqliteTaskStoreReadError> =>
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const row = yield* requireTaskRow(session, taskId, repoPath);
-    return yield* rowToTaskCard(session, row);
+    return yield* rowToTaskRecord(session, row, taskWorkflows.forTask(row));
   });
 
-export const findTaskCard = (
+export const findTaskRecord = (
   session: TaskStoreSession,
   taskId: string,
-): Effect.Effect<TaskCard | null, SqliteTaskStoreReadError> =>
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskRecord | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const row = yield* getTaskRow(session, taskId);
-    return row === null ? null : yield* rowToTaskCard(session, row);
+    return row === null ? null : yield* rowToTaskRecord(session, row, taskWorkflows.forTask(row));
   });
 
+/** A Kanban list hides tasks in terminal states after the done visible days. */
 export const listTasksInDatabase = (
   session: TaskStoreSession,
   input: TaskStoreListTasksInput,
   now: () => Date,
-): Effect.Effect<TaskCard[], SqliteTaskStoreReadError> =>
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (input.taskIds !== undefined) {
-      return yield* readChangedCards(session, input.taskIds, input.doneVisibleDays, now);
+      return yield* readChangedCards(session, input.taskIds, taskWorkflows);
     }
     let where: SQL | undefined;
     if (input.doneVisibleDays !== undefined) {
       const cutoff = new Date(now().getTime() - input.doneVisibleDays * 24 * 60 * 60 * 1000);
-      where =
-        input.doneVisibleDays > 0
-          ? or(ne(tasks.status, "closed"), gte(tasks.updatedAt, cutoff))
-          : ne(tasks.status, "closed");
+      const open = notInArray(tasks.status, hostTerminalStates(taskWorkflows));
+      where = input.doneVisibleDays > 0 ? or(open, gte(tasks.updatedAt, cutoff)) : open;
     }
-    const rows = yield* taskRows(session, where);
-    const summaries = yield* artifactSummariesByTaskId(
-      session,
-      rows.map((row) => row.id),
-    );
-    const cards = yield* Effect.forEach(rows, (row) =>
-      rowToTaskCard(session, row, summaries.get(row.id)),
-    );
-    return finalizeTaskCards(cards);
+    return yield* rowsToTaskRecords(session, yield* taskRows(session, where), taskWorkflows);
   });
 
-/** Read full cards for changed tasks and parents, but only child fields needed for actions. */
+/** Read full cards for changed tasks. */
 const readChangedCards = (
   session: TaskStoreSession,
   taskIds: readonly string[],
-  doneVisibleDays: number | undefined,
-  now: () => Date,
-): Effect.Effect<TaskCard[], SqliteTaskStoreReadError> =>
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (taskIds.length === 0) return [];
-    const changedRows = yield* taskRows(session, inArray(tasks.id, [...taskIds]));
-    const cardIds = [
-      ...new Set([
-        ...taskIds,
-        ...changedRows.flatMap((row) => (row.parentId ? [row.parentId] : [])),
-      ]),
-    ];
-    const rows = yield* taskRows(session, inArray(tasks.id, cardIds));
-    const children = yield* session.execute(
-      (database) =>
-        database
-          .select({
-            id: tasks.id,
-            parentId: tasks.parentId,
-            status: tasks.status,
-            updatedAt: tasks.updatedAt,
-          })
-          .from(tasks)
-          .where(inArray(tasks.parentId, cardIds)),
-      "sqliteTaskStore.listChangedCards.selectChildren",
-    );
-    const summaries = yield* artifactSummariesByTaskId(session, cardIds);
-    const cards = yield* Effect.forEach(rows, (row) =>
-      rowToTaskCard(session, row, summaries.get(row.id)),
-    );
-    const cutoff =
-      doneVisibleDays === undefined ? null : now().getTime() - doneVisibleDays * 86400000;
-    const childStatuses = children.map((child) => ({
-      id: child.id,
-      status: child.status,
-      parentId: child.parentId ?? undefined,
-    }));
-    return cards.map((card) => ({
-      ...card,
-      subtaskIds: children
-        .filter(
-          (child) =>
-            child.parentId === card.id &&
-            (cutoff === null ||
-              child.status !== "closed" ||
-              (doneVisibleDays! > 0 && child.updatedAt.getTime() >= cutoff)),
-        )
-        .map((child) => child.id)
-        .sort(),
-      availableActions: deriveAvailableActions(card, childStatuses),
-    }));
+    const rows = yield* taskRows(session, inArray(tasks.id, [...taskIds]));
+    return yield* rowsToTaskRecords(session, rows, taskWorkflows);
   });
 
-const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
-  const subtasksByParent = new Map<string, string[]>();
-  for (const task of tasks) {
-    if (task.parentId !== undefined) {
-      const subtasks = subtasksByParent.get(task.parentId) ?? [];
-      subtasks.push(task.id);
-      subtasksByParent.set(task.parentId, subtasks);
-    }
-  }
-  return tasks.map((task) => ({
-    ...task,
-    subtaskIds: [...(subtasksByParent.get(task.id) ?? [])].sort(),
-  }));
-};
+const rowsToTaskRecords = (
+  session: TaskStoreSession,
+  rows: readonly TaskRow[],
+  taskWorkflows: TaskWorkflowResolver,
+): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    const workflows = new Map(rows.map((row) => [row.id, taskWorkflows.forTask(row)]));
+    const summaries = yield* artifactSummariesByTaskId(session, workflows);
+    return yield* Effect.forEach(rows, (row) =>
+      rowToTaskRecord(session, row, taskWorkflows.forTask(row), summaries.get(row.id)),
+    );
+  });
 
-const rowToTaskCard = (
+const rowToTaskRecord = (
   session: TaskStoreSession,
   row: TaskRow,
+  workflow: TaskWorkflow,
   savedSummary?: TaskArtifactSummary,
-): Effect.Effect<TaskCard, SqliteTaskStoreReadError> =>
+): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const targetBranch = yield* optionalJsonFromRow(row, "targetBranchJson", (value) =>
       decodeWithSchema(gitTargetBranchSchema, value, "target_branch_json", { taskId: row.id }),
@@ -171,33 +122,23 @@ const rowToTaskCard = (
             { taskId: row.id },
           );
     const labels = yield* labelsFromRow(row);
-    const summary = savedSummary ?? (yield* artifactSummary(session, row.id));
-    const taskCard: TaskCard = {
-      aiReviewEnabled: row.qaRequired === 1,
-      agentWorkflows: {
-        spec: { required: false, canSkip: true, available: false, completed: false },
-        planner: { required: false, canSkip: true, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
-        qa: { required: false, canSkip: true, available: false, completed: false },
-      },
-      availableActions: [],
+    const summary = savedSummary ?? (yield* artifactSummary(session, row.id, workflow));
+    const taskCard: TaskRecord = {
       createdAt: row.createdAt.toISOString(),
       description: row.description ?? "",
       artifactSummary: summary,
       id: row.id,
       issueType: row.issueType,
       labels,
-      parentId: row.parentId ?? undefined,
       priority: row.priority,
       pullRequest,
       sourceIssue,
       status: row.status,
-      subtaskIds: [],
       targetBranch,
       title: row.title,
       updatedAt: row.updatedAt.toISOString(),
     };
-    return yield* validateWithSchema(taskCardSchema, taskCard, "task card read model", {
+    return yield* validateWithSchema(taskRecordSchema, taskCard, "task card read model", {
       taskId: row.id,
     });
   });

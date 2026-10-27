@@ -1,3 +1,4 @@
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import {
@@ -76,6 +77,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
     "releaseRuntime" | "createRuntimeRegistration"
   >;
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
+  readonly resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
 };
 
 const stateEffect = <Value, Details extends object>(
@@ -94,6 +96,7 @@ const stateEffect = <Value, Details extends object>(
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
   prepareRuntime,
+  resolveWorkflowRolePolicy,
 }: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
@@ -116,6 +119,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       const state = createOpenCodeLiveSessionState({
         runtime,
         nextOccurrenceId: () => `opencode-pending-${nextOccurrence++}`,
+        resolveWorkflowRolePolicy,
       });
       const runtimeLane = createSerialLane();
       const binding = liveSessionLifecycle.createRuntimeRegistration({

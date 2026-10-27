@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { KanbanColumnId } from "@openducktor/core";
+import type { KanbanColumnId } from "@openducktor/workflows";
 import type { BoardColumn } from "./board-columns";
 import { nextLaneToMount } from "./board-lane-mounting";
 

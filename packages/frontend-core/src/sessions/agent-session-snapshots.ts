@@ -1,3 +1,4 @@
+import { builtinRoleId, type BuiltinRoleId } from "@openducktor/workflows";
 import { getAgentSessionActivityStateFromSession } from "../lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../lib/agent-session-identity";
 import type { AgentSessionCollection } from "./agent-session-collection";
@@ -13,7 +14,7 @@ import { isWorkflowAgentSession } from "./agent-orchestrator/support/workflow-se
 export type AgentSessionSummary = AgentSessionIdentity &
   Pick<WorkflowAgentSessionState, "title" | "startedAt" | "statusUnavailableReason"> & {
     taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
-    role: WorkflowAgentSessionState["sessionAssociation"]["role"];
+    role: BuiltinRoleId;
     activityState: AgentSessionActivityState;
     pendingApprovalCount: number;
     pendingQuestionCount: number;
@@ -86,7 +87,7 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
   return {
     ...toSummary(session),
     taskId: session.sessionAssociation.taskId,
-    role: session.sessionAssociation.role,
+    role: builtinRoleId(session.sessionAssociation.role),
   };
 }
 

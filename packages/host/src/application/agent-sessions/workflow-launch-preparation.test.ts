@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import type { WorkflowLaunchRequest } from "@openducktor/contracts";
+import type { AgentSessionStartMode, WorkflowLaunchRequest } from "@openducktor/contracts";
+import { createTaskWorkflow } from "@openducktor/workflows";
+import {
+  reviewTaskDefinition,
+  reviewTaskPromptTemplates,
+} from "@openducktor/workflows/test-support";
+import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import {
   type AutomaticLaunchInput,
   createLaunchHarness,
@@ -47,6 +53,38 @@ test("a fresh target outside the canonical task worktree fails before any task m
     session: { externalSessionId: "session-1", workingDirectory: "/worktrees/task" },
   });
   expect(h.getTask().status).toBe("in_progress");
+});
+
+test("a saved override with an unsupported placeholder fails before any task mutation", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("human_review");
+  h.setPromptOverrides({
+    "system.shared.task_context": {
+      template: "Task {{task.id}}, QA required: {{task.qaRequired}}",
+      baseVersion: 1,
+    },
+  });
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_human_request_changes",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      instruction: { kind: "kickoff", feedback: "Required changes" },
+      beforeStartAction: { action: "human_request_changes", note: "Required changes" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: {
+      message:
+        'Prompt template "system.shared.task_context" uses unsupported placeholder "task.qaRequired". Edit or disable this prompt override in Settings.',
+    },
+  });
+  expect(h.getTask().status).toBe("human_review");
+  expect(h.starts).toHaveLength(0);
 });
 
 test("manual fresh launch starts a model that the catalog does not list without loading the catalog", async () => {
@@ -351,5 +389,167 @@ test.each(["opencode", "codex", "claude"] as const)(
         text: expect.stringContaining("task"),
       });
     }
+  },
+);
+
+test("a custom workflow launch starts its step role with the prompts of that workflow", async () => {
+  const h = await createLaunchHarness("codex", {
+    taskWorkflows: reviewTaskWorkflows,
+    task: { issueType: "article", status: "backlog" },
+  });
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "write_start",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      instruction: { kind: "kickoff" },
+    }),
+  );
+  expect(result).toMatchObject({ status: "completed", role: "writer" });
+  expect(h.getTask().status).toBe("writing");
+  expect(h.sends[0]?.parts).toEqual([{ kind: "text", text: "Write the draft for task." }]);
+  expect(h.sends[0]?.systemPrompt).toContain("You are the writer of task task.");
+});
+
+test("automatic launch checks the worktree of an action that needs it without reuse", async () => {
+  const definition = reviewTaskDefinition();
+  for (const step of definition.steps)
+    if (step.kind === "agent")
+      for (const action of step.launchActions)
+        if (action.id === "write_revise") {
+          action.startModes = ["fresh"];
+          action.defaultStartMode = "fresh";
+        }
+  definition.automations = definition.automations.map((automation) =>
+    automation.id === "startRevision" ? { ...automation, startMode: "fresh" as const } : automation,
+  );
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const launch = async (worktreeExists: boolean) => {
+    const h = await createLaunchHarness("codex", {
+      taskWorkflows: singleTaskWorkflow(workflow),
+      task: { issueType: "article", status: "writing" },
+    });
+    h.setWorktreeExists(worktreeExists);
+    return Effect.runPromise(
+      h.launchAutomatic({
+        ...requestFor("codex"),
+        policy: { kind: "automatic", actionId: "startRevision" },
+      }),
+    );
+  };
+
+  expect(await launch(false)).toMatchObject({ status: "skipped", role: "writer" });
+  expect(await launch(true)).toMatchObject({ status: "completed", role: "writer" });
+});
+
+const launchCustomAutomation = async ({
+  automationId,
+  launchActionId,
+  role,
+  status,
+  startModes,
+  defaultStartMode,
+  roleSession,
+  freshReviews = false,
+}: {
+  automationId: string;
+  launchActionId: string;
+  role: string;
+  status: string;
+  startModes: AgentSessionStartMode[];
+  defaultStartMode: AgentSessionStartMode;
+  roleSession: boolean;
+  freshReviews?: boolean;
+}) => {
+  const definition = reviewTaskDefinition();
+  for (const step of definition.steps)
+    if (step.kind === "agent")
+      for (const action of step.launchActions)
+        if (action.id === launchActionId) Object.assign(action, { startModes, defaultStartMode });
+  definition.automations = definition.automations.map(
+    ({ startMode: _startMode, ...automation }) => automation,
+  );
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const h = await createLaunchHarness("codex", {
+    taskWorkflows: singleTaskWorkflow(workflow),
+    task: { issueType: "article", status },
+  });
+  h.settings.autopilot.alwaysStartQaReviewsFresh = freshReviews;
+  if (roleSession) h.addTaskSession(`${role}-1`, { role });
+  const result = await Effect.runPromise(
+    h.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: automationId },
+    }),
+  );
+  return { h, result };
+};
+
+const launchRevision = (
+  startModes: AgentSessionStartMode[],
+  defaultStartMode: AgentSessionStartMode,
+  roleSession: boolean,
+) =>
+  launchCustomAutomation({
+    automationId: "startRevision",
+    launchActionId: "write_revise",
+    role: "writer",
+    status: "writing",
+    startModes,
+    defaultStartMode,
+    roleSession,
+  });
+
+test.each([
+  [["fresh", "reuse"], "fresh", true, "fresh"],
+  [["fresh", "reuse"], "reuse", true, "reuse"],
+  [["fresh", "reuse"], "reuse", false, "fresh"],
+  [["fork"], "fork", true, "fork"],
+] as const)(
+  "automatic launch with start modes %p and default %p, writer session %p, starts %p",
+  async (startModes, defaultStartMode, writerSession, startMode) => {
+    const { result } = await launchRevision([...startModes], defaultStartMode, writerSession);
+
+    expect(result).toMatchObject({ status: "completed", role: "writer", startMode });
+  },
+);
+
+test.each([
+  [["fork"], "fork", "No writer session is available to fork"],
+  [["reuse"], "reuse", "No Writer session in the task worktree is available to reuse"],
+] as const)(
+  "automatic launch with start modes %p skips without a session to continue",
+  async (startModes, defaultStartMode, reason) => {
+    const { h, result } = await launchRevision([...startModes], defaultStartMode, false);
+
+    expect(result).toMatchObject({ status: "skipped", role: "writer" });
+    expect(result.skipReason).toContain(reason);
+    expect(h.starts).toHaveLength(0);
+  },
+);
+
+test.each([
+  ["reuse", false, "reuse"],
+  ["fork", false, "fork"],
+  ["reuse", true, "fresh"],
+  ["fork", true, "fresh"],
+] as const)(
+  "automatic %s of a role that writes a review, with fresh reviews %p, starts %p",
+  async (defaultStartMode, freshReviews, startMode) => {
+    const { result } = await launchCustomAutomation({
+      automationId: "startEditor",
+      launchActionId: "edit_review",
+      role: "editor",
+      status: "reviewing",
+      startModes: ["fresh", defaultStartMode],
+      defaultStartMode,
+      roleSession: true,
+      freshReviews,
+    });
+
+    expect(result).toMatchObject({ status: "completed", role: "editor", startMode });
   },
 );

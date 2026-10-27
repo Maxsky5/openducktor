@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type {
   AgentSessionControlSummary,
   AgentSessionLiveRef,
@@ -27,7 +28,7 @@ import type {
 
 export type TaskSessions = Pick<
   TaskService,
-  "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel" | "transitionTask"
+  "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel" | "applyStartEvent"
 >;
 type TaskReader = Pick<TaskStorePort, "getTask">;
 
@@ -39,6 +40,7 @@ export const createTaskWorkflowSessionPolicy = ({
   canonicalizeRepoPath,
   runtime,
   taskReader,
+  taskWorkflows,
   tasks,
   taskLifecycle,
   taskSessionStart,
@@ -48,6 +50,7 @@ export const createTaskWorkflowSessionPolicy = ({
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
+  taskWorkflows: TaskWorkflowResolver;
   tasks: TaskSessions;
   taskLifecycle: TaskLifecycle;
   taskSessionStart: Pick<TaskSessionStartPreparationService, "prepare" | "complete">;
@@ -67,13 +70,14 @@ export const createTaskWorkflowSessionPolicy = ({
     runtime,
     tasks,
     taskReader,
+    taskWorkflows,
     taskLifecycle,
     taskSessionStart,
     writes: {
       saveSession: (input) =>
         tasks.agentSessionUpsert(input).pipe(Effect.as({ publish: Effect.void })),
-      transitionTask: (input) =>
-        tasks.transitionTask(input).pipe(Effect.map((task) => ({ task, publish: Effect.void }))),
+      applyStartEvent: (input) =>
+        tasks.applyStartEvent(input).pipe(Effect.map((task) => ({ task, publish: Effect.void }))),
     },
   });
   return {

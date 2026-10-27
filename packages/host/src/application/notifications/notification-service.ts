@@ -18,6 +18,7 @@ import type { TaskService } from "../tasks/task-service";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { loadGlobalConfig } from "../workspaces/workspace-settings-model";
 import { openWorkspaceRecordsInEffectiveOrder } from "../workspaces/workspace-catalog-model";
 import { createNotificationStream } from "./notification-stream";
@@ -29,12 +30,14 @@ import {
 
 export const createNotificationService = ({
   settingsConfig,
+  taskWorkflows,
   tasks,
   live,
   workspaceSessions,
   boundIdentity,
 }: {
   settingsConfig: SettingsConfigPort;
+  taskWorkflows: TaskWorkflowResolver;
   tasks: Pick<TaskService, "listTasks" | "agentSessionsListForTasks">;
   live: Pick<AgentSessionLiveStateService, "attach">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "listActive">;
@@ -136,6 +139,7 @@ export const createNotificationService = ({
         if (existing) yield* existing.observer.dispose();
         const observer = yield* createWorkspaceNotificationObserver({
           record,
+          taskWorkflows,
           tasks,
           live,
           workspaceSessions,

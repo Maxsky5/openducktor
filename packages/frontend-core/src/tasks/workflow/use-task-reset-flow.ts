@@ -1,4 +1,8 @@
-import type { TaskCard } from "@openducktor/contracts";
+import {
+  decideTaskEvent,
+  taskStatusTitle,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { isOutcomeUnknown } from "../../lib/command-outcome";
@@ -52,14 +56,10 @@ type UseTaskResetFlowArgs = {
   closeTaskDetails: (taskId: string) => void;
 };
 
+/** A task that does not offer the reset keeps its status, and the host rejects the request. */
 const deriveRollbackLabel = (task: TaskCard): string => {
-  if (task.artifactSummary.plan.has) {
-    return "Ready for Dev";
-  }
-  if (task.artifactSummary.spec.has) {
-    return "Spec Ready";
-  }
-  return "Backlog";
+  const decision = decideTaskEvent("reset-implementation", task);
+  return taskStatusTitle(decision.kind === "transition" ? decision.to : task.status);
 };
 
 export function useTaskResetFlow({

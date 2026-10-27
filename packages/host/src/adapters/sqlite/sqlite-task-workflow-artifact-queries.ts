@@ -1,13 +1,13 @@
-import type { TaskArtifactSummary } from "@openducktor/contracts";
+import type { TaskArtifactState, TaskArtifactSummary } from "@openducktor/contracts";
 import { and, desc, eq, gt, inArray, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreReadError,
 } from "./sqlite-task-store-errors";
 import {
-  type WorkflowArtifactKind,
   type TaskArtifactRow,
   type TaskStoreSession,
   taskArtifacts,
@@ -18,7 +18,7 @@ export type WorkflowArtifactRow = TaskArtifactRow & { markdown: string };
 export const latestWorkflowArtifactRow = (
   session: TaskStoreSession,
   taskId: string,
-  kind: WorkflowArtifactKind,
+  code: string,
 ): Effect.Effect<WorkflowArtifactRow | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -30,7 +30,7 @@ export const latestWorkflowArtifactRow = (
             and(
               eq(taskArtifacts.taskId, taskId),
               eq(taskArtifacts.classification, "workflow"),
-              eq(taskArtifacts.workflowKind, kind),
+              eq(taskArtifacts.code, code),
             ),
           )
           .orderBy(desc(taskArtifacts.revision))
@@ -50,14 +50,18 @@ export const latestWorkflowArtifactRow = (
     return { ...row, markdown: row.markdown };
   });
 
+/**
+ * The summary of a task has an entry for each artifact of its workflow. A stored code outside that
+ * workflow is left out.
+ */
 export const artifactSummariesByTaskId = (
   session: TaskStoreSession,
-  taskIds: readonly string[],
+  workflowsByTaskId: ReadonlyMap<string, TaskWorkflow>,
 ): Effect.Effect<Map<string, TaskArtifactSummary>, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const uniqueTaskIds = Array.from(new Set(taskIds));
+    const uniqueTaskIds = [...workflowsByTaskId.keys()];
     const summaries = new Map<string, TaskArtifactSummary>(
-      uniqueTaskIds.map((taskId) => [taskId, emptyArtifactSummary()]),
+      [...workflowsByTaskId].map(([taskId, workflow]) => [taskId, workflow.emptyArtifactSummary()]),
     );
     if (uniqueTaskIds.length === 0) {
       return summaries;
@@ -68,7 +72,7 @@ export const artifactSummariesByTaskId = (
 
       return database
         .select({
-          kind: taskArtifacts.workflowKind,
+          code: taskArtifacts.code,
           taskId: taskArtifacts.taskId,
           updatedAt: taskArtifacts.updatedAt,
           verdict: taskArtifacts.verdict,
@@ -86,7 +90,7 @@ export const artifactSummariesByTaskId = (
                   and(
                     eq(newerTaskArtifacts.taskId, taskArtifacts.taskId),
                     eq(newerTaskArtifacts.classification, "workflow"),
-                    eq(newerTaskArtifacts.workflowKind, taskArtifacts.workflowKind),
+                    eq(newerTaskArtifacts.code, taskArtifacts.code),
                     gt(newerTaskArtifacts.revision, taskArtifacts.revision),
                   ),
                 ),
@@ -97,22 +101,15 @@ export const artifactSummariesByTaskId = (
 
     for (const row of rows) {
       const summary = summaries.get(row.taskId);
-      if (summary === undefined) {
+      if (
+        summary === undefined ||
+        workflowsByTaskId.get(row.taskId)?.artifact(row.code) === undefined
+      ) {
         continue;
       }
-      if (row.kind === "implementation_plan") {
-        summary.plan = { has: true, updatedAt: toIso(row.updatedAt) };
-      }
-      if (row.kind === "spec") {
-        summary.spec = { has: true, updatedAt: toIso(row.updatedAt) };
-      }
-      if (row.kind === "qa_report") {
-        summary.qaReport = {
-          has: true,
-          updatedAt: toIso(row.updatedAt),
-          verdict: row.verdict ?? "not_reviewed",
-        };
-      }
+      const state: TaskArtifactState = { present: true, updatedAt: toIso(row.updatedAt) };
+      if (row.verdict !== null) state.verdict = row.verdict;
+      summary[row.code] = state;
     }
     return summaries;
   });
@@ -120,17 +117,12 @@ export const artifactSummariesByTaskId = (
 export const artifactSummary = (
   session: TaskStoreSession,
   taskId: string,
+  workflow: TaskWorkflow,
 ): Effect.Effect<TaskArtifactSummary, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const summaries = yield* artifactSummariesByTaskId(session, [taskId]);
-    return summaries.get(taskId) ?? emptyArtifactSummary();
+    const summaries = yield* artifactSummariesByTaskId(session, new Map([[taskId, workflow]]));
+    return summaries.get(taskId) ?? workflow.emptyArtifactSummary();
   });
-
-const emptyArtifactSummary = (): TaskArtifactSummary => ({
-  plan: { has: false },
-  qaReport: { has: false, verdict: "not_reviewed" },
-  spec: { has: false },
-});
 
 const toIso = (value: Date | null): string | undefined => {
   if (value === null) {

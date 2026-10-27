@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { asc, desc, eq, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
@@ -96,32 +96,4 @@ export const requireTaskRow = (
       });
     }
     return row;
-  });
-
-export const descendantTaskIds = (
-  session: TaskStoreSession,
-  rootTaskId: string,
-): Effect.Effect<Set<string>, SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    const targetIds = new Set<string>([rootTaskId]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      const childRows = yield* session.execute(
-        (database) =>
-          database
-            .select({ id: tasks.id })
-            .from(tasks)
-            .where(inArray(tasks.parentId, Array.from(targetIds))),
-        "sqliteTaskStore.descendantTaskIds.selectChildren",
-        { rootTaskId },
-      );
-      for (const child of childRows) {
-        if (!targetIds.has(child.id)) {
-          targetIds.add(child.id);
-          changed = true;
-        }
-      }
-    }
-    return targetIds;
   });

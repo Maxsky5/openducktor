@@ -1,8 +1,5 @@
-import {
-  getSessionLaunchAction,
-  type AgentRole,
-  type AgentUserMessagePart,
-} from "@openducktor/core";
+import { type AgentUserMessagePart } from "@openducktor/core";
+import { getSessionLaunchAction, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import {
   type WorkflowLaunchDecision,
   type WorkflowLaunchRequest,

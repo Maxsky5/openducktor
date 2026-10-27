@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { SessionStartWorkflowResult } from "../../sessions/start/session-start-workflow";
 import type { ClientFeedback } from "../../platform/client-feedback";
 import type {
@@ -8,6 +7,7 @@ import type {
 import { isSessionStartFailureFeedbackHandled } from "../../sessions/start/session-start-orchestration";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { SessionStartFlowRequest } from "../../sessions/start/session-start-types";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type StartKanbanSessionFlowInput = {
   request: SessionStartFlowRequest;

@@ -1,8 +1,6 @@
 import { DEFAULT_BRANCH_PREFIX, type TaskArtifactChange } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { workflowArtifactChange } from "../artifact-changes";
-import { canResetImplementationFromStatus } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
 import {
   appendImplementationResetCleanupProgress,
   cleanupImplementationResetActivity as cleanupActivity,
@@ -19,18 +17,22 @@ import {
 import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
-  implementationSessionRoleNames,
-  replaceTaskInList,
-  resetImplementationRollbackStatus,
   runTaskLocalCleanup,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
+import {
+  requireEffectInput,
+  resultingStatus,
+  transitionCause,
+} from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
+
 export const createTaskImplementationResetUseCase = ({
   gitPort,
   taskStore,
+  taskWorkflows,
   taskActivityGuard,
   settingsConfig,
   terminalService,
@@ -48,24 +50,16 @@ export const createTaskImplementationResetUseCase = ({
       const storeDependencies = requireImplementationResetStoreDependencies(taskStore);
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
       yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset implementation");
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
-        return yield* new HostValidationError({
-          field: "taskId",
-          message: `Task not found: ${taskId}`,
-          details: { repoPath, taskId },
-        });
-      }
-      if (!canResetImplementationFromStatus(current.status)) {
-        return yield* new HostValidationError({
-          field: "taskId",
-          message: `Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: ${current.status}).`,
-          details: { repoPath, taskId, status: current.status },
-        });
-      }
-      const currentSessions = (yield* taskStore.getTaskMetadata({ repoPath, taskId }))
-        .agentSessions;
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(current);
+      const decision = yield* requireEffectInput(
+        "Implementation reset is",
+        workflow,
+        "implementation.reset",
+        current,
+        { repoPath, taskId, status: current.status },
+      );
+      const { agentSessions: currentSessions } = yield* taskStore.getTaskMetadata(input);
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
@@ -75,6 +69,7 @@ export const createTaskImplementationResetUseCase = ({
         sessionState: canonicalSessionState,
       } = yield* collectImplementationResetSessionState(
         dependencies,
+        workflow,
         repoConfig,
         taskId,
         currentSessions,
@@ -93,7 +88,7 @@ export const createTaskImplementationResetUseCase = ({
         managedWorktreeBasePath,
         current.id,
         currentSessions,
-        new Set<string>(implementationSessionRoleNames),
+        new Set(workflow.worktreeRoles),
         "reset implementation",
       );
       const relatedBranches = yield* collectRelatedTaskBranches(
@@ -150,13 +145,18 @@ export const createTaskImplementationResetUseCase = ({
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
-          roles: [...implementationSessionRoleNames],
+          roles: [...workflow.worktreeRoles],
         });
         taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("Cleared Builder and QA session records.");
-        yield* storeDependencies.clearQaReports({ repoPath: effectiveRepoPath, taskId });
-        artifactChanges.push(workflowArtifactChange(taskId, "qaReport", true));
-        cleanupProgress.completedSteps.push("Cleared QA reports.");
+        cleanupProgress.completedSteps.push("Cleared the session records of the worktree roles.");
+        yield* storeDependencies.clearWorkflowArtifacts({
+          repoPath: effectiveRepoPath,
+          taskId,
+          codes: workflow.reviewArtifactCodes,
+        });
+        for (const code of workflow.reviewArtifactCodes)
+          artifactChanges.push(workflowArtifactChange(taskId, code, true));
+        cleanupProgress.completedSteps.push("Cleared the review artifacts.");
         yield* storeDependencies.setPullRequest({
           repoPath: effectiveRepoPath,
           taskId,
@@ -177,9 +177,10 @@ export const createTaskImplementationResetUseCase = ({
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,
-          status: resetImplementationRollbackStatus(current),
+          status: resultingStatus(decision),
+          cause: transitionCause(decision),
         });
-        return enrichTask(updated, replaceTaskInList(currentTasks, updated));
+        return enrichTask(workflow, updated);
       }).pipe(
         Effect.catch((error) => {
           const decoratedFailure = appendImplementationResetCleanupProgress(error, cleanupProgress);

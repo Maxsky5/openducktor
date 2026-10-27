@@ -39,5 +39,13 @@ export const readCodexThread = (
       method: "thread/read",
       params: { threadId, includeTurns: false },
     });
-    return yield* parseCodexThread(response, runtimeId, threadId);
+    const thread = yield* parseCodexThread(response, runtimeId, threadId);
+    if (thread.id !== threadId) {
+      return yield* new HostValidationError({
+        field: "threadId",
+        message: "Codex returned a different thread. Select the matching session and retry.",
+        details: { method: "thread/read", runtimeId, threadId, returnedThreadId: thread.id },
+      });
+    }
+    return thread;
   });

@@ -1,5 +1,9 @@
 import { expect, mock, test } from "bun:test";
-import { makeRuntimeSummary, testManagedMcpServer } from "./codex-app-server-adapter.test-harness";
+import {
+  makeRuntimeSummary,
+  testManagedMcpServer,
+  testWorkflowRolePolicy,
+} from "./codex-app-server-adapter.test-harness";
 import { CodexAppServerAdapter } from "./index";
 
 test("reports workspace runtime failures without session identity", async () => {
@@ -7,7 +11,9 @@ test("reports workspace runtime failures without session identity", async () => 
     throw new Error("transportFactory should not be called");
   });
   const adapter = new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     runtime: {
       ...makeRuntimeSummary("runtime-wrong-route"),
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
@@ -32,7 +38,9 @@ test("validates operation working directories before creating a transport", asyn
     throw new Error("transportFactory should not be called");
   });
   const adapter = new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     runtime: makeRuntimeSummary("runtime-live"),
     transportFactory,
   });

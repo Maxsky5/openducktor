@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import type { OpencodeRuntimeSnapshotSource } from "@openducktor/adapters-opencode-sdk";
 import { Effect } from "effect";
@@ -42,6 +43,7 @@ const prepareAdapter = (
 ) =>
   Effect.runPromise(
     createOpenCodeLiveSessionAdapterPreparer({
+      resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       liveSessionLifecycle: createLifecycle(options.changes ?? []),
       prepareRuntime: harness.prepareRuntime,
     })(

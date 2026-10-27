@@ -1,4 +1,5 @@
-import type { TaskCard, WorkspaceRecord } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,
   useRequiredContext,
@@ -44,7 +45,7 @@ import {
   taskImageMarkdown,
 } from "./description-assets";
 import { DocumentEditor } from "./document-editor";
-import { FieldInput, FormField, SwitchBox, ToolbarButton } from "./form-parts";
+import { FieldInput, FormField, ToolbarButton } from "./form-parts";
 import { IssueTypeGrid, IssueTypeSummary } from "./issue-type-grid";
 import { LabelsField } from "./labels-field";
 import { MarkdownEditorField } from "./markdown-editor-field";
@@ -161,7 +162,8 @@ const useEditorClose = (
   allowRemoval: RefObject<() => void>,
 ) => {
   const { close, isBusy, isActiveDocumentDirty, mode } = controller;
-  const dirty = controller.isTaskDraftDirty || controller.isSpecDirty || controller.isPlanDirty;
+  const dirty =
+    controller.isTaskDraftDirty || Object.values(controller.dirtyDocuments).some(Boolean);
   const requestClose = useCallback(() => {
     // For an unsaved open document, the controller asks once through its discard intent.
     if (!dirty || isActiveDocumentDirty) {
@@ -391,8 +393,8 @@ function EditIntro({
       </Text>
       <EditSectionSwitcher
         section={controller.editSection}
-        unsavedSpec={controller.isSpecDirty}
-        unsavedPlan={controller.isPlanDirty}
+        unsavedSpec={controller.dirtyDocuments.spec}
+        unsavedPlan={controller.dirtyDocuments.plan}
         disabled={controller.isFormDisabled}
         onChange={controller.requestSectionChange}
       />
@@ -490,10 +492,6 @@ function TaskFields({
     (priority: number) => updateState({ priority }),
     [updateState],
   );
-  const changeAiReview = useCallback(
-    (aiReviewEnabled: boolean) => updateState({ aiReviewEnabled }),
-    [updateState],
-  );
   const changeDescription = useCallback(
     (description: string) => updateState({ description }),
     [updateState],
@@ -509,7 +507,6 @@ function TaskFields({
       />
       <TitleField value={state.title} editable={editable} onChange={changeTitle} />
       <PriorityField value={state.priority} editable={editable} onChange={changePriority} />
-      <AiReviewField value={state.aiReviewEnabled} editable={editable} onChange={changeAiReview} />
       <DescriptionField
         value={state.description}
         editable={editable}
@@ -597,28 +594,6 @@ const PriorityField = memo(function PriorityField({
         options={PRIORITY_CHOICES}
         value={String(value)}
         onChange={(next) => onChange(Number(next))}
-        disabled={!editable}
-      />
-    </FormField>
-  );
-});
-
-const AiReviewField = memo(function AiReviewField({
-  value,
-  editable,
-  onChange,
-}: {
-  value: boolean;
-  editable: boolean;
-  onChange: (enabled: boolean) => void;
-}): ReactElement {
-  return (
-    <FormField label="AI Review">
-      <SwitchBox
-        label="AI Review"
-        text="Run QA agent before human review"
-        value={value}
-        onValueChange={onChange}
         disabled={!editable}
       />
     </FormField>

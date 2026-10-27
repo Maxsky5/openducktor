@@ -5,13 +5,13 @@ import { join } from "node:path";
 import {
   agentSessionRecordSchema,
   repoConfigSchema,
-  taskCardSchema,
   type RepoConfig,
   type TaskCard,
   type TaskAgentSessions,
   type WorkspaceCatalog,
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
@@ -36,6 +36,7 @@ import {
   createWorkspaceLifecycleService,
   type WorkspaceStoragePort,
 } from "./workspace-lifecycle-service";
+import { taskCardFixture } from "../../test-support/task-card-fixture";
 
 type TaskStoreDouble = Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
 
@@ -66,7 +67,8 @@ const removalRecord = (
 });
 
 const taskCard = (id: string): TaskCard =>
-  taskCardSchema.parse({
+  taskCardFixture({
+    artifactSummary: emptyArtifactSummary(),
     id,
     title: id,
     status: "open",

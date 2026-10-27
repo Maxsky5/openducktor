@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { TaskCard, WorkspaceRecord } from "@openducktor/contracts";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { type ReactElement, useEffect, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
@@ -24,6 +24,7 @@ import {
   type WorkspaceIntent,
   type WorkspaceIntentContext,
 } from "./use-workspace-intent-runner";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", workspaceName: "Alpha" });
 const beta = createWorkspaceRecordFixture({

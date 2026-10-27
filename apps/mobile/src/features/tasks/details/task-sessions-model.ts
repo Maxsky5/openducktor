@@ -1,5 +1,4 @@
 import { type AgentSessionRecord, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type AgentSessionRecencySummary,
@@ -8,7 +7,11 @@ import {
   formatAgentSessionOptionLabel,
 } from "@openducktor/frontend-core/lib/agent-session-options";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import {
+  BUILTIN_ROLE_LABELS,
+  builtinRoleId,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import type { Tone } from "@/ui/tones";
@@ -57,7 +60,7 @@ const toEntry = (
   externalSessionId: session.externalSessionId,
   runtimeKind: session.runtimeKind,
   workingDirectory: session.workingDirectory,
-  role: session.role,
+  role: builtinRoleId(session.role),
   startedAt: session.startedAt,
   activityState,
 });
@@ -102,7 +105,7 @@ export const groupTaskSessions = (
         label: formatAgentSessionOptionLabel({
           session: entry,
           sessionNumber: sessionNumbers.get(key) ?? index + 1,
-          roleLabelByRole: AGENT_ROLE_LABELS,
+          roleLabelByRole: BUILTIN_ROLE_LABELS,
         }),
         runtimeLabel: RUNTIME_DESCRIPTORS_BY_KIND[entry.runtimeKind].label,
         startedAt: entry.startedAt,
@@ -112,6 +115,6 @@ export const groupTaskSessions = (
         activityState: entry.activityState,
       };
     });
-    return rows.length > 0 ? [{ role, roleLabel: AGENT_ROLE_LABELS[role], rows }] : [];
+    return rows.length > 0 ? [{ role, roleLabel: BUILTIN_ROLE_LABELS[role], rows }] : [];
   });
 };

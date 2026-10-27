@@ -75,7 +75,6 @@ Iterate through your findings. For **EACH** distinct gap identified:
     *   **priority**: Map the command severity to OpenDucktor numeric priority.
       `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
     *   **labels**: Only `audit` and `doc` are allowed for this command. Every task must include both labels. Do not add any other labels.
-    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Gap Category

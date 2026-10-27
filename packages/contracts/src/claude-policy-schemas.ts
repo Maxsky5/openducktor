@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { AgentRole } from "./agent-workflow-schemas";
 
 export const CLAUDE_PERMISSION_MODE_VALUES = [
   "default",
@@ -153,9 +152,9 @@ export type ClaudePolicySource = "role" | "default" | "native";
 export const resolveClaudePolicy = (
   config: {
     defaults: ClaudePolicyFields;
-    roleOverrides: Partial<Record<AgentRole, ClaudePolicyFields>>;
+    roleOverrides: Partial<Record<string, ClaudePolicyFields>>;
   },
-  role?: AgentRole | null,
+  role?: string | null,
 ) => {
   const defaults = config.defaults;
   const override = role ? config.roleOverrides[role] : undefined;

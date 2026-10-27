@@ -29,7 +29,11 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 | `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
 | `open_qa` | Open the linked QA session. No transition. |
 | `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
-| `human_approve` | Move `ai_review` or `human_review` to `closed` after the epic child check passes. |
+| `human_approve` | Move `ai_review` or `human_review` to `closed`. |
+
+## Event actions
+
+An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_close` for `task.close`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
 
 ## Session startup
 
@@ -45,17 +49,15 @@ Stop also cancels Autopilot submissions that are still being prepared. A cancele
 
 `set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the artifact.
 
-`set_plan` writes or revises the implementation plan. A `feature` or `epic` can use it from `spec_ready` or any later active status. A `task` or `bug` can also use it from `open`. Valid planning before a build moves the task to `ready_for_dev`. A later edit changes only the artifact.
+`set_plan` writes or revises the implementation plan. A `feature` can use it from `spec_ready` or any later active status. A `task` or `bug` can also use it from `open`. Valid planning before a build moves the task to `ready_for_dev`. A later edit changes only the artifact.
 
 Builder can revise the spec with `odt_set_task_artifact` and code `spec`, and the plan with code `plan` when implementation findings require artifact changes. Builder must get user approval before changing required scope, design contracts, or security posture. Each call saves the complete Markdown artifact for the session task. Revisions from `in_progress`, `blocked`, `ai_review`, or `human_review` keep the task status unchanged.
 
-Manual Specification and Implementation Plan saves use `saveSpecArtifact` and `savePlanArtifact`. They keep task status unchanged, including on closed tasks. They remain separate from workflow submissions.
+Manual document saves use `workflow_artifact_save` with `submit: false`. They keep task status unchanged, including on closed tasks. They send no workflow event.
 
-`odt_set_task_artifact` saves workflow artifacts through the existing workflow actions. Code `qaReport` requires a verdict and completes one QA review pass. Build completion remains separate. Managed workflow writes follow the role policy described in [external MCP](external-mcp.md#tool-access).
+`odt_set_task_artifact` submits workflow artifacts. A document save sends the save event of its artifact. A review save requires a declared verdict, sends the event of that verdict, and commits the report with its status change. Code `qaReport` completes one QA review pass. Build completion remains separate. Managed workflow writes follow the role policy described in [external MCP](external-mcp.md#tool-access).
 
 Users and workflow agents can create, rename, replace, and delete free artifacts on non-closed tasks. These operations cannot change workflow artifacts, task status, QA verdict, or workflow readiness. Closed tasks keep read, preview, and download access. See [task artifacts](task-artifacts.md) for collection behavior and [artifact tools](external-mcp.md) for inputs and transfer limits.
-
-For a native epic planning action, `subtasks` means replace the direct child proposal. Replacement is allowed only when all current direct children are `open`, `spec_ready`, or `ready_for_dev`. If `subtasks` is absent, keep the current children.
 
 ## Direct merge
 
@@ -98,7 +100,7 @@ Reject the action while a live role still owns task state. Reject it when branch
 
 The action keeps the task record, user fields, all artifacts, session history, pull request data, and direct merge data. It stops task terminals and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
 
-Reject it while a live role owns mutable task state. Reject an epic while a direct child is not closed.
+Reject it while a live role owns mutable task state.
 
 Only the task detail sheet can show `close_task`. Do not show it on a Kanban card, Task Workflows quick action, bulk action, header, or command palette.
 

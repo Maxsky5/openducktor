@@ -5,11 +5,13 @@ import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
 } from "../support/required-task-dependencies";
-import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
+import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
+import { requirePullRequestManagement } from "../support/task-workflow-events";
 import { loadTaskBranchCleanup } from "../support/task-worktree-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
+  taskWorkflows,
   gitPort,
   gitProviderResolver,
   taskStore,
@@ -28,7 +30,8 @@ export const createTaskPullRequestDetectionUseCase = ({
         }),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* validatePullRequestManagementStatusEffect(current.status);
+      const workflow = taskWorkflows.forTask(current);
+      yield* requirePullRequestManagement(workflow, current);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest !== undefined) {
         return yield* Effect.fail(
@@ -39,21 +42,19 @@ export const createTaskPullRequestDetectionUseCase = ({
           }),
         );
       }
-      if (metadata.directMerge !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before linking a merged pull request.`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
+      yield* ensureNoDirectMergeEffect({
+        operation: "detect_pull_request",
+        repoPath,
+        taskId,
+        directMerge: metadata.directMerge,
+      });
 
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
       const taskContext = yield* loadTaskBranchCleanup(
         dependencies,
+        workflow,
         current,
         effectiveRepoPath,
         taskId,

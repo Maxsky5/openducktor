@@ -101,7 +101,6 @@ Iterate through the codebase. For **EACH** distinct optimization found:
     *   **priority**: Map the command impact to OpenDucktor numeric priority.
       `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical issues.
     *   **labels**: Only `audit` and `perf` are allowed for this command. Every task must include both labels. Do not add any other labels.
-    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Optimization Category

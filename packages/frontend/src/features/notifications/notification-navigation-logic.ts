@@ -1,10 +1,13 @@
 import type {
-  AgentRole,
   AgentSessionRecord,
   NotificationNavigationTarget,
-  TaskCard,
   WorkspaceSession,
 } from "@openducktor/contracts";
+import {
+  resolveAgentStudioDefaultRoleForTask,
+  type BuiltinTaskCard as TaskCard,
+  builtinRoleId,
+} from "@openducktor/workflows";
 import {
   buildSessionNavigationHref,
   type SessionsPageKind,
@@ -15,19 +18,6 @@ import { buildKanbanTaskHref } from "@/pages/kanban/kanban-task-link";
 
 export const ATTENTION_KIND_QUERY_KEY = "attention";
 export const ATTENTION_ID_QUERY_KEY = "attentionId";
-
-const roleForTask = (task: TaskCard): AgentRole => {
-  if (task.status === "open") return "spec";
-  if (task.status === "spec_ready") return "planner";
-  if (
-    task.status === "ready_for_dev" ||
-    task.status === "in_progress" ||
-    task.status === "blocked"
-  ) {
-    return "build";
-  }
-  return "qa";
-};
 
 export const addNotificationAttention = (
   href: string,
@@ -140,7 +130,9 @@ export const navigateToNotificationTarget = async (
         kind: "task",
         workspaceId: workspace.workspaceId,
         taskId: task.id,
-        role: target.preferredRole ?? roleForTask(task),
+        role: target.preferredRole
+          ? builtinRoleId(target.preferredRole)
+          : resolveAgentStudioDefaultRoleForTask(task),
       }),
     );
     return;
@@ -157,7 +149,7 @@ export const navigateToNotificationTarget = async (
     kind: "task_session",
     workspaceId: workspace.workspaceId,
     taskId,
-    role: session.role,
+    role: builtinRoleId(session.role),
     identity: {
       externalSessionId: session.externalSessionId,
       runtimeKind: session.runtimeKind,

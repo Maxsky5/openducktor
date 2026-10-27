@@ -1,30 +1,32 @@
 import { mcpArtifactSaveResultSchema, type McpTaskArtifact } from "@openducktor/contracts";
+import {
+  workflowArtifact,
+  workflowArtifactLabel,
+  workflowArtifactShortLabel,
+  workflowArtifactVerdict,
+} from "@openducktor/workflows";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 
-/** What an `odt_set_task_artifact` call saves: a workflow document, a QA verdict, or a free file. */
+/** What an `odt_set_task_artifact` call saves: a workflow document, a review, or a free file. */
 export type ArtifactToolHeading =
-  | "spec"
-  | "plan"
-  | "qa_approved"
-  | "qa_rejected"
-  | "qa_report"
+  | "document"
+  | "review_passed"
+  | "review_failed"
+  | "review"
   | "free";
+
+/** The heading and title of a workflow artifact call. */
+type WorkflowArtifactHeading = { heading: Exclude<ArtifactToolHeading, "free">; title: string };
 
 export type ArtifactToolCall = {
   heading: ArtifactToolHeading;
   title: string;
+  /** The artifact code, from the result or the input. */
+  code: string | null;
   /** The saved artifact, after the call completes with a valid result. */
   saved: McpTaskArtifact | null;
 };
-
-const HEADING_TITLES = {
-  spec: "Set Spec",
-  plan: "Set Plan",
-  qa_approved: "Approve QA",
-  qa_rejected: "Reject QA",
-  qa_report: "Set QA Report",
-} as const satisfies Record<Exclude<ArtifactToolHeading, "free">, string>;
 
 /** Reads an `odt_set_task_artifact` call from its result, or from its input until it completes. */
 export const readArtifactToolCall = (meta: ToolMeta): ArtifactToolCall => {
@@ -32,10 +34,11 @@ export const readArtifactToolCall = (meta: ToolMeta): ArtifactToolCall => {
   const code = saved?.code ?? readInputText(meta, "code");
   const verdict =
     saved?.classification === "workflow" ? saved.verdict : readInputText(meta, "verdict");
-  const heading = artifactHeading(code, verdict);
-  if (heading !== "free") return { heading, title: HEADING_TITLES[heading], saved };
+  const artifact = code ? workflowArtifact(code) : undefined;
+  if (code && artifact) return { ...workflowHeading(code, artifact.kind, verdict), code, saved };
   const name = saved?.name ?? readInputText(meta, "name") ?? code;
-  return { heading, title: name ? `Set Artifact · ${name}` : "Set Artifact", saved };
+  const title = name ? `Set Artifact · ${name}` : "Set Artifact";
+  return { heading: "free", title, code, saved };
 };
 
 const readInputText = (meta: ToolMeta, field: string): string | null => {
@@ -53,14 +56,16 @@ const readSavedArtifact = (output: string | undefined): McpTaskArtifact | null =
   }
 };
 
-const artifactHeading = (
-  code: string | null,
+/** Documents read "Set <name>". A review reads "Approve" or "Reject" by its verdict. */
+const workflowHeading = (
+  code: string,
+  kind: "document" | "review",
   verdict: string | null | undefined,
-): ArtifactToolHeading => {
-  if (code === "spec") return "spec";
-  if (code === "plan") return "plan";
-  if (code !== "qaReport") return "free";
-  if (verdict === "approved") return "qa_approved";
-  if (verdict === "rejected") return "qa_rejected";
-  return "qa_report";
+): WorkflowArtifactHeading => {
+  const name = workflowArtifactShortLabel(code);
+  if (kind === "document") return { heading: "document", title: `Set ${name}` };
+  const declared = verdict ? workflowArtifactVerdict(code, verdict) : undefined;
+  if (declared?.passes === false) return { heading: "review_failed", title: `Reject ${name}` };
+  if (declared?.passes) return { heading: "review_passed", title: `Approve ${name}` };
+  return { heading: "review", title: `Set ${workflowArtifactLabel(code)}` };
 };

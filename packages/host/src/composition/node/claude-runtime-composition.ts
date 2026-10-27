@@ -1,3 +1,4 @@
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
 import type { Effect } from "effect";
 import {
@@ -27,6 +28,7 @@ export type CreateClaudeRuntimeCompositionInput = {
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   readEnv: () => NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   runtimeExecutableProbe: RuntimeExecutableProbePort;
   runtimeDistribution: HostRuntimeDistribution;
   launchPolicy: ClaudeLaunchPolicyPort;
@@ -46,6 +48,7 @@ export const createClaudeRuntimeComposition = ({
   onBackgroundFailure,
   readEnv,
   resolveMcpBridgeConnection,
+  resolveWorkflowRolePolicy,
   runtimeExecutableProbe,
   runtimeDistribution,
   launchPolicy,
@@ -65,6 +68,7 @@ export const createClaudeRuntimeComposition = ({
       // Each runtime start reads the environment once, like the other runtime processes.
       processEnv: readEnv(),
       resolveMcpBridgeConnection,
+      resolveWorkflowRolePolicy,
       runtimeDistribution,
       sessionStore,
       toolDiscovery,

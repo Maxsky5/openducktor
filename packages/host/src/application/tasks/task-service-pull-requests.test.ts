@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import { z } from "zod";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
@@ -78,7 +79,11 @@ const createGithubTaskService = (
     listRemotes: () => Effect.succeed(remotes),
   });
   const providerDependencies = createGithubTaskDependencies(gitPort, input.systemCommands);
-  return createTaskService({ ...input, ...providerDependencies });
+  return createTaskService({
+    taskWorkflows: builtinTaskWorkflows,
+    ...input,
+    ...providerDependencies,
+  });
 };
 
 describe("createTaskService pull requests", () => {
@@ -104,8 +109,7 @@ describe("createTaskService pull requests", () => {
           try: async () => {
             calls.push({ type: "metadata", input });
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -148,45 +152,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -258,6 +223,7 @@ describe("createTaskService pull requests", () => {
     });
     const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       ...providerDependencies,
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
@@ -319,6 +285,7 @@ describe("createTaskService pull requests", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({ calls }),
       systemCommands: createPullRequestDetectSystemCommands({
         calls,
@@ -363,8 +330,7 @@ describe("createTaskService pull requests", () => {
           try: async () => {
             calls.push({ type: "metadata", input });
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -407,45 +373,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -538,6 +465,7 @@ describe("createTaskService pull requests", () => {
     });
     const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       ...providerDependencies,
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
@@ -597,8 +525,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -641,45 +568,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -813,8 +701,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -856,45 +743,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1037,8 +885,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -1082,45 +929,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1366,8 +1174,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               pullRequest: existingPullRequest,
               agentSessions: [],
             };
@@ -1411,45 +1218,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1640,8 +1408,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -1683,45 +1450,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1774,6 +1502,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -1888,8 +1617,7 @@ describe("createTaskService pull requests", () => {
       getTaskMetadata() {
         return Effect.sync(() => {
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             directMerge: {
               method: "squash",
               sourceBranch: "odt/task-1",
@@ -1930,45 +1658,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2021,6 +1710,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
             readConfig() {
@@ -2102,8 +1792,7 @@ describe("createTaskService pull requests", () => {
           try: async () => {
             calls.push({ type: "metadata", input });
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [buildSession],
             };
           },
@@ -2160,58 +1849,6 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2291,7 +1928,7 @@ describe("createTaskService pull requests", () => {
     });
     expect(calls).toContainEqual({
       type: "transition",
-      input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
+      input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
     });
     expect(calls).toContainEqual({
       type: "deleteLocalBranch",
@@ -2392,62 +2029,10 @@ describe("createTaskService pull requests", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getTaskMetadata() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected metadata");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2623,63 +2208,84 @@ describe("createTaskService pull requests", () => {
       ),
     ).resolves.toBe(mutationFailure);
   });
-  test("retains merged pull request progress when task closure validation fails", async () => {
-    const mutationFailure = new HostOperationError({
-      operation: "task-store.list-tasks",
-      message: "closure validation failed",
-    });
-    const linkedPullRequest = {
-      providerId: "github" as const,
-      number: 42,
-      url: "https://github.com/openai/openducktor/pull/42",
-      state: "open" as const,
-      createdAt: "2026-05-01T00:00:00.000Z",
-      updatedAt: "2026-05-02T00:00:00.000Z",
-    };
-    const taskStore: TaskStorePort = {
-      listPullRequestSyncCandidates: () =>
-        Effect.succeed([{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }]),
-      setPullRequest: () => Effect.succeed(true),
-      listTasks: () => Effect.fail(mutationFailure),
-    };
-    const service = createGithubTaskService({
-      gitPort: createDirectMergeGitPort({ calls: [] }),
-      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-      systemCommands: createPullRequestSyncSystemCommands({
-        calls: [],
-        payload: githubPullResponsePayload({
-          number: 42,
-          state: "closed",
-          mergedAt: "2026-05-10T11:00:00.000Z",
-          updatedAt: "2026-05-10T11:00:00.000Z",
+  test.each(["fails validation", "is already closed"] as const)(
+    "retains merged pull request progress when task closure %s",
+    async (closure) => {
+      const mutationFailure = new HostOperationError({
+        operation: "task-store.list-tasks",
+        message: "closure validation failed",
+      });
+      const linkedPullRequest = {
+        providerId: "github" as const,
+        number: 42,
+        url: "https://github.com/openai/openducktor/pull/42",
+        state: "open" as const,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      };
+      const taskStore: TaskStorePort = {
+        listPullRequestSyncCandidates: () =>
+          Effect.succeed([
+            { id: "task-1", status: "human_review", pullRequest: linkedPullRequest },
+          ]),
+        setPullRequest: () => Effect.succeed(true),
+        listTasks: () =>
+          closure === "fails validation"
+            ? Effect.fail(mutationFailure)
+            : Effect.succeed([task({ status: "closed" })]),
+        transitionTask: () => Effect.die(new Error("must not close the task again")),
+      };
+      const service = createGithubTaskService({
+        gitPort: createDirectMergeGitPort({ calls: [] }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        systemCommands: createPullRequestSyncSystemCommands({
+          calls: [],
+          payload: githubPullResponsePayload({
+            number: 42,
+            state: "closed",
+            mergedAt: "2026-05-10T11:00:00.000Z",
+            updatedAt: "2026-05-10T11:00:00.000Z",
+          }),
         }),
-      }),
-      taskStore,
-      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-      workspaceSettingsService: createBuildWorkspaceSettingsService({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        hooks: { postComplete: [] },
-        git: {
-          provider: {
-            id: "github",
-            enabled: true,
-            repository: { host: "github.com", owner: "openai", name: "openducktor" },
-            autoDetected: false,
-          },
+        taskStore,
+        terminalService: {
+          acquireTaskCleanup: () => Effect.die(new Error("must not repeat task cleanup")),
         },
-      }),
-    });
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { postComplete: [] },
+          git: {
+            provider: {
+              id: "github",
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        }),
+      });
 
-    const failure = await Effect.runPromise(
-      service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
-    );
-    expect(failure).toBeInstanceOf(TaskMutationProgressFailure);
-    expect(failure).toMatchObject({
-      changes: { taskIds: ["task-1"], removedTaskIds: [] },
-      failure: mutationFailure,
-    });
-  });
+      const result = await Effect.runPromise(
+        Effect.result(service.repoPullRequestSyncDetailed({ repoPath: "/repo" })),
+      );
+      if (closure === "fails validation") {
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            changes: { taskIds: ["task-1"], removedTaskIds: [] },
+            failure: mutationFailure,
+          },
+        });
+      } else {
+        expect(result).toMatchObject({
+          _tag: "Success",
+          success: { ran: true, changedTaskIds: ["task-1"] },
+        });
+      }
+    },
+  );
   test("propagates a missing GitHub CLI during pull request sync", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
@@ -2738,62 +2344,10 @@ describe("createTaskService pull requests", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getTaskMetadata() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected metadata");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2891,8 +2445,7 @@ describe("createTaskService pull requests", () => {
         return Effect.sync(() => {
           calls.push({ type: "metadata", input });
           return {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             pullRequest: {
               providerId: "github",
               number: 42,
@@ -2987,7 +2540,7 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).unlinkPullRequest({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
         }),
@@ -3111,7 +2664,10 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
       ),
     ).rejects.toThrow(
       "Pull request management is only available from in_progress, ai_review, or human_review.",
@@ -3136,8 +2692,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -3230,7 +2785,10 @@ describe("createTaskService pull requests", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
       ),
     ).rejects.toThrow("Task task-1 does not have a linked pull request.");
   });
@@ -3244,8 +2802,7 @@ describe("createTaskService pull requests", () => {
       getTaskMetadata(input) {
         calls.push({ type: "metadata", input });
         return Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         });
       },
@@ -3255,6 +2812,7 @@ describe("createTaskService pull requests", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -3317,8 +2875,7 @@ describe("createTaskService pull requests", () => {
           try: async () => {
             calls.push({ type: "metadata", input });
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [buildSession],
             };
           },
@@ -3384,19 +2941,6 @@ describe("createTaskService pull requests", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       deleteTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -3412,6 +2956,7 @@ describe("createTaskService pull requests", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -3469,7 +3014,7 @@ describe("createTaskService pull requests", () => {
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: false },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
+        input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
       },
     ]);
   });
@@ -3483,8 +3028,7 @@ describe("createTaskService pull requests", () => {
       listTasks: () => Effect.succeed([task({ status: "human_review" })]),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         }),
       setPullRequest: () =>
@@ -3495,6 +3039,7 @@ describe("createTaskService pull requests", () => {
       transitionTask: () => Effect.fail(failure),
     };
     const service = createTaskServiceWithMutationProgress({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({
         calls: [],
         currentBranches: { "/worktrees/repo/task-1": { name: "odt/task-1", detached: false } },
@@ -3541,13 +3086,13 @@ describe("createTaskService pull requests", () => {
       getTaskMetadata(input: { repoPath: string; taskId: string }) {
         calls.push({ type: "metadata", input });
         return Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         });
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskStore,
@@ -3599,8 +3144,7 @@ describe("createTaskService pull requests", () => {
           try: async () => {
             calls.push({ type: "metadata", input });
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               pullRequest: pullRequest(),
               agentSessions: [],
             };
@@ -3665,19 +3209,6 @@ describe("createTaskService pull requests", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       deleteTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -3695,6 +3226,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
@@ -3735,8 +3267,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -3800,19 +3331,6 @@ describe("createTaskService pull requests", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       deleteTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -3830,6 +3348,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,

@@ -18,6 +18,7 @@ export type ResolveCodexRuntimeSnapshotSourceInput = {
   session: CodexSessionState;
   thread: CodexThreadSnapshot | null;
   threadIsLoaded: boolean;
+  directoryMatch: boolean;
   hasPendingInput: boolean;
   hasActiveTurn: boolean;
 };
@@ -26,13 +27,14 @@ const resolveCodexRuntimeSnapshotSource = ({
   session,
   thread,
   threadIsLoaded,
+  directoryMatch,
   hasPendingInput,
   hasActiveTurn,
 }: ResolveCodexRuntimeSnapshotSourceInput): CodexRuntimeSnapshotSource => {
   if (
     thread &&
     !threadIsLoaded &&
-    thread.cwd === session.workingDirectory &&
+    directoryMatch &&
     thread.status.classification === "idle" &&
     (thread.parentThreadId ?? thread.subAgentSource?.parentThreadId) &&
     !hasPendingInput &&
@@ -46,7 +48,7 @@ const resolveCodexRuntimeSnapshotSource = ({
       : { type: "missing" };
   }
 
-  if (thread.cwd !== session.workingDirectory) {
+  if (!directoryMatch) {
     return { type: "missing" };
   }
 
@@ -93,7 +95,7 @@ const toRuntimeSnapshot = (
 
 export const toRuntimeSnapshotFromThread = (
   thread: CodexThreadSnapshot,
-  ref: { repoPath: string; externalSessionId?: string },
+  ref: SessionRef,
   pendingInput: {
     pendingApprovals?: AgentPendingApprovalRequest[];
     pendingQuestions?: AgentPendingQuestionRequest[];
@@ -110,10 +112,10 @@ export const toRuntimeSnapshotFromThread = (
       pendingQuestions,
     }),
     ref: {
-      externalSessionId: ref.externalSessionId ?? thread.id,
+      externalSessionId: ref.externalSessionId,
       repoPath: ref.repoPath,
       runtimeKind: "codex",
-      workingDirectory: thread.cwd,
+      workingDirectory: ref.workingDirectory,
     },
     title: thread.title,
     startedAt: thread.startedAt,
@@ -134,10 +136,10 @@ const codexRuntimeSnapshotRef = (session: CodexSessionState): ReadSessionRuntime
 });
 
 const parentExternalSessionIdFromThread = (
-  session: CodexSessionState,
   thread: CodexThreadSnapshot | null,
+  directoryMatch: boolean,
 ): string | undefined => {
-  if (!thread || thread.cwd !== session.workingDirectory) {
+  if (!thread || !directoryMatch) {
     return undefined;
   }
   return thread.parentThreadId ?? thread.subAgentSource?.parentThreadId ?? undefined;
@@ -146,6 +148,7 @@ const parentExternalSessionIdFromThread = (
 export const toRefreshedRuntimeSnapshot = ({
   session,
   inventory,
+  directoryMatch,
   input,
   pendingApprovals,
   pendingQuestions,
@@ -153,6 +156,7 @@ export const toRefreshedRuntimeSnapshot = ({
 }: {
   session: CodexSessionState;
   inventory: CodexThreadInventory;
+  directoryMatch: boolean;
   input?: ReadSessionRuntimeSnapshotInput;
   pendingApprovals: AgentPendingApprovalRequest[];
   pendingQuestions: AgentPendingQuestionRequest[];
@@ -165,6 +169,7 @@ export const toRefreshedRuntimeSnapshot = ({
     session,
     thread,
     threadIsLoaded: inventory.loadedIds.has(session.threadId),
+    directoryMatch,
     hasPendingInput,
     hasActiveTurn,
   });
@@ -174,7 +179,7 @@ export const toRefreshedRuntimeSnapshot = ({
       session,
       pendingApprovals,
       pendingQuestions,
-      parentExternalSessionIdFromThread(session, thread),
+      parentExternalSessionIdFromThread(thread, directoryMatch),
     );
   }
   if (runtimeSnapshotSource.type === "missing") {

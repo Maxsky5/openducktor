@@ -1,8 +1,8 @@
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
-  AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
   normalizeOdtWorkflowToolName,
+  type WorkflowRolePolicyResolver,
 } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
 import {
@@ -16,7 +16,6 @@ import {
 } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
-import { READ_ONLY_ROLES } from "./codex-session-policy";
 import {
   type CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -40,6 +39,7 @@ type TrustedOdtToolDecision =
 const ODT_MCP_TOOL_NAME_SET = new Set<string>(ODT_MCP_TOOL_NAMES);
 
 const decideTrustedOdtTool = (
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
   session: CodexSessionState,
   serverName: string,
   toolName: string | undefined,
@@ -73,9 +73,8 @@ const decideTrustedOdtTool = (
     };
   }
 
-  if (
-    AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].some((candidate) => candidate === workflowTool)
-  ) {
+  const { tools } = resolveWorkflowRolePolicy(sessionAssociation);
+  if (tools.some((candidate) => candidate === workflowTool)) {
     return { kind: "allow" };
   }
   return {
@@ -86,6 +85,7 @@ const decideTrustedOdtTool = (
 
 export type CodexServerRequestHandlerContext = {
   respondServerRequest: CodexServerRequestResponder;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   pendingInput: CodexPendingInputState;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   subagents: CodexSubagentLinkState;
@@ -250,6 +250,7 @@ export const handleCodexServerRequest = async (
     }
 
     const workflowToolDecision = decideTrustedOdtTool(
+      context.resolveWorkflowRolePolicy,
       routeContext.policySession,
       mcpElicitationApproval.metadata.serverName,
       mcpElicitationApproval.tool?.name,
@@ -415,7 +416,7 @@ export const handleCodexServerRequest = async (
     const policyAssociation = routeContext.policySession.summary.sessionAssociation;
     if (
       policyAssociation.kind === "workflow" &&
-      READ_ONLY_ROLES.has(policyAssociation.role) &&
+      context.resolveWorkflowRolePolicy(policyAssociation).readOnly &&
       requestMutation === "read_only"
     ) {
       markHandled();

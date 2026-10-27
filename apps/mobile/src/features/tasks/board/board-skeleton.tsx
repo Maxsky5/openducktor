@@ -1,4 +1,4 @@
-import type { KanbanColumnId } from "@openducktor/core";
+import type { KanbanColumnId } from "@openducktor/workflows";
 import type { ReactElement, ReactNode } from "react";
 import { View } from "react-native";
 import { useSharedValue } from "react-native-reanimated";

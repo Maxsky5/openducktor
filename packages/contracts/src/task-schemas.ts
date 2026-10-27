@@ -6,159 +6,46 @@ import {
   pullRequestSchema,
   sourceIssueReferenceSchema,
 } from "./git-schemas";
+import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
-export const taskStatusSchema = z.enum([
-  "open",
-  "spec_ready",
-  "ready_for_dev",
-  "in_progress",
-  "blocked",
-  "ai_review",
-  "human_review",
-  "closed",
-]);
-export type TaskStatus = z.infer<typeof taskStatusSchema>;
+/** A state of the task workflow. The workflow of the task validates it. */
+export const taskStatusSchema = workflowIdSchema;
 
-export const issueTypeSchema = z.enum(["task", "feature", "bug", "epic"]);
-export type IssueType = z.infer<typeof issueTypeSchema>;
+/** A value of the `issueType` fact of the task workflow. */
+export const issueTypeSchema = workflowIdSchema;
 
-export const taskActionSchema = z.enum([
-  "view_details",
-  "set_spec",
-  "set_plan",
-  "build_start",
-  "qa_start",
-  "open_builder",
-  "open_qa",
-  "reset_implementation",
-  "reset_task",
-  "close_task",
-  "human_request_changes",
-  "human_approve",
-]);
-export type TaskAction = z.infer<typeof taskActionSchema>;
+/** An action of the task workflow. */
+export const taskActionSchema = workflowIdSchema;
 
 export const taskPrioritySchema = z.number().int().min(0).max(4);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
-export const planSubtaskPrioritySchema = taskPrioritySchema.describe(
-  "Subtask priority. Valid values: 0, 1, 2, 3, 4. Default is 2.",
-);
-export type PlanSubtaskPriority = z.infer<typeof planSubtaskPrioritySchema>;
-
-export const planSubtaskIssueTypeSchema = z.enum(["task", "feature", "bug"]);
-export type PlanSubtaskIssueType = z.infer<typeof planSubtaskIssueTypeSchema>;
-
-export const planSubtaskInputSchema = z.object({
-  title: z.string().trim().min(1),
-  issueType: planSubtaskIssueTypeSchema.optional(),
-  priority: planSubtaskPrioritySchema.optional(),
-  description: z.string().optional(),
-});
-export type PlanSubtaskInput = z.infer<typeof planSubtaskInputSchema>;
-
-const taskArtifactPresenceSchema = z.object({
-  has: z.boolean().default(false),
+/** The state of one workflow artifact of a task. Only a present review has a verdict. */
+export const taskArtifactStateSchema = z.object({
+  present: z.boolean(),
+  verdict: workflowIdSchema.optional(),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
-export type TaskArtifactPresence = z.infer<typeof taskArtifactPresenceSchema>;
+export type TaskArtifactState = z.infer<typeof taskArtifactStateSchema>;
 
-export const qaWorkflowVerdictSchema = z.enum(["approved", "rejected", "not_reviewed"]);
-export type QaWorkflowVerdict = z.infer<typeof qaWorkflowVerdictSchema>;
-
-export const qaReportVerdictSchema = z.enum(["approved", "rejected"]);
-export type QaReportVerdict = z.infer<typeof qaReportVerdictSchema>;
-
-const taskQaArtifactPresenceSchema = taskArtifactPresenceSchema.extend({
-  verdict: qaWorkflowVerdictSchema.default("not_reviewed"),
-});
-export type TaskQaArtifactPresence = z.infer<typeof taskQaArtifactPresenceSchema>;
-
-const EMPTY_TASK_ARTIFACT_PRESENCE: TaskArtifactPresence = {
-  has: false,
-};
-
-const taskArtifactSummarySchema = z.object({
-  spec: taskArtifactPresenceSchema.default(EMPTY_TASK_ARTIFACT_PRESENCE),
-  plan: taskArtifactPresenceSchema.default(EMPTY_TASK_ARTIFACT_PRESENCE),
-  qaReport: taskQaArtifactPresenceSchema.default({
-    ...EMPTY_TASK_ARTIFACT_PRESENCE,
-    verdict: "not_reviewed",
-  }),
-});
+/** Keyed by the workflow artifact IDs. The task workflow definition declares them. */
+export const taskArtifactSummarySchema = z.record(
+  workflowArtifactIdSchema,
+  taskArtifactStateSchema,
+);
 export type TaskArtifactSummary = z.infer<typeof taskArtifactSummarySchema>;
 
-const EMPTY_TASK_ARTIFACT_SUMMARY: TaskArtifactSummary = {
-  spec: EMPTY_TASK_ARTIFACT_PRESENCE,
-  plan: EMPTY_TASK_ARTIFACT_PRESENCE,
-  qaReport: {
-    ...EMPTY_TASK_ARTIFACT_PRESENCE,
-    verdict: "not_reviewed",
-  },
-};
-
-const agentWorkflowStateSchema = z.object({
-  required: z.boolean().default(false),
-  canSkip: z.boolean().default(true),
-  available: z.boolean().default(false),
-  completed: z.boolean().default(false),
+export const agentWorkflowStateSchema = z.object({
+  required: z.boolean(),
+  canSkip: z.boolean(),
+  available: z.boolean(),
+  completed: z.boolean(),
 });
 export type AgentWorkflowState = z.infer<typeof agentWorkflowStateSchema>;
 
-const agentWorkflowsSchema = z.object({
-  spec: agentWorkflowStateSchema.default({
-    required: false,
-    canSkip: true,
-    available: false,
-    completed: false,
-  }),
-  planner: agentWorkflowStateSchema.default({
-    required: false,
-    canSkip: true,
-    available: false,
-    completed: false,
-  }),
-  builder: agentWorkflowStateSchema.default({
-    required: true,
-    canSkip: false,
-    available: false,
-    completed: false,
-  }),
-  qa: agentWorkflowStateSchema.default({
-    required: false,
-    canSkip: true,
-    available: false,
-    completed: false,
-  }),
-});
+/** The step state of each role of the task workflow. The host derives it from the workflow. */
+const agentWorkflowsSchema = z.record(workflowIdSchema, agentWorkflowStateSchema);
 export type AgentWorkflows = z.infer<typeof agentWorkflowsSchema>;
-
-const EMPTY_AGENT_WORKFLOWS: AgentWorkflows = {
-  spec: {
-    required: false,
-    canSkip: true,
-    available: false,
-    completed: false,
-  },
-  planner: {
-    required: false,
-    canSkip: true,
-    available: false,
-    completed: false,
-  },
-  builder: {
-    required: true,
-    canSkip: false,
-    available: false,
-    completed: false,
-  },
-  qa: {
-    required: false,
-    canSkip: true,
-    available: false,
-    completed: false,
-  },
-};
 
 export const taskCardSchema = z.object({
   id: z.string(),
@@ -167,11 +54,8 @@ export const taskCardSchema = z.object({
   status: taskStatusSchema,
   priority: taskPrioritySchema.default(2),
   issueType: issueTypeSchema,
-  aiReviewEnabled: z.boolean().optional().default(true),
-  availableActions: z.array(taskActionSchema).default([]),
+  availableActions: z.array(taskActionSchema),
   labels: z.array(z.string()).default([]),
-  parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  subtaskIds: z.array(z.string()).default([]),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
     gitTargetBranchSchema.optional(),
@@ -188,8 +72,8 @@ export const taskCardSchema = z.object({
     (value) => (value === null ? undefined : value),
     sourceIssueReferenceSchema.optional(),
   ),
-  artifactSummary: taskArtifactSummarySchema.optional().default(EMPTY_TASK_ARTIFACT_SUMMARY),
-  agentWorkflows: agentWorkflowsSchema.optional().default(EMPTY_AGENT_WORKFLOWS),
+  artifactSummary: taskArtifactSummarySchema,
+  agentWorkflows: agentWorkflowsSchema,
   updatedAt: z.string(),
   createdAt: z.string(),
 });
@@ -223,12 +107,10 @@ export type TaskDirectMergeResult = z.infer<typeof taskDirectMergeResultSchema>;
 
 export const taskCreateInputSchema = z.object({
   title: z.string().min(1),
-  issueType: issueTypeSchema.default("task"),
-  aiReviewEnabled: z.boolean().optional().default(true),
+  issueType: issueTypeSchema,
   priority: taskPrioritySchema.default(2),
   description: z.string().optional(),
   labels: z.array(z.string()).optional(),
-  parentId: z.string().optional(),
 });
 export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
 
@@ -237,9 +119,7 @@ export const taskUpdatePatchSchema = z.object({
   description: z.string().optional(),
   priority: taskPrioritySchema.optional(),
   issueType: issueTypeSchema.optional(),
-  aiReviewEnabled: z.boolean().optional(),
   labels: z.array(z.string()).optional(),
-  parentId: z.string().optional(),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
     gitTargetBranchSchema.optional(),

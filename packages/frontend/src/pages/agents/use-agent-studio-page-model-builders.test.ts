@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   agentSessionIdentityKey,
@@ -5,7 +6,6 @@ import {
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import { buildWorkflowModelContext } from "./use-agent-studio-page-model-builders";
 
@@ -17,7 +17,7 @@ const createSession = (
     ...overrides,
   });
 
-const roleLabelByRole = { ...AGENT_ROLE_LABELS } as const;
+const roleLabelByRole = { ...BUILTIN_ROLE_LABELS } as const;
 
 const selectedIdentityFromSession = (session: AgentSessionSummary | null = null) =>
   session ? toAgentSessionIdentity(session) : null;
@@ -33,7 +33,7 @@ describe("use-agent-studio-page-model-builders", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -71,7 +71,7 @@ describe("use-agent-studio-page-model-builders", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
@@ -101,14 +101,14 @@ describe("use-agent-studio-page-model-builders", () => {
       status: "human_review",
       availableActions: ["human_request_changes", "human_approve"],
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
       },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
@@ -141,14 +141,14 @@ describe("use-agent-studio-page-model-builders", () => {
       status: "ai_review",
       availableActions: ["qa_start", "human_request_changes", "human_approve"],
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
       },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: true, completed: true },
       },
     });
@@ -171,14 +171,14 @@ describe("use-agent-studio-page-model-builders", () => {
     const taskWithApprovedQa = createTaskCardFixture({
       status: "human_review",
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
       },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: true },
       },
     });

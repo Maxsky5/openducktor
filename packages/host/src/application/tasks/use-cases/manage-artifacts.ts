@@ -29,6 +29,7 @@ type ArtifactUseCases = Pick<
 
 export const createArtifactUseCases = ({
   taskStore,
+  taskWorkflows,
   taskSessionLifecycleCoordinator,
   gitPort,
 }: TaskServiceUseCaseInput): ArtifactUseCases => {
@@ -38,7 +39,10 @@ export const createArtifactUseCases = ({
         const scope = yield* parseRequest(artifactScopeSchema, input);
         const task = yield* taskStore.getTask(scope);
         const artifacts = yield* taskStore.listArtifacts(scope);
-        return { artifacts, canManageFree: task.status !== "closed" };
+        return {
+          artifacts,
+          canManageFree: !taskWorkflows.forTask(task).isTerminalState(task.status),
+        };
       });
     },
     readTaskArtifact(input) {

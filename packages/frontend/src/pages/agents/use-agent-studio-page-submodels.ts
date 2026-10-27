@@ -1,14 +1,16 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { useMemo } from "react";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { ROLE_OPTIONS } from "./agents-page-constants";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { buildAgentStudioHeaderModel } from "./agents-page-view-model";
 import type {
   AgentStudioWorkflowStepSelect,
   WorkflowHeaderContext,
 } from "./use-agent-studio-page-submodel-contracts";
+import type {
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;

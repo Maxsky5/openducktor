@@ -1,8 +1,8 @@
 import {
   type AgentKickoffTemplateId,
-  type AgentRole,
   buildAgentKickoffPrompt,
-} from "@openducktor/core";
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 
 export const kickoffPrompt = (
   role: AgentRole,

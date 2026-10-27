@@ -1,15 +1,15 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  resolveTaskCardActions,
+  type TaskWorkflowAction,
+  taskActionLabel,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  resolveTaskCardActions,
-  type TaskWorkflowAction,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
-import { taskActionLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import {
   TASK_ACTION_ICON,
   taskMenuActionVariant,

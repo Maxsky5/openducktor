@@ -8,10 +8,9 @@ import {
 } from "./task-composer-options";
 
 describe("task composer options", () => {
-  test("starts a new task as a normal priority task with AI review", () => {
+  test("starts a new task as a normal priority task", () => {
     expect(toComposerState(null)).toEqual({
       issueType: "task",
-      aiReviewEnabled: true,
       title: "",
       priority: 2,
       description: "",
@@ -22,7 +21,6 @@ describe("task composer options", () => {
   test("copies the user fields of a task", () => {
     const task = createTaskCardFixture({
       issueType: "bug",
-      aiReviewEnabled: false,
       title: "Fix login",
       priority: 0,
       description: "Steps",
@@ -30,7 +28,6 @@ describe("task composer options", () => {
     });
     expect(toComposerState(task)).toEqual({
       issueType: "bug",
-      aiReviewEnabled: false,
       title: "Fix login",
       priority: 0,
       description: "Steps",
@@ -46,10 +43,8 @@ describe("task composer options", () => {
     expect(collectKnownLabels(tasks)).toEqual(["api", "docs", "ui"]);
   });
 
-  test("offers epics only as a disabled choice", () => {
-    expect(
-      ISSUE_TYPE_CHOICES.filter((choice) => choice.disabled).map((choice) => choice.value),
-    ).toEqual(["epic"]);
+  test("offers each issue type of the workflow", () => {
+    expect(ISSUE_TYPE_CHOICES.map((choice) => choice.value)).toEqual(["feature", "bug", "task"]);
   });
 
   test("labels each priority with its hint", () => {

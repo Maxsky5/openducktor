@@ -1,5 +1,5 @@
+import { createDefaultNotificationSettings } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_NOTIFICATION_SETTINGS } from "@openducktor/contracts";
 import type { JSONType } from "zod";
 import {
   createDefaultGlobalConfig,
@@ -32,7 +32,8 @@ describe("global config", () => {
       roleOverrides: {},
     });
     expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
-    expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+    // The settings port adds the workflow notifications when it reads the config.
+    expect(config.notifications).toEqual(createDefaultNotificationSettings());
   });
 
   test("parses current and legacy versions through distinct entry points", () => {
@@ -659,7 +660,7 @@ describe("global config", () => {
       executablePath: "/tools/claude",
     });
     expect(upgraded.autopilot.alwaysStartQaReviewsFresh).toBe(true);
-    expect(upgraded.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+    expect(upgraded.notifications).toEqual(createDefaultNotificationSettings());
   });
 
   test("reports a missing field for a rejected config", () => {

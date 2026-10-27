@@ -29,7 +29,7 @@ test("selected transport requires a complete preference snapshot with no config 
     selectedNotificationSchema.parse({ occurrence, settings, preferenceRevision: 1 }).settings,
   ).toEqual(settings);
   // Every kind must be present; transport cannot activate substitute defaults.
-  const { "workflow.closed": _removed, ...kinds } = settings.kinds;
+  const { "agent.session_idle": _removed, ...kinds } = settings.kinds;
   expect(
     selectedNotificationSchema.safeParse({
       occurrence,

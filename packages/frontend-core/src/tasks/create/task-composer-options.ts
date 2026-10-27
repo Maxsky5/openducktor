@@ -1,4 +1,7 @@
-import type { IssueType, TaskCard } from "@openducktor/contracts";
+import type {
+  BuiltinIssueTypeId as IssueType,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import type { SelectOption } from "../../lib/select-option";
 import {
   ISSUE_TYPE_LABELS,
@@ -7,7 +10,7 @@ import {
 } from "../board/kanban-task-badge-model";
 import type { ComposerState, IssueTypeChoice, PriorityOption } from "./task-composer-types";
 
-/** The issue types in display order. New task cannot create an epic yet. */
+/** The issue types in display order. */
 export const ISSUE_TYPE_CHOICES: readonly IssueTypeChoice[] = [
   {
     value: "feature",
@@ -24,13 +27,6 @@ export const ISSUE_TYPE_CHOICES: readonly IssueTypeChoice[] = [
     label: ISSUE_TYPE_LABELS.task,
     description: "Standard implementation work item.",
   },
-  {
-    value: "epic",
-    label: ISSUE_TYPE_LABELS.epic,
-    description: "Large initiative that contains multiple subtasks.",
-    disabled: true,
-    disabledText: "Coming soon",
-  },
 ];
 
 export const PRIORITY_OPTIONS: PriorityOption[] = PRIORITY_LEVELS.map((value) => ({
@@ -38,18 +34,10 @@ export const PRIORITY_OPTIONS: PriorityOption[] = PRIORITY_LEVELS.map((value) =>
   ...PRIORITY_LABELS[value],
 }));
 
-export const ISSUE_TYPE_DEFAULTS = {
-  bug: { aiReviewEnabled: true },
-  epic: { aiReviewEnabled: true },
-  feature: { aiReviewEnabled: true },
-  task: { aiReviewEnabled: true },
-} as const;
-
 export const toComposerState = (task?: TaskCard | null): ComposerState => {
   if (!task) {
     return {
       issueType: "task",
-      aiReviewEnabled: ISSUE_TYPE_DEFAULTS.task.aiReviewEnabled,
       title: "",
       priority: 2,
       description: "",
@@ -59,7 +47,6 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
 
   return {
     issueType: task.issueType,
-    aiReviewEnabled: task.aiReviewEnabled,
     title: task.title,
     priority: task.priority,
     description: task.description,
@@ -70,9 +57,6 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
 export const issueTypeGuidance = (issueType: IssueType): string => {
   if (issueType === "bug") {
     return "Capture reproduction context, impact, and a concrete fix target.";
-  }
-  if (issueType === "epic") {
-    return "Use this for umbrella initiatives and then create scoped child tasks under it.";
   }
   return "Define enough detail for Planner/Builder automation to execute with minimal ambiguity.";
 };

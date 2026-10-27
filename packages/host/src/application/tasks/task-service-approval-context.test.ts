@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
@@ -47,8 +48,7 @@ describe("createTaskService approval context", () => {
           try: async () => {
             calls.push({ type: "metadata", input });
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -77,45 +77,6 @@ describe("createTaskService approval context", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -166,6 +127,7 @@ describe("createTaskService approval context", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitProviderResolver: unusedGitProviderResolver,
       gitPort: extendGitPort(
         createDirectMergeGitPort({
@@ -300,8 +262,7 @@ describe("createTaskService approval context", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               agentSessions: [],
             };
           },
@@ -330,45 +291,6 @@ describe("createTaskService approval context", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -421,6 +343,7 @@ describe("createTaskService approval context", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitProviderResolver: unusedGitProviderResolver,
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
@@ -480,8 +403,7 @@ describe("createTaskService approval context", () => {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "# Spec" },
-              plan: { markdown: "# Plan" },
+              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
               directMerge,
               agentSessions: [
                 createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
@@ -535,45 +457,6 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -604,6 +487,7 @@ describe("createTaskService approval context", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
+          taskWorkflows: builtinTaskWorkflows,
           gitProviderResolver: unusedGitProviderResolver,
           gitPort: createDirectMergeGitPort({
             calls,

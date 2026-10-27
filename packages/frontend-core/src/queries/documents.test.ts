@@ -4,7 +4,6 @@ import {
   documentQueryKeys,
   fetchFreshTaskDocumentFromQuery,
   taskDocumentQueryOptions,
-  type TaskDocumentSection,
 } from "./documents";
 
 const document = (markdown: string, updatedAt: string) => ({ markdown, updatedAt });
@@ -16,7 +15,7 @@ describe("documents query helpers", () => {
     const read = mock(async (_repoPath: string, _taskId: string, section: string) =>
       document(`${section} V${version}`, `2026-03-28T0${version}:00:00.000Z`),
     );
-    const load = (section: TaskDocumentSection) =>
+    const load = (section: string) =>
       queryClient.fetchQuery(
         taskDocumentQueryOptions(queryClient, "/repo", "task-1", section, read),
       );
@@ -24,7 +23,7 @@ describe("documents query helpers", () => {
     try {
       expect((await load("spec")).markdown).toBe("spec V1");
       expect((await load("plan")).markdown).toBe("plan V1");
-      expect((await load("qa")).markdown).toBe("qa V1");
+      expect((await load("qaReport")).markdown).toBe("qaReport V1");
       await load("spec");
       expect(read).toHaveBeenCalledTimes(3);
 
@@ -32,7 +31,7 @@ describe("documents query helpers", () => {
       await queryClient.invalidateQueries({ queryKey: documentQueryKeys.all, refetchType: "none" });
       expect((await load("spec")).markdown).toBe("spec V2");
       expect((await load("plan")).markdown).toBe("plan V2");
-      expect((await load("qa")).markdown).toBe("qa V2");
+      expect((await load("qaReport")).markdown).toBe("qaReport V2");
       expect(read).toHaveBeenCalledTimes(6);
     } finally {
       queryClient.clear();
@@ -43,7 +42,7 @@ describe("documents query helpers", () => {
     const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec V2", "2026-03-28T10:00:00.000Z"));
     queryClient.setQueryData(
-      documentQueryKeys.spec("/repo", "task-1"),
+      documentQueryKeys.document("/repo", "task-1", "spec"),
       document("# Spec V1", "2026-03-28T09:00:00.000Z"),
     );
 
@@ -58,7 +57,9 @@ describe("documents query helpers", () => {
       expect(fresh.markdown).toBe("# Spec V2");
       expect(read).toHaveBeenCalledWith("/repo", "task-1", "spec");
       expect(
-        queryClient.getQueryData<typeof fresh>(documentQueryKeys.spec("/repo", "task-1")),
+        queryClient.getQueryData<typeof fresh>(
+          documentQueryKeys.document("/repo", "task-1", "spec"),
+        ),
       ).toEqual(fresh);
     } finally {
       queryClient.clear();
@@ -69,7 +70,7 @@ describe("documents query helpers", () => {
     const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec V1", "2026-03-28T09:00:00.000Z"));
     queryClient.setQueryData(
-      documentQueryKeys.spec("/repo", "task-1"),
+      documentQueryKeys.document("/repo", "task-1", "spec"),
       document("# Optimistic spec", "2026-03-28T10:00:00.000Z"),
     );
 
@@ -91,7 +92,7 @@ describe("documents query helpers", () => {
     const queryClient = createClientQueryClient();
     let incoming = document("# Older spec", "2026-03-28T09:00:00.000Z");
     const read = mock(async () => incoming);
-    const queryKey = documentQueryKeys.spec("/repo", "task-1");
+    const queryKey = documentQueryKeys.document("/repo", "task-1", "spec");
     const loadSpec = () =>
       queryClient.fetchQuery(
         taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", read),

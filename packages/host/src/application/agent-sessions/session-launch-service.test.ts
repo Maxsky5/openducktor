@@ -94,7 +94,8 @@ const fixture = (accepted?: AcceptedAgentInput) => {
   const service = createSessionLaunchService<Request, SessionLaunchResult>({
     runtime,
     send: (_request, input, options) => runtime.sendUserMessage(input, options),
-    initial: () => ({ workspaceId: "workspace", repoPath: "/repo", status: "completed" }),
+    initial: () =>
+      Effect.succeed({ workspaceId: "workspace", repoPath: "/repo", status: "completed" as const }),
     key: (request) => request.key,
     run: (attempt) =>
       Effect.gen(function* () {

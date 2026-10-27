@@ -7,9 +7,11 @@ import type {
   CodexSessionStatus,
 } from "../../ports/codex-app-server-port";
 import { readCodexThread } from "./codex-thread-lookup";
+import type { CodexDirectoryMatcher } from "./codex-directory-identity";
 
 export type CodexSessionStatusProbeInput = {
   codexAppServer: Pick<CodexAppServerPort, "request">;
+  directoriesMatch: CodexDirectoryMatcher;
   runtimeId: string;
   externalSessionId: string;
   workingDirectory: string;
@@ -34,8 +36,9 @@ const isLiveCodexThreadStatus = (
 ): Effect.Effect<boolean, HostValidationError<never>> => {
   switch (statusType) {
     case "active":
-    case "systemError":
       return Effect.succeed(true);
+    // Codex reports systemError only for a loaded thread with no running turn or pending request.
+    case "systemError":
     case "idle":
     case "notLoaded":
       return Effect.succeed(false);
@@ -70,12 +73,12 @@ export const probeCodexSessionStatus = (
       return yield* Effect.fail(threadResult.failure);
     }
     const thread = threadResult.success;
-    const hasLiveSession =
-      thread.cwd === input.workingDirectory
-        ? yield* isLiveCodexThreadStatus(thread.status.type)
-        : false;
+    // A thread that is not live cannot block cleanup, even after its directory is deleted.
+    if (!(yield* isLiveCodexThreadStatus(thread.status.type))) {
+      return { supported: true, hasLiveSession: false };
+    }
     return {
       supported: true,
-      hasLiveSession,
+      hasLiveSession: yield* input.directoriesMatch(thread.cwd, input.workingDirectory),
     };
   });

@@ -10,9 +10,8 @@ import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
-  activeStatuses,
   findFreeTaskArtifact,
-  isWorkflowArtifactCode,
+  publicWorkflowArtifacts,
   mapPublicTask,
   mapTaskSummary,
   missingFreeTaskArtifact,
@@ -45,14 +44,33 @@ export const executeOdtMcpReadTool = (
 
 const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const { tasksForWorkspace } = context;
     const parsed = yield* parseToolInput(
       "odt_search_tasks",
       ODT_TOOL_SCHEMAS.odt_search_tasks,
       input,
     );
-    const tasks = (yield* tasksForWorkspace(parsed.workspaceId ?? "")).filter((task) => {
-      if (!activeStatuses.has(task.status)) {
+    const repoPath = yield* context.repoPathForWorkspace(parsed.workspaceId ?? "");
+    // A filter value is valid when a task workflow of the host declares it.
+    const { workflows } = context.taskWorkflows;
+    const issueTypes = [...new Set(workflows.flatMap(({ issueTypes }) => issueTypes))];
+    if (parsed.issueType !== undefined && !issueTypes.includes(parsed.issueType)) {
+      return yield* new HostValidationError({
+        field: "issueType",
+        message: `Issue type ${parsed.issueType} is not in a task workflow. Use ${issueTypes.join(", ")}.`,
+        details: { issueType: parsed.issueType },
+      });
+    }
+    const openStates = workflows.flatMap(({ definition }) =>
+      definition.states.flatMap(({ id, terminal }) => (terminal ? [] : [id])),
+    );
+    if (parsed.status !== undefined && !openStates.includes(parsed.status)) {
+      return yield* new HostValidationError({
+        field: "status",
+        message: `Status ${parsed.status} is not an open state of a task workflow.`,
+      });
+    }
+    const tasks = (yield* context.taskService.listTasks({ repoPath })).filter((task) => {
+      if (context.taskWorkflows.forTask(task).isTerminalState(task.status)) {
         return false;
       }
       if (parsed.priority !== undefined && task.priority !== parsed.priority) {
@@ -161,7 +179,7 @@ const executeReadTask: OdtMcpReadToolHandler = (context, input) =>
     return yield* parseResponse("odt_read_task", RESPONSE_SCHEMAS.odt_read_task, {
       task: {
         ...mapPublicTask(task),
-        qaVerdict: task.artifactSummary.qaReport.verdict,
+        workflowArtifacts: publicWorkflowArtifacts(task),
         artifacts: collection.artifacts.map(toMcpTaskArtifact),
       },
     });
@@ -178,12 +196,13 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
-    const listedArtifacts = parsed.codes.some((code) => !isWorkflowArtifactCode(code))
+    const workflow = context.taskWorkflows.forTask(task);
+    const listedArtifacts = parsed.codes.some((code) => !workflow.artifact(code))
       ? (yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id })).artifacts
       : [];
     const selections = [];
     for (const code of parsed.codes) {
-      if (isWorkflowArtifactCode(code)) {
+      if (workflow.artifact(code)) {
         selections.push({ artifactId: workflowArtifactId(task.id, code), workflow: true });
         continue;
       }

@@ -3,7 +3,8 @@ import type {
   CodexAppServerProtocolMessage,
   CodexAppServerThreadStatus,
 } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
+import { type AgentEvent } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,

@@ -6,6 +6,7 @@ import { useTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflo
 import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskDetailsSheetControllerHandle = {
   openTask: (taskId: string) => void;
@@ -16,6 +17,7 @@ type TaskDetailsSheetControllerProps = Omit<
   TaskDetailsSheetProps,
   "task" | "open" | "onOpenChange" | "onDelete"
 > & {
+  allTasks: TaskCard[];
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
 
@@ -91,13 +93,12 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     <TaskDetailsSheet
       {...sheetProps}
       task={task}
-      allTasks={sheetTasks}
       open={open}
       {...(deleteTask && {
-        onDelete: async (deletedTaskId: string, options: { deleteSubtasks: boolean }) => {
+        onDelete: async (deletedTaskId: string) => {
           setDeletingTask({ id: deletedTaskId, task });
           try {
-            await deleteTask(deletedTaskId, options);
+            await deleteTask(deletedTaskId);
             setTaskId((currentTaskId) => (currentTaskId === deletedTaskId ? null : currentTaskId));
             setDeletingTask((current) => (current?.id === deletedTaskId ? null : current));
           } catch (error) {

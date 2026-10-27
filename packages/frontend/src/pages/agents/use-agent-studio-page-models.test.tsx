@@ -101,9 +101,9 @@ beforeAll(async () => {
 const createTask = () =>
   createTaskCardFixture({
     artifactSummary: {
-      spec: { has: true },
-      plan: { has: false },
-      qaReport: { has: false, verdict: "not_reviewed" },
+      spec: { present: true },
+      plan: { present: false },
+      qaReport: { present: false },
     },
   });
 
@@ -1161,7 +1161,7 @@ describe("useAgentStudioPageModels", () => {
     ["planner", "plan"],
     ["build", "plan"],
     ["qa", "qaReport"],
-  ] as const)("opens the %s session workflow artifact", async (role, workflowKind) => {
+  ] as const)("opens the %s session workflow artifact", async (role, code) => {
     const harness = createHookHarness(
       createHookArgs({
         artifactScope: { repoPath: "/repo", taskId: "task-1", workspaceId: "workspace-1" },
@@ -1172,7 +1172,7 @@ describe("useAgentStudioPageModels", () => {
       await harness.mount();
       expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
         kind: "workflow",
-        workflowKind,
+        code,
       });
     } finally {
       await harness.unmount();
@@ -1227,12 +1227,12 @@ describe("useAgentStudioPageModels", () => {
       );
       expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
         kind: "workflow",
-        workflowKind: "qaReport",
+        code: "qaReport",
       });
       await harness.update(plannerArgs);
       expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
         kind: "workflow",
-        workflowKind: "plan",
+        code: "plan",
       });
 
       await harness.run((state) => {
@@ -1249,7 +1249,7 @@ describe("useAgentStudioPageModels", () => {
       );
       expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
         kind: "workflow",
-        workflowKind: "plan",
+        code: "plan",
       });
     } finally {
       await harness.unmount();
@@ -1279,7 +1279,7 @@ describe("useAgentStudioPageModels", () => {
       );
       expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
         kind: "workflow",
-        workflowKind: "spec",
+        code: "spec",
       });
     } finally {
       await harness.unmount();
@@ -2045,7 +2045,7 @@ describe("useAgentStudioPageModels", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -2081,7 +2081,7 @@ describe("useAgentStudioPageModels", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });

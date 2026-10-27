@@ -116,8 +116,7 @@ const historyHarness = async (
     taskReader: {
       getTaskMetadata: ({ taskId }: { taskId: string }) =>
         Effect.succeed({
-          spec: { markdown: "" },
-          plan: { markdown: "" },
+          artifacts: {},
           agentSessions:
             taskId === "task"
               ? [

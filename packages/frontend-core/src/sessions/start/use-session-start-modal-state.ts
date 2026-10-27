@@ -1,3 +1,4 @@
+import { supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
@@ -21,7 +22,6 @@ import {
 import { effectiveTaskTargetBranch, targetBranchSelectionValue } from "../../lib/target-branch";
 import { useRuntimeAvailabilityContext } from "../../app-state/app-state-contexts";
 import type { RepoSettingsInput } from "../../types/session-slices";
-import { supportsTaskTargetBranchSelection } from "./constants";
 import { orderStartModesForDisplay } from "./session-start-display";
 import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
 import { useSessionStartModalRuntimeState } from "./session-start-modal-runtime-state";
@@ -284,7 +284,7 @@ export function useSessionStartModalState({
 
   const runtimeProfileOptions = useMemo<SelectOption[]>(() => {
     const options = toPrimaryAgentOptions(catalog);
-    if (options.length > 0) {
+    if (options.length > 0 || (selectedStartMode !== "reuse" && catalog?.profiles !== undefined)) {
       return options;
     }
 
@@ -298,7 +298,7 @@ export function useSessionStartModalState({
       description: "Current default runtime profile",
     };
     return [fallbackOption];
-  }, [catalog, visibleSelection?.profileId]);
+  }, [catalog, selectedStartMode, visibleSelection?.profileId]);
 
   const variantOptions = useMemo<SelectOption[]>(() => {
     if (selectedModelEntry) {

@@ -105,22 +105,18 @@ describe("buildTaskResetConfirmCopy", () => {
 });
 
 describe("buildTaskDeleteConfirmCopy", () => {
-  test("states that direct subtasks are deleted too", () => {
-    const copy = buildTaskDeleteConfirmCopy({ id: "ODT-3", title: "Epic" }, impact(), 2);
-    expect(copy.description).toBe(
-      "Delete “Epic” (ODT-3) and its 2 direct subtasks? This cannot be undone.",
-    );
+  test("names the task in the description", () => {
+    const copy = buildTaskDeleteConfirmCopy({ id: "ODT-3", title: "Login" }, impact());
+    expect(copy.description).toBe("Delete “Login” (ODT-3)? This cannot be undone.");
     expect(texts(copy)).toEqual([
       "This action permanently removes the task and all its workflow and free artifacts.",
-      "Direct subtasks will also be deleted to avoid orphaned children in the workflow.",
     ]);
   });
 
-  test("names descendant cleanup and the impact of a task without subtasks", () => {
+  test("names the cleanup impact of the task", () => {
     const copy = buildTaskDeleteConfirmCopy(
       { id: "ODT-4", title: null },
       impact({ terminalCount: 1, activeSessionCountError: "boom", isLoading: true }),
-      0,
     );
     expect(copy.description).toBe("Delete ODT-4? This cannot be undone.");
     expect(copy.descriptionSegments).toEqual([
@@ -128,12 +124,11 @@ describe("buildTaskDeleteConfirmCopy", () => {
     ]);
     expect(texts(copy)).toEqual([
       "This action permanently removes the task and all its workflow and free artifacts.",
-      "Any descendant subtasks will also be deleted to avoid orphaned children.",
       "1 associated terminal will be terminated before deletion.",
       "Unable to check how many active sessions will be stopped: boom",
       "Checking linked task worktree cleanup impact before deletion.",
     ]);
-    expect(copy.lines[3]?.error).toBe(true);
+    expect(copy.lines[2]?.error).toBe(true);
     expect(copy.confirmLabel).toEqual({
       idle: "Delete",
       pending: "Deleting...",

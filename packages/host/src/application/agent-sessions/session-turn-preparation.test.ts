@@ -1,15 +1,17 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import {
   agentModelCatalogSchema,
   repoConfigSchema,
   settingsSnapshotSchema,
-  taskCardSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentMessageTarget,
   type AgentSessionModelSelection,
 } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
+import { taskCardFixture } from "../../test-support/task-card-fixture";
 
 const target: AgentMessageTarget = {
   repoPath: "/repo",
@@ -45,6 +47,7 @@ const setup = () => {
   let currentCatalog = catalog;
   let description = "First task context";
   const preparation = createSessionTurnPreparation({
+    taskWorkflows: builtinTaskWorkflows,
     settings: {
       getRepoConfigByRepoPath: () =>
         Effect.succeed(
@@ -63,14 +66,14 @@ const setup = () => {
     taskReader: {
       getTask: () =>
         Effect.succeed(
-          taskCardSchema.parse({
+          taskCardFixture({
+            artifactSummary: emptyArtifactSummary(),
             id: "task-1",
             title: "Current task",
             description,
             status: "in_progress",
             priority: 2,
             issueType: "task",
-            aiReviewEnabled: true,
             createdAt: "2026-10-13T12:00:00Z",
             updatedAt: "2026-10-13T12:00:00Z",
           }),

@@ -253,6 +253,8 @@ export class OpencodeSdkAdapter {
         detail,
         identity: input,
         scope: input.sessionScope,
+        repoPath: input.repoPath,
+        resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
         systemPrompt: input.systemPrompt,
       });
     });
@@ -271,9 +273,10 @@ export class OpencodeSdkAdapter {
       );
       await this.hooks.ensureMcp(input);
       const policy = resolveOpencodeSessionPolicy(
-        input.sessionScope,
+        input,
         OPENCODE_RUNTIME_DESCRIPTOR,
         "start the conversation",
+        this.options.resolveWorkflowRolePolicy,
       );
       const request: OpenCodeRequestDraft<Parameters<OpenCodeClient["session"]["create"]>[0]> = {
         location: { directory: input.workingDirectory },
@@ -300,6 +303,8 @@ export class OpencodeSdkAdapter {
           detail,
           identity: ref,
           scope: input.sessionScope,
+          repoPath: ref.repoPath,
+          resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
           systemPrompt: input.systemPrompt,
           creationSettings: settings,
           native: [],
@@ -433,14 +438,17 @@ export class OpencodeSdkAdapter {
           detail,
           identity: ref,
           scope: input.sessionScope,
+          repoPath: ref.repoPath,
+          resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
           systemPrompt: input.systemPrompt,
           creationSettings: settings,
           native,
         });
         const title = resolveOpencodeSessionPolicy(
-          input.sessionScope,
+          input,
           OPENCODE_RUNTIME_DESCRIPTOR,
           "fork the conversation",
+          this.options.resolveWorkflowRolePolicy,
         ).title;
         if (title) await this.client.session.update({ sessionID: detail.id, title });
         if (input.model) await this.updateNativeModel(ref, input.model);

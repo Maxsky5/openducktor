@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
@@ -24,6 +25,7 @@ export const createClaudeServiceFixture = (
   }
   const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
     claudeExecutablePath: process.execPath,
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     fileSearch: { dispose: () => {}, prewarm: () => {}, release: () => {}, search: async () => [] },
     now: () => "2026-06-25T20:00:00.000Z",
     launchPolicy: {

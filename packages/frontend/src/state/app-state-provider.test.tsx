@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   useChecksState,
   useDelegationState,
-  useSpecState,
+  useDocumentState,
   useTasksState,
 } from "./app-state-provider";
 import { useWorkspaceState } from "./index";
@@ -43,8 +43,8 @@ describe("AppStateProvider hooks", () => {
         expected: "useDelegationState must be used inside AppStateProvider",
       },
       {
-        hook: useSpecState,
-        expected: "useSpecState must be used inside AppStateProvider",
+        hook: useDocumentState,
+        expected: "useDocumentState must be used inside AppStateProvider",
       },
     ];
 

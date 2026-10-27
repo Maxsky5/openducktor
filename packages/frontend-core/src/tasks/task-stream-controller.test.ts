@@ -3,7 +3,6 @@ import type {
   AgentSessionRecord,
   ExternalTaskSyncEvent,
   TaskAgentSessions,
-  TaskCard,
   TaskEventCursor,
 } from "@openducktor/contracts";
 import { notifyManager, QueryClient, QueryObserver } from "@tanstack/react-query";
@@ -27,6 +26,7 @@ import {
 import { taskQueryKeys } from "../queries/tasks";
 import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 const cursor = (sequence: number): TaskEventCursor => ({ epoch, sequence });

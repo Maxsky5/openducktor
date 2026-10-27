@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-"));
   tempDirectories.add(configDir);
   const manager = createSqliteTaskRepositoryContextManager({
+    taskWorkflows: builtinTaskWorkflows,
     assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     openConnection: openSqliteTaskStoreTestConnection,
     processEnv: {},
@@ -32,6 +34,7 @@ const createCloseFailureHarness = async (
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-failure-"));
   tempDirectories.add(configDir);
   const manager = createSqliteTaskRepositoryContextManager({
+    taskWorkflows: builtinTaskWorkflows,
     assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     onBackgroundFailure,
     processEnv: {},
@@ -102,6 +105,7 @@ test("does not open configured workspace databases before their first operation"
 test("opens a connection using only the resolved database path", async () => {
   const inputs: unknown[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
+    taskWorkflows: builtinTaskWorkflows,
     assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     openConnection: (databasePath) => {
       inputs.push(databasePath);
@@ -132,6 +136,7 @@ test("uses the explicit config directory instead of the environment", async () =
   tempDirectories.add(configDir);
   const inputs: string[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
+    taskWorkflows: builtinTaskWorkflows,
     assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     configDir,
     openConnection: (databasePath) => {
@@ -356,6 +361,7 @@ test("waits for admitted workspace operations before closing their slot", async 
   const releaseAdmission = Deferred.makeUnsafe<void>();
   const events: string[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
+    taskWorkflows: builtinTaskWorkflows,
     assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     assertWorkspaceAdmitted: () =>
       Effect.gen(function* () {

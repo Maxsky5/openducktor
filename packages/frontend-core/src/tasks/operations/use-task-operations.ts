@@ -42,7 +42,6 @@ export function useTaskOperations({
   const mutationCommands = useTaskMutationCommands({
     activeRepoPath,
     activeWorkspaceId,
-    tasks: taskReadFlow.tasks,
     runTaskMutation: mutationRunner.runTaskMutation,
     agentSessionReadPort,
   });

@@ -25,19 +25,17 @@ const makeTaskCardPayload = () => ({
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   labels: [],
-  parentId: null,
-  subtaskIds: [],
+  availableActions: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-02-17T12:00:00Z",
@@ -45,13 +43,15 @@ const makeTaskCardPayload = () => ({
 });
 
 const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
-  spec: { markdown: specMarkdown, updatedAt: "2026-02-20T09:00:00Z" },
-  plan: { markdown: "Plan Body", updatedAt: "2026-02-20T09:05:00Z" },
-  qaReport: {
-    markdown: "QA Body",
-    verdict: "approved",
-    updatedAt: "2026-02-20T09:10:00Z",
-    revision: 2,
+  artifacts: {
+    spec: { markdown: specMarkdown, updatedAt: "2026-02-20T09:00:00Z" },
+    plan: { markdown: "Plan Body", updatedAt: "2026-02-20T09:05:00Z" },
+    qaReport: {
+      markdown: "QA Body",
+      verdict: "approved",
+      updatedAt: "2026-02-20T09:10:00Z",
+      revision: 2,
+    },
   },
   agentSessions: [
     {
@@ -170,24 +170,24 @@ describe("HostClient", () => {
       },
     ]);
   });
-  test("routes setSpec through the host command", async () => {
+  test.each([
+    { code: "spec", markdown: "# Spec", submit: true },
+    { code: "plan", markdown: "## Plan", submit: false },
+    { code: "qaReport", markdown: "# Report", verdict: "approved", submit: true },
+  ])("workflowArtifactSave forwards a $code save to the host command", async (save) => {
     const { client, calls } = createClient((command) => {
-      if (command === "set_spec") {
+      if (command === "workflow_artifact_save") {
         return { updatedAt: "2026-02-20T10:00:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const input = {
-      repoPath: "/repo",
-      taskId: "task-1",
-      markdown: "# Spec",
-    };
-    const output = await client.setSpec(input);
+    const input = { repoPath: "/repo", taskId: "task-1", ...save };
+    const output = await client.workflowArtifactSave(input);
 
     expect(output.updatedAt).toBe("2026-02-20T10:00:00Z");
     expect(output.cursor).toEqual(saveCursor);
-    expect(calls).toEqual([{ command: "set_spec", args: input }]);
+    expect(calls).toEqual([{ command: "workflow_artifact_save", args: input }]);
   });
 
   test("uses host-owned retention for task lists", async () => {
@@ -601,34 +601,6 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("saveSpecArtifact uses dedicated non-transition IPC route", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "spec_save_artifact") {
-        return { updatedAt: "2026-02-20T09:30:00Z", cursor: saveCursor };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const output = await client.saveSpecArtifact({
-      repoPath: "/repo",
-      taskId: "task-77",
-      markdown: "# Updated Spec",
-    });
-
-    expect(output.updatedAt).toBe("2026-02-20T09:30:00Z");
-    expect(output.cursor).toEqual(saveCursor);
-    expect(calls).toEqual([
-      {
-        command: "spec_save_artifact",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-77",
-          markdown: "# Updated Spec",
-        },
-      },
-    ]);
-  });
-
   test("systemListOpenInTools uses the dedicated discovery IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "system_list_open_in_tools") {
@@ -706,34 +678,6 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("savePlanArtifact uses dedicated non-transition IPC route", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "plan_save_artifact") {
-        return { updatedAt: "2026-02-20T09:45:00Z", cursor: saveCursor };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const output = await client.savePlanArtifact({
-      repoPath: "/repo",
-      taskId: "task-88",
-      markdown: "## Plan",
-    });
-
-    expect(output.updatedAt).toBe("2026-02-20T09:45:00Z");
-    expect(output.cursor).toEqual(saveCursor);
-    expect(calls).toEqual([
-      {
-        command: "plan_save_artifact",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-88",
-          markdown: "## Plan",
-        },
-      },
-    ]);
-  });
-
   test("taskUpdate forwards task target branches through IPC", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_update") {
@@ -803,7 +747,6 @@ describe("HostClient", () => {
           input: {
             title: "Task",
             issueType: "task",
-            aiReviewEnabled: true,
             priority: 2,
             description: `![x](odt-asset:${assetId})`,
           },
@@ -835,8 +778,6 @@ describe("HostClient", () => {
       issueType: "feature",
       description: undefined,
       labels: undefined,
-      parentId: undefined,
-      aiReviewEnabled: true,
       priority: 2,
     });
 
@@ -849,8 +790,6 @@ describe("HostClient", () => {
           issueType: "feature",
           description: undefined,
           labels: undefined,
-          parentId: undefined,
-          aiReviewEnabled: true,
           priority: 2,
         },
       },
@@ -903,90 +842,43 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("document mutation commands reject malformed updatedAt payloads", async () => {
+  test.each([{ updatedAt: 123 }, {}, { updatedAt: null }, { updatedAt: "" }])(
+    "workflowArtifactSave rejects a malformed updatedAt payload %j",
+    async (payload) => {
+      const { client } = createClient((command) => {
+        if (command === "workflow_artifact_save") return { ...payload, cursor: saveCursor };
+        throw new Error(`Unexpected command: ${command}`);
+      });
+
+      await expect(
+        client.workflowArtifactSave({
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "spec",
+          markdown: "# Spec",
+          submit: false,
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test("workflowArtifactSave preserves host error details for invalid command payloads", async () => {
     const { client } = createClient((command) => {
-      switch (command) {
-        case "set_spec":
-          return { updatedAt: 123, cursor: saveCursor };
-        case "spec_save_artifact":
-          return { cursor: saveCursor };
-        case "set_plan":
-          return { updatedAt: null, cursor: saveCursor };
-        case "plan_save_artifact":
-          return { updatedAt: "", cursor: saveCursor };
-        default:
-          throw new Error(`Unexpected command: ${command}`);
-      }
-    });
-
-    await expect(
-      client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
-    ).rejects.toThrow();
-    await expect(
-      client.saveSpecArtifact({
-        repoPath: "/repo",
-        taskId: "task-1",
-        markdown: "# Spec",
-      }),
-    ).rejects.toThrow();
-    await expect(
-      client.setPlan({ repoPath: "/repo", taskId: "task-1", markdown: "## Plan" }),
-    ).rejects.toThrow();
-    await expect(
-      client.savePlanArtifact({
-        repoPath: "/repo",
-        taskId: "task-1",
-        markdown: "## Plan",
-      }),
-    ).rejects.toThrow();
-  });
-
-  test("setPlan forwards markdown and subtasks payload", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "set_plan") {
-        return { updatedAt: "2026-02-17T12:01:00Z", cursor: saveCursor };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const output = await client.setPlan({
-      repoPath: "/repo",
-      taskId: "epic-1",
-      markdown: "## Plan",
-      subtasks: [{ title: "Subtask A", issueType: "task", priority: 1 }],
-    });
-
-    expect(output.updatedAt).toBe("2026-02-17T12:01:00Z");
-    expect(output.cursor).toEqual(saveCursor);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toEqual({
-      command: "set_plan",
-      args: {
-        repoPath: "/repo",
-        taskId: "epic-1",
-        input: {
-          markdown: "## Plan",
-          subtasks: [{ title: "Subtask A", issueType: "task", priority: 1 }],
-        },
-      },
-    });
-  });
-
-  test("setPlan preserves host error details for invalid command payloads", async () => {
-    const { client } = createClient((command) => {
-      if (command === "set_plan") {
-        throw new Error("invalid args: input.markdown is required");
+      if (command === "workflow_artifact_save") {
+        throw new Error("invalid args: markdown is required");
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
     await expect(
-      client.setPlan({
+      client.workflowArtifactSave({
         repoPath: "/repo",
-        taskId: "epic-1",
+        taskId: "task-1",
+        code: "plan",
         markdown: "## Plan",
+        submit: true,
       }),
-    ).rejects.toThrow("invalid args: input.markdown is required");
+    ).rejects.toThrow("invalid args: markdown is required");
   });
 
   test("PATH and Git checks use separate IPC commands", async () => {
@@ -1050,8 +942,8 @@ describe("HostClient", () => {
     const { client, calls } = createClient(() => makeTaskCardPayload());
 
     await expect(
-      // @ts-expect-error This negative test verifies runtime validation of an invalid task status.
-      client.taskTransition("/repo", "task-1", "not_a_status"),
+      // @ts-expect-error This negative test verifies runtime validation of a blank task status.
+      client.taskTransition("/repo", "task-1", " "),
     ).rejects.toThrow();
     expect(calls).toHaveLength(0);
   });
@@ -1520,15 +1412,14 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const result = await client.taskDelete("/repo", "epic-1", true);
+    const result = await client.taskDelete("/repo", "task-1");
     expect(result.ok).toBe(true);
     expect(calls).toEqual([
       {
         command: "task_delete",
         args: {
           repoPath: "/repo",
-          taskId: "epic-1",
-          deleteSubtasks: true,
+          taskId: "task-1",
         },
       },
     ]);
@@ -1542,7 +1433,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskDelete("/repo", "epic-1", true)).rejects.toThrow(
+    await expect(client.taskDelete("/repo", "task-1")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command task_delete",
     );
   });
@@ -1587,6 +1478,25 @@ describe("HostClient", () => {
           repoPath: "/repo",
           taskId: "task-1",
         },
+      },
+    ]);
+  });
+
+  test("taskApplyEvent sends the workflow event to its IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_apply_event") {
+        return makeTaskCardPayload();
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const task = await client.taskApplyEvent("/repo", "task-1", "hold");
+
+    expect(task.id).toBe("task-1");
+    expect(calls).toEqual([
+      {
+        command: "task_apply_event",
+        args: { repoPath: "/repo", taskId: "task-1", eventId: "hold" },
       },
     ]);
   });
@@ -2253,8 +2163,8 @@ describe("HostClient", () => {
     };
     const latestSession = { ...batchSession, externalSessionId: "session-opencode-3" };
     const { client, calls } = createClient((command) => {
-      if (command === "spec_get") {
-        return makeTaskMetadataPayload().spec;
+      if (command === "workflow_artifact_get") {
+        return makeTaskMetadataPayload().artifacts.spec;
       }
       if (command === "agent_sessions_list_for_tasks") {
         return [{ taskId: "task-1", agentSessions: [batchSession] }];
@@ -2265,13 +2175,13 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.specGet("/repo", "task-1");
+    await client.workflowArtifactGet("/repo", "task-1", "spec");
     await client.agentSessionsListForTasks("/repo", ["task-1"]);
     const sessions = await client.agentSessionsList("/repo", "task-1");
 
     expect(sessions.map((session) => session.externalSessionId)).toEqual(["session-opencode-3"]);
     expect(calls.map((call) => call.command)).toEqual([
-      "spec_get",
+      "workflow_artifact_get",
       "agent_sessions_list_for_tasks",
       "agent_sessions_list",
     ]);
@@ -2286,7 +2196,7 @@ describe("HostClient", () => {
             agentSessions: [
               {
                 externalSessionId: "session-opencode-1",
-                role: "invalid-role",
+                role: " ",
                 startedAt: "2026-02-18T17:20:00Z",
                 runtimeKind: "opencode",
                 workingDirectory: "/repo",
@@ -2308,7 +2218,7 @@ describe("HostClient", () => {
         return [
           {
             externalSessionId: "ext-1",
-            role: "invalid-role",
+            role: " ",
             startedAt: "2026-02-18T17:20:00Z",
             runtimeKind: "opencode",
             workingDirectory: "/repo",

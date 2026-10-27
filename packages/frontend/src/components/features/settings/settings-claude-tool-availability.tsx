@@ -1,6 +1,10 @@
 import {
+  BUILTIN_ROLE_LABELS,
+  BUILTIN_ROLE_IDS,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
+import {
   resolveClaudePolicy,
-  type AgentRole,
   type ClaudeRuntimeConfig,
   type ClaudeToolAvailability,
   type ClaudeToolCatalog,
@@ -16,8 +20,7 @@ import {
   claudeToolCatalogQueryOptions,
   skippedClaudeToolCatalogQueryOptions,
 } from "@openducktor/frontend-core/queries/claude-tool-catalog";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
-import { CLAUDE_POLICY_ROLES } from "./settings-claude-policy-fields";
+
 import { ClaudeToolList } from "./settings-claude-tool-list";
 import {
   RuntimePolicyCard,
@@ -78,7 +81,7 @@ export function ClaudeToolAvailabilityEditor({
 }: EditorProps): ReactElement {
   const id = useId();
   const [showRoles, setShowRoles] = useState(false);
-  const hasOverride = CLAUDE_POLICY_ROLES.some(
+  const hasOverride = BUILTIN_ROLE_IDS.some(
     (role) => config.roleOverrides[role]?.toolAvailability !== undefined,
   );
   const defaults = resolveClaudePolicy(config).settings.toolAvailability;
@@ -93,7 +96,7 @@ export function ClaudeToolAvailabilityEditor({
     if (enabled || !hasOverride) return;
 
     const roleOverrides = { ...config.roleOverrides };
-    for (const role of CLAUDE_POLICY_ROLES) {
+    for (const role of BUILTIN_ROLE_IDS) {
       const policy = roleOverrides[role];
       if (policy?.toolAvailability === undefined) continue;
       const next = { ...policy };
@@ -161,9 +164,9 @@ export function ClaudeToolAvailabilityEditor({
         onEnabledChange={setRoles}
       >
         <div className="divide-y divide-border rounded-md border border-border">
-          {CLAUDE_POLICY_ROLES.map((role) => {
+          {BUILTIN_ROLE_IDS.map((role) => {
             const roleId = `${id}-${role}`;
-            const label = AGENT_ROLE_LABELS[role];
+            const label = BUILTIN_ROLE_LABELS[role];
             const inherits = config.roleOverrides[role]?.toolAvailability === undefined;
             const choices = resolveClaudePolicy(config, role).settings.toolAvailability;
             return (

@@ -3,9 +3,11 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
 import { readCodexThread } from "./codex-thread-lookup";
 import { findActiveCodexTurnId } from "./codex-turn-lookup";
+import type { CodexDirectoryMatcher } from "./codex-directory-identity";
 
 export type CodexSessionStopInput = {
   codexAppServer: Pick<CodexAppServerPort, "request">;
+  directoriesMatch: CodexDirectoryMatcher;
   runtimeId: string;
   externalSessionId: string;
   workingDirectory: string;
@@ -20,7 +22,7 @@ const requireExactThread = (input: CodexSessionStopInput) =>
       input.runtimeId,
       input.externalSessionId,
     );
-    if (thread.cwd === input.workingDirectory) {
+    if (yield* input.directoriesMatch(thread.cwd, input.workingDirectory)) {
       return thread;
     }
     return yield* Effect.fail(

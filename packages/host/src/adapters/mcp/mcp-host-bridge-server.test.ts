@@ -10,6 +10,7 @@ import {
   type HostMcpBridgeStatus,
   ODT_MCP_TOOL_NAMES,
   type RepoConfig,
+  ODT_MCP_BRIDGE_VERSION,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { BrowserServiceError } from "../../application/browser/browser-service-error";
@@ -118,7 +119,7 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return { bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -179,7 +180,7 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return { bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -240,7 +241,7 @@ describe("createMcpHostBridgeServer", () => {
         body: {},
       });
       expect(ready.body).toEqual({
-        bridgeVersion: 2,
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: [...ODT_MCP_TOOL_NAMES],
       });
       expect(ready.status).toBe(200);
@@ -313,7 +314,10 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -355,7 +359,10 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -399,7 +406,10 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -459,7 +469,7 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return { bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -486,7 +496,6 @@ describe("createMcpHostBridgeServer", () => {
                 status: "in_progress",
                 priority: 2,
                 issueType: "feature",
-                aiReviewEnabled: true,
                 labels: [],
                 createdAt: "2026-05-10T10:00:00.000Z",
                 updatedAt: "2026-05-10T10:01:00.000Z",
@@ -531,7 +540,10 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -580,7 +592,11 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
-        ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        ready: () =>
+          Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
         invokeBrowserTool(toolName, input) {
@@ -624,7 +640,11 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
-        ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        ready: () =>
+          Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
         invokeBrowserTool: () =>
@@ -683,7 +703,11 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
-        ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        ready: () =>
+          Effect.succeed({
+            bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+          }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
         invokeBrowserTool: () =>
@@ -727,7 +751,11 @@ test("artifact setters use a bounded 16 MiB envelope while other bridge requests
     workspaceSettingsService: createWorkspaceSettingsService(),
     onStatusChanged: () => {},
     bridgeService: {
-      ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+      ready: () =>
+        Effect.succeed({
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+          toolNames: [...ODT_MCP_TOOL_NAMES],
+        }),
       getWorkspaces: () => Effect.succeed({ workspaces: [] }),
       invokeBrowserTool: unexpectedBrowserTool,
       invoke: (tool) => {

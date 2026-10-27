@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -7,7 +7,7 @@ import { MergedPullRequestNotice } from "@/features/workflow/pull-requests/merge
 import { MessageRetryNotices } from "@/features/workflow/start-session/message-retry-notice";
 import { DocumentRowView } from "../documents/document-row-view";
 import type { CollapsedDetailsSections, DetailsRow } from "./task-details-rows";
-import { TaskMetadataSection, TaskSubtasksSection } from "./task-details-section";
+import { TaskMetadataSection } from "./task-details-section";
 import { TaskSessionsSection } from "./task-sessions-section";
 import type { TaskSessionGroup } from "./task-sessions-model";
 import { TaskWorkLinks } from "./task-work-links";
@@ -16,7 +16,6 @@ import { TaskWorkLinks } from "./task-work-links";
 export type TaskDetailsRowContext = {
   workspaceId: string;
   task: TaskCard;
-  tasks: readonly TaskCard[];
   /** The summary card, when the list shows it. */
   summary: ReactElement;
   sessionGroups: readonly TaskSessionGroup[];
@@ -33,7 +32,7 @@ export function TaskDetailsRowView({
   row: DetailsRow;
   context: TaskDetailsRowContext;
 }): ReactElement {
-  const { workspaceId, task, tasks, sections } = context;
+  const { workspaceId, task, sections } = context;
   const { collapsed, toggles } = sections;
   switch (row.kind) {
     case "summary":
@@ -45,16 +44,6 @@ export function TaskDetailsRowView({
           <MessageRetryNotices taskId={task.id} />
           <HeldOutcomesSection workspaceId={workspaceId} taskId={task.id} />
         </View>
-      );
-    case "subtasks":
-      return (
-        <TaskSubtasksSection
-          workspaceId={workspaceId}
-          task={task}
-          tasks={tasks}
-          collapsed={collapsed.has("subtasks")}
-          onToggle={toggles.subtasks}
-        />
       );
     case "sessions":
       return (
@@ -80,9 +69,7 @@ export function TaskDetailsRowView({
     case "metadata":
       return (
         <TaskMetadataSection
-          workspaceId={workspaceId}
           task={task}
-          tasks={tasks}
           collapsed={collapsed.has("metadata")}
           onToggle={toggles.metadata}
         />

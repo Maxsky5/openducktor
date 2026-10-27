@@ -1,15 +1,11 @@
-import {
-  workflowArtifactId,
-  type TaskArtifactChange,
-  type WorkflowArtifactKind,
-} from "@openducktor/contracts";
+import { workflowArtifactId, type TaskArtifactChange } from "@openducktor/contracts";
 
 export const workflowArtifactChange = (
   taskId: string,
-  kind: WorkflowArtifactKind,
+  code: string,
   removed = false,
 ): TaskArtifactChange => {
-  const artifactId = workflowArtifactId(taskId, kind);
+  const artifactId = workflowArtifactId(taskId, code);
   return { taskId, artifactIds: [artifactId], removedArtifactIds: removed ? [artifactId] : [] };
 };
 

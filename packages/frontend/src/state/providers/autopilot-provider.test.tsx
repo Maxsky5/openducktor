@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
-  AutopilotActionId,
   AutopilotOutcome,
   AutopilotState,
   SettingsSnapshot,
@@ -30,6 +29,7 @@ import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-
 import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { AutopilotProvider } from "./autopilot-provider";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
+import type { BuiltinAutomationId as AutopilotActionId } from "@openducktor/workflows";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", repoPath: "/repos/alpha" });
 const beta = createWorkspaceRecordFixture({

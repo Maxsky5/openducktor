@@ -1,6 +1,6 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError } from "../../../effect/host-errors";
 import { TaskAssetError } from "../../../effect/task-asset-error";
 import { requireDependencies } from "../support/required-task-dependencies";
 import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependencies";
@@ -12,14 +12,13 @@ import {
 import {
   collectDeleteWorktreePaths,
   collectRelatedTaskBranches,
-  collectTaskDeleteTargets,
   managedWorktreeBaseForRepoConfig,
   readTaskSessionRecords,
   runTaskBrowserTabCleanup,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,
-  workflowCleanupSessionRoles,
+  workflowRoleIds,
 } from "../support/task-cleanup-support";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
@@ -27,6 +26,7 @@ import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from ".
 export const createTaskDeleteUseCase = ({
   gitPort,
   taskStore,
+  taskWorkflows,
   taskActivityGuard,
   settingsConfig,
   terminalService,
@@ -38,7 +38,7 @@ export const createTaskDeleteUseCase = ({
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId, deleteSubtasks } = input;
+      const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
@@ -48,47 +48,15 @@ export const createTaskDeleteUseCase = ({
         [taskId],
         "delete tasks",
       );
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
+      const workflow = taskWorkflows.forTask(yield* taskStore.getTask({ repoPath, taskId }));
 
-      const directSubtaskIds = currentTasks
-        .filter((task) => task.parentId === taskId)
-        .map((task) => task.id);
-      if (directSubtaskIds.length > 0 && !deleteSubtasks) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "deleteSubtasks",
-            message: `Task ${taskId} has ${directSubtaskIds.length} subtasks. Confirm subtask deletion to continue.`,
-            details: { repoPath, taskId, directSubtaskIds },
-          }),
-        );
-      }
-
-      const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
-      const targetTaskIds = targetTasks.map((task) => task.id);
+      const targetTaskIds = [taskId];
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
-      if (additionalTaskIds.length > 0) {
-        yield* taskSessionLifecycleCoordinator.acquireLifecycle(
-          canonicalInputRepo,
-          additionalTaskIds,
-          "delete tasks",
-        );
-      }
       const targetTaskSessions = yield* readTaskSessionRecords(taskStore, repoPath, targetTaskIds);
       const hasWorkflowSessions = targetTaskSessions.some((entry) =>
-        taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
+        taskHasSessionsForRoles(entry.sessions, workflowRoleIds(workflow)),
       );
       const activityGuard = taskActivityGuard;
       if (hasWorkflowSessions && !activityGuard) {
@@ -111,7 +79,7 @@ export const createTaskDeleteUseCase = ({
         dependencies,
         effectiveRepoPath,
         managedWorktreeBasePath,
-        targetTaskSessions,
+        targetTaskSessions.map((entry) => ({ ...entry, workflow })),
       );
       yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
       const branchNames = yield* collectRelatedTaskBranches(
@@ -128,7 +96,7 @@ export const createTaskDeleteUseCase = ({
           repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions.map(({ taskId: targetTaskId, sessions }) => ({
             taskId: targetTaskId,
-            sessions: selectWorkflowCleanupSessionRecords(sessions),
+            sessions: selectWorkflowCleanupSessionRecords(workflow, sessions),
           })),
         });
         recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
@@ -155,11 +123,7 @@ export const createTaskDeleteUseCase = ({
           workspaceId: repoConfig.workspaceId,
         });
         const deletion = yield* Effect.result(
-          taskStore.deleteTask({
-            repoPath: effectiveRepoPath,
-            taskId,
-            deleteSubtasks,
-          }),
+          taskStore.deleteTask({ repoPath: effectiveRepoPath, taskId }),
         );
         durableDeleteCommitted =
           deletion._tag === "Success" ||

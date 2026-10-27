@@ -48,7 +48,6 @@ const createPromptTask = (overrides = {}) =>
     title: undefined,
     issueType: undefined,
     status: undefined,
-    aiReviewEnabled: undefined,
     description: undefined,
     ...overrides,
   });
@@ -619,7 +618,7 @@ describe("useAgentStudioSessionStartFlow", () => {
             available: true,
             completed: false,
           },
-          builder: {
+          build: {
             required: true,
             canSkip: false,
             available: true,
@@ -788,7 +787,7 @@ describe("useAgentStudioSessionStartFlow", () => {
             available: true,
             completed: false,
           },
-          builder: {
+          build: {
             required: true,
             canSkip: false,
             available: true,
@@ -858,7 +857,7 @@ describe("useAgentStudioSessionStartFlow", () => {
             available: true,
             completed: true,
           },
-          builder: {
+          build: {
             required: true,
             canSkip: false,
             available: true,
@@ -1052,13 +1051,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({
         status: "in_progress",
         artifactSummary: {
-          spec: { has: false, updatedAt: undefined },
-          plan: { has: false, updatedAt: undefined },
-          qaReport: {
-            has: true,
-            updatedAt: "2026-02-22T10:00:00.000Z",
-            verdict: "rejected",
-          },
+          spec: { present: false, updatedAt: undefined },
+          plan: { present: false, updatedAt: undefined },
+          qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
         },
         agentWorkflows: {
           spec: {
@@ -1073,7 +1068,7 @@ describe("useAgentStudioSessionStartFlow", () => {
             available: true,
             completed: true,
           },
-          builder: {
+          build: {
             required: true,
             canSkip: false,
             available: true,
@@ -1164,13 +1159,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({
         status: "in_progress",
         artifactSummary: {
-          spec: { has: false, updatedAt: undefined },
-          plan: { has: false, updatedAt: undefined },
-          qaReport: {
-            has: true,
-            updatedAt: "2026-02-22T10:00:00.000Z",
-            verdict: "rejected",
-          },
+          spec: { present: false, updatedAt: undefined },
+          plan: { present: false, updatedAt: undefined },
+          qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
         },
       }),
       sessionsForTask: summarizeSessions([existingSession]),
@@ -1250,13 +1241,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({
         status: "in_progress",
         artifactSummary: {
-          spec: { has: false, updatedAt: undefined },
-          plan: { has: false, updatedAt: undefined },
-          qaReport: {
-            has: true,
-            updatedAt: "2026-02-22T10:00:00.000Z",
-            verdict: "rejected",
-          },
+          spec: { present: false, updatedAt: undefined },
+          plan: { present: false, updatedAt: undefined },
+          qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
         },
       }),
       sessionsForTask: summarizeSessions([

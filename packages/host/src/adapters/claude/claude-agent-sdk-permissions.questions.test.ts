@@ -1,3 +1,4 @@
+import { claudeTestRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import {
@@ -11,6 +12,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -87,6 +89,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -143,6 +146,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -203,6 +207,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -252,6 +257,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -290,6 +296,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),
@@ -319,6 +326,7 @@ describe("Claude permission questions", () => {
     const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
+      rolePolicy: claudeTestRolePolicy(session),
       now: () => "2026-06-25T12:00:00.000Z",
       randomId: () => "request-1",
       emit: (_session, event) => events.push(event),

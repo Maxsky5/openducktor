@@ -31,47 +31,27 @@ export type TaskDocument = {
   error?: string | null;
 };
 
-export type TaskDocumentSection = "spec" | "plan" | "qa";
+/** Reads one workflow artifact of a task by its code. */
 export type TaskDocumentReader = (
   repoPath: string,
   taskId: string,
-  section: TaskDocumentSection,
+  code: string,
 ) => Promise<TaskDocument>;
 
 export const documentQueryKeys = {
   all: ["task-documents"] as const,
-  spec: (repoPath: string, taskId: string) =>
-    [...documentQueryKeys.all, "spec", repoPath, taskId] as const,
-  plan: (repoPath: string, taskId: string) =>
-    [...documentQueryKeys.all, "plan", repoPath, taskId] as const,
-  qaReport: (repoPath: string, taskId: string) =>
-    [...documentQueryKeys.all, "qa-report", repoPath, taskId] as const,
-};
-
-export const documentQueryKeyForSection = (
-  repoPath: string,
-  taskId: string,
-  section: TaskDocumentSection,
-) => {
-  if (section === "spec") {
-    return documentQueryKeys.spec(repoPath, taskId);
-  }
-
-  if (section === "plan") {
-    return documentQueryKeys.plan(repoPath, taskId);
-  }
-
-  return documentQueryKeys.qaReport(repoPath, taskId);
+  document: (repoPath: string, taskId: string, code: string) =>
+    [...documentQueryKeys.all, code, repoPath, taskId] as const,
 };
 
 export const taskDocumentQueryOptions = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  section: TaskDocumentSection,
-  readDocument: TaskDocumentReader = connectionHost(queryClient).taskWorkflowArtifactGet,
+  code: string,
+  readDocument: TaskDocumentReader = connectionHost(queryClient).workflowArtifactGet,
 ) => {
-  const queryKey = documentQueryKeyForSection(repoPath, taskId, section);
+  const queryKey = documentQueryKeys.document(repoPath, taskId, code);
   return queryOptions({
     queryKey,
     queryFn: async (): Promise<TaskDocumentPayload> => {
@@ -80,7 +60,7 @@ export const taskDocumentQueryOptions = (
       }
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
       const dataUpdateCount = query?.state.dataUpdateCount;
-      const incoming = await readDocument(repoPath, taskId, section);
+      const incoming = await readDocument(repoPath, taskId, code);
       if (queryClient.getQueryCache().find({ queryKey, exact: true }) !== query) {
         throw new Error(
           "The task artifact changed while loading. Open it again to load the current artifact.",
@@ -166,11 +146,11 @@ export const createDocumentSaveGuard = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  section: "spec" | "plan",
+  code: string,
 ): ((incoming: TaskArtifactSaveResult & { markdown: string }) => void) => {
-  const options = taskDocumentQueryOptions(queryClient, repoPath, taskId, section);
+  const options = taskDocumentQueryOptions(queryClient, repoPath, taskId, code);
   // Query's tagged key needs its plain key type at this cache boundary.
-  const queryKey: ReturnType<typeof documentQueryKeyForSection> = options.queryKey;
+  const queryKey: ReturnType<typeof documentQueryKeys.document> = options.queryKey;
   // Create the query without fetching so a reset can also block a first save.
   const query: object = queryClient.getQueryCache().build(queryClient, { ...options, queryKey });
   const saveEpoch = saveEpochs.get(query);
@@ -201,11 +181,11 @@ export const fetchFreshTaskDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
-  section: TaskDocumentSection,
+  code: string,
   readDocument?: TaskDocumentReader,
 ): Promise<TaskDocumentPayload> => {
   return queryClient.fetchQuery({
-    ...taskDocumentQueryOptions(queryClient, repoPath, taskId, section, readDocument),
+    ...taskDocumentQueryOptions(queryClient, repoPath, taskId, code, readDocument),
     staleTime: 0,
   });
 };
@@ -261,23 +241,10 @@ export const invalidateCachedTaskDocumentQueries = async (
   });
 };
 
-export const loadSpecDocumentFromQuery = (
+export const loadTaskDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
   taskId: string,
+  code: string,
 ): Promise<TaskDocument> =>
-  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, "spec"));
-
-export const loadPlanDocumentFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): Promise<TaskDocument> =>
-  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, "plan"));
-
-export const loadQaReportDocumentFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): Promise<TaskDocument> =>
-  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, "qa"));
+  queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, code));

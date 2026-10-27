@@ -1,9 +1,11 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import {
+  kickoffPromptContextKind,
+  type KickoffPromptContextKind,
   type AgentKickoffTemplateId,
   type BuildAgentKickoffPromptInput,
   resolvePullRequestTarget,
-} from "@openducktor/core";
+} from "@openducktor/workflows";
 import { effectiveTaskTargetBranch } from "../../lib/target-branch";
 
 export const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
@@ -54,17 +56,13 @@ const resolvePullRequestPrompt: KickoffPromptContextResolver = async ({
 };
 
 const KICKOFF_PROMPT_CONTEXT_RESOLVERS = {
-  "kickoff.spec_initial": resolveContextFreePrompt,
-  "kickoff.planner_initial": resolveContextFreePrompt,
-  "kickoff.build_implementation_start": resolveContextFreePrompt,
-  "kickoff.build_after_qa_rejected": resolveContextFreePrompt,
-  "kickoff.build_after_human_request_changes": resolveHumanFeedbackPrompt,
-  "kickoff.build_pull_request_generation": resolvePullRequestPrompt,
-  "kickoff.qa_review": resolveContextFreePrompt,
-} satisfies Record<AgentKickoffTemplateId, KickoffPromptContextResolver>;
+  none: resolveContextFreePrompt,
+  human_feedback: resolveHumanFeedbackPrompt,
+  pull_request: resolvePullRequestPrompt,
+} satisfies Record<KickoffPromptContextKind, KickoffPromptContextResolver>;
 
 export const resolveSessionStartKickoffPromptContext = async (
   input: ResolveSessionStartKickoffPromptContextInput,
 ): Promise<SessionStartKickoffPromptContext> => {
-  return KICKOFF_PROMPT_CONTEXT_RESOLVERS[input.templateId](input);
+  return KICKOFF_PROMPT_CONTEXT_RESOLVERS[kickoffPromptContextKind(input.templateId)](input);
 };

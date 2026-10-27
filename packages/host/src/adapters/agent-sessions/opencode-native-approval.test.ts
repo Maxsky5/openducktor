@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { expect, test } from "bun:test";
 import { createPrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import { Effect } from "effect";
@@ -90,12 +91,14 @@ test("projects native V2 approvals through the host and replies to the native re
     },
   });
   const prepareRuntime = createPrepareOpencodeSessionRuntime({
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     resolveCreationSettings: async () => ({ defaults: [], role: [] }),
     resolveMcpServerConfig: async () => ({ command: ["test-bridge"], environment: {} }),
     readDirectory: async (_directory, read) => read(),
   });
   const changes: AgentSessionLiveAdapterChange[] = [];
   const prepare = createTestOpenCodeLiveSessionAdapterPreparer({
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     liveSessionLifecycle: createLifecycle(changes),
     prepareRuntime,
   });

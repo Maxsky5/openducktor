@@ -1,6 +1,7 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type { AgentSessionStartMode } from "@openducktor/core";
 import { runtimeSupportsStartMode } from "../../lib/agent-runtime";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export const assertRuntimeSupportsSelectedStartMode = ({
   launchActionId,

@@ -1,3 +1,4 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -98,6 +99,7 @@ describe("host workflow approval policy", () => {
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
       preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
         promptOverrides: () =>
           Effect.suspend(() => {
             promptReads += 1;
@@ -175,7 +177,10 @@ describe("host workflow approval policy", () => {
       },
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
-      preparation: { promptOverrides: () => Effect.succeed({}) },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+        promptOverrides: () => Effect.succeed({}),
+      },
       reportFailure: () => Effect.void,
     });
     try {
@@ -216,7 +221,10 @@ describe("host workflow approval policy", () => {
       },
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
-      preparation: { promptOverrides: () => Effect.succeed({}) },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+        promptOverrides: () => Effect.succeed({}),
+      },
       reportFailure: () => Effect.void,
     });
     try {
@@ -261,7 +269,10 @@ describe("host workflow approval policy", () => {
       },
       readRoots: () => Effect.succeed([root]),
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
-      preparation: { promptOverrides: () => Effect.succeed({}) },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+        promptOverrides: () => Effect.succeed({}),
+      },
       reportFailure: () => Effect.void,
     });
     try {

@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import Svg, { Circle, Path, Rect } from "react-native-svg";

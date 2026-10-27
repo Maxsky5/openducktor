@@ -243,7 +243,8 @@ const setup = async () => {
   const task = await Effect.runPromise(
     database.store.createTask({
       repoPath: database.repoPath,
-      task: { title: "Activity", issueType: "task", priority: 2, aiReviewEnabled: false },
+      status: "open",
+      task: { title: "Activity", issueType: "task", priority: 2 },
     }),
   );
   const session = createAgentSessionRecord({

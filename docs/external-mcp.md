@@ -182,38 +182,36 @@ Call `odt_get_workspaces` when the process has no default workspace or when the 
     "status": "ai_review",
     "priority": 2,
     "issueType": "task",
-    "aiReviewEnabled": true,
     "labels": ["docs", "mcp"],
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
-    "qaVerdict": "approved",
-    "artifacts": {
-      "hasSpec": true,
-      "hasPlan": true,
-      "hasQaReport": true
+    "workflowArtifacts": {
+      "spec": { "present": true },
+      "plan": { "present": true },
+      "qaReport": { "present": true, "verdict": "approved" }
     }
   }
 }
 ```
 
-`qaVerdict` is `approved`, `rejected`, or `not_reviewed`. Public summaries omit `parentId`, `availableActions`, and `agentWorkflows`.
+`workflowArtifacts` lists every artifact that the task workflow declares, keyed by its code. Each entry has `present`. A present review also has its `verdict`. Public summaries omit `availableActions` and `agentWorkflows`.
 
-`odt_read_task` returns the same task fields and `qaVerdict`, with an `artifacts` metadata array instead of presence flags. Call it first to find current workflow and free artifacts and the images that the description refers to. Read only the content and images needed for the task.
+`odt_read_task` returns the same task fields and `workflowArtifacts`, with an `artifacts` metadata array. Call it first to find current workflow and free artifacts and the images that the description refers to. Read only the content and images needed for the task.
 
 ## Create a task
 
 `odt_create_task` requires `title`, `issueType`, and `priority`.
 
-- `issueType` is `task`, `feature`, or `bug`. MCP rejects `epic`.
+- `issueType` is an issue type of the task workflow. The built-in workflow has `task`, `feature`, and `bug`, and the tool list names them as a hint.
 - `priority` is an integer from 0 through 4.
-- `description`, `labels`, and `aiReviewEnabled` are optional.
+- `description` and `labels` are optional.
 - `workspaceId` is optional only when the process has a default workspace.
 
 The result is `{ task }`.
 
 ## Read a task
 
-`odt_read_task` requires `taskId`. It also requires `workspaceId` when the process has no default workspace. The result is `{ task }` with task fields, `qaVerdict`, and an `artifacts` array of all current workflow and free artifact metadata. Each entry has a stable `code`, display `name`, and `classification`. Free metadata also has `fileName`, `mediaType`, and `byteSize`. The result omits content, old workflow revisions, description images, internal artifact IDs, and `workflowKind`.
+`odt_read_task` requires `taskId`. It also requires `workspaceId` when the process has no default workspace. The result is `{ task }` with task fields, `workflowArtifacts`, and an `artifacts` array of all current workflow and free artifact metadata. Each entry has a stable `code`, display `name`, and `classification`. Free metadata also has `fileName`, `mediaType`, and `byteSize`. The result omits content, old workflow revisions, description images, internal artifact IDs, and `workflowKind`.
 
 ## Update a task
 
@@ -224,17 +222,15 @@ The result is `{ task }`.
 - `priority`
 - `labels`
 - `issueType`
-- `aiReviewEnabled`
 
-The input is a patch. An omitted field keeps its stored value. A null value fails. The tool never changes `status`, `parentId`, `targetBranch`, or artifacts.
+The input is a patch. An omitted field keeps its stored value. A null value fails. The tool never changes `status`, `targetBranch`, or artifacts.
 
 Clearing uses typed values:
 
 - An empty `description` clears the description.
 - An empty `labels` array clears all labels.
-- `aiReviewEnabled: false` turns QA review off.
 
-`title` must not be empty. The tool trims `title` and `description`. `priority` is an integer from 0 through 4. Each label must contain a non-whitespace character. The store drops repeats and sorts labels before it saves them. `issueType` is `task`, `feature`, or `bug`. The tool rejects epic targets and epic conversions. A task can change between `task`, `feature`, and `bug` and keeps its status.
+`title` must not be empty. The tool trims `title` and `description`. `priority` is an integer from 0 through 4. Each label must contain a non-whitespace character. The store drops repeats and sorts labels before it saves them. `issueType` is an issue type of the task workflow. A task can change to another issue type of its workflow and keeps its status.
 
 A call with no fields other than `taskId` and optional `workspaceId` succeeds and changes nothing. `updatedAt` changes only when a field value changes. Repeating stored values changes nothing.
 
@@ -256,7 +252,7 @@ Optional filters:
 - `tags`, all tags must match
 - `limit`, default 50 and maximum 100
 
-Active epics can appear in results. `workspaceId` is optional only when the process has a default workspace.
+`workspaceId` is optional only when the process has a default workspace.
 
 ```json
 {
@@ -281,7 +277,7 @@ The tool has no MCP `outputSchema` or `structuredContent`. It does not return st
 
 ## Read and manage task artifacts
 
-Use two calls to read task content. First call `odt_read_task` for task fields, `qaVerdict`, and metadata for all current workflow and free artifacts. Then call `odt_read_task_artifacts` with a required `codes` array. The array must be nonempty and contain distinct codes from `task.artifacts`. The reader has no metadata-only mode.
+Use two calls to read task content. First call `odt_read_task` for task fields, `workflowArtifacts`, and metadata for all current workflow and free artifacts. Then call `odt_read_task_artifacts` with a required `codes` array. The array must be nonempty and contain distinct codes from `task.artifacts`. The reader has no metadata-only mode.
 
 For example, Planner can read the full spec in the second call:
 
@@ -323,13 +319,13 @@ Set returns `{ artifact }` with the saved artifact's public metadata, including 
 
 Artifact ownership checks require the requested workspace and task. Managed setter calls also require the native caller's root session and enforce its workflow role. Task agents must still use their locked session task. The removed specialized workflow writers have no aliases.
 
-The MCP bridge and remote protocol use version 2. Update incompatible clients and hosts together. The removed `odt_read_task_documents` tool has no alias. Custom prompt overrides remain user-owned and must use the new tool names.
+The MCP bridge and remote protocol use version 3. Update incompatible clients and hosts together. The removed `odt_read_task_documents` tool has no alias. Custom prompt overrides remain user-owned and must use the new tool names.
 
 The MCP stdio input cap is 64 MiB to accept escaped text within the decoded limit. The adapter sends content as base64 to the host. Set bridge requests have a 16 MiB envelope; other requests keep their 1 MiB limit. Each artifact response stays below 10 MiB of serialized JSON-RPC bytes, including all requested artifacts, without truncating original content. If a response exceeds the limit, request fewer artifacts or a smaller `maxBytes` value.
 
 ## Ownership
 
 - `packages/openducktor-mcp` owns MCP transport, request and response checks, image-block conversion, the calling session of browser tools, and packaging.
-- The host owns SQLite readiness, task reads and writes, workflow rules, recovery, artifact writes, and the owner of each browser tool call.
+- The workflows package defines workflow rules. The host applies them and owns SQLite readiness, task and artifact reads and writes, recovery, and browser tool call ownership.
 - The bridge mirrors MCP tool names so all MCP clients use one execution path.
 - The host bridge sends task images as a checked base64 DTO. Only the MCP adapter converts it to image blocks.

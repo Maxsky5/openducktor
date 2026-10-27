@@ -272,16 +272,18 @@ export class CodexAppServerAdapter
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
-  private readonly threadInventory = new CodexThreadInventoryReader();
+  private readonly threadInventory: CodexThreadInventoryReader;
   private readonly generatedImages: CodexGeneratedImageResolver;
   private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.questionHistory = options.questionHistory ?? new CodexQuestionHistory();
     this.runtimeClients = new CodexRuntimeClientResolver(options);
+    this.threadInventory = new CodexThreadInventoryReader(options.directoriesMatch);
     this.generatedImages = new CodexGeneratedImageResolver(
       this.runtimeClients,
       this.threadInventory,
+      options.directoriesMatch,
       options.prepareImageGenerations,
     );
     const onLiveSessionMutation = options.onLiveSessionMutation;
@@ -292,6 +294,7 @@ export class CodexAppServerAdapter
     > = {
       prepareImageGenerations: options.prepareImageGenerations,
       respondServerRequest: options.respondServerRequest,
+      resolveWorkflowRolePolicy: options.resolveWorkflowRolePolicy,
       sessions: {
         get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
         values: () => this.localSessions.values(),
@@ -361,6 +364,7 @@ export class CodexAppServerAdapter
       prepareRuntime: (runtimeId) => this.prepareRuntime(runtimeId),
       threadConfig: (repoPath, sessionPolicy) => this.threadConfig(repoPath, sessionPolicy),
       clearThreadInventory: (runtimeId) => this.clearThreadInventory(runtimeId),
+      resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
     });
   }
 
@@ -464,9 +468,9 @@ export class CodexAppServerAdapter
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "start Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "start Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
@@ -520,9 +524,9 @@ export class CodexAppServerAdapter
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "resume Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "resume Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const current = this.localSessions.get(input.externalSessionId);
     if (current) {
@@ -567,7 +571,7 @@ export class CodexAppServerAdapter
         });
         if (
           response.thread.id !== input.externalSessionId ||
-          response.cwd !== input.workingDirectory
+          !(await this.options.directoriesMatch(response.cwd, input.workingDirectory))
         )
           throw new Error("Codex resumed a different conversation or directory.");
         markAgentWorkAccepted(input);
@@ -681,9 +685,9 @@ export class CodexAppServerAdapter
   ): Promise<AgentSessionSummary> {
     assertCodexRuntimePolicyBinding(input, "continue Codex turn");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "continue Codex turn",
+      this.options.resolveWorkflowRolePolicy,
     );
     const current = this.localSessions.get(input.externalSessionId);
     if (current) {
@@ -723,7 +727,10 @@ export class CodexAppServerAdapter
         cause,
       });
     }
-    if (thread.id !== input.externalSessionId || thread.cwd !== input.workingDirectory) {
+    if (
+      thread.id !== input.externalSessionId ||
+      !(await this.options.directoriesMatch(thread.cwd, input.workingDirectory))
+    ) {
       throw interruptedTurnResumeError({
         reason: "identity_mismatch",
         message: `Codex thread '${input.externalSessionId}' does not match the stored working directory '${input.workingDirectory}'.`,
@@ -840,9 +847,9 @@ export class CodexAppServerAdapter
     }
     assertCodexRuntimePolicyBinding(input, "fork Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "fork Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
@@ -946,9 +953,9 @@ export class CodexAppServerAdapter
   ): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
     const scopePolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "send Codex user message",
+      this.options.resolveWorkflowRolePolicy,
     );
     const systemInvocation = classifySystemSlashCommandInvocation(input.parts);
     if (systemInvocation.kind === "not_system") {
@@ -1219,7 +1226,10 @@ export class CodexAppServerAdapter
       threadId: input.externalSessionId,
       includeTurns: false,
     });
-    if (thread.id !== input.externalSessionId || thread.cwd !== input.workingDirectory) {
+    if (
+      thread.id !== input.externalSessionId ||
+      !(await this.options.directoriesMatch(thread.cwd, input.workingDirectory))
+    ) {
       throw new AgentRuntimeQueryError(
         "scope_mismatch",
         "The native session does not match the selected session and working directory. Select the matching session.",
@@ -1300,12 +1310,12 @@ export class CodexAppServerAdapter
 
   private async resumeExistingThread(input: PolicyBoundSessionRef) {
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "open existing session");
-    const metadata = await getCodexSessionMetadata(client, input);
+    const metadata = await getCodexSessionMetadata(client, input, this.options.directoriesMatch);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "open existing Codex session",
+      this.options.resolveWorkflowRolePolicy,
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
     assertAgentWorkStartCurrent(input);
@@ -1315,7 +1325,10 @@ export class CodexAppServerAdapter
       threadId: input.externalSessionId,
       excludeTurns: true,
     });
-    if (response.thread.id !== input.externalSessionId || response.cwd !== input.workingDirectory)
+    if (
+      response.thread.id !== input.externalSessionId ||
+      !(await this.options.directoriesMatch(response.cwd, input.workingDirectory))
+    )
       throw new Error("Codex resumed a different conversation or directory.");
     const session = sessionStateFromExistingThread(input, runtimeId, undefined, response);
     session.preserveNativeSettings = true;
@@ -1415,9 +1428,9 @@ export class CodexAppServerAdapter
     }
 
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      input.sessionScope,
-      input.runtimePolicy,
+      input,
       "ensure Codex session state",
+      this.options.resolveWorkflowRolePolicy,
     );
     const policy = sessionPolicy.runtimePolicy;
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
@@ -1996,16 +2009,16 @@ export class CodexAppServerAdapter
     );
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const inventory = await this.threadInventory.refresh(client, runtimeId);
-    this.recordInventorySubagentRoutes(inventory, runtimeId, input.workingDirectory);
     const thread = inventory.threadsById.get(input.externalSessionId);
+    if (thread && !(await this.options.directoriesMatch(thread.cwd, input.workingDirectory))) {
+      return runtimeId;
+    }
+    this.recordInventorySubagentRoutes(inventory, runtimeId, thread?.cwd ?? input.workingDirectory);
     if (!thread) {
       if (this.subagents.routeForChild(input.externalSessionId, runtimeId)) {
         await this.ensureSessionState(input);
         this.clearThreadInventory(runtimeId);
       }
-      return runtimeId;
-    }
-    if (thread.cwd !== input.workingDirectory) {
       return runtimeId;
     }
     this.subagents.recordThread(thread, runtimeId);
@@ -2088,6 +2101,7 @@ export class CodexAppServerAdapter
       sessions: this.localSessions,
       pendingInput: this.pendingInput,
       asyncQuestions: this.asyncQuestions,
+      directoriesMatch: this.options.directoriesMatch,
       hasActiveTurn: (externalSessionId: string) =>
         runningTurnOf(this.activeTurnsBySessionId, externalSessionId) !== null,
     };
@@ -2138,19 +2152,7 @@ export class CodexAppServerAdapter
     );
     const session = this.querySession(input, runtimeId);
     if (!session) {
-      const response = await client.threadRead({
-        threadId: input.externalSessionId,
-        includeTurns: false,
-      });
-      if (
-        response.thread.id !== input.externalSessionId ||
-        response.thread.cwd !== input.workingDirectory
-      ) {
-        throw new AgentRuntimeQueryError(
-          "scope_mismatch",
-          "The native session does not match the selected session and working directory. Select the matching session.",
-        );
-      }
+      await this.readScopedThread(client, input);
     }
     const diff = this.runtimeEvents.sessionDiff(
       runtimeId,

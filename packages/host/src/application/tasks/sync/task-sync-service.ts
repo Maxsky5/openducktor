@@ -19,6 +19,7 @@ import type {
 import { collectTaskStatusChanges } from "../../../ports/task-status-changes";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
+  CommittedTaskStatusChange,
   CommittedTaskStatusChangeObserver,
   TaskMutationOperation,
 } from "../task-mutation-operation";
@@ -134,22 +135,13 @@ const buildTasksUpdatedEvent = (
   changes: TaskChangeSet,
   taskSnapshots: readonly TaskEventTaskSnapshot[],
   statusChanges: readonly TaskEventStatusChange[],
-  operation: string,
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId: eventIdFactory(),
   kind: "tasks_updated",
   repoPath,
   ...changes,
   taskSnapshots: [...taskSnapshots],
-  statusChanges: statusChanges.map((change) => {
-    if (change.task.status === "human_review" && operation === "build-completed") {
-      return { ...change, sourceRole: "build" };
-    }
-    if (change.task.status === "human_review" && operation === "qa-approved") {
-      return { ...change, sourceRole: "qa" };
-    }
-    return change;
-  }),
+  statusChanges: [...statusChanges],
   boardChanges: null,
   emittedAt: nowIso(),
 });
@@ -186,9 +178,11 @@ export const createTaskSyncService = ({
     afterCommit,
     settleOnInterrupt = false,
   ) => {
-    const commitAndPublish = collectTaskStatusChanges(mutation, (statusChange) =>
-      observeStatusChanges?.({ repoPath, operation, statusChange }),
-    ).pipe(Effect.flatMap(afterCommit));
+    const commitAndPublish = collectTaskStatusChanges(mutation, (statusChange, signal) => {
+      const change: CommittedTaskStatusChange = { repoPath, operation, statusChange };
+      if (signal !== undefined) change.signal = signal;
+      observeStatusChanges?.(change);
+    }).pipe(Effect.flatMap(afterCommit));
     return runMutation(
       repoPath,
       settleOnInterrupt ? Effect.uninterruptible(commitAndPublish) : commitAndPublish,
@@ -272,14 +266,7 @@ export const createTaskSyncService = ({
     artifactChanges: TaskArtifactChange[] = [],
   ): Effect.Effect<TaskEventCursor, HostOperationErrorAggregate> =>
     Effect.gen(function* () {
-      const event = buildTasksUpdatedEvent(
-        eventIdFactory,
-        repoPath,
-        changes,
-        [],
-        statusChanges,
-        operation,
-      );
+      const event = buildTasksUpdatedEvent(eventIdFactory, repoPath, changes, [], statusChanges);
       acceptNotificationInput?.(event);
       if (operation.startsWith("agent-session-") && statusChanges.length === 0) {
         return yield* publish(event, operation, repoPath, changes, mutationFailure);

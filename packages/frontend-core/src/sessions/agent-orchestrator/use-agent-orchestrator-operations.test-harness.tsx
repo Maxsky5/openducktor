@@ -1,10 +1,6 @@
 import { createOpenCodeAgentEngineTestAdapter } from "./handlers/opencode-agent-engine.test-support";
 import { AgentRuntimeTestAdapter } from "../../test-support/agent-runtime-test-adapter";
-import type {
-  AgentSessionLiveEnvelope,
-  AgentSessionLiveSnapshot,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import { QueryClient } from "@tanstack/react-query";
@@ -19,6 +15,7 @@ import {
 import type { AgentSessionState } from "../../types/agent-orchestrator";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 import { createLiveSnapshotEnvelope } from "../../test-support/agent-session-live-fixture";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type OrchestratorDependencies = NonNullable<
   Parameters<typeof useAgentOrchestratorOperations>[0]["dependencies"]

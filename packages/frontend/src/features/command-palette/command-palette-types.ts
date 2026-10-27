@@ -1,7 +1,8 @@
-import type { TaskCard, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
+import type { WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import type { OpenRepositoryModalView } from "@/components/features/repository/open-repository-modal";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 /** A command that a page adds while it is mounted, such as the panel toggles of a session page. */
 export type CommandPalettePageCommand = {

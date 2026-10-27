@@ -1,4 +1,4 @@
-import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type { KanbanColumn as KanbanColumnData } from "@openducktor/workflows";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {

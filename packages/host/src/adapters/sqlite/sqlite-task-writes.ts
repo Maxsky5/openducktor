@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import {
   directMergeRecordSchema,
   gitTargetBranchSchema,
@@ -9,8 +10,7 @@ import { z } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { encodeJson, validateWithSchema } from "./sqlite-json-codecs";
-import { getTaskCard } from "./sqlite-task-card-read-model";
-import { requireTaskRow } from "./sqlite-task-queries";
+import { getTaskRecord } from "./sqlite-task-card-read-model";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreWriteError,
@@ -142,6 +142,7 @@ export const applyTaskPatch = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["updateTask"]>[0],
   updatedAt: Date,
+  taskWorkflows: TaskWorkflowResolver,
 ) =>
   Effect.gen(function* () {
     const updates: Partial<TaskInsert> = {};
@@ -157,18 +158,8 @@ export const applyTaskPatch = (
     if (input.patch.issueType !== undefined) {
       updates.issueType = input.patch.issueType;
     }
-    if (input.patch.aiReviewEnabled !== undefined) {
-      updates.qaRequired = input.patch.aiReviewEnabled ? 1 : 0;
-    }
     if (input.patch.labels !== undefined) {
       updates.labelsJson = encodeJson(normalizeLabels(input.patch.labels));
-    }
-    if (input.patch.parentId !== undefined) {
-      const parentId = input.patch.parentId.trim();
-      if (parentId.length > 0) {
-        yield* requireTaskRow(session, parentId, input.repoPath);
-      }
-      updates.parentId = parentId.length > 0 ? parentId : null;
     }
     if (input.patch.targetBranch !== undefined) {
       const parsed = gitTargetBranchSchema.safeParse(input.patch.targetBranch);
@@ -193,5 +184,5 @@ export const applyTaskPatch = (
         { taskId: input.taskId },
       );
     }
-    return yield* getTaskCard(session, input.taskId, input.repoPath);
+    return yield* getTaskRecord(session, input.taskId, input.repoPath, taskWorkflows);
   });

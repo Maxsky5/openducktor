@@ -174,8 +174,8 @@ describe("OpenCode tool strategy catalog", () => {
       },
       {
         canonicalName: "odt_set_plan",
-        rawInput: { taskId: "task-42", subtasks: [{ id: "1" }, { id: "2" }] },
-        expectedPreview: "task-42 · 2 subtasks",
+        rawInput: { taskId: "task-42" },
+        expectedPreview: "task-42",
       },
       {
         canonicalName: "odt_build_blocked",

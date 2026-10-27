@@ -1,10 +1,10 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
+  BUILTIN_LAUNCH_ACTION_IDS,
   getSessionLaunchAction,
-  type SessionLaunchActionId,
-  sessionLaunchActionIds,
-} from "@openducktor/frontend-core/lib/session-launch-actions";
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+} from "@openducktor/workflows";
 import type { UseTaskSessionStartFlowResult } from "@openducktor/frontend-core/tasks/workflow/use-task-session-start-flow";
 import { usePreventRemove } from "expo-router";
 import { type ReactElement, useCallback, useState } from "react";
@@ -35,7 +35,7 @@ const START_ACTIONS = {
 const isStartAction = (value: string | null): value is StartSessionSheetAction =>
   value !== null && Object.hasOwn(START_ACTIONS, value);
 const isLaunchAction = (value: string | null): value is SessionLaunchActionId =>
-  sessionLaunchActionIds.some((launch) => launch === value);
+  BUILTIN_LAUNCH_ACTION_IDS.some((launch) => launch === value);
 
 /** A task workflow action, or the session launch action of a desktop quick action. */
 type StartRequest =

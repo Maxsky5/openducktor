@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-  type AutopilotActionId,
   CODEX_RUNTIME_DESCRIPTOR,
   createDefaultAutopilotSettings,
   DEFAULT_AGENT_RUNTIMES,
@@ -33,6 +32,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+import type { BuiltinAutomationId as AutopilotActionId } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 

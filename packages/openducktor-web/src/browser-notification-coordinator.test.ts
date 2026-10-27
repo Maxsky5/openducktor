@@ -1,12 +1,9 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type NotificationOccurrence,
-  type NotificationSettings,
-} from "@openducktor/contracts";
+import { type NotificationOccurrence, type NotificationSettings } from "@openducktor/contracts";
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 type CoordinatorMessage =
   | {
@@ -25,7 +22,7 @@ type CoordinatorMessage =
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
-const settings = createDefaultNotificationSettings();
+const settings = createBuiltinNotificationSettings();
 
 type LockRequest = {
   name: string;
@@ -380,7 +377,7 @@ describe("browser notification coordinator", () => {
     const second = makeHost("https://second.test/remote", false);
     try {
       await waitFor(() => first.isExternalDeliveryOwner() && second.isExternalDeliveryOwner());
-      const settings = createDefaultNotificationSettings();
+      const settings = createBuiltinNotificationSettings();
       await first.publishOccurrence(occurrence, settings);
       const other = { ...occurrence, repositoryLabel: "Other host" };
       expect((await second.publishOccurrence(other, settings)).occurrence.repositoryLabel).toBe(
@@ -427,10 +424,13 @@ describe("browser notification coordinator", () => {
           canGuaranteeSilent: true,
           focusWindow: () => {},
         });
-        const config = createDefaultNotificationSettings();
+        const config = createBuiltinNotificationSettings();
         config.volumePercent = rule === "sound" ? 30 : 0;
-        config.kinds["workflow.closed"].target =
-          rule === "sound" || rule === "local" ? "in_app" : rule;
+        config.kinds["workflow.closed"] = {
+          enabled: true,
+          target: rule === "sound" || rule === "local" ? "in_app" : rule,
+          sound: "inherit",
+        };
         const deliver = mock(async () => {});
         const play = mock(async () => {});
         const onFailure = mock(() => {});
@@ -641,10 +641,18 @@ describe("browser notification coordinator", () => {
       tabId: "publisher-b",
     });
     await waitFor(() => owner.isExternalDeliveryOwner());
-    const enabledSettings = createDefaultNotificationSettings();
-    enabledSettings.kinds["workflow.closed"].enabled = true;
-    const disabledSettings = createDefaultNotificationSettings();
-    disabledSettings.kinds["workflow.closed"].enabled = false;
+    const enabledSettings = createBuiltinNotificationSettings();
+    enabledSettings.kinds["workflow.closed"] = {
+      enabled: true,
+      target: "in_app",
+      sound: "inherit",
+    };
+    const disabledSettings = createBuiltinNotificationSettings();
+    disabledSettings.kinds["workflow.closed"] = {
+      enabled: false,
+      target: "in_app",
+      sound: "inherit",
+    };
 
     const firstSelection = firstPublisher.publishOccurrence(occurrence, enabledSettings);
     const secondSelection = secondPublisher.publishOccurrence(occurrence, disabledSettings);

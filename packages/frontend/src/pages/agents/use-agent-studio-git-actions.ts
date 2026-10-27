@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { ResolveGitConflict } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 import type { CommitsAheadBehind, GitLocalChanges } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,7 +40,7 @@ type AgentStudioGitActionState = {
   isGitActionsLocked: boolean;
   gitActionsLockReason: string | null;
   gitConflict: GitConflict | null;
-  conflictRecipientLabel: "Builder" | "agent";
+  conflictRecipientLabel: string;
   conflictAssistanceBlockedReason: string | null;
   conflictAssistanceIsStarting: boolean;
   pendingForcePush: AgentStudioPendingForcePush | null;
@@ -81,7 +82,7 @@ type UseAgentStudioGitActionsInput = {
   applyLocalChanges: (changes: GitLocalChanges) => Promise<void>;
   onResolveGitConflict?: ResolveGitConflict | undefined;
   assistanceContextKey?: string;
-  conflictRecipientLabel?: "Builder" | "agent";
+  conflictRecipientLabel?: string;
   conflictAssistanceBlockedReason?: string | null | undefined;
   conflictAssistanceIsStarting?: boolean | undefined;
 };
@@ -102,7 +103,7 @@ export function useAgentStudioGitActions({
   applyLocalChanges,
   onResolveGitConflict,
   assistanceContextKey = "",
-  conflictRecipientLabel = "Builder",
+  conflictRecipientLabel = BUILTIN_ROLE_LABELS.build,
   conflictAssistanceBlockedReason = null,
   conflictAssistanceIsStarting = false,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {

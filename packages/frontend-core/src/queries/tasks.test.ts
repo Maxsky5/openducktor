@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createRepoTaskDataQueryOptions, invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const task: TaskCard = {
   id: "task-1",
@@ -10,19 +10,17 @@ const task: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   createdAt: "2026-03-22T12:00:00.000Z",

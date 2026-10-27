@@ -11,9 +11,9 @@ function renderWorkflowActionGroup(compactMenuTrigger = false) {
         issueType: "task",
         availableActions: ["open_builder", "open_qa", "build_start"],
         artifactSummary: {
-          spec: { has: false, updatedAt: undefined },
-          plan: { has: false, updatedAt: undefined },
-          qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "rejected" },
+          spec: { present: false, updatedAt: undefined },
+          plan: { present: false, updatedAt: undefined },
+          qaReport: { present: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "rejected" },
         },
       })}
       onAction={() => {}}

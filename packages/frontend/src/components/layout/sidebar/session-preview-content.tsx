@@ -51,6 +51,8 @@ export function SessionPreviewContent({
 }): ReactElement {
   const projection = useWorkspaceActivityProjection(entry.workspace.workspaceId);
   const details = useMemo(() => buildSessionPreviewModel(entry, projection), [entry, projection]);
+  const selectedRole = entry.target.kind === "task_session" ? entry.target.role : null;
+  const selectedStepId = details.steps.find((step) => step.role === selectedRole)?.id ?? null;
   const task = entry.context.kind === "task" ? entry.context.task : null;
   const time = sessionEntryTimeText(entry, now);
   const statusIssue = entry.status.kind === "unavailable" ? entry.status.reason : entry.fault;
@@ -67,9 +69,10 @@ export function SessionPreviewContent({
           <section aria-label="Role lane">
             <WorkflowRailPreview
               steps={details.steps}
-              selectedRole={entry.target.kind === "task_session" ? entry.target.role : null}
-              onStepSelect={(role) => {
-                const target = details.roleTargets.get(role);
+              selectedStepId={selectedStepId}
+              onStepSelect={(stepId) => {
+                const step = details.steps.find((entry) => entry.id === stepId);
+                const target = step ? details.roleTargets.get(step.role) : undefined;
                 if (target) onOpen(target);
               }}
             />
@@ -171,11 +174,7 @@ function SessionPreviewHeader({
       </div>
       {task ? (
         <div aria-label="Task details">
-          <TaskHeaderBadges
-            task={task}
-            subtasksCount={task.subtaskIds.length}
-            showQaPolicy={false}
-          />
+          <TaskHeaderBadges task={task} />
         </div>
       ) : null}
     </header>

@@ -1,5 +1,6 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
-import type { AgentRole, RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter.test-support";
 import {
@@ -10,7 +11,7 @@ import {
   ignoreObservationLoss,
 } from "./opencode-live-session-adapter.test-support";
 
-const roles: AgentRole[] = ["spec", "planner", "build", "qa"];
+const roles = ["spec", "planner", "build", "qa"] as const;
 const permittedWrite = {
   spec: "odt_set_task_artifact",
   planner: "odt_set_task_artifact",
@@ -25,6 +26,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
       const harness = createRuntimeHarness();
       const prepared = await Effect.runPromise(
         createOpenCodeLiveSessionAdapterPreparer({
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           liveSessionLifecycle: createLifecycle([]),
           prepareRuntime: harness.prepareRuntime,
         })(runtime, ignoreObservationLoss),
@@ -123,6 +125,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
     const harness = createRuntimeHarness();
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: createLifecycle([]),
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),

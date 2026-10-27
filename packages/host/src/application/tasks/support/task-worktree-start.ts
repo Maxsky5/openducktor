@@ -1,4 +1,4 @@
-import type { RepoConfig, TaskCard } from "@openducktor/contracts";
+import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
@@ -9,6 +9,7 @@ import {
   rollbackFailedTaskWorktree,
   type TaskStartRollbackError,
 } from "./task-worktree-rollback";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type BuildStartDependencies = ReturnType<typeof requireBuildStartDependencies>;
 
@@ -50,7 +51,7 @@ export const validateExistingGitTaskWorktree = (
 export const prepareNewTaskWorktree = (
   dependencies: BuildStartDependencies,
   repoConfig: RepoConfig,
-  task: TaskCard,
+  task: TaskRecord,
   canonicalRepoPath: string,
   worktreeBase: string,
   worktreePath: string,

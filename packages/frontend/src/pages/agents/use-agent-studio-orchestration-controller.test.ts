@@ -11,10 +11,7 @@ import { createElement, type PropsWithChildren } from "react";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import {
-  documentQueryKeys,
-  type TaskDocumentSection,
-} from "@openducktor/frontend-core/queries/documents";
+import { documentQueryKeys } from "@openducktor/frontend-core/queries/documents";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
@@ -559,9 +556,9 @@ describe("task workflow artifact loading", () => {
       const task = createTaskCardFixture({
         id: "task-1",
         artifactSummary: {
-          spec: { has: true },
-          plan: { has: hasPlanAndQa },
-          qaReport: { has: hasPlanAndQa, verdict: "approved" },
+          spec: { present: true },
+          plan: { present: hasPlanAndQa },
+          qaReport: hasPlanAndQa ? { present: true, verdict: "approved" } : { present: false },
         },
       });
       base.selectedSession.selectedTask = task;
@@ -575,22 +572,20 @@ describe("task workflow artifact loading", () => {
         }),
       };
       const args = createControllerArgs(base, OPENCODE_RUNTIME_DESCRIPTOR, pendingSession);
-      const sections = hasPlanAndQa ? (["spec", "plan", "qa"] as const) : (["spec"] as const);
+      const sections = hasPlanAndQa ? (["spec", "plan", "qaReport"] as const) : (["spec"] as const);
       const expectedSections = [...sections].sort();
       const releaseReads = Promise.withResolvers<void>();
       let revision = 1;
-      const read = mock(
-        async (_repoPath: string, _taskId: string, section: TaskDocumentSection) => {
-          await releaseReads.promise;
-          return {
-            markdown: `${section} V${revision}`,
-            updatedAt: `2026-10-22T1${revision}:00:00Z`,
-          };
-        },
-      );
+      const read = mock(async (_repoPath: string, _taskId: string, section: string) => {
+        await releaseReads.promise;
+        return {
+          markdown: `${section} V${revision}`,
+          updatedAt: `2026-10-22T1${revision}:00:00Z`,
+        };
+      });
       const connection = createTestClientConnection({
         client: {
-          taskWorkflowArtifactGet: read,
+          workflowArtifactGet: read,
           workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
         },
         scheduleTask: () => () => {},

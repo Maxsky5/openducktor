@@ -74,6 +74,7 @@ import type {
 type CodexRuntimeSessionEventsDepsBase = {
   prepareImageGenerations?: CodexAppServerAdapterOptions["prepareImageGenerations"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
+  resolveWorkflowRolePolicy: CodexAppServerAdapterOptions["resolveWorkflowRolePolicy"];
   onLiveSessionMutation?: (mutation: CodexRuntimeLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: CodexAppServerAdapterOptions["onCatalogInvalidated"];
   sessions: CodexSessionLookup;
@@ -1153,6 +1154,7 @@ export class CodexRuntimeSessionEvents {
     }
     return {
       respondServerRequest,
+      resolveWorkflowRolePolicy: this.deps.resolveWorkflowRolePolicy,
       pendingInput: this.deps.pendingInput,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       subagents: this.deps.subagents,

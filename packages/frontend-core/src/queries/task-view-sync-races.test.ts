@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
 import { boardEvent, eventCursor } from "./task-view-sync.test-support";
 import { taskQueryKeys, type RepoTaskData } from "./tasks";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -110,19 +110,16 @@ describe("TaskViewSync races", () => {
   });
 
   test.each(["cached", "pending"] as const)(
-    "%s boards preserve deletion, recreation, and child visibility in event order",
+    "%s boards preserve deletion, recreation, and closed visibility in event order",
     async (baseline) => {
       const result = createDeferred<RepoTaskData>();
       const ids = createDeferred<string[]>();
       const { queryClient, sync } = createSync(createPorts());
       const queryKey = taskQueryKeys.repoData("/repo");
       const idKey = taskQueryKeys.ids("/repo");
-      const early = createTaskCardFixture({ id: "early", subtaskIds: ["edge"] });
-      const parent = createTaskCardFixture({ id: "epic" });
-      const other = createTaskCardFixture({
-        id: "other",
-        subtaskIds: ["hidden", "edge", "old", "moving"],
-      });
+      const early = createTaskCardFixture({ id: "early" });
+      const item = createTaskCardFixture({ id: "item" });
+      const other = createTaskCardFixture({ id: "other" });
       const hidden = createTaskCardFixture({
         id: "hidden",
         status: "closed",
@@ -139,7 +136,7 @@ describe("TaskViewSync races", () => {
         status: "closed",
         updatedAt: "2026-04-01T00:00:00.000Z",
       });
-      const tasks = [early, parent, other, hidden, edge, old, moving];
+      const tasks = [early, item, other, hidden, edge, old, moving];
       const taskIds = tasks.map((card) => card.id);
       if (baseline === "cached") {
         queryClient.setQueryData(queryKey, { tasks });
@@ -154,19 +151,15 @@ describe("TaskViewSync races", () => {
           ? queryClient.fetchQuery({ queryKey: idKey, queryFn: () => ids.promise })
           : Promise.resolve();
       const earlyChanged = Object.freeze({ ...early, title: "Changed early" });
-      const firstParent = Object.freeze({ ...parent, subtaskIds: ["hidden", "edge"] });
+      const firstItem = Object.freeze({ ...item, title: "First item" });
       const moved = Object.freeze({ ...moving, status: "open" as const });
       const marker = Object.freeze(createTaskCardFixture({ id: "marker" }));
-      const lastParent = Object.freeze({
-        ...parent,
-        title: "Latest parent",
-        subtaskIds: ["hidden", "edge", "old", "moving"],
-      });
+      const lastItem = Object.freeze({ ...item, title: "Latest item" });
       const restored = Object.freeze({ ...old, title: "Recreated" });
       const reopened = Object.freeze({ ...edge, status: "open" as const });
       try {
         await sync.reconcileExternalEvent(
-          boardEvent("/repo", [earlyChanged, firstParent, moved], { removedTaskIds: ["old"] }),
+          boardEvent("/repo", [earlyChanged, firstItem, moved], { removedTaskIds: ["old"] }),
           eventCursor(),
         );
         await sync.reconcileExternalEvent(
@@ -174,24 +167,24 @@ describe("TaskViewSync races", () => {
           eventCursor(),
         );
         await sync.reconcileExternalEvent(
-          boardEvent("/repo", [lastParent, restored, reopened], { doneVisibleDays: 7 }),
+          boardEvent("/repo", [lastItem, restored, reopened], { doneVisibleDays: 7 }),
           eventCursor(),
         );
         result.resolve({ tasks });
         ids.resolve(taskIds);
         await Promise.all([read, idRead]);
         expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks).toEqual([
-          { ...earlyChanged, subtaskIds: [] },
+          { ...earlyChanged },
           reopened,
-          lastParent,
+          lastItem,
           marker,
           moved,
           restored,
-          { ...other, subtaskIds: ["moving"] },
+          other,
         ]);
         expect(queryClient.getQueryData<string[]>(idKey)).toEqual([
           "early",
-          "epic",
+          "item",
           "other",
           "hidden",
           "edge",
@@ -377,7 +370,7 @@ describe("TaskViewSync races", () => {
         }),
       }),
     );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
+    const documentKey = documentQueryKeys.document("/repo", "task-1", "spec");
     queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
     const observer = new QueryObserver(queryClient, {
       queryKey: documentKey,
@@ -438,8 +431,8 @@ describe("TaskViewSync races", () => {
       updatedAt: "2026-04-10T13:11:00.000Z",
     }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const activeDocumentKey = documentQueryKeys.spec("/repo", "task-1");
-    const inactiveDocumentKey = documentQueryKeys.spec("/inactive", "task-1");
+    const activeDocumentKey = documentQueryKeys.document("/repo", "task-1", "spec");
+    const inactiveDocumentKey = documentQueryKeys.document("/inactive", "task-1", "spec");
     queryClient.setQueryData(activeDocumentKey, { markdown: "# Active cached", updatedAt: null });
     queryClient.setQueryData(inactiveDocumentKey, {
       markdown: "# Inactive cached",

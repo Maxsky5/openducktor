@@ -1,9 +1,5 @@
-import {
-  agentRoleSchema,
-  openCodeRuntimeConfigSchema,
-  type OpenCodeRuntimeConfig,
-} from "@openducktor/contracts";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import { BUILTIN_ROLE_LABELS, BUILTIN_ROLE_IDS } from "@openducktor/workflows";
+import { openCodeRuntimeConfigSchema, type OpenCodeRuntimeConfig } from "@openducktor/contracts";
 
 export const validateOpenCodePermissions = (
   config: OpenCodeRuntimeConfig | undefined,
@@ -15,8 +11,8 @@ export const validateOpenCodePermissions = (
     const [scope, roleOrRules, ruleOrIndex, indexOrField] = issue.path;
     if (scope === "defaults") return `Defaults rule ${Number(ruleOrIndex) + 1}: ${issue.message}`;
     if (scope === "roleOverrides") {
-      const role = agentRoleSchema.safeParse(roleOrRules);
-      const label = role.success ? AGENT_ROLE_LABELS[role.data] : String(roleOrRules);
+      const role = BUILTIN_ROLE_IDS.find((id) => id === roleOrRules);
+      const label = role ? BUILTIN_ROLE_LABELS[role] : String(roleOrRules);
       return `${label} rule ${Number(indexOrField) + 1}: ${issue.message}`;
     }
     return issue.message;

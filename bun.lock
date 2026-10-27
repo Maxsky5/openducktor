@@ -92,6 +92,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@react-native/normalize-colors": "0.88.0",
         "@shopify/flash-list": "2.3.3",
         "@tanstack/react-query": "^5.104.4",
@@ -165,6 +166,7 @@
         "zod": "^4.6.7",
       },
       "devDependencies": {
+        "@openducktor/workflows": "workspace:*",
         "@types/node": "^26.6.4",
       },
     },
@@ -177,6 +179,9 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@openducktor/workflows": "workspace:*",
       },
     },
     "packages/build-tools": {
@@ -215,6 +220,7 @@
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@pierre/diffs": "1.5.2",
         "@pierre/trees": "1.0.0-beta.6",
         "@radix-ui/react-checkbox": "^1.4.1",
@@ -299,6 +305,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@tanstack/react-query": "^5.104.4",
         "react": "^19.3.1",
         "zod": "^4.6.7",
@@ -328,6 +335,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "@openducktor/runtime-orchestration": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@xterm/addon-serialize": "0.14.0",
         "@xterm/headless": "6.0.0",
         "diff": "9.0.0",
@@ -357,6 +365,7 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "zod": "^4.6.7",
       },
     },
@@ -374,6 +383,7 @@
         "@openducktor/build-tools": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "bun-types": "^1.4.2",
       },
     },
@@ -399,6 +409,7 @@
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/remote-host": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@tailwindcss/vite": "^4.3.3",
         "@tanstack/react-query": "^5.104.4",
         "@testing-library/react": "^16.3.3",
@@ -453,6 +464,14 @@
       },
       "devDependencies": {
         "bun-types": "^1.4.2",
+      },
+    },
+    "packages/workflows": {
+      "name": "@openducktor/workflows",
+      "version": "1.0.1",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+        "zod": "^4.6.7",
       },
     },
     "tools/oxlint/anti-slop": {
@@ -1172,6 +1191,8 @@
     "@openducktor/runtime-orchestration": ["@openducktor/runtime-orchestration@workspace:packages/runtime-orchestration"],
 
     "@openducktor/web": ["@openducktor/web@workspace:packages/openducktor-web"],
+
+    "@openducktor/workflows": ["@openducktor/workflows@workspace:packages/workflows"],
 
     "@oslojs/encoding": ["@oslojs/encoding@1.1.0", "", {}, "sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ=="],
 

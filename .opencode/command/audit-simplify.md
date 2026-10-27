@@ -142,7 +142,6 @@ Iterate through the codebase. For **EACH** distinct simplification opportunity f
     *   **priority**: Map the severity table to OpenDucktor numeric priority.
       `1` = High, `2` = Medium, `3` = Low. Use `0` only for truly critical failure-masking paths.
     *   **labels**: Only `audit` and `simplify` are allowed for this command. Every task must include both labels. Do not add any other labels.
-    *   **aiReviewEnabled**: `true`
     *   **description**:
         ```markdown
         ### Simplification Category

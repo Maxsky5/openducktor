@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
 import {
   codexSessionRuntimeRef,
   codexThreadStartResultFixture,
@@ -15,6 +15,7 @@ import {
   RecordingTransport,
   expectedThreadConfig,
   testManagedMcpServer,
+  testWorkflowRolePolicy,
 } from "./codex-app-server-adapter.test-harness";
 import { CodexAppServerAdapter } from "./index";
 
@@ -946,7 +947,9 @@ describe("CodexAppServerAdapter repository sessions", () => {
       throw new Error("transportFactory should not be called");
     });
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: {
         ...makeRuntimeSummary("runtime-wrong-route"),
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },

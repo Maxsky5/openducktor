@@ -1,7 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { waitFor } from "@testing-library/react";
 import {
-  createDefaultNotificationSettings,
   type NotificationHealth,
   type NotificationStreamFrame,
   type SelectedNotification,
@@ -12,6 +11,7 @@ import {
   createDeliveryAdapters,
   workflowClosedOccurrence,
 } from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 
@@ -361,7 +361,7 @@ test.each(["attachment", "live"] as const)(
 );
 
 const harness = () => {
-  const settings = createDefaultNotificationSettings();
+  const settings = createBuiltinNotificationSettings();
   settings.volumePercent = 17;
   settings.osFocus = "always_send";
   settings.soundFocus = "always_play";

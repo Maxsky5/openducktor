@@ -8,7 +8,7 @@ import {
 } from "@/features/task-workflow/use-task-workflow-composer";
 import {
   ActiveWorkspaceContext,
-  SpecStateContext,
+  DocumentStateContext,
   TasksStateContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
@@ -20,7 +20,7 @@ import {
   createTaskWorkflowActionsFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type {
-  SpecStateContextValue,
+  DocumentStateContextValue,
   TasksStateContextValue,
 } from "@openducktor/frontend-core/types/state-slices";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -86,15 +86,10 @@ const workspaceState = {
   },
 } satisfies WorkspaceStateContextValue;
 
-const specState = {
-  loadSpec: async () => "",
-  loadSpecDocument: async () => ({ markdown: "", updatedAt: null }),
-  loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
-  loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
-  saveSpec: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  saveSpecArtifact: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  savePlanArtifact: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-} satisfies SpecStateContextValue;
+const documentState = {
+  loadDocument: async () => ({ markdown: "", updatedAt: null }),
+  saveDocument: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
+} satisfies DocumentStateContextValue;
 
 const createTasksState = (
   updateTask: TasksStateContextValue["updateTask"],
@@ -140,11 +135,10 @@ describe("workflow artifact editor shortcuts", () => {
       const workspace = workspaceState.activeWorkspace;
       let controller: Controller;
       const getController = () => controller;
-      const spec = {
-        ...specState,
-        loadSpecDocument: async () => ({ markdown: "# Saved specification", updatedAt: null }),
-        loadPlanDocument: async () => ({
-          markdown: "# Saved implementation plan",
+      const documents = {
+        ...documentState,
+        loadDocument: async (_taskId: string, code: string) => ({
+          markdown: code === "spec" ? "# Saved specification" : "# Saved implementation plan",
           updatedAt: null,
         }),
       };
@@ -159,7 +153,7 @@ describe("workflow artifact editor shortcuts", () => {
             <TooltipProvider>
               <WorkflowArtifactControls
                 taskId={task.id}
-                workflowKind={section}
+                workflowCode={section}
                 name={label}
                 markdown={undefined}
                 taskAssetContext={undefined}
@@ -179,9 +173,9 @@ describe("workflow artifact editor shortcuts", () => {
               value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
             >
               <TasksStateContext.Provider value={createTasksState(async () => {})}>
-                <SpecStateContext.Provider value={spec}>
+                <DocumentStateContext.Provider value={documents}>
                   <EditorFlow />
-                </SpecStateContext.Provider>
+                </DocumentStateContext.Provider>
               </TasksStateContext.Provider>
             </ActiveWorkspaceContext.Provider>
           </WorkspaceStateContext.Provider>
@@ -248,9 +242,9 @@ describe("task workflow editor save ownership", () => {
               <TasksStateContext.Provider
                 value={{ ...createTasksState(updateTask), tasks: [task] }}
               >
-                <SpecStateContext.Provider value={specState}>
+                <DocumentStateContext.Provider value={documentState}>
                   <ComposerProbe workspace={workspace} task={task} />
-                </SpecStateContext.Provider>
+                </DocumentStateContext.Provider>
               </TasksStateContext.Provider>
             </ActiveWorkspaceContext.Provider>
           </WorkspaceStateContext.Provider>

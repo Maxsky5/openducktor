@@ -1,4 +1,8 @@
-import type { IssueType, TaskCard, TaskPriority } from "@openducktor/contracts";
+import type { TaskPriority } from "@openducktor/contracts";
+import type {
+  BuiltinIssueTypeId as IssueType,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 /** The search text and the filter selections of one workspace board. */
 export type KanbanBoardFilter = {

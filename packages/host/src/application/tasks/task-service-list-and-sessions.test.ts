@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
@@ -35,7 +36,11 @@ describe("createTaskService list and session reads", () => {
       const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
         getSettingsSnapshot: () => Effect.succeed(settings),
       });
-      const service = createTaskService({ taskStore, workspaceSettingsService });
+      const service = createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        taskStore,
+        workspaceSettingsService,
+      });
       await expect(
         Effect.runPromise(service.listKanbanTasks({ repoPath: "/repo" })),
       ).resolves.toEqual([]);
@@ -55,7 +60,7 @@ describe("createTaskService list and session reads", () => {
         return Effect.succeed(["task-open", "task-closed-long-ago"]);
       },
     };
-    const service = createTaskService({ taskStore });
+    const service = createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore });
 
     await expect(Effect.runPromise(service.listTaskIds({ repoPath: "/repo" }))).resolves.toEqual([
       "task-open",
@@ -70,6 +75,7 @@ describe("createTaskService list and session reads", () => {
       message: "Cannot read task IDs.",
     });
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: { listTaskIds: () => Effect.fail(failure) },
     });
 
@@ -90,6 +96,7 @@ describe("createTaskService list and session reads", () => {
       message: "Failed to promote a staged task asset.",
     });
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: {
         createTask: () => Effect.fail(failure),
       },
@@ -111,6 +118,7 @@ describe("createTaskService list and session reads", () => {
     const session = createAgentSessionRecord();
     const calls: Array<Parameters<NonNullable<TaskStorePort["listAgentSessionsForTasks"]>>[0]> = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: {
         listAgentSessionsForTasks(input) {
           calls.push(input);
@@ -156,19 +164,6 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -201,16 +196,15 @@ describe("createTaskService list and session reads", () => {
             calls.push(input);
             return [
               task({
-                id: "epic-1",
-                issueType: "epic",
+                id: "feature-1",
+                issueType: "feature",
                 status: "human_review",
                 artifactSummary: {
-                  spec: { has: true, updatedAt: "2026-01-03T00:00:00Z" },
-                  plan: { has: true, updatedAt: "2026-01-04T00:00:00Z" },
-                  qaReport: { has: false, verdict: "not_reviewed" },
+                  spec: { present: true, updatedAt: "2026-01-03T00:00:00Z" },
+                  plan: { present: true, updatedAt: "2026-01-04T00:00:00Z" },
+                  qaReport: { present: false },
                 },
               }),
-              task({ id: "task-2", parentId: "epic-1" }),
             ];
           },
           catch: (cause) =>
@@ -222,13 +216,13 @@ describe("createTaskService list and session reads", () => {
         });
       },
     };
-    const service = createTaskService({ taskStore });
+    const service = createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore });
     const tasks = await Effect.runPromise(
       service.listTasks({ repoPath: "/repo", doneVisibleDays: 3 }),
     );
     expect(calls).toEqual([{ repoPath: "/repo", doneVisibleDays: 3 }]);
     expect(tasks[0]).toMatchObject({
-      id: "epic-1",
+      id: "feature-1",
       availableActions: [
         "view_details",
         "set_spec",
@@ -238,107 +232,16 @@ describe("createTaskService list and session reads", () => {
         "reset_implementation",
         "reset_task",
         "human_request_changes",
+        "human_approve",
+        "close_task",
       ],
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
-  });
-  test("allows human approval only when an epic has no active direct subtasks", async () => {
-    const taskStore: TaskStorePort = {
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            return [
-              task({
-                id: "epic-1",
-                issueType: "epic",
-                status: "human_review",
-              }),
-              task({ id: "task-2", parentId: "epic-1", status: "closed" }),
-            ];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    const tasks = await Effect.runPromise(
-      createTaskService({ taskStore }).listTasks({ repoPath: "/repo" }),
-    );
-    expect(tasks[0]?.availableActions).toContain("human_approve");
   });
   test("loads task metadata through the task store", async () => {
     const calls: unknown[] = [];
@@ -348,8 +251,10 @@ describe("createTaskService list and session reads", () => {
           try: async () => {
             calls.push(input);
             return {
-              spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
-              plan: { markdown: "# Plan" },
+              artifacts: {
+                spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+                plan: { markdown: "# Plan" },
+              },
               agentSessions: [],
             };
           },
@@ -378,45 +283,6 @@ describe("createTaskService list and session reads", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -468,14 +334,16 @@ describe("createTaskService list and session reads", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).getTaskMetadata({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).getTaskMetadata({
           repoPath: "/repo",
           taskId: "task-1",
         }),
       ),
     ).resolves.toEqual({
-      spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
-      plan: { markdown: "# Plan" },
+      artifacts: {
+        spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+        plan: { markdown: "# Plan" },
+      },
       agentSessions: [],
     });
     expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1" }]);
@@ -484,17 +352,20 @@ describe("createTaskService list and session reads", () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord();
     const taskStore: TaskStorePort = {
+      getTask: () => Effect.succeed(task({ id: "task-1" })),
       getTaskMetadata(input) {
         return Effect.sync(() => {
           calls.push(input);
           return {
-            spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
-            plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
-            qaReport: {
-              markdown: "# QA",
-              verdict: "approved",
-              updatedAt: "2026-05-10T12:00:00.000Z",
-              revision: 3,
+            artifacts: {
+              spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+              plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
+              qaReport: {
+                markdown: "# QA",
+                verdict: "approved",
+                updatedAt: "2026-05-10T12:00:00.000Z",
+                revision: 3,
+              },
             },
             agentSessions: [session],
           };
@@ -526,58 +397,6 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -618,27 +437,34 @@ describe("createTaskService list and session reads", () => {
         });
       },
     };
-    const service = createTaskService({ taskStore });
+    const service = createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore });
     await expect(
-      Effect.runPromise(service.specGet({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.workflowArtifactGet({ repoPath: "/repo", taskId: "task-1", code: "spec" }),
+      ),
     ).resolves.toEqual({
       markdown: "# Spec",
       updatedAt: "2026-05-10T10:00:00.000Z",
       revision: 1,
     });
     await expect(
-      Effect.runPromise(service.planGet({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.workflowArtifactGet({ repoPath: "/repo", taskId: "task-1", code: "plan" }),
+      ),
     ).resolves.toEqual({
       markdown: "# Plan",
       updatedAt: "2026-05-10T11:00:00.000Z",
       revision: 2,
     });
     await expect(
-      Effect.runPromise(service.qaGetReport({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.workflowArtifactGet({ repoPath: "/repo", taskId: "task-1", code: "qaReport" }),
+      ),
     ).resolves.toEqual({
       markdown: "# QA",
       updatedAt: "2026-05-10T12:00:00.000Z",
       revision: 3,
+      verdict: "approved",
     });
     expect(calls).toEqual([
       { repoPath: "/repo", taskId: "task-1" },
@@ -648,12 +474,12 @@ describe("createTaskService list and session reads", () => {
   });
   test("returns an empty QA document when no report is present", async () => {
     const taskStore: TaskStorePort = {
+      getTask: () => Effect.succeed(task({ id: "task-1" })),
       getTaskMetadata() {
         return Effect.tryPromise({
           try: async () => {
             return {
-              spec: { markdown: "" },
-              plan: { markdown: "" },
+              artifacts: {},
               agentSessions: [],
             };
           },
@@ -682,58 +508,6 @@ describe("createTaskService list and session reads", () => {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setSpecArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set spec");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPlanArtifact() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected set plan");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -785,7 +559,11 @@ describe("createTaskService list and session reads", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).qaGetReport({ repoPath: "/repo", taskId: "task-1" }),
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).workflowArtifactGet({
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "qaReport",
+        }),
       ),
     ).resolves.toEqual({ markdown: "" });
   });
@@ -793,6 +571,7 @@ describe("createTaskService list and session reads", () => {
     const calls: unknown[] = [];
     const taskStore = createAgentSessionTaskStore(calls);
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore,
       settingsConfig: createAgentSessionSettingsConfig(new Set(["/repo", "/repo/task-1"])),
       workspaceSettingsService: createAgentSessionWorkspaceSettingsService({
@@ -829,7 +608,7 @@ describe("createTaskService list and session reads", () => {
         });
       },
     };
-    const service = createTaskService({ taskStore });
+    const service = createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore });
     const identity = {
       externalSessionId: "session-1",
       runtimeKind: "opencode" as const,
@@ -846,6 +625,7 @@ describe("createTaskService list and session reads", () => {
   test("upserts an agent session from the configured worktree base", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createAgentSessionTaskStore(calls),
       settingsConfig: createAgentSessionSettingsConfig(
         new Set(["/repo", "/worktrees/repo", "/worktrees/repo/task-1"]),
@@ -869,6 +649,7 @@ describe("createTaskService list and session reads", () => {
   test("upserts an agent session from the repository default worktree base", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createAgentSessionTaskStore(calls),
       settingsConfig: createAgentSessionSettingsConfig(
         new Set(["/repo", "/repo-default-worktrees/repo", "/repo-default-worktrees/repo/task-1"]),
@@ -894,6 +675,7 @@ describe("createTaskService list and session reads", () => {
   test("rejects agent sessions outside the repository and worktree bases", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createAgentSessionTaskStore(calls),
       settingsConfig: createAgentSessionSettingsConfig(new Set(["/repo", "/outside/task-1"])),
       workspaceSettingsService: createAgentSessionWorkspaceSettingsService({

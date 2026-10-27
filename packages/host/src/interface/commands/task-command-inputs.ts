@@ -3,7 +3,6 @@ import {
   taskDirectMergeCompleteIntentSchema,
 } from "@openducktor/contracts";
 import {
-  planSubtaskInputSchema,
   pullRequestSchema,
   taskAssetDescriptionMutationSchema,
   taskCreateInputSchema,
@@ -23,25 +22,24 @@ import type {
   DeleteTaskInput,
   DirectMergeInput,
   ListAgentSessionsForTasksInput,
-  MarkdownArtifactInput,
+  WorkflowArtifactInput,
+  WorkflowArtifactSaveInput,
   OptionalNoteInput,
   PullRequestLinkMergedInput,
   PullRequestUpsertInput,
   RepoPathInput,
-  SetPlanInput,
   TaskIdInput,
   TransitionTaskInput,
+  ApplyTaskEventInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   normalizedAgentSessionIdentitySchema,
-  optionalBoolean,
   parseAgentSessionIdentity,
   parseCreateInput,
   parseDescriptionAssets,
   parseOptionalNote,
-  parsePlanSubtasks,
   parsePullRequest,
   parsePullRequestContent,
   parseRequiredMarkdown,
@@ -58,12 +56,10 @@ import {
   requireParsedRecord,
 } from "./command-inputs";
 
-const optionalBooleanSchema = z.union([z.boolean(), z.null(), z.undefined()]);
 const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 const taskIdsSchema = z.array(z.unknown());
 
 const optionalDescriptionAssetsSchema = taskAssetDescriptionMutationSchema.optional();
-const optionalPlanSubtasksSchema = planSubtaskInputSchema.array().optional();
 
 const readRequiredString = (record: CommandInputRecord, key: string, label: string = key): string =>
   requireString(commandInputStringSchema.safeParse(record[key]), label);
@@ -205,9 +201,6 @@ export const parseDeleteTaskInput = (input: HostCommandArgs): DeleteTaskInput =>
   return {
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
-    deleteSubtasks:
-      optionalBoolean(optionalBooleanSchema.safeParse(record.deleteSubtasks), "deleteSubtasks") ??
-      false,
   };
 };
 
@@ -249,53 +242,56 @@ export const parseTransitionTaskInput = (input: HostCommandArgs): TransitionTask
   };
 };
 
-export const parseMarkdownArtifactInput = (
-  input: HostCommandArgs,
-  commandLabel: string,
-  markdownLabel: string,
-): MarkdownArtifactInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), commandLabel);
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    markdown: parseRequiredMarkdown(
-      commandInputStringSchema.safeParse(record.markdown),
-      markdownLabel,
-    ),
-  };
-};
-
-export const parseQaOutcomeInput = (
-  input: HostCommandArgs,
-  commandLabel: string,
-): MarkdownArtifactInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), commandLabel);
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    markdown: parseRequiredMarkdown(
-      commandInputStringSchema.safeParse(record.reportMarkdown),
-      "QA report",
-    ),
-  };
-};
-
-export const parseSetPlanInput = (input: HostCommandArgs): SetPlanInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "set_plan input");
-  const planInput = requireParsedRecord(
-    commandInputRecordSchema.safeParse(record.input),
-    "set_plan input.input",
+export const parseApplyTaskEventInput = (input: HostCommandArgs): ApplyTaskEventInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "task_apply_event input",
   );
   return {
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
-    markdown: parseRequiredMarkdown(
-      commandInputStringSchema.safeParse(planInput.markdown),
-      "implementation plan",
-    ),
-    subtasks: parsePlanSubtasks(optionalPlanSubtasksSchema.safeParse(planInput.subtasks)),
-    hasExplicitSubtasks: "subtasks" in planInput,
+    eventId: readRequiredString(record, "eventId"),
   };
+};
+
+export const parseWorkflowArtifactInput = (input: HostCommandArgs): WorkflowArtifactInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "workflow_artifact_get input",
+  );
+  return {
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    code: readRequiredString(record, "code"),
+  };
+};
+
+export const parseWorkflowArtifactSaveInput = (
+  input: HostCommandArgs,
+): WorkflowArtifactSaveInput => {
+  const record = requireParsedRecord(
+    commandInputRecordSchema.safeParse(input),
+    "workflow_artifact_save input",
+  );
+  const code = readRequiredString(record, "code");
+  const submit = z.boolean().safeParse(record.submit);
+  if (!submit.success) {
+    throw new HostValidationError({
+      field: "submit",
+      message: "workflow_artifact_save input.submit must be true or false.",
+    });
+  }
+  const parsed: WorkflowArtifactSaveInput = {
+    repoPath: readRequiredString(record, "repoPath"),
+    taskId: readRequiredString(record, "taskId"),
+    code,
+    markdown: parseRequiredMarkdown(commandInputStringSchema.safeParse(record.markdown), code),
+    submit: submit.data,
+    sourceTool: "workflow_artifact_save",
+    updatedBy: "user",
+  };
+  if (record.verdict !== undefined) parsed.verdict = readRequiredString(record, "verdict");
+  return parsed;
 };
 
 export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput => {

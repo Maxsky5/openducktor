@@ -1,13 +1,10 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { isTaskEventAvailable, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
-const hasPullRequestManageableStatus = (status: TaskCard["status"]): boolean =>
-  status === "in_progress" || status === "ai_review" || status === "human_review";
+export const canUnlinkTaskPullRequest = (task: TaskCard): boolean =>
+  isTaskEventAvailable("manage-pull-request", task);
 
 export const canDetectTaskPullRequest = (task: TaskCard): boolean =>
-  hasPullRequestManageableStatus(task.status) && task.agentWorkflows.builder.completed;
-
-export const canUnlinkTaskPullRequest = (status: TaskCard["status"]): boolean =>
-  hasPullRequestManageableStatus(status);
+  canUnlinkTaskPullRequest(task) && task.agentWorkflows.build.completed;
 
 export const humanDate = (value: string): string => {
   const parsed = new Date(value);

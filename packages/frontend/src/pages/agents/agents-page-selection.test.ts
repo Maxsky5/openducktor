@@ -9,7 +9,6 @@ import {
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
   resolveAgentStudioBuilderSessionsForTask,
-  resolveAgentStudioDefaultRoleForTask,
   resolveAgentStudioSessionSelection,
   toRightPanelStorageKey,
 } from "./agents-page-selection";
@@ -154,21 +153,6 @@ describe("agents-page-selection", () => {
         { providerId: "openai", modelId: "gpt-5", variant: "fast" },
       ),
     ).toBe(false);
-  });
-
-  test("resolves default role for open tasks from first required available workflow", () => {
-    const task = createTaskCardFixture({
-      id: "task-1",
-      status: "open",
-      agentWorkflows: {
-        spec: { required: false, canSkip: true, available: true, completed: false },
-        planner: { required: false, canSkip: true, available: true, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
-        qa: { required: false, canSkip: true, available: false, completed: false },
-      },
-    });
-
-    expect(resolveAgentStudioDefaultRoleForTask(task)).toBe("build");
   });
 
   test("keeps active session unresolved when explicit session param does not belong to active task", () => {
@@ -372,7 +356,7 @@ describe("agents-page-selection", () => {
         agentWorkflows: {
           spec: { required: true, canSkip: false, available: true, completed: false },
           planner: { required: false, canSkip: true, available: true, completed: false },
-          builder: { required: true, canSkip: false, available: true, completed: false },
+          build: { required: true, canSkip: false, available: true, completed: false },
           qa: { required: false, canSkip: true, available: false, completed: false },
         },
       }),
@@ -399,7 +383,7 @@ describe("agents-page-selection", () => {
         agentWorkflows: {
           spec: { required: true, canSkip: false, available: false, completed: false },
           planner: { required: true, canSkip: false, available: false, completed: false },
-          builder: { required: true, canSkip: false, available: false, completed: false },
+          build: { required: true, canSkip: false, available: false, completed: false },
           qa: { required: false, canSkip: true, available: false, completed: false },
         },
       }),

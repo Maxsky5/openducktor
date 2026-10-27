@@ -1,5 +1,8 @@
-import type { TaskCard } from "@openducktor/contracts";
-import { type KanbanColumn, mapToKanbanColumns } from "@openducktor/core";
+import {
+  type BuiltinTaskCard as TaskCard,
+  type KanbanColumn,
+  mapToKanbanColumns,
+} from "@openducktor/workflows";
 import { useMemo } from "react";
 import { buildTaskActivityStateByTaskId, sortTasksByActivityState } from "./kanban-board-sessions";
 import type { KanbanTaskActivityState, KanbanTaskSession } from "./kanban-task-activity";

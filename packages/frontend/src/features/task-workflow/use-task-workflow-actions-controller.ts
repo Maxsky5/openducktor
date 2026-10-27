@@ -206,11 +206,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     tasks,
   });
 
-  const onDelete = useCallback(
-    (taskId: string, options: { deleteSubtasks: boolean }): Promise<void> =>
-      deleteTask(taskId, options.deleteSubtasks),
-    [deleteTask],
-  );
+  const onDelete = deleteTask;
   const { onConfirmTaskAction, model: taskConfirmDialog } = useTaskConfirmDialogHost({
     workspaceIdentity,
     tasks,

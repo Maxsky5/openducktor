@@ -12,7 +12,6 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
-  type TaskCard,
   type WorkspaceRecord,
   type WorkspaceSession,
 } from "@openducktor/contracts";
@@ -104,6 +103,7 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";

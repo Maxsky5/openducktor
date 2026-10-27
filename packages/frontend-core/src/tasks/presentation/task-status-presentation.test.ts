@@ -1,5 +1,5 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { statusLabel, statusTone } from "./task-status-presentation";
 
 const STATUSES: TaskCard["status"][] = [

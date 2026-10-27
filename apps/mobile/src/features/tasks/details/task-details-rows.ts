@@ -2,13 +2,12 @@ import { useMemo, useState } from "react";
 import type { DocumentRow } from "../documents/document-rows";
 
 /** A card of the task details that its header opens and closes. */
-export type DetailsSectionKey = "description" | "subtasks" | "sessions" | "work" | "metadata";
+export type DetailsSectionKey = "description" | "sessions" | "work" | "metadata";
 
 /** The rows of the details list. The description blocks are rows, so a long text scrolls well. */
 export type DetailsRow =
   | { kind: "summary"; key: "summary" }
   | { kind: "notices"; key: "notices" }
-  | { kind: "subtasks"; key: "subtasks" }
   | { kind: "sessions"; key: "sessions" }
   | { kind: "work"; key: "work" }
   | { kind: "metadata"; key: "metadata" }
@@ -20,18 +19,15 @@ export const detailsRowType = (row: DetailsRow): string =>
 
 /**
  * The rows of the task details: the summary, unless a low window shows it in its own pane, the
- * notices, the description, the subtasks of an epic or a parent task, the sessions, the work
- * views, and the metadata at the end. A closed description keeps only its header row.
+ * notices, the description, the sessions, the work views, and the metadata at the end. A closed description keeps only its header row.
  */
 export const buildTaskDetailsRows = ({
   summaryInList,
   descriptionRows,
-  showsSubtasks,
   collapsed,
 }: {
   summaryInList: boolean;
   descriptionRows: readonly DocumentRow[];
-  showsSubtasks: boolean;
   collapsed: ReadonlySet<DetailsSectionKey>;
 }): DetailsRow[] => [
   ...(summaryInList ? [{ kind: "summary", key: "summary" } as const] : []),
@@ -39,7 +35,6 @@ export const buildTaskDetailsRows = ({
   ...(collapsed.has("description")
     ? descriptionRows.filter((row) => row.kind === "doc_header")
     : descriptionRows),
-  ...(showsSubtasks ? [{ kind: "subtasks", key: "subtasks" } as const] : []),
   { kind: "sessions", key: "sessions" },
   { kind: "work", key: "work" },
   { kind: "metadata", key: "metadata" },
@@ -68,7 +63,6 @@ export const useCollapsedDetailsSections = (): CollapsedDetailsSections => {
       });
     return {
       description: toggle("description"),
-      subtasks: toggle("subtasks"),
       sessions: toggle("sessions"),
       work: toggle("work"),
       metadata: toggle("metadata"),

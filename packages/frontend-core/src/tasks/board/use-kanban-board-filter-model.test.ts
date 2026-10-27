@@ -1,6 +1,5 @@
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { act, renderHook } from "@testing-library/react";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { EMPTY_KANBAN_BOARD_FILTER, type KanbanBoardFilter } from "./kanban-board-filter";
@@ -8,6 +7,7 @@ import {
   useKanbanBoardFilterModel,
   useKanbanBoardFilterStore,
 } from "./use-kanban-board-filter-model";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 let filtersBefore: Record<string, KanbanBoardFilter>;
 

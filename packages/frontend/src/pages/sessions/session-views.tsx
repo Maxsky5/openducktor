@@ -1,3 +1,4 @@
+import { taskHasSessionPage } from "@openducktor/workflows";
 import {
   memo,
   type ReactElement,
@@ -202,7 +203,7 @@ function hasOwner(client: QueryClient, view: View): boolean {
     );
     return (
       tasks === undefined ||
-      tasks.tasks.some((task) => task.id === params.get("task") && task.status !== "closed")
+      tasks.tasks.some((task) => task.id === params.get("task") && taskHasSessionPage(task))
     );
   }
   const sessions = client.getQueryData<WorkspaceSession[]>(

@@ -19,7 +19,8 @@ test("reload roots recover workflow roles and repository scope from persisted ow
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath,
-        task: { title: "Permissions", issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Permissions", issueType: "task", priority: 2 },
       }),
     );
     const workflowSessions = (["spec", "planner", "build", "qa"] as const).map((role) =>
@@ -39,7 +40,8 @@ test("reload roots recover workflow roles and repository scope from persisted ow
     const closed = await Effect.runPromise(
       harness.store.createTask({
         repoPath,
-        task: { title: "Closed history", issueType: "task", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Closed history", issueType: "task", priority: 2 },
       }),
     );
     const historicalSession = createAgentSessionRecord({

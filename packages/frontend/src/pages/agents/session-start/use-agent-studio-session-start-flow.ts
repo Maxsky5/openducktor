@@ -1,9 +1,17 @@
+import {
+  getSessionLaunchAction,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+  builtinRoleId,
+} from "@openducktor/workflows";
+import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSessionStartKickoffResolver } from "@openducktor/frontend-core/sessions/start/session-start-kickoff";
-import type { GitBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { GitBranch } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
@@ -14,7 +22,6 @@ import type {
   SessionStartFlowRequest,
   SessionStartLaunchRequest,
 } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
-import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
 import type {
   SessionStartPostAction,
   SessionStartWorkflowResult,
@@ -34,7 +41,6 @@ import type {
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
-import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   buildAgentStudioSelectionQueryUpdate,
   type AgentStudioQueryUpdate as QueryUpdate,
@@ -147,7 +153,7 @@ export function useAgentStudioSessionStartFlow({
             ? {
                 ...loadedSession,
                 taskId: loadedSession.sessionAssociation.taskId,
-                role: loadedSession.sessionAssociation.role,
+                role: builtinRoleId(loadedSession.sessionAssociation.role),
               }
             : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
@@ -308,7 +314,7 @@ export function useAgentStudioSessionStartFlow({
     if (!canStartRole(role)) {
       return;
     }
-    if (role === "build" && launchActionId === "build_after_human_request_changes") {
+    if (getSessionLaunchAction(launchActionId).context === "human_feedback") {
       openHumanReviewFeedback();
       return;
     }

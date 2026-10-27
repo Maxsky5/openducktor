@@ -1,4 +1,4 @@
-import type { IssueType } from "@openducktor/contracts";
+import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

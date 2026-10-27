@@ -15,8 +15,7 @@ type TodoNormalizerTypeContract = {
 };
 
 describe("core exports contract", () => {
-  test("re-exports workflow code policy and historical tool name support", () => {
-    expect(core.AGENT_ROLE_WORKFLOW_CODES).toBeDefined();
+  test("re-exports historical tool name support", () => {
     expect(core.retiredArtifactToolName).toBeInstanceOf(Function);
   });
 

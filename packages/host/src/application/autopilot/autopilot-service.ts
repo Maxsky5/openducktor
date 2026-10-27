@@ -1,6 +1,4 @@
 import type {
-  AutopilotActionId,
-  AutopilotEventId,
   AutopilotOutcome,
   AutopilotRecoveryClaimInput,
   AutopilotRecoveryClaimResult,
@@ -9,15 +7,12 @@ import type {
   AutopilotStateReadInput,
   GlobalConfig,
   NotificationActionOccurrence,
-  TaskStatus,
   WorkflowLaunchResult,
 } from "@openducktor/contracts";
 import {
-  AUTOPILOT_ACTION_DEFINITIONS,
   buildSessionStartErrorOccurrence,
   buildSessionStartedOccurrence,
   sessionLaunchFailureMessage,
-  taskStatusTitle,
 } from "@openducktor/core";
 import { Cause, Effect, Exit, FiberSet, type Result, Scope } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
@@ -30,6 +25,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { StoredTask, TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type {
   AutomaticWorkflowLaunchStartCheck,
   WorkflowLaunchService,
@@ -39,7 +35,6 @@ import type { TaskSyncService } from "../tasks/sync/task-sync-service";
 import type { CommittedTaskStatusChange } from "../tasks/task-mutation-operation";
 import type { TaskService } from "../tasks/task-service";
 import { loadGlobalConfig } from "../workspaces/workspace-settings-model";
-import { classifyCommittedStatusChange } from "./autopilot-classification";
 
 type WorkspaceView = {
   workspaceId: string;
@@ -61,14 +56,15 @@ type Attempt = {
   /** Identifies the committed change. Duplicate prevention uses it, not the task or session. */
   sequence: number;
   task: { id: string; title: string };
-  eventId: AutopilotEventId;
-  actionId: AutopilotActionId;
+  eventId: string;
+  actionId: string;
 };
 
 type HeldOutcome = { outcome: AutopilotOutcome; recoveryClaimed: boolean };
 
 export type AutopilotServiceDependencies = {
   settingsConfig: SettingsConfigPort;
+  taskWorkflows: TaskWorkflowResolver;
   tasks: Pick<TaskService, "listTaskIds">;
   mutations: Pick<TaskSyncService, "runMutation">;
   workflowLaunch: Pick<WorkflowLaunchService, "launch">;
@@ -92,6 +88,10 @@ const workspaceState = (repo: GlobalConfig["workspaces"][string]): WorkspaceView
  * service. All state stays in memory, so a host restart loses waiting attempts and outcomes.
  */
 export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
+  const stateTitle = (task: StoredTask, status: string): string => {
+    const state = deps.taskWorkflows.forTask(task).state(status);
+    return state.title ?? state.label;
+  };
   let phase: "pending" | "ready" | "stopped" = "pending";
   /** The latest saved settings. Before the first save, the settings that initialize read. */
   let config: GlobalConfig | null = null;
@@ -100,7 +100,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
   let lastGeneration = 0;
   const workspaces = new Map<string, WorkspaceView>();
   /** The latest committed status change of each task, by workspace and task. */
-  const latestChanges = new Map<string, Map<string, { sequence: number; status: TaskStatus }>>();
+  const latestChanges = new Map<string, Map<string, { sequence: number; status: string }>>();
   /** The latest outcome of each task and action, by workspace. */
   const outcomes = new Map<string, Map<string, HeldOutcome>>();
   // Holds the waiting and running attempts. Dispose closes the scope, which interrupts them.
@@ -112,7 +112,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
     deps.publish({ type: "autopilot_failure", failure: message });
   };
 
-  const ruleActions = (eventId: AutopilotEventId): AutopilotActionId[] =>
+  const ruleActions = (eventId: string): string[] =>
     config?.autopilot.rules.find((rule) => rule.eventId === eventId)?.actionIds ?? [];
 
   // A waiting attempt of a removed workspace skips at its start check, and settle drops it.
@@ -176,7 +176,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       const latest = latestChanges.get(attempt.workspaceId)?.get(attempt.task.id);
       if (latest && latest.sequence !== attempt.sequence)
         return skip(
-          `The task moved to ${taskStatusTitle(latest.status)} before the action started.`,
+          `The task moved to ${stateTitle(attempt.task, latest.status)} before the action started.`,
         );
       return { start: true as const };
     });
@@ -221,11 +221,14 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
     workspace: WorkspaceView,
   ): Effect.Effect<string | null> => {
     const target = { repoPath: workspace.repoPath, repositoryLabel: workspace.workspaceName };
+    const workflow = deps.taskWorkflows.forTask(outcome.task);
+    const { role } = workflow.automation(outcome.actionId);
     const input = {
       launchAttemptId: outcome.outcomeId,
       taskId: outcome.task.id,
       taskTitle: outcome.task.title,
-      role: AUTOPILOT_ACTION_DEFINITIONS[outcome.actionId].role,
+      role,
+      roleLabel: workflow.role(role).label,
     };
     let occurrence: NotificationActionOccurrence | null = null;
     if (outcome.kind === "started") {
@@ -327,7 +330,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
   };
 
   /** Evaluates one change at its commit, with the rules saved at that moment. */
-  const observe = ({ repoPath, operation, statusChange }: CommittedTaskStatusChange): void => {
+  const observe = ({ repoPath, statusChange, signal }: CommittedTaskStatusChange): void => {
     if (phase !== "ready") return;
     // The mutation already committed, so an error here must not fail it.
     try {
@@ -347,7 +350,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       lastSequence += 1;
       const { task } = statusChange;
       tasks.set(task.id, { sequence: lastSequence, status: task.status });
-      const eventId = classifyCommittedStatusChange(operation, statusChange);
+      const eventId = signal;
       if (!eventId) return;
       for (const actionId of ruleActions(eventId))
         dispatch({

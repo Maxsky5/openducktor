@@ -1,7 +1,7 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   GitCurrentBranch,
   GitTargetBranch,
-  TaskCard,
   WorkspaceRecord,
   WorkspaceSession,
 } from "@openducktor/contracts";

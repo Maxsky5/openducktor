@@ -1,5 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { KanbanColumnId } from "@openducktor/core";
+import { type BuiltinTaskCard as TaskCard, type KanbanColumnId } from "@openducktor/workflows";
 import {
   statusTone,
   type TaskStatusTone,

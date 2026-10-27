@@ -1,6 +1,6 @@
 import type { CodexAppServerThread, WorkspaceSessionExternal } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
-import type { CodexAppServerClient } from "./types";
+import type { CodexAppServerAdapterOptions, CodexAppServerClient } from "./types";
 
 const isRoot = (thread: CodexAppServerThread): boolean => {
   if (thread.parentThreadId !== null) return false;
@@ -82,13 +82,17 @@ export const listCodexSessionMetadataPage = async (
 export const getCodexSessionMetadata = async (
   client: CodexAppServerClient,
   ref: SessionRef,
+  directoriesMatch: CodexAppServerAdapterOptions["directoriesMatch"],
 ): Promise<WorkspaceSessionExternal> => {
   const { thread } = await client.threadRead({
     threadId: ref.externalSessionId,
     includeTurns: false,
   });
   if (!isRoot(thread)) throw new Error("Subagent conversations cannot be imported.");
-  if (thread.id !== ref.externalSessionId || thread.cwd !== ref.workingDirectory)
+  if (
+    thread.id !== ref.externalSessionId ||
+    !(await directoriesMatch(thread.cwd, ref.workingDirectory))
+  )
     throw new Error("The source conversation identity or directory changed. Reload sessions.");
   return metadata(thread);
 };

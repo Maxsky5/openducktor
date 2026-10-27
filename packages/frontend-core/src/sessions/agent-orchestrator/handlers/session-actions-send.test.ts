@@ -1002,7 +1002,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
             agentWorkflows: {
               spec: { required: false, canSkip: true, available: true, completed: false },
               planner: { required: false, canSkip: true, available: true, completed: false },
-              builder: { required: true, canSkip: false, available: true, completed: false },
+              build: { required: true, canSkip: false, available: true, completed: false },
               qa: { required: true, canSkip: false, available: false, completed: false },
             },
           }),

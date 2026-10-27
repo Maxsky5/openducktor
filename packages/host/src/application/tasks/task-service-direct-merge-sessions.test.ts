@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Deferred, Effect, Fiber } from "effect";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
@@ -41,6 +42,7 @@ const createHarness = (
   const coordinator = createTaskSessionLifecycleCoordinator();
   let current = task({ status: "ai_review" });
   const service = createTaskService({
+    taskWorkflows: builtinTaskWorkflows,
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
@@ -85,8 +87,7 @@ const createHarness = (
       listTasks: () => Effect.succeed([current]),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "" },
-          plan: { markdown: "" },
+          artifacts: {},
           agentSessions: [createAgentSessionRecord()],
         }),
       setDirectMerge: () =>

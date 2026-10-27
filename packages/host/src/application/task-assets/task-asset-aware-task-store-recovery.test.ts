@@ -53,10 +53,10 @@ const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof createHarn
   const task = await Effect.runPromise(
     harness.store.createTask({
       repoPath: harness.repoPath,
+      status: "open",
       task: {
         title: "Asset owner",
         issueType: "task",
-        aiReviewEnabled: true,
         priority: 2,
         description,
       },
@@ -97,10 +97,10 @@ describe("asset-aware task store", () => {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Asset-free task",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
         },
       }),
@@ -132,10 +132,10 @@ describe("asset-aware task store", () => {
       Effect.flip(
         store.createTask({
           repoPath: harness.repoPath,
+          status: "open",
           task: {
             title: "Asset-free failure",
             issueType: "task",
-            aiReviewEnabled: true,
             priority: 2,
           },
         }),
@@ -175,10 +175,10 @@ describe("asset-aware task store", () => {
     const result = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Asset failure",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![Architecture](odt-asset:${staged.assetId})`,
         },
@@ -212,10 +212,10 @@ describe("asset-aware task store", () => {
     const error = await captureTaskAssetError(
       store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Unsupported asset persistence",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![image](odt-asset:${staged.assetId})`,
         },
@@ -249,10 +249,10 @@ describe("asset-aware task store", () => {
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Rollback",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: originalDescription,
         },

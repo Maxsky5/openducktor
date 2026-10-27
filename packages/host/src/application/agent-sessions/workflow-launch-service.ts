@@ -5,7 +5,6 @@ import type {
   AgentWorkflowSessionStartInput,
   WorkflowLaunchResult,
 } from "@openducktor/contracts";
-import { getSessionLaunchAction } from "@openducktor/core";
 import { Effect } from "effect";
 import type { TaskServiceError } from "../tasks/task-service";
 import { createSessionLaunchService } from "./session-launch-service";
@@ -15,7 +14,7 @@ import { toControlSessionRef } from "./task-workflow-session-storage";
 import {
   prepareWorkflowLaunch,
   resolveLaunchWorkspace,
-  workflowActionId,
+  requireLaunchAction,
 } from "./workflow-launch-preparation";
 import type {
   WorkflowLaunchAttemptRequest,
@@ -170,13 +169,17 @@ export const createWorkflowLaunchService = (
           Effect.map((result) => (result.kind === "accepted" ? result.acceptedMessage : undefined)),
         );
     },
-    initial: (request) => ({
-      workspaceId: request.workspaceId,
-      repoPath: request.repoPath,
-      taskId: request.taskId,
-      role: getSessionLaunchAction(workflowActionId(request)).role,
-      status: "completed",
-    }),
+    initial: (request) =>
+      // A missing task fails in the launch, which reports it in the result.
+      requireLaunchAction(deps.taskWorkflows.forTask({ id: request.taskId }), request).pipe(
+        Effect.map(({ role }) => ({
+          workspaceId: request.workspaceId,
+          repoPath: request.repoPath,
+          taskId: request.taskId,
+          role,
+          status: "completed" as const,
+        })),
+      ),
     key: (request) => JSON.stringify([request.workspaceId, request.taskId]),
     target: (request) =>
       request.policy.kind === "manual" && request.policy.decision.startMode === "reuse"

@@ -1,6 +1,7 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, SettingsSnapshot } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { TasksStateContext } from "../../app-state/app-state-contexts";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";

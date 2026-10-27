@@ -1,19 +1,26 @@
-import type { AgentRole, AgentSessionLiveRef, AgentSessionScope } from "@openducktor/contracts";
+import type { AgentSessionLiveRef, AgentSessionScope } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
+import {
+  BUILTIN_STEPS,
+  roleWorkflowForTask,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { AgentWorkflowStep } from "@/components/features/agents/agent-studio-header.types";
 import type { WorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
 import {
   foldWorkspaceSessionLiveFacts,
   resolveWorkspaceSessionOwnerKey,
 } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
-import { ROLE_OPTIONS } from "@/lib/agent-role-presentation";
+import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
 import {
   agentSessionIdentityKey,
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@openducktor/frontend-core/lib/agent-session-options";
-import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
-import { roleWorkflowForTask } from "@openducktor/frontend-core/lib/task-agent-workflows";
+import {
+  buildRoleWorkflowState,
+  workflowStepRailState,
+} from "@openducktor/frontend-core/lib/agent-workflow-state";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import type {
@@ -118,38 +125,42 @@ const previewWorkflow = (
   const facts = projection
     ? foldWorkspaceSessionLiveFacts(projection.sessions, projection.faults)
     : null;
-  const steps: AgentWorkflowStep[] = ROLE_OPTIONS.map((option) => {
+  const steps: AgentWorkflowStep[] = BUILTIN_STEPS.map((step) => {
     const latest = context.sessions
-      .filter((session) => session.role === option.role)
+      .filter((session) => session.role === step.roleId)
       .toSorted(compareAgentSessionRecency)[0];
     const sessionKey = latest ? agentSessionIdentityKey(latest) : null;
     roleTargets.set(
-      option.role,
+      step.roleId,
       latest
         ? {
             kind: "task_session",
             workspaceId: entry.workspace.workspaceId,
             taskId: context.task.id,
-            role: option.role,
+            role: step.roleId,
             identity: toAgentSessionIdentity(latest),
           }
         : {
             kind: "task",
             workspaceId: entry.workspace.workspaceId,
             taskId: context.task.id,
-            role: option.role,
+            role: step.roleId,
           },
     );
-    return {
-      ...option,
+    const workflowStep = {
+      id: step.id,
+      role: step.roleId,
+      label: step.label,
+      icon: AGENT_ROLE_ICONS[step.roleId],
       state: buildRoleWorkflowState({
         task: context.task,
-        role: option.role,
-        workflow: roleWorkflowForTask(context.task, option.role),
+        role: step.roleId,
+        workflow: roleWorkflowForTask(context.task, step.roleId),
         liveSession: sessionKey ? (facts?.get(sessionKey)?.activityState ?? "none") : "none",
       }),
       sessionValue: sessionKey,
     };
+    return { ...workflowStep, ...workflowStepRailState(workflowStep) };
   });
   return { steps, roleTargets };
 };

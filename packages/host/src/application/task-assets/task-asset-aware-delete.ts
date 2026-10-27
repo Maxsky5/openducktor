@@ -6,7 +6,6 @@ import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-
 import {
   asTaskAssetError,
   taskAssetPartialStateError,
-  taskIdsForDelete,
 } from "./task-asset-aware-task-store-support";
 
 export const createTaskAssetAwareDelete =
@@ -32,36 +31,30 @@ export const createTaskAssetAwareDelete =
     let committed = false;
     const remove = Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
-      const tasks = yield* inner.listTasks({ repoPath: input.repoPath });
-      const targetIds = taskIdsForDelete(tasks, input.taskId, input.deleteSubtasks);
-      for (const taskId of targetIds) {
-        const registered = yield* registry.listAssets({
-          repoPath: input.repoPath,
-          taskId,
-          scope: "description",
-        });
-        affectedAssetIds.push(...registered.map((asset) => asset.id));
-        const quarantineId = yield* filePort.quarantineTaskDirectory({ workspaceId, taskId });
-        if (!quarantineId && registered.length > 0) {
-          return yield* new TaskAssetError({
-            operation: "delete",
-            code: "partial_state",
-            taskId,
-            assetIds: registered.map((asset) => asset.id),
-            failedPhase: "quarantine_task_directory",
-            durableState: "unknown",
-            retryAllowed: false,
-            message: "Registered task assets are missing from durable storage.",
-          });
-        }
-        if (quarantineId) {
-          quarantineIds.push(quarantineId);
-        }
-      }
-      const deleted = yield* inner.deleteTask({
-        ...input,
-        expectedTaskIds: Array.from(targetIds),
+      const { taskId } = input;
+      const registered = yield* registry.listAssets({
+        repoPath: input.repoPath,
+        taskId,
+        scope: "description",
       });
+      affectedAssetIds.push(...registered.map((asset) => asset.id));
+      const quarantineId = yield* filePort.quarantineTaskDirectory({ workspaceId, taskId });
+      if (!quarantineId && registered.length > 0) {
+        return yield* new TaskAssetError({
+          operation: "delete",
+          code: "partial_state",
+          taskId,
+          assetIds: registered.map((asset) => asset.id),
+          failedPhase: "quarantine_task_directory",
+          durableState: "unknown",
+          retryAllowed: false,
+          message: "Registered task assets are missing from durable storage.",
+        });
+      }
+      if (quarantineId) {
+        quarantineIds.push(quarantineId);
+      }
+      const deleted = yield* inner.deleteTask(input);
       committed = true;
       for (const quarantineId of quarantineIds) {
         yield* filePort.purgeQuarantine(quarantineId);

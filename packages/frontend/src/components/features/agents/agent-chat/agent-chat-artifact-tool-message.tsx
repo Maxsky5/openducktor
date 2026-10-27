@@ -3,15 +3,7 @@ import {
   type ArtifactToolHeading,
   readArtifactToolCall,
 } from "@openducktor/frontend-core/sessions/messages/artifact-tool-call";
-import {
-  ArrowRight,
-  File,
-  FileText,
-  ListChecks,
-  LoaderCircle,
-  ShieldCheck,
-  ShieldX,
-} from "lucide-react";
+import { ArrowRight, File, FileText, LoaderCircle, ShieldCheck, ShieldX } from "lucide-react";
 import { useMemo, useState, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatArtifactLinkAction } from "./agent-chat-artifact-link-context";
@@ -19,11 +11,10 @@ import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agen
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 
 const HEADING_ICONS = {
-  spec: <FileText className="size-3.5" />,
-  plan: <ListChecks className="size-3.5" />,
-  qa_approved: <ShieldCheck className="size-3.5" />,
-  qa_rejected: <ShieldX className="size-3.5" />,
-  qa_report: <ShieldCheck className="size-3.5" />,
+  document: <FileText className="size-3.5" />,
+  review_passed: <ShieldCheck className="size-3.5" />,
+  review_failed: <ShieldX className="size-3.5" />,
+  review: <ShieldCheck className="size-3.5" />,
   free: <File className="size-3.5" />,
 } satisfies Record<ArtifactToolHeading, ReactElement>;
 

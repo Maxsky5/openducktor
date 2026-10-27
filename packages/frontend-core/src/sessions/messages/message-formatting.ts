@@ -1,9 +1,13 @@
+import {
+  BUILTIN_ROLE_LABELS,
+  type BuiltinRoleId as AgentRole,
+  builtinRoleId,
+} from "@openducktor/workflows";
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { agentModelInfoParts } from "../../lib/agent-model-presentation";
 import { isFinalAssistantChatMessage } from "../agent-orchestrator/support/messages";
 import { SYSTEM_PROMPT_PREFIX } from "../agent-orchestrator/support/session-prompt";
-import { AGENT_ROLE_LABELS } from "../../types/agent-role-labels";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 import { stripToolPrefix } from "./tool-text-utils";
 
@@ -52,7 +56,7 @@ export const assistantRoleFromMessage = (message: AgentChatMessage): AgentRole |
     return null;
   }
   if (message.meta?.kind === "assistant") {
-    return message.meta.agentRole ?? null;
+    return message.meta.agentRole ? builtinRoleId(message.meta.agentRole) : null;
   }
   return null;
 };
@@ -60,7 +64,7 @@ export const assistantRoleFromMessage = (message: AgentChatMessage): AgentRole |
 export const roleLabel = (role: AgentChatMessage["role"], message: AgentChatMessage): string => {
   if (role === "assistant") {
     const assistantRole = assistantRoleFromMessage(message);
-    return assistantRole ? AGENT_ROLE_LABELS[assistantRole] : "Assistant";
+    return assistantRole ? BUILTIN_ROLE_LABELS[assistantRole] : "Assistant";
   }
   if (role === "thinking") {
     return "Thinking";

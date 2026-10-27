@@ -4,13 +4,15 @@ import { createHostClient } from "./index";
 import type { InvokeFn } from "./invoke-utils";
 
 const metadata = (version: string): TaskMetadataPayload => ({
-  spec: { markdown: `Spec ${version}`, updatedAt: "2026-07-22T00:00:00Z" },
-  plan: { markdown: `Plan ${version}`, updatedAt: "2026-07-22T00:00:00Z" },
-  qaReport: {
-    markdown: `QA ${version}`,
-    verdict: "approved",
-    updatedAt: "2026-07-22T00:00:00Z",
-    revision: 1,
+  artifacts: {
+    spec: { markdown: `Spec ${version}`, updatedAt: "2026-07-22T00:00:00Z" },
+    plan: { markdown: `Plan ${version}`, updatedAt: "2026-07-22T00:00:00Z" },
+    qaReport: {
+      markdown: `QA ${version}`,
+      verdict: "approved",
+      updatedAt: "2026-07-22T00:00:00Z",
+      revision: 1,
+    },
   },
   agentSessions: [],
 });
@@ -26,9 +28,13 @@ describe("host client task reads", () => {
     };
     const client = createHostClient(invoke);
 
-    expect((await client.taskMetadataGet("/repo", "task-1")).spec.markdown).toBe("Spec V1");
+    expect((await client.taskMetadataGet("/repo", "task-1")).artifacts.spec?.markdown).toBe(
+      "Spec V1",
+    );
     version = "V2";
-    expect((await client.taskMetadataGet("/repo", "task-1")).spec.markdown).toBe("Spec V2");
+    expect((await client.taskMetadataGet("/repo", "task-1")).artifacts.spec?.markdown).toBe(
+      "Spec V2",
+    );
     expect(calls).toEqual([
       { repoPath: "/repo", taskId: "task-1" },
       { repoPath: "/repo", taskId: "task-1" },
@@ -36,20 +42,22 @@ describe("host client task reads", () => {
   });
 
   test("parallel document reads send separate requests and keep each response", async () => {
-    const pending: Array<{ command: string; resolve: (value: TaskMetadataArtifact) => void }> = [];
+    const pending: Array<{ args: unknown; resolve: (value: TaskMetadataArtifact) => void }> = [];
     const invoke: InvokeFn = async (command, args, resultSchema) => {
-      expect(args).toEqual({ repoPath: "/repo", taskId: "task-1" });
+      expect(command).toBe("workflow_artifact_get");
       const payload = await new Promise<TaskMetadataArtifact>((resolve) => {
-        pending.push({ command, resolve });
+        pending.push({ args, resolve });
       });
       return resultSchema.parse(payload);
     };
     const client = createHostClient(invoke);
 
-    const spec = client.specGet("/repo", "task-1");
-    const plan = client.planGet("/repo", "task-1");
-    const qa = client.qaGetReport("/repo", "task-1");
-    expect(pending.map((read) => read.command)).toEqual(["spec_get", "plan_get", "qa_get_report"]);
+    const spec = client.workflowArtifactGet("/repo", "task-1", "spec");
+    const plan = client.workflowArtifactGet("/repo", "task-1", "plan");
+    const qa = client.workflowArtifactGet("/repo", "task-1", "qaReport");
+    expect(pending.map((read) => read.args)).toEqual(
+      ["spec", "plan", "qaReport"].map((code) => ({ repoPath: "/repo", taskId: "task-1", code })),
+    );
 
     pending[2]?.resolve({ markdown: "QA V3" });
     pending[1]?.resolve({ markdown: "Plan V2" });
@@ -57,11 +65,6 @@ describe("host client task reads", () => {
     expect((await spec).markdown).toBe("Spec V1");
     expect((await plan).markdown).toBe("Plan V2");
     expect((await qa).markdown).toBe("QA V3");
-    const next = client.taskWorkflowArtifactGet("/repo", "task-1", "spec");
-    expect(pending).toHaveLength(4);
-    expect(pending[3]?.command).toBe("spec_get");
-    pending[3]?.resolve({ markdown: "Spec V4" });
-    expect((await next).markdown).toBe("Spec V4");
   });
 
   test("a pending document read does not replace a session history read", async () => {
@@ -72,7 +75,7 @@ describe("host client task reads", () => {
     const calls: Array<{ command: string; args: unknown }> = [];
     const client = createHostClient(async (command, args, resultSchema) => {
       calls.push({ command, args });
-      if (command === "spec_get") {
+      if (command === "workflow_artifact_get") {
         return resultSchema.parse(await pendingArtifact);
       }
       if (command === "agent_sessions_list") {
@@ -90,12 +93,15 @@ describe("host client task reads", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const document = client.taskWorkflowArtifactGet("/repo", "task-1", "spec");
+    const document = client.workflowArtifactGet("/repo", "task-1", "spec");
     const sessions = client.agentSessionsList("/repo", "task-1");
     const observedCalls = [...calls];
     releaseArtifact?.({ markdown: "Spec V1" });
     expect(observedCalls).toEqual([
-      { command: "spec_get", args: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        command: "workflow_artifact_get",
+        args: { repoPath: "/repo", taskId: "task-1", code: "spec" },
+      },
       { command: "agent_sessions_list", args: { repoPath: "/repo", taskId: "task-1" } },
     ]);
 
@@ -103,13 +109,9 @@ describe("host client task reads", () => {
     expect((await sessions)[0]?.externalSessionId).toBe("session-2");
   });
 
-  test.each([
-    ["spec", "spec_get"],
-    ["plan", "plan_get"],
-    ["qa", "qa_get_report"],
-  ] as const)(
+  test.each(["spec", "plan", "qaReport"])(
     "workflow %s reads preserve content, decode errors, and absence",
-    async (section, route) => {
+    async (code) => {
       let payload: TaskMetadataArtifact = {
         markdown: "Saved content",
         updatedAt: "2026-07-22T00:00:00Z",
@@ -120,7 +122,7 @@ describe("host client task reads", () => {
         return Promise.resolve(resultSchema.parse(payload));
       });
 
-      await expect(client.taskWorkflowArtifactGet("/repo", "task-1", section)).resolves.toEqual({
+      await expect(client.workflowArtifactGet("/repo", "task-1", code)).resolves.toEqual({
         markdown: "Saved content",
         updatedAt: "2026-07-22T00:00:00Z",
         error: null,
@@ -130,17 +132,18 @@ describe("host client task reads", () => {
         updatedAt: "2026-07-22T00:00:00Z",
         error: "Failed to decode saved content",
       };
-      await expect(client.taskWorkflowArtifactGet("/repo", "task-1", section)).resolves.toEqual(
-        payload,
-      );
+      await expect(client.workflowArtifactGet("/repo", "task-1", code)).resolves.toEqual(payload);
       payload = { markdown: "" };
-      await expect(client.taskWorkflowArtifactGet("/repo", "task-1", section)).resolves.toEqual({
+      await expect(client.workflowArtifactGet("/repo", "task-1", code)).resolves.toEqual({
         markdown: "",
         updatedAt: null,
         error: null,
       });
       expect(calls).toEqual(
-        Array(3).fill({ command: route, args: { repoPath: "/repo", taskId: "task-1" } }),
+        Array(3).fill({
+          command: "workflow_artifact_get",
+          args: { repoPath: "/repo", taskId: "task-1", code },
+        }),
       );
     },
   );
@@ -150,6 +153,6 @@ describe("host client task reads", () => {
     const client = createHostClient(() => Promise.reject(failure));
 
     await expect(client.taskMetadataGet("/repo", "task-1")).rejects.toBe(failure);
-    await expect(client.taskWorkflowArtifactGet("/repo", "task-1", "plan")).rejects.toBe(failure);
+    await expect(client.workflowArtifactGet("/repo", "task-1", "plan")).rejects.toBe(failure);
   });
 });

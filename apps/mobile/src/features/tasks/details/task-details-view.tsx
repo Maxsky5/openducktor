@@ -1,4 +1,5 @@
-import type { TaskCard, WorkspaceRecord } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,
   useRequiredContext,
@@ -11,7 +12,6 @@ import {
   buildActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
 } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
-import { showsTaskSubtasks } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { resolveTaskPullRequestActions } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
@@ -161,7 +161,7 @@ function TaskDetailsContent({
     syncPullRequests,
     detectingPullRequestTaskIds,
   } = useRequiredContext(TasksStateContext, "TaskDetailsContent");
-  // The list that holds the task, so its parent and subtasks resolve.
+  // The list that holds the task.
   const tasks = useRepoTask(repoPath, task.id).tasks ?? EMPTY_TASKS;
   const scope = useTaskWorkspaceScope(workspaceId, { selectOnFocus: !embedded });
   const provider = useQuery(repositoryGitProviderContextQueryOptions(repoPath));
@@ -218,16 +218,14 @@ function TaskDetailsContent({
   // so the workflow and the main action stay in view.
   const split = useCompactHeight() && !embedded;
   const sections = useCollapsedDetailsSections();
-  const showsSubtasks = showsTaskSubtasks(task);
   const rows = useMemo(
     () =>
       buildTaskDetailsRows({
         summaryInList: !split,
         descriptionRows: buildDocumentRows([description]),
-        showsSubtasks,
         collapsed: sections.collapsed,
       }),
-    [description, sections.collapsed, showsSubtasks, split],
+    [description, sections.collapsed, split],
   );
 
   const refetchHistory = useCallback(
@@ -339,23 +337,13 @@ function TaskDetailsContent({
     () => ({
       workspaceId,
       task,
-      tasks,
       summary,
       sessionGroups,
       isLoadingHistory,
       historyError: historyErrorText,
       sections,
     }),
-    [
-      historyErrorText,
-      isLoadingHistory,
-      sections,
-      sessionGroups,
-      summary,
-      task,
-      tasks,
-      workspaceId,
-    ],
+    [historyErrorText, isLoadingHistory, sections, sessionGroups, summary, task, workspaceId],
   );
   const renderItem = useCallback<ListRenderItem<DetailsRow>>(
     ({ item }) => <TaskDetailsRowView row={item} context={rowContext} />,

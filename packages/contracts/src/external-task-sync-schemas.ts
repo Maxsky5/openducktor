@@ -57,9 +57,6 @@ export const taskEventStatusChangeSchema = z.strictObject({
 });
 export type TaskEventStatusChange = z.infer<typeof taskEventStatusChangeSchema>;
 
-export const workflowArtifactSectionSchema = z.enum(["spec", "plan", "qa"]);
-export type WorkflowArtifactSection = z.infer<typeof workflowArtifactSectionSchema>;
-
 export const taskArtifactChangeSchema = z
   .strictObject({
     taskId: taskChangeIdSchema,

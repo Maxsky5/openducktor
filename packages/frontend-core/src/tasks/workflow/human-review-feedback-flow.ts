@@ -1,5 +1,5 @@
 import type { ClientFeedback } from "../../platform/client-feedback";
-import type { SessionLaunchActionId } from "../../lib/session-launch-actions";
+import type { BuiltinLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
 import type { SessionStartExistingSessionOption } from "../../sessions/start/session-start-types";
 import { buildReusableSessionOptions } from "../../sessions/start/session-start-reuse-options";
 import { toAgentSessionIdentity } from "../../lib/agent-session-identity";

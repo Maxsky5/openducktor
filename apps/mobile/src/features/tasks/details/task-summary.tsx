@@ -1,5 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
-import { isQaRejectedTask } from "@openducktor/frontend-core/lib/task-qa";
+import { isQaRejectedTask, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { TASK_PULL_REQUEST_ACTION_LABELS } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 import { memo, type ReactElement, type ReactNode } from "react";
@@ -18,7 +17,6 @@ import {
   SourceIssueBadge,
   TaskLabelChip,
 } from "../presentation/task-badges";
-import { TaskChip } from "../presentation/task-chip";
 import { TaskStatusBadge } from "../presentation/task-status-badge";
 import { useCopyTaskId } from "../presentation/use-copy-task-id";
 
@@ -150,9 +148,8 @@ export const TaskSummary = memo(function TaskSummary({
   );
 });
 
-/** The type, priority, pull request, source issue, QA, AI QA, and subtask count badges. */
+/** The type, priority, pull request, source issue, and QA badges. */
 function TaskSummaryBadges({ task }: { task: TaskCard }): ReactElement {
-  const subtasks = task.subtaskIds.length;
   return (
     <View style={[styles.badges, styles.grow]}>
       <IssueTypeBadge issueType={task.issueType} />
@@ -160,13 +157,6 @@ function TaskSummaryBadges({ task }: { task: TaskCard }): ReactElement {
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} /> : null}
       {isQaRejectedTask(task) ? <QaRejectedBadge /> : null}
-      <TaskChip
-        label={task.aiReviewEnabled ? "AI QA required" : "AI QA optional"}
-        paint={task.aiReviewEnabled ? "status-success" : "status-neutral"}
-      />
-      {task.issueType === "epic" ? (
-        <TaskChip label={subtasks === 1 ? "1 subtask" : `${subtasks} subtasks`} paint="violet" />
-      ) : null}
     </View>
   );
 }

@@ -3,7 +3,6 @@ import type {
   AgentSessionRecord,
   DirectMergeRecord,
   PullRequest,
-  QaReportVerdict,
   RepoStoreHealth,
   TaskAgentSessions,
   TaskArtifact,
@@ -12,7 +11,6 @@ import type {
   TaskCreateInput,
   TaskMetadataArtifact,
   TaskMetadataPayload,
-  TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
@@ -26,6 +24,7 @@ import type {
   HostValidationErrorAggregate,
 } from "../effect/host-errors";
 import type { TaskAssetError } from "../effect/task-asset-error";
+import type { TransitionCause } from "@openducktor/workflows";
 
 export type TaskStoreError =
   | TaskAssetError
@@ -40,83 +39,85 @@ export type TaskStoreError =
 export type TaskStoreListTasksInput = {
   repoPath: string;
   doneVisibleDays?: number;
-  /** Read these tasks and their parents for a committed change event. */
+  /** Read these tasks for a committed change event. */
   taskIds?: readonly string[];
 };
 export type PullRequestSyncCandidate = {
   id: string;
   pullRequest: PullRequest;
-  status: TaskStatus;
+  status: string;
 };
 export type TaskReference = Pick<TaskCard, "id" | "title">;
-export type TaskQaOutcomeResult = { task: TaskCard; artifact: TaskMetadataArtifact };
+/** A stored task. The workflow projection adds its actions and role states. */
+export type TaskRecord = Omit<TaskCard, "availableActions" | "agentWorkflows">;
 export type TaskReader = {
   findTask(input: {
     repoPath: string;
     taskId: string;
-  }): Effect.Effect<TaskCard | null, TaskStoreError>;
+  }): Effect.Effect<TaskRecord | null, TaskStoreError>;
   /** Read IDs and titles in listTasks order without loading cards. */
   listTaskReferences(input: { repoPath: string }): Effect.Effect<TaskReference[], TaskStoreError>;
-  getTask(input: { repoPath: string; taskId: string }): Effect.Effect<TaskCard, TaskStoreError>;
+  getTask(input: { repoPath: string; taskId: string }): Effect.Effect<TaskRecord, TaskStoreError>;
   getTaskMetadata(input: {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<TaskMetadataPayload, TaskStoreError>;
   /** Read every task ID in listTasks order, including all closed tasks. */
   listTaskIds(input: { repoPath: string }): Effect.Effect<string[], TaskStoreError>;
-  listTasks(input: TaskStoreListTasksInput): Effect.Effect<TaskCard[], TaskStoreError>;
+  listTasks(input: TaskStoreListTasksInput): Effect.Effect<TaskRecord[], TaskStoreError>;
 };
 export type TaskWriter = {
   createTask(input: {
     repoPath: string;
     task: TaskCreateInput;
+    /** The initial state of the task workflow. */
+    status: string;
     descriptionAssets?: TaskAssetDescriptionMutation;
-  }): Effect.Effect<TaskCard, TaskStoreError>;
-  deleteTask(input: {
-    repoPath: string;
-    taskId: string;
-    deleteSubtasks: boolean;
-    expectedTaskIds?: readonly string[];
-  }): Effect.Effect<boolean, TaskStoreError>;
+  }): Effect.Effect<TaskRecord, TaskStoreError>;
+  deleteTask(input: { repoPath: string; taskId: string }): Effect.Effect<boolean, TaskStoreError>;
   transitionTask(input: {
     repoPath: string;
     taskId: string;
-    status: TaskStatus;
-  }): Effect.Effect<TaskCard, TaskStoreError>;
+    status: string;
+    cause?: TransitionCause;
+  }): Effect.Effect<TaskRecord, TaskStoreError>;
   updateTask(input: {
     repoPath: string;
     taskId: string;
     patch: TaskUpdatePatch;
     descriptionAssets?: TaskAssetDescriptionMutation;
-  }): Effect.Effect<TaskCard, TaskStoreError>;
+  }): Effect.Effect<TaskRecord, TaskStoreError>;
 };
 export type WorkflowArtifactRepository = {
-  clearQaReports(input: {
+  /** Deletes every revision of these workflow artifacts. */
+  clearWorkflowArtifacts(input: {
     repoPath: string;
     taskId: string;
+    codes: readonly string[];
   }): Effect.Effect<boolean, TaskStoreError>;
   clearTaskArtifacts(input: {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<boolean, TaskStoreError>;
-  recordQaOutcome(input: {
-    repoPath: string;
-    taskId: string;
-    status: TaskStatus;
-    markdown: string;
-    verdict: QaReportVerdict;
-  }): Effect.Effect<TaskQaOutcomeResult, TaskStoreError>;
-  setPlanArtifact(input: {
-    repoPath: string;
-    taskId: string;
-    markdown: string;
-  }): Effect.Effect<TaskMetadataArtifact, TaskStoreError>;
-  setSpecArtifact(input: {
-    repoPath: string;
-    taskId: string;
-    markdown: string;
-  }): Effect.Effect<TaskMetadataArtifact, TaskStoreError>;
+  /** Saves a new revision. A status commits in the same transaction. */
+  saveWorkflowArtifact(
+    input: WorkflowArtifactWrite,
+  ): Effect.Effect<WorkflowArtifactSaveResult, TaskStoreError>;
 };
+export type WorkflowArtifactWrite = {
+  repoPath: string;
+  taskId: string;
+  code: string;
+  markdown: string;
+  /** The command that saves the artifact, such as `odt_set_task_artifact`. */
+  sourceTool: string;
+  /** The role of the acting session, or `user`. */
+  updatedBy: string;
+  verdict?: string;
+  status?: string;
+  cause?: TransitionCause;
+};
+export type WorkflowArtifactSaveResult = { task: TaskRecord; artifact: TaskMetadataArtifact };
 export type ArtifactStoreScope = { repoPath: string; taskId: string };
 export type ArtifactStoreReference = ArtifactStoreScope & { artifactId: string };
 export type ArtifactStoreContent = {

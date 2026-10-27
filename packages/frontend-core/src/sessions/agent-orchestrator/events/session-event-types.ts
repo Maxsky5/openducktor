@@ -1,6 +1,5 @@
 import type {
   AgentEvent,
-  AgentRole,
   AgentSessionTodoItem,
   ReplyApprovalInput,
   SessionRef,
@@ -9,6 +8,7 @@ import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import type { AgentSessionIdentity, AgentSessionState } from "../../../types/agent-orchestrator";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export type UpdateSession = (
   identity: AgentSessionIdentity,

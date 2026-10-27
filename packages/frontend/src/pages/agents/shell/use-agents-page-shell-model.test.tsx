@@ -841,7 +841,7 @@ describe("useAgentsPageShellModel", () => {
       orchestrationState.taskExecutionDocumentPanelModel = {
         repoPath: "/repo",
         taskId: "task-1",
-        selection: { kind: "workflow", workflowKind: "plan" },
+        selection: { kind: "workflow", code: "plan" },
         onSelectionChange,
       };
       const harness = createHookHarness();

@@ -70,6 +70,7 @@ describe("toRuntimeSnapshot", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: false,
         hasActiveTurn: true,
       }),
     ).toMatchObject({
@@ -94,6 +95,7 @@ describe("toRuntimeSnapshot", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: false,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -111,6 +113,7 @@ describe("toRuntimeSnapshot", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        directoryMatch: false,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -127,7 +130,12 @@ describe("toRuntimeSnapshot", () => {
           id: "child-thread",
           parentThreadId: "parent-thread",
         },
-        { repoPath: "/repo" },
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          externalSessionId: "child-thread",
+          workingDirectory: "/repo",
+        },
       ),
     ).toMatchObject({
       availability: "runtime",
@@ -137,7 +145,12 @@ describe("toRuntimeSnapshot", () => {
       },
     });
     expect(
-      toRuntimeSnapshotFromThread(createThread("active"), { repoPath: "/repo" }),
+      toRuntimeSnapshotFromThread(createThread("active"), {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        externalSessionId: "thread-1",
+        workingDirectory: "/repo",
+      }),
     ).not.toHaveProperty("parentExternalSessionId");
   });
 
@@ -149,7 +162,12 @@ describe("toRuntimeSnapshot", () => {
           id: "child-thread",
           parentThreadId: "parent-thread",
         },
-        { repoPath: "/repo" },
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          externalSessionId: "child-thread",
+          workingDirectory: "/repo",
+        },
         {
           pendingApprovals: [
             {
@@ -181,6 +199,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory({ thread: createThread("active") }),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -193,16 +212,23 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
   test("uses loaded inventory when no pending input or active turn needs local state", () => {
     expect(
       toRefreshedRuntimeSnapshot({
-        session: createSession(codexThreadStatusSnapshot("idle")),
-        inventory: createInventory({ thread: createThread("active") }),
+        session: {
+          ...createSession(codexThreadStatusSnapshot("idle")),
+          workingDirectory: "/tmp/repo",
+        },
+        inventory: createInventory({
+          thread: { ...createThread("active"), cwd: "/private/tmp/repo" },
+        }),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
       availability: "runtime",
       classification: "running",
       title: "Codex thread",
+      ref: expect.objectContaining({ workingDirectory: "/tmp/repo" }),
     });
   });
 
@@ -219,6 +245,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -245,6 +272,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory,
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: true,
       }),
     ).toMatchObject({ classification: "running", title: "Codex" });
@@ -254,6 +282,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory,
         pendingApprovals: [],
         pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({ classification: "waiting_for_question", title: "Codex" });
@@ -269,6 +298,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -291,6 +321,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({ classification: "running", title: "Codex" });
@@ -303,6 +334,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory({ thread: createThread("idle") }),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: true,
         hasActiveTurn: true,
       }),
     ).toMatchObject({
@@ -318,6 +350,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         session: {
           ...createSession(),
           threadId: "child-thread",
+          workingDirectory: "/tmp/repo",
           summary: {
             ...createSession().summary,
             externalSessionId: "child-thread",
@@ -326,12 +359,14 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory({
           thread: {
             ...createThread("active"),
+            cwd: "/private/tmp/repo",
             id: "child-thread",
             parentThreadId: "parent-thread",
           },
         }),
         pendingApprovals: [],
         pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        directoryMatch: true,
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -339,6 +374,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
       parentExternalSessionId: "parent-thread",
       ref: {
         externalSessionId: "child-thread",
+        workingDirectory: "/tmp/repo",
       },
     });
   });
@@ -350,6 +386,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [],
+        directoryMatch: false,
         hasActiveTurn: false,
       }),
     ).toMatchObject({

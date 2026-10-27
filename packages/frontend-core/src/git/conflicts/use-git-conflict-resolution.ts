@@ -1,4 +1,5 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { useCallback } from "react";
 import type { GitConflict } from "../contracts";
 import { SessionStartWorkflowError } from "../../sessions/start/session-start-orchestration";

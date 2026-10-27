@@ -1,11 +1,15 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX, buildAgentSystemPrompt } from "@openducktor/core";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
+import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
+import {
+  buildAgentSystemPrompt,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 
 export type SessionPromptTask = Pick<
   TaskCard,
-  "id" | "title" | "issueType" | "status" | "aiReviewEnabled" | "description"
+  "id" | "title" | "issueType" | "status" | "description"
 >;
 
 type SessionPromptInput = {
@@ -46,7 +50,6 @@ const buildSessionSystemPrompt = ({ role, task, promptOverrides }: SessionPrompt
       title: task.title,
       issueType: task.issueType,
       status: task.status,
-      qaRequired: task.aiReviewEnabled,
       description: task.description,
     },
     overrides: promptOverrides,

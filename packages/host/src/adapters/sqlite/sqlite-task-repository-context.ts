@@ -1,3 +1,4 @@
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Deferred, Effect } from "effect";
 import path from "node:path";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
@@ -37,7 +38,14 @@ export type SqliteTaskRepositoryContext = {
   repoPath: string;
   session: TaskStoreSession;
   workspaceId: string;
+  /** Finds the workflow of a task row. Terminal states hide tasks and lock their artifacts. */
+  taskWorkflows: TaskWorkflowResolver;
 };
+
+/** A read of many tasks hides a task in a state that ends a task in a host workflow. */
+export const hostTerminalStates = (taskWorkflows: TaskWorkflowResolver): string[] => [
+  ...new Set(taskWorkflows.workflows.flatMap(({ terminalStates }) => terminalStates)),
+];
 
 export type SqliteTaskRepositoryContextProvider = <A>(
   repoPath: string,
@@ -76,6 +84,7 @@ type CreateSqliteTaskRepositoryContextManagerInput = {
   processEnv: NodeJS.ProcessEnv;
   resolveDatabasePath?: ResolveSqliteTaskStorePath;
   resolveWorkspaceIdForRepoPath: ResolveWorkspaceIdForRepoPath;
+  taskWorkflows: TaskWorkflowResolver;
 };
 
 type AdmissionGate = {
@@ -164,6 +173,7 @@ export const createSqliteTaskRepositoryContextManager = ({
   processEnv,
   resolveDatabasePath = resolveDefaultDatabasePath(configDir, processEnv),
   resolveWorkspaceIdForRepoPath,
+  taskWorkflows,
 }: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
   const admission = createAdmissionGate();
   const slots = new Map<string, SqliteTaskStoreConnectionSlot>();
@@ -181,7 +191,7 @@ export const createSqliteTaskRepositoryContextManager = ({
     Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceIdForRepoPath(repoPath);
       const databasePath = yield* resolveDatabasePath({ repoPath, workspaceId });
-      return { databasePath, repoPath, workspaceId };
+      return { databasePath, repoPath, workspaceId, taskWorkflows };
     });
 
   const getSlot = (databasePath: string) => {
@@ -257,10 +267,8 @@ export const createSqliteTaskRepositoryContextManager = ({
       );
   const listOpenTasksForWorktreeOwnership: SqliteTaskRepositoryContextManager["listOpenTasksForWorktreeOwnership"] =
     (scope) =>
-      readForWorktreeOwnership(
-        scope,
-        "taskStore.worktreeOwners",
-        readOpenTasksForWorktreeOwnership,
+      readForWorktreeOwnership(scope, "taskStore.worktreeOwners", (session) =>
+        readOpenTasksForWorktreeOwnership(session, hostTerminalStates(taskWorkflows)),
       );
 
   const closeWorkspace = (

@@ -1,13 +1,14 @@
+import {
+  BUILTIN_ROLE_LABELS,
+  getSessionLaunchAction,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { GitBranch } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback } from "react";
-import { AGENT_ROLE_LABELS } from "../../types/agent-role-labels";
 import type { RepoSettingsInput } from "../../types/session-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
-import {
-  getSessionLaunchAction,
-  type SessionLaunchActionId,
-} from "../../lib/session-launch-actions";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
@@ -22,7 +23,7 @@ const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
 };
 
 export const buildSessionStartModalTitle = (role: AgentRole): string => {
-  const roleLabel = AGENT_ROLE_LABELS[role] ?? role.toUpperCase();
+  const roleLabel = BUILTIN_ROLE_LABELS[role] ?? role.toUpperCase();
   return `Start ${roleLabel} Session`;
 };
 
@@ -33,7 +34,7 @@ export const buildSessionStartModalDescription = ({
 }): string => {
   const launchAction = getSessionLaunchAction(launchActionId);
   const actionLabel = launchAction.label;
-  const allowedStartModes = orderStartModesForDisplay(launchAction.allowedStartModes);
+  const allowedStartModes = orderStartModesForDisplay(launchAction.startModes);
   if (allowedStartModes.length > 1) {
     const allowedModeLabels = allowedStartModes.map((mode) => {
       if (mode === "fresh") {

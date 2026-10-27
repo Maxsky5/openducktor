@@ -7,14 +7,14 @@ import {
   groupTaskArtifacts,
 } from "./artifact-presentation";
 
-const workflow = (workflowKind: WorkflowTaskArtifact["workflowKind"]): WorkflowTaskArtifact => ({
-  artifactId: `workflow:${workflowKind}`,
+const workflow = (code: string): WorkflowTaskArtifact => ({
+  artifactId: `workflow:task-1:${code}`,
   taskId: "task-1",
-  name: workflowKind,
+  name: code,
   revision: 1,
   updatedAt: null,
   classification: "workflow",
-  workflowKind,
+  code,
   mediaType: "text/markdown",
 });
 
@@ -41,7 +41,7 @@ describe("artifact presentation", () => {
       workflow("plan"),
     ]);
 
-    expect(groups.workflow.map((item) => item.workflowKind)).toEqual(["spec", "plan", "qaReport"]);
+    expect(groups.workflow.map((item) => item.code)).toEqual(["spec", "plan", "qaReport"]);
     expect(groups.files.map((item) => item.name)).toEqual(["Diagram", "Notes"]);
   });
 

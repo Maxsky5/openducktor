@@ -4,6 +4,7 @@ import {
   createAdapterWithTransport,
   RecordingTransport,
   codexThreadFixture,
+  codexThreadStartResultFixture,
   defaultCodexEffectivePolicy,
   expectedThreadConfig,
 } from "./codex-app-server-adapter.test-harness";
@@ -189,37 +190,70 @@ describe("external Codex sessions", () => {
     },
   );
 
-  test("opens the exact session and registers it only after import", async () => {
-    const transport = new RecordingTransport("runtime-live", false);
-    const adapter = createAdapterWithTransport(transport);
-    const prepared = await adapter.openExistingSession({
-      ...ref,
-      sessionScope: { kind: "repository" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-    });
-    expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
-    expect(transport.calls.map((call) => call.method)).toEqual(["thread/read", "thread/resume"]);
-    expect(transport.calls[0]?.params).toEqual({ threadId: "native", includeTurns: false });
-    expect(transport.calls[1]?.params).toEqual({
-      config: expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES),
-      threadId: "native",
-      excludeTurns: true,
-    });
-    await prepared.attach();
-    expect(adapter.listLiveSessionSnapshots("runtime-live")).toHaveLength(1);
-    await adapter.sendUserMessage({
-      ...ref,
-      sessionScope: { kind: "repository" },
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      parts: [{ kind: "text", text: "Hello" }],
-      delivery: "new_turn",
-    });
-    const turn = transport.calls.find((call) => call.method === "turn/start");
-    expect(turn?.params).not.toHaveProperty("sandboxPolicy");
-    expect(turn?.params).not.toHaveProperty("approvalPolicy");
-    expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
-    await adapter.releaseRuntime("runtime-live");
-  });
+  test.each(["/repo", "/private/repo"])(
+    "opens the selected session in %s and registers it only after import",
+    async (cwd) => {
+      const transport = new RecordingTransport("runtime-live", false);
+      const adapter = createAdapterWithTransport(
+        {
+          request: async (request) => {
+            if (request.method === "thread/read") {
+              transport.calls.push(request);
+              return {
+                thread: codexThreadFixture({
+                  id: request.params.threadId,
+                  cwd,
+                  status: { type: "idle" },
+                }),
+              };
+            }
+            if (request.method === "thread/resume") {
+              transport.calls.push(request);
+              const result = codexThreadStartResultFixture(
+                request.params.threadId,
+                "thread/resume",
+              );
+              return { ...result, cwd, thread: { ...result.thread, cwd } };
+            }
+            return transport.request(request);
+          },
+        },
+        {
+          directoriesMatch: async (left, right) =>
+            left === right || (left === "/private/repo" && right === "/repo"),
+        },
+      );
+      const prepared = await adapter.openExistingSession({
+        ...ref,
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      });
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+      expect(transport.calls.map((call) => call.method)).toEqual(["thread/read", "thread/resume"]);
+      expect(transport.calls[0]?.params).toEqual({ threadId: "native", includeTurns: false });
+      expect(transport.calls[1]?.params).toEqual({
+        config: expectedThreadConfig("/repo", ODT_MCP_TOOL_NAMES),
+        threadId: "native",
+        excludeTurns: true,
+      });
+      await prepared.attach();
+      expect(
+        adapter.listLiveSessionSnapshots("runtime-live").map((session) => session.ref),
+      ).toEqual([ref]);
+      await adapter.sendUserMessage({
+        ...ref,
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        parts: [{ kind: "text", text: "Hello" }],
+        delivery: "new_turn",
+      });
+      const turn = transport.calls.find((call) => call.method === "turn/start");
+      expect(turn?.params).not.toHaveProperty("sandboxPolicy");
+      expect(turn?.params).not.toHaveProperty("approvalPolicy");
+      expect(transport.calls.some((call) => call.method === "thread/name/set")).toBe(false);
+      await adapter.releaseRuntime("runtime-live");
+    },
+  );
 
   for (const cold of [true, false]) {
     test(`context loading preserves native settings for a ${cold ? "cold" : "live"} imported session`, async () => {

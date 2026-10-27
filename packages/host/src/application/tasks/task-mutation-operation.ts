@@ -9,6 +9,7 @@ export type TaskMutationOperation =
   | "agent-session-create"
   | "agent-session-delete"
   | "agent-session-update-model"
+  | "apply-task-event"
   | "build-blocked"
   | "build-completed"
   | "build-resumed"
@@ -23,15 +24,10 @@ export type TaskMutationOperation =
   | "human-request-changes"
   | "link-merged-pull-request"
   | "link-pull-request"
-  | "qa-approved"
-  | "qa-rejected"
   | "repo-pull-request-sync"
   | "reset-implementation"
   | "reset-task"
-  | "save-plan-artifact"
-  | "save-spec-artifact"
-  | "set-plan"
-  | "set-spec"
+  | "save-workflow-artifact"
   | "transition-task"
   | "unlink-pull-request"
   | "update-task"
@@ -43,6 +39,8 @@ export type CommittedTaskStatusChange = {
   repoPath: string;
   operation: TaskMutationOperation;
   statusChange: TaskEventStatusChange;
+  /** The Autopilot signal of the workflow outcome behind the change. */
+  signal?: string;
 };
 
 /**

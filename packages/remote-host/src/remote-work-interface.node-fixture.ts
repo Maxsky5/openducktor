@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Effect } from "effect";
-import { REMOTE_BASELINE_CAPABILITIES, REMOTE_CONNECTION_HEADER } from "@openducktor/contracts";
+import {
+  REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_CONNECTION_HEADER,
+  REMOTE_PROTOCOL_VERSION,
+} from "@openducktor/contracts";
 import { createEffectHostCommandRouter } from "../../host/src/interface/router/host-command-router";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
@@ -116,7 +120,7 @@ for (const shell of ["electron", "web"] as const) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             appVersion: "mobile-test",
-            supportedProtocolVersions: [2],
+            supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
             requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
             optionalCapabilities: [],
           }),

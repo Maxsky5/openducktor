@@ -1,4 +1,8 @@
-import type { AgentRole } from "@openducktor/core";
+import {
+  BUILTIN_ROLE_IDS,
+  BUILTIN_ROLE_LABELS,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import { MessageCirclePlus, Zap } from "lucide-react";
 import type { ReactElement } from "react";
 import {
@@ -50,15 +54,6 @@ type QuickActionMenuGroup = {
   role: AgentRole;
   entries: QuickActionMenuEntry[];
 };
-
-const QUICK_ACTION_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
-
-const QUICK_ACTION_ROLE_LABELS = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Builder",
-  qa: "QA",
-} satisfies Record<AgentRole, string>;
 
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
@@ -116,7 +111,7 @@ const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActio
     entriesByRole[quickActionEntryRole(entry)].push(entry);
   }
 
-  for (const role of QUICK_ACTION_ROLE_ORDER) {
+  for (const role of BUILTIN_ROLE_IDS) {
     const roleEntries = entriesByRole[role];
     if (roleEntries.length > 0) {
       groups.push({ role, entries: roleEntries });
@@ -266,7 +261,7 @@ export function QuickActionsMenu({
             <CommandList className="max-h-[32rem]">
               <CommandEmpty>No quick actions available.</CommandEmpty>
               {groupedMenuEntries.map((group) => (
-                <CommandGroup key={group.role} heading={QUICK_ACTION_ROLE_LABELS[group.role]}>
+                <CommandGroup key={group.role} heading={BUILTIN_ROLE_LABELS[group.role]}>
                   {group.entries.map((entry) => (
                     <QuickActionCommandItem
                       key={quickActionEntryId(entry)}

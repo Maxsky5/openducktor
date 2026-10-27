@@ -1,4 +1,5 @@
-import type { IssueType, PullRequest, SourceIssueReference } from "@openducktor/contracts";
+import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
+import type { PullRequest, SourceIssueReference } from "@openducktor/contracts";
 import {
   ISSUE_TYPE_LABELS,
   PRIORITY_LABELS,
@@ -15,11 +16,10 @@ import type { Tone } from "@/ui/tones";
 /** The label, color tone, and icon of a badge. The label always shows with the color. */
 export type BadgePaint = { label: string; tone: Tone; icon: IconName };
 
-/** The desktop issue type badges: Feature sky, Bug rose, Epic violet, and Task neutral. */
+/** The desktop issue type badges: Feature sky, Bug rose, and Task neutral. */
 const ISSUE_TYPE_PAINT = {
   feature: { label: ISSUE_TYPE_LABELS.feature, tone: "info", icon: "sparkles" },
   bug: { label: ISSUE_TYPE_LABELS.bug, tone: "destructive", icon: "bug" },
-  epic: { label: ISSUE_TYPE_LABELS.epic, tone: "pending", icon: "layers" },
   task: { label: ISSUE_TYPE_LABELS.task, tone: "neutral", icon: "square-check" },
 } as const satisfies Record<IssueType, BadgePaint>;
 

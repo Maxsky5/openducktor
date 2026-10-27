@@ -16,6 +16,7 @@ import {
   nativeClient,
   eventChannel,
   type NativeRequest,
+  testWorkflowRolePolicy,
 } from "./opencode-v2.test-support";
 
 export const prepareFixture = (
@@ -66,6 +67,7 @@ export const prepareFixture = (
       return client;
     },
     resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveMcpServerConfig,
     readDirectory: async (_directory, read) => read(),
   });

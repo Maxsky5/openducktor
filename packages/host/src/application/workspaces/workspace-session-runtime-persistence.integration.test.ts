@@ -1,3 +1,5 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { commandPreparationFixture } from "../agent-sessions/test-support/command-preparation-fixture";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -118,6 +120,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
     const harness = createRuntimeHarness();
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: live,
         prepareRuntime: harness.prepareRuntime,
       })(
@@ -140,6 +143,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       }),
     );
     const commands = createAgentSessionCommandService({
+      taskWorkflows: builtinTaskWorkflows,
       turnPreparation: commandPreparationFixture,
       readSessionRootRefs: () =>
         Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
@@ -153,7 +157,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
         agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
         agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
         agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
-        transitionTask: () => Effect.die(new Error("unexpected task transition")),
+        applyStartEvent: () => Effect.die(new Error("unexpected task transition")),
       },
       taskLifecycle: { acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")) },
       taskSessionStart: {

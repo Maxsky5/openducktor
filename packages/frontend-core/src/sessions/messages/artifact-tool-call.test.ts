@@ -30,7 +30,7 @@ describe("readArtifactToolCall", () => {
       readArtifactToolCall(
         call({ status: "running", input: { code: "qaReport", verdict: "approved" } }),
       ),
-    ).toEqual({ heading: "qa_approved", title: "Approve QA", saved: null });
+    ).toEqual({ heading: "review_passed", title: "Approve QA", code: "qaReport", saved: null });
   });
 
   test("reads a completed call from its saved artifact", () => {
@@ -40,8 +40,9 @@ describe("readArtifactToolCall", () => {
     });
 
     expect(readArtifactToolCall(meta)).toEqual({
-      heading: "qa_rejected",
+      heading: "review_failed",
       title: "Reject QA",
+      code: "qaReport",
       saved: qaReport,
     });
   });
@@ -53,6 +54,7 @@ describe("readArtifactToolCall", () => {
     expect(readArtifactToolCall(call({ output: "not json" }))).toEqual({
       heading: "free",
       title: "Set Artifact",
+      code: null,
       saved: null,
     });
   });

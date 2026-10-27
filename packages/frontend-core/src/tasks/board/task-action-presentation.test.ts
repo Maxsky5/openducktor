@@ -1,79 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import {
   taskActionIsDestructive,
   taskActionIsWarning,
-  taskActionLabel,
   taskActionTone,
   taskSessionStatusLabel,
 } from "./task-action-presentation";
-
-describe("taskActionLabel", () => {
-  test("uses builder naming consistently for standard workflow actions", () => {
-    const task = createTaskCardFixture({
-      status: "ready_for_dev",
-      artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
-      },
-    });
-
-    expect(taskActionLabel("build_start", task)).toBe("Start Builder");
-    expect(taskActionLabel("build_start", task, { surface: "agent_studio" })).toBe(
-      "Start Implementation",
-    );
-    expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
-    expect(taskActionLabel("open_builder", task)).toBe("Open Builder");
-    expect(taskActionLabel("open_spec", task)).toBe("Open Spec");
-    expect(taskActionLabel("open_planner", task)).toBe("Open Planner");
-    expect(taskActionLabel("human_approve", task)).toBe("Approve Task");
-    expect(taskActionLabel("human_request_changes", task)).toBe("Request Changes");
-    expect(taskActionLabel("reset_implementation", task)).toBe("Reset Implementation");
-    expect(taskActionLabel("reset_task", task)).toBe("Reset Task");
-    expect(taskActionLabel("close_task", task)).toBe("Close Task");
-  });
-
-  test("uses open wording for spec-ready follow-up actions", () => {
-    const task = createTaskCardFixture({
-      status: "spec_ready",
-      artifactSummary: {
-        spec: { has: true, updatedAt: "2026-03-09T10:00:00.000Z" },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
-      },
-    });
-
-    expect(taskActionLabel("set_spec", task)).toBe("Open Spec");
-  });
-
-  test("uses qa rework label for rejected tasks", () => {
-    const task = createTaskCardFixture({
-      status: "in_progress",
-      artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "rejected" },
-      },
-    });
-
-    expect(taskActionLabel("build_start", task)).toBe("Address QA Feedbacks");
-    expect(taskActionLabel("open_qa", task)).toBe("Open QA");
-  });
-
-  test("uses request wording for qa action during human review", () => {
-    const task = createTaskCardFixture({
-      status: "human_review",
-      artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "approved" },
-      },
-    });
-
-    expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
-  });
-});
 
 describe("taskActionTone", () => {
   test("keeps request changes as a non-destructive workflow action", () => {

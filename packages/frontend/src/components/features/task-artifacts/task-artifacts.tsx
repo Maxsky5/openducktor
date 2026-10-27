@@ -2,10 +2,13 @@ import type {
   TaskArtifact,
   TaskArtifactCollection,
   TaskAssetRenderContext,
-  TaskCard,
-  WorkflowTaskArtifact,
 } from "@openducktor/contracts";
 import { workflowArtifactId } from "@openducktor/contracts";
+import {
+  workflowArtifactLabel,
+  workflowArtifactVerdict,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import {
   taskArtifactContentQueryOptions,
   taskArtifactsQueryOptions,
@@ -42,7 +45,6 @@ import {
   artifactFormatLabel,
   formatFileSize,
   groupTaskArtifacts,
-  WORKFLOW_ARTIFACT_NAMES,
 } from "@openducktor/frontend-core/tasks/artifacts/artifact-presentation";
 import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { cn } from "@/lib/utils";
@@ -59,7 +61,7 @@ export type TaskArtifactsProps = {
 
 export type ArtifactSelection =
   | { kind: "collection" }
-  | { kind: "workflow"; workflowKind: "spec" | "plan" | "qaReport" }
+  | { kind: "workflow"; code: string }
   | { kind: "artifact"; artifactId: string };
 
 export type TaskArtifactsViewProps = TaskArtifactsProps & {
@@ -191,7 +193,7 @@ function ArtifactBrowser({
           title={state.selected?.name ?? selectionTitle(selection)}
           {...(view.workspaceId ? { workspaceId: view.workspaceId } : {})}
           artifact={state.selected}
-          workflowKind={selection.kind === "workflow" ? selection.workflowKind : undefined}
+          workflowCode={selection.kind === "workflow" ? selection.code : undefined}
           canManage={state.canManage}
           onBack={state.back}
           onAction={state.openAction}
@@ -314,7 +316,7 @@ function ArtifactSection(props: TaskArtifactsProps): ReactElement {
 }
 
 const hasWorkflowArtifact = (summary: TaskArtifactsProps["artifactSummary"]): boolean =>
-  summary !== undefined && (summary.spec.has || summary.plan.has || summary.qaReport.has);
+  summary !== undefined && Object.values(summary).some((state) => state.present);
 
 function AddArtifactButton({
   size,
@@ -425,7 +427,7 @@ function UnavailableSelection({ selection }: { selection: ArtifactSelection }): 
   return (
     <p role="status" className="py-3 text-sm text-muted-foreground">
       {selection.kind === "workflow"
-        ? `${WORKFLOW_ARTIFACT_NAMES[selection.workflowKind]} has not been created yet.`
+        ? `${workflowArtifactLabel(selection.code)} has not been created yet.`
         : "This artifact is no longer available. Return to All artifacts to select another item."}
     </p>
   );
@@ -494,18 +496,16 @@ type ArtifactContentProps = Omit<TaskArtifactsProps, "artifactSummary"> & {
   artifactId: string;
   title: string;
   artifact: TaskArtifact | undefined;
-  workflowKind: WorkflowTaskArtifact["workflowKind"] | undefined;
+  workflowCode: string | undefined;
   canManage: boolean;
   onBack: () => void;
   onAction: (action: ArtifactAction, trigger: HTMLElement) => void;
 };
 
 const ArtifactContent = memo(function ArtifactContent(props: ArtifactContentProps): ReactElement {
-  const kind =
-    props.artifact?.classification === "workflow"
-      ? props.artifact.workflowKind
-      : props.workflowKind;
-  if (kind) return <WorkflowArtifactContent {...props} workflowKind={kind} />;
+  const code =
+    props.artifact?.classification === "workflow" ? props.artifact.code : props.workflowCode;
+  if (code) return <WorkflowArtifactContent {...props} workflowCode={code} />;
   return <FreeArtifactContent {...props} />;
 });
 
@@ -559,18 +559,11 @@ function WorkflowArtifactContent({
   workspaceId,
   title,
   artifact,
-  workflowKind,
+  workflowCode,
   onBack,
-}: ArtifactContentProps & { workflowKind: WorkflowTaskArtifact["workflowKind"] }): ReactElement {
+}: ArtifactContentProps & { workflowCode: string }): ReactElement {
   const queryClient = useQueryClient();
-  const content = useQuery(
-    taskDocumentQueryOptions(
-      queryClient,
-      repoPath,
-      taskId,
-      workflowKind === "qaReport" ? "qa" : workflowKind,
-    ),
-  );
+  const content = useQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, workflowCode));
   const error = content.error?.message ?? content.data?.error ?? null;
   const data = error ? undefined : content.data;
   const isAbsent = data?.markdown === "" && data.updatedAt === null;
@@ -583,18 +576,18 @@ function WorkflowArtifactContent({
   const previewArtifact = useMemo(
     () => ({
       taskId,
-      artifactId: workflowArtifactId(taskId, workflowKind),
+      artifactId: workflowArtifactId(taskId, workflowCode),
       name,
       mediaType: "text/markdown",
     }),
-    [taskId, workflowKind, name],
+    [taskId, workflowCode, name],
   );
   let preview: ReactElement | null = null;
   if (data) {
     if (isAbsent) {
       preview = (
         <p role="status" className="p-4 text-sm text-muted-foreground">
-          {WORKFLOW_ARTIFACT_NAMES[workflowKind]} has not been created yet.
+          {workflowArtifactLabel(workflowCode)} has not been created yet.
         </p>
       );
     } else {
@@ -617,7 +610,7 @@ function WorkflowArtifactContent({
       controls={
         <WorkflowArtifactControls
           taskId={taskId}
-          workflowKind={workflowKind}
+          workflowCode={workflowCode}
           name={name}
           markdown={isAbsent ? undefined : data?.markdown}
           taskAssetContext={taskAssetContext}
@@ -722,10 +715,10 @@ function resolveSelection(
 ) {
   const artifact = findArtifact(artifacts, selection);
   if (selection.kind === "workflow" && summary) {
-    const exists = summary[selection.workflowKind].has;
+    const exists = summary[selection.code]?.present === true;
     return {
       artifact,
-      artifactId: exists ? workflowArtifactId(taskId, selection.workflowKind) : undefined,
+      artifactId: exists ? workflowArtifactId(taskId, selection.code) : undefined,
       isAbsentWorkflow: !exists,
     };
   }
@@ -743,8 +736,7 @@ function findArtifact(
       return artifacts?.find((item) => item.artifactId === selection.artifactId);
     case "workflow":
       return artifacts?.find(
-        (item) =>
-          item.classification === "workflow" && item.workflowKind === selection.workflowKind,
+        (item) => item.classification === "workflow" && item.code === selection.code,
       );
   }
 }
@@ -756,7 +748,7 @@ function selectionTitle(selection: ArtifactSelection): string {
     case "artifact":
       return "Artifact unavailable";
     case "workflow":
-      return WORKFLOW_ARTIFACT_NAMES[selection.workflowKind];
+      return workflowArtifactLabel(selection.code);
   }
 }
 
@@ -774,12 +766,6 @@ function BackButton({ onClick }: { onClick: () => void }): ReactElement {
   );
 }
 
-const verdictVariants = {
-  approved: "success",
-  rejected: "danger",
-  not_reviewed: "secondary",
-} as const;
-
 function ArtifactMetadata({ artifact }: { artifact: TaskArtifact }): ReactElement {
   const now = useMinuteClock();
   return (
@@ -792,11 +778,16 @@ function ArtifactMetadata({ artifact }: { artifact: TaskArtifact }): ReactElemen
         </time>
       ) : null}
       {artifact.classification === "workflow" && artifact.verdict ? (
-        <Badge variant={verdictVariants[artifact.verdict]}>
-          {artifact.verdict.replaceAll("_", " ")}
-        </Badge>
+        <VerdictBadge code={artifact.code} verdict={artifact.verdict} />
       ) : null}
     </span>
+  );
+}
+
+function VerdictBadge({ code, verdict }: { code: string; verdict: string }): ReactElement {
+  const declared = workflowArtifactVerdict(code, verdict);
+  return (
+    <Badge variant={declared?.passes ? "success" : "danger"}>{declared?.label ?? verdict}</Badge>
   );
 }
 

@@ -1,5 +1,5 @@
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
-import type { AgentRole } from "@openducktor/core";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { resolveTaskActionDestination, taskActionSendsCommand } from "./task-action-routing";
 

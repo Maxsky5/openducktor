@@ -134,7 +134,6 @@ describe("KanbanBoardFilterBar menus", () => {
       "Task",
       "Feature",
       "Bug",
-      "Epic",
     ]);
 
     await act(async () => {

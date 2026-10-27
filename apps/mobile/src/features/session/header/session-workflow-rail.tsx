@@ -1,7 +1,9 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  type BuiltinTaskCard as TaskCard,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
-import type { AgentWorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
+import type { WorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
 import { useRouter } from "expo-router";
 import { Fragment, memo, type ReactElement, useMemo } from "react";
 import { View } from "react-native";
@@ -142,7 +144,7 @@ function WorkflowRailSteps({
 }
 
 /** The desktop `WORKFLOW_SELECTION_CLASSES` ring colors. A selected blocked step rings in warning. */
-const ringColor = (theme: AppTheme, tone: AgentWorkflowStepTone): string => {
+const ringColor = (theme: AppTheme, tone: WorkflowStepTone): string => {
   if (tone === "available" || tone === "optional")
     return withAlpha(theme.desktop.mutedForeground, 0.5);
   if (tone === "blocked") return theme.desktop.warningRing;

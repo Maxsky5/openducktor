@@ -7,8 +7,9 @@ import type {
   RepoConfig,
   SourceIssueReference,
   SourceIssue,
-  TaskCard,
 } from "@openducktor/contracts";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { requireWorkflowIssueType } from "../tasks/support/task-workflow-events";
 import { Effect } from "effect";
 import { z } from "zod";
 import {
@@ -22,6 +23,7 @@ import type { IssueReaderPort } from "../../ports/git-provider-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "./git-provider-resolver";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
+import type { TaskRecord } from "../../ports/task-repository-ports";
 
 const cursorSchema = z
   .object({
@@ -120,17 +122,19 @@ const githubImageRepoConfig = (
 export const createIssueImportService = ({
   resolver,
   store,
+  taskWorkflows,
   workspaceSettingsService,
   publishTaskCreated,
   runMutation,
 }: {
   resolver: GitProviderResolver;
   store: IssueImportStorePort;
+  taskWorkflows: TaskWorkflowResolver;
   runMutation: TaskSyncService["runMutation"];
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
   publishTaskCreated: (
     repoPath: string,
-    task: TaskCard,
+    task: TaskRecord,
   ) => Effect.Effect<void, HostOperationErrorAggregate>;
 }) => {
   const resolveReader = (repoPath: string) =>
@@ -373,16 +377,18 @@ export const createIssueImportService = ({
               return yield* runMutation(
                 input.repoPath,
                 Effect.gen(function* () {
+                  const workflow = taskWorkflows.forNewTask(input.repoPath);
+                  yield* requireWorkflowIssueType(workflow, review.issueType);
                   const created = yield* store.createImportedTask({
                     repoPath: input.repoPath,
                     sourceIssue: source,
+                    status: workflow.initialState,
                     task: {
                       title: source.title,
                       description: source.description,
                       issueType: review.issueType,
                       priority: review.priority,
                       labels: review.labels,
-                      aiReviewEnabled: true,
                     },
                   });
                   if (created.outcome === "duplicate") {

@@ -1,6 +1,6 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
   requireTaskCloseDependencies,
@@ -14,21 +14,21 @@ import {
 import {
   collectRelatedTaskBranches,
   managedWorktreeBaseForRepoConfig,
-  replaceTaskInList,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,
-  workflowCleanupSessionRoles,
+  workflowRoleIds,
 } from "../support/task-cleanup-support";
 import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
 import { completeTaskClosure } from "../support/task-closure";
-import { validateManualCloseTaskEffect } from "../support/task-validation-effects";
+import { requireEffect } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
 export const createTaskCloseUseCase = ({
   gitPort,
   taskStore,
+  taskWorkflows,
   taskActivityGuard,
   settingsConfig,
   terminalService,
@@ -40,22 +40,12 @@ export const createTaskCloseUseCase = ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
-        );
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const workflow = taskWorkflows.forTask(current);
+      const decision = yield* requireEffect(workflow, "task.close", current);
+      if (decision.kind === "unchanged") {
+        return enrichTask(workflow, current);
       }
-      if (current.status === "closed") {
-        return enrichTask(current, currentTasks);
-      }
-
-      yield* validateManualCloseTaskEffect(current, currentTasks);
 
       const dependencies = yield* requireDependencies(() =>
         requireTaskCloseDependencies(gitPort, settingsConfig, workspaceSettingsService),
@@ -74,7 +64,7 @@ export const createTaskCloseUseCase = ({
         const currentSessions = currentMetadata.agentSessions;
         const hasWorkflowSessions = taskHasSessionsForRoles(
           currentSessions,
-          workflowCleanupSessionRoles,
+          workflowRoleIds(workflow),
         );
         if (hasWorkflowSessions && !taskActivityGuard) {
           return yield* Effect.fail(
@@ -102,6 +92,7 @@ export const createTaskCloseUseCase = ({
         const worktreePaths = yield* collectCloseWorktreePaths(
           closeWorktreeDependencies,
           effectiveRepoPath,
+          workflow,
           current,
           currentSessions,
         );
@@ -120,7 +111,7 @@ export const createTaskCloseUseCase = ({
             taskSessions: [
               {
                 taskId,
-                sessions: selectWorkflowCleanupSessionRecords(currentSessions),
+                sessions: selectWorkflowCleanupSessionRecords(workflow, currentSessions),
               },
             ],
           });
@@ -150,8 +141,9 @@ export const createTaskCloseUseCase = ({
           taskId,
           taskSessionLifecycleCoordinator,
           taskStore,
+          decision,
         });
-        return enrichTask(updated, replaceTaskInList(currentTasks, updated));
+        return enrichTask(workflow, updated);
       }).pipe(
         Effect.catch((error) =>
           Effect.fail(

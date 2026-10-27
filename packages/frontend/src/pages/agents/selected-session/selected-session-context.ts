@@ -1,9 +1,7 @@
 import type {
   RepositoryGitProviderContext,
   RuntimeApprovalReplyOutcome,
-  TaskCard,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import {
   getAgentSessionWaitingInputPlaceholder,
   hasAgentSessionPendingApprovals,
@@ -19,6 +17,10 @@ import {
   type WorkflowModelContext,
 } from "../use-agent-studio-page-model-builders";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
+import type {
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze(new Array<AgentApprovalRequest>());
 const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze(new Array<AgentQuestionRequest>());

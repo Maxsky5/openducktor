@@ -53,6 +53,8 @@ A new runtime kind plugs in through one `RuntimeDriver` from `@openducktor/runti
 
 Each session operation sends the directory of its session to the shared runtime. Do not depend on the directory of one workspace.
 
+Codex can report the real path of a session directory, such as `/private/tmp` for a session saved under `/tmp`. When the paths differ, the host compares their real paths through the filesystem port. A path that does not resolve fails with its cause, and a different directory fails. Session ID and ownership checks stay exact, and live session references keep the saved directory.
+
 ### Workspace binding of OpenDucktor tools
 
 A shared process must not give every workspace the same workspace ID. Bind the managed OpenDucktor MCP server to the workspace of each session, and keep `ODT_FORBID_WORKSPACE_ID_INPUT=true`. A failed binding fails the operation that needs it, with its cause.
@@ -358,7 +360,7 @@ Saved tool choices apply to fresh and forked sessions through a fixed native exc
 
 ### Workflow prompts
 
-The built-in prompt templates live in [agent-system-prompts.ts](../packages/core/src/services/agent-system-prompts.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
+The built-in prompt templates live in [prompt-templates.ts](../packages/workflows/src/builtin/prompt-templates.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
 
 For each changed template, set `builtinVersion` to the target branch's version plus one. Increment it only once per PR, even when later commits revise the prompt.
 
@@ -366,7 +368,7 @@ Existing custom overrides remain active. Users must review, update, or disable o
 
 ### Permissions and pending input
 
-Shared role policy lists canonical `odt_*` tools. The descriptor maps them to native aliases and lists native tools blocked for read-only roles.
+Each role of the task workflow lists its canonical `odt_*` tools. Adapters read the tools and workspace access of a session role through the `WorkflowRolePolicyResolver`, with the task and role of the session scope. The runtime descriptor in `packages/contracts` maps the canonical tools to native aliases and lists native tools blocked for read-only roles. Adapters classify native tools and apply native permissions.
 
 Inherit native permissions and sandbox settings. Add session hooks through SDK options. Let unclassified tools use the native approval path. Shared code does not edit user settings or parse shell commands.
 

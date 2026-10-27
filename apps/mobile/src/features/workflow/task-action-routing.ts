@@ -1,12 +1,12 @@
-import type { AgentRole } from "@openducktor/core";
 import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
-import {
-  SESSION_VIEW_ACTIONS,
-  type TaskWorkflowAction,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
+import {
+  BUILTIN_ROLE_LABELS,
+  SESSION_VIEW_ACTIONS,
+  type TaskWorkflowAction,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { StartSessionSheetAction } from "@/navigation/routes";
 
 /** The confirmations that a task action asks for on the screen where the user starts it. */
@@ -87,6 +87,6 @@ export const taskActionSendsCommand = (action: TaskWorkflowAction): boolean =>
 
 /** Tells the user that a task has no session of a role, so the action opens none. */
 export const showNoSession = (feedback: ClientFeedback, taskId: string, role: AgentRole): void =>
-  feedback.show("info", `${taskId} has no ${AGENT_ROLE_LABELS[role]} session.`, {
+  feedback.show("info", `${taskId} has no ${BUILTIN_ROLE_LABELS[role]} session.`, {
     description: "Start the session from the task workflow actions first.",
   });

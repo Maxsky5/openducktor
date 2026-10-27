@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
 import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
@@ -6,7 +7,6 @@ import {
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionFixtureOverrides } from "@/test-utils/shared-test-fixtures";
-import { AGENT_ROLE_LABELS } from "@openducktor/frontend-core/types/agent-role-labels";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -98,7 +98,7 @@ const createInput = (
       approvalReplyErrorByRequestId: {},
       onReplyApproval: async () => {},
     },
-    roleLabelByRole: AGENT_ROLE_LABELS,
+    roleLabelByRole: BUILTIN_ROLE_LABELS,
     ...inputOverrides,
   };
 };
@@ -149,7 +149,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: false },
-        builder: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: true, completed: false },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -171,7 +171,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });

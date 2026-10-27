@@ -200,8 +200,12 @@ describe("task event publication", () => {
     });
     const changes = { taskIds: ["task-1"], removedTaskIds: [] };
 
-    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-spec", []));
-    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-plan", []));
+    await Effect.runPromise(
+      service.publishTasksUpdated("/repo", changes, "save-workflow-artifact", []),
+    );
+    await Effect.runPromise(
+      service.publishTasksUpdated("/repo", changes, "save-workflow-artifact", []),
+    );
 
     expect(
       events.map((event) =>
@@ -297,6 +301,7 @@ describe("task event publication", () => {
           [
             {
               previousStatus: "in_progress",
+              sourceRole: "build",
               task: { id: "task-1", title: "Task 1", status: "human_review" },
             },
           ],

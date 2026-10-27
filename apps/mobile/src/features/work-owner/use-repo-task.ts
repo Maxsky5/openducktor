@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   repoTaskDataQueryOptions,
   unfilteredRepoTaskDataQueryOptions,
@@ -11,7 +11,7 @@ const NO_REPO = "__no_workspace__";
 export type RepoTaskRead = {
   /** The task, or null while it loads, when it does not exist, or without a task. */
   task: TaskCard | null;
-  /** The list that holds the task, so its parent and subtasks resolve in the same list. */
+  /** The list that holds the task. */
   tasks: TaskCard[] | undefined;
   error: Error | null;
   isPending: boolean;

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { BUILTIN_STATUS_LABELS, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 /**
  * The color family of a task status. `review` and `approval` have no semantic theme token, so
@@ -14,19 +14,17 @@ export type TaskStatusTone =
   | "approval"
   | "success";
 
-const TASK_STATUS_PRESENTATION = {
-  open: { label: "Backlog", tone: "neutral" },
-  spec_ready: { label: "Spec ready", tone: "pending" },
-  ready_for_dev: { label: "Ready for dev", tone: "info" },
-  in_progress: { label: "In progress", tone: "warning" },
-  blocked: { label: "Blocked needs input", tone: "destructive" },
-  ai_review: { label: "AI review", tone: "review" },
-  human_review: { label: "Human review", tone: "approval" },
-  closed: { label: "Done", tone: "success" },
-} satisfies Record<TaskCard["status"], { label: string; tone: TaskStatusTone }>;
+const TASK_STATUS_TONES = {
+  open: "neutral",
+  spec_ready: "pending",
+  ready_for_dev: "info",
+  in_progress: "warning",
+  blocked: "destructive",
+  ai_review: "review",
+  human_review: "approval",
+  closed: "success",
+} satisfies Record<TaskCard["status"], TaskStatusTone>;
 
-export const statusLabel = (status: TaskCard["status"]): string =>
-  TASK_STATUS_PRESENTATION[status].label;
+export const statusLabel = (status: TaskCard["status"]): string => BUILTIN_STATUS_LABELS[status];
 
-export const statusTone = (status: TaskCard["status"]): TaskStatusTone =>
-  TASK_STATUS_PRESENTATION[status].tone;
+export const statusTone = (status: TaskCard["status"]): TaskStatusTone => TASK_STATUS_TONES[status];

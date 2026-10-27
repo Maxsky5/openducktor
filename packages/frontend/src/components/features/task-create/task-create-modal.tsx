@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useRef } from "react";
 import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
@@ -20,6 +19,12 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
+import {
+  workflowArtifactLabel,
+  workflowArtifactShortLabel,
+  workflowDocumentPlaceholder,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 const TaskDocumentEditor = lazy(async () => {
   const module = await import("@/components/features/task-composer/task-document-editor");
@@ -92,12 +97,9 @@ function TaskDocumentFooterActions({
   controller: TaskCreateModalController;
 }): ReactElement {
   const isSaving = controller.isSavingDocument === controller.activeDocumentSection;
-  let saveLabel = "Save Plan";
-  if (isSaving) {
-    saveLabel = "Saving...";
-  } else if (controller.activeDocumentSection === "spec") {
-    saveLabel = "Save Spec";
-  }
+  const section = controller.activeDocumentSection;
+  let saveLabel = "Saving...";
+  if (!isSaving) saveLabel = section ? `Save ${workflowArtifactShortLabel(section)}` : "Save";
 
   return (
     <>
@@ -202,8 +204,7 @@ function TaskCreateModalSectionNavigation({
   return (
     <TaskEditSectionSwitcher
       section={controller.editSection}
-      hasUnsavedSpec={controller.isSpecDirty}
-      hasUnsavedPlan={controller.isPlanDirty}
+      dirtyDocuments={controller.dirtyDocuments}
       disabled={controller.isFormDisabled}
       onSectionChange={controller.requestSectionChange}
     />
@@ -231,17 +232,9 @@ function TaskCreateModalSectionContent({
       <Suspense fallback={<TaskDocumentEditorFallback />}>
         <TaskDocumentEditor
           key={section}
-          title={section === "spec" ? "Specification" : "Implementation Plan"}
-          subtitle={
-            section === "spec"
-              ? "Edit the canonical specification markdown for this task."
-              : "Edit the implementation plan markdown for this task."
-          }
-          placeholder={
-            section === "spec"
-              ? "# Purpose\n\nDescribe expected outcome..."
-              : "## Milestones\n\n- ..."
-          }
+          title={workflowArtifactLabel(section)}
+          subtitle={`Edit the ${workflowArtifactLabel(section).toLowerCase()} markdown for this task.`}
+          placeholder={workflowDocumentPlaceholder(section)}
           markdown={controller.activeDraft}
           view={controller.views[section]}
           onViewChange={(nextView) => controller.setDocumentView(section, nextView)}

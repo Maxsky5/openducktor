@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
@@ -48,19 +49,17 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   labels: [],
-  subtaskIds: [],
   availableActions: [],
   artifactSummary: {
-    spec: { has: true },
-    plan: { has: true },
-    qaReport: { has: true, verdict: "approved" },
+    spec: { present: true },
+    plan: { present: true },
+    qaReport: { present: true, verdict: "approved" },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: true },
     planner: { required: false, canSkip: true, available: true, completed: true },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: true, completed: false },
   },
   pullRequest: {
@@ -93,12 +92,14 @@ const repoConfig: RepoConfig = {
 };
 
 const createMetadata = (agentSessions: AgentSessionRecord[] = []): TaskMetadataPayload => ({
-  spec: { markdown: "spec", updatedAt: "2026-05-10T10:00:00.000Z" },
-  plan: { markdown: "plan", updatedAt: "2026-05-10T10:00:00.000Z" },
-  qaReport: {
-    markdown: "qa",
-    verdict: "approved",
-    updatedAt: "2026-05-10T10:00:00.000Z",
+  artifacts: {
+    spec: { markdown: "spec", updatedAt: "2026-05-10T10:00:00.000Z" },
+    plan: { markdown: "plan", updatedAt: "2026-05-10T10:00:00.000Z" },
+    qaReport: {
+      markdown: "qa",
+      verdict: "approved",
+      updatedAt: "2026-05-10T10:00:00.000Z",
+    },
   },
   agentSessions,
 });
@@ -198,6 +199,7 @@ describe("TaskService.closeTask", () => {
   test("closes an open task without local cleanup and preserves returned metadata", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -210,7 +212,7 @@ describe("TaskService.closeTask", () => {
 
     expect(closed.status).toBe("closed");
     expect(closed.availableActions).not.toContain("close_task");
-    expect(closed.artifactSummary.spec.has).toBe(true);
+    expect(closed.artifactSummary.spec?.present).toBe(true);
     expect(closed.pullRequest?.number).toBe(12);
     expect(calls).toEqual(["transition:task-1:closed"]);
   });
@@ -218,6 +220,7 @@ describe("TaskService.closeTask", () => {
   test("does not require task worktree service when no task worktree exists", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -234,6 +237,7 @@ describe("TaskService.closeTask", () => {
   test("requires task worktree service when a task worktree exists", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
@@ -249,6 +253,7 @@ describe("TaskService.closeTask", () => {
 
   test("closes an in-progress task", async () => {
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task({ status: "in_progress" })]),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
@@ -265,6 +270,7 @@ describe("TaskService.closeTask", () => {
   test("returns an already closed task without requiring cleanup dependencies", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task({ status: "closed" })], calls),
     });
 
@@ -284,6 +290,7 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], [], { "task-1": [buildSession] }),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
@@ -300,6 +307,7 @@ describe("TaskService.closeTask", () => {
   test("removes task worktree, deletes related branch, then closes", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -331,6 +339,7 @@ describe("TaskService.closeTask", () => {
   test("requires worktree file cleanup dependencies before cleanup", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -350,6 +359,7 @@ describe("TaskService.closeTask", () => {
   test("rejects task worktrees that resolve to the repository root before cleanup", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
@@ -379,6 +389,7 @@ describe("TaskService.closeTask", () => {
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),
@@ -397,6 +408,7 @@ describe("TaskService.closeTask", () => {
   test("removes the task worktree whatever branch it has checked out", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -424,6 +436,7 @@ describe("TaskService.closeTask", () => {
   test("rejects cleanup when another worktree has the task branch checked out", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -444,6 +457,7 @@ describe("TaskService.closeTask", () => {
   test("retains an unrelated repository at the canonical managed path", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls, registered: false }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
@@ -473,6 +487,7 @@ describe("TaskService.closeTask", () => {
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({
@@ -498,6 +513,7 @@ describe("TaskService.closeTask", () => {
   test("reports cleanup progress when branch deletion fails after worktree removal", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -536,6 +552,7 @@ describe("TaskService.closeTask", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls, { "task-1": [qaSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),
@@ -553,6 +570,7 @@ describe("TaskService.closeTask", () => {
   test("aborts destructive cleanup when task terminal termination fails", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -584,6 +602,7 @@ describe("TaskService.closeTask", () => {
   test("holds task terminal cleanup admission through destructive close cleanup", async () => {
     const calls: string[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -630,6 +649,7 @@ describe("TaskService.closeTask", () => {
     } satisfies TaskStorePort;
     const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore,
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
@@ -686,6 +706,7 @@ describe("TaskService.closeTask", () => {
       },
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls, {
         "task-1": [specSession, plannerSession],
       }),
@@ -725,6 +746,7 @@ describe("TaskService.closeTask", () => {
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),
@@ -774,6 +796,7 @@ describe("TaskService.closeTask", () => {
         ),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),

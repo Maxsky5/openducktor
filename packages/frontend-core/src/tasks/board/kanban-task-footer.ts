@@ -1,11 +1,20 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import {
+  BUILTIN_ROLE_LABELS,
+  BUILTIN_ROLE_IDS,
+  SESSION_CREATING_ACTIONS,
+  SESSION_VIEW_ACTION_BY_ROLE,
+  resolveTaskCardActions,
+  taskHasSessionPage,
+  type TaskWorkflowAction,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import {
   agentSessionIdentityKey,
   matchesAgentSessionIdentity,
 } from "../../lib/agent-session-identity";
 import type { KanbanTaskActivityState, KanbanTaskSession } from "./kanban-task-activity";
-import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-workflow";
 import {
   resolveHistoricalSessionRoles,
   resolvePreferredActiveSession,
@@ -46,17 +55,16 @@ export const getTaskFooter = ({
   const primarySession = sessions.find(
     (session) => session.action === workflowActions.primaryAction,
   );
-  const shortcuts =
-    task.status === "closed"
-      ? []
-      : sessions.flatMap((session) => {
-          if (
-            !session.options ||
-            matchesAgentSessionIdentity(session.options.session, primarySession?.options?.session)
-          )
-            return [];
-          return [{ ...session, options: session.options }];
-        });
+  const shortcuts = !taskHasSessionPage(task)
+    ? []
+    : sessions.flatMap((session) => {
+        if (
+          !session.options ||
+          matchesAgentSessionIdentity(session.options.session, primarySession?.options?.session)
+        )
+          return [];
+        return [{ ...session, options: session.options }];
+      });
   const secondaryActions = workflowActions.secondaryActions.filter((action) => {
     const target = sessions.find((session) => session.action === action)?.options?.session;
     return (
@@ -67,12 +75,8 @@ export const getTaskFooter = ({
   const disabledActions = workflowActions.allActions.filter((action) => {
     const session = sessions.find((entry) => entry.action === action);
     if (session) return !session.options;
+    if (SESSION_CREATING_ACTIONS.includes(action)) return pendingState?.isSessionStarting ?? false;
     switch (action) {
-      case "set_spec":
-      case "set_plan":
-      case "build_start":
-      case "qa_start":
-        return pendingState?.isSessionStarting ?? false;
       case "human_approve":
         return pendingState?.approvingTaskId === task.id;
       case "human_request_changes":
@@ -111,11 +115,10 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
     task.issueType,
     task.priority,
     task.labels,
-    task.subtaskIds,
     task.availableActions,
     task.pullRequest,
     task.sourceIssue,
-    task.artifactSummary.qaReport,
+    task.artifactSummary,
     inputs.hasActiveSession,
     inputs.activeSessionRole,
     inputs.taskActivityState,
@@ -142,19 +145,6 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
   return { contentRevision, hasSessionShortcuts: footer.shortcuts.length > 0 };
 };
 
-type RoleSession = (typeof SESSION_ACTIONS)[number] & {
-  options: ReturnType<typeof resolveSessionTargetOptions>;
-};
-
-type Footer = {
-  sessions: RoleSession[];
-  shortcuts: (RoleSession & { options: SessionTargetOptions })[];
-  actions: ReturnType<typeof resolveTaskCardActions>;
-  disabledActions: TaskWorkflowAction[];
-  primaryActiveSession: KanbanTaskSession | null;
-  primarySessionIsWaitingInput: boolean;
-};
-
 const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_spec",
   "set_plan",
@@ -169,12 +159,24 @@ const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "reset_implementation",
 ];
 
-const SESSION_ACTIONS = [
-  { role: "spec", action: "open_spec", label: "Spec" },
-  { role: "planner", action: "open_planner", label: "Planner" },
-  { role: "build", action: "open_builder", label: "Builder" },
-  { role: "qa", action: "open_qa", label: "QA" },
-] as const;
+const SESSION_ACTIONS = BUILTIN_ROLE_IDS.map((role) => ({
+  role,
+  action: SESSION_VIEW_ACTION_BY_ROLE[role],
+  label: BUILTIN_ROLE_LABELS[role],
+}));
+
+type RoleSession = (typeof SESSION_ACTIONS)[number] & {
+  options: ReturnType<typeof resolveSessionTargetOptions>;
+};
+
+type Footer = {
+  sessions: RoleSession[];
+  shortcuts: (RoleSession & { options: SessionTargetOptions })[];
+  actions: ReturnType<typeof resolveTaskCardActions>;
+  disabledActions: TaskWorkflowAction[];
+  primaryActiveSession: KanbanTaskSession | null;
+  primarySessionIsWaitingInput: boolean;
+};
 
 type FooterInputs = {
   task: TaskCard;

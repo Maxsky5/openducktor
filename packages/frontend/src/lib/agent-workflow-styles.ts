@@ -1,4 +1,4 @@
-import type { AgentWorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
+import type { WorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
 
 /** Shared label colors for workflow roles in the header and session navigation. */
 export const AGENT_WORKFLOW_TONE_TEXT_CLASSES = {
@@ -10,11 +10,11 @@ export const AGENT_WORKFLOW_TONE_TEXT_CLASSES = {
   waiting_input: "text-warning-muted",
   failed: "text-destructive-muted",
   blocked: "text-secondary-foreground",
-} satisfies Record<AgentWorkflowStepTone, string>;
+} satisfies Record<WorkflowStepTone, string>;
 
 /** Icons keep the workflow tone with a lighter success color than small text. */
 export const AGENT_WORKFLOW_TONE_ICON_CLASSES = {
   ...AGENT_WORKFLOW_TONE_TEXT_CLASSES,
   done: "text-success-icon",
   blocked: "text-muted-foreground",
-} satisfies Record<AgentWorkflowStepTone, string>;
+} satisfies Record<WorkflowStepTone, string>;

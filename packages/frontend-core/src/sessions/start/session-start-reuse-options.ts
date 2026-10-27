@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import { BUILTIN_ROLE_LABELS, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import {
   buildRoleSessionSequenceByIdentity,
@@ -7,7 +7,6 @@ import {
   formatAgentSessionOptionLabel,
 } from "../../lib/agent-session-options";
 import type { AgentSessionSummary } from "../agent-sessions-store";
-import { AGENT_ROLE_LABELS } from "../../types/agent-role-labels";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 export const buildReusableSessionOptions = ({
@@ -30,7 +29,7 @@ export const buildReusableSessionOptions = ({
         session,
         sessionNumber:
           roleSessionNumberByIdentity.get(agentSessionIdentityKey(session)) ?? index + 1,
-        roleLabelByRole: AGENT_ROLE_LABELS,
+        roleLabelByRole: BUILTIN_ROLE_LABELS,
       }),
       description: formatAgentSessionOptionDescription(session),
       selectedModel: session.selectedModel

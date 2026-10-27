@@ -21,7 +21,7 @@ import {
   toSessionSummary,
 } from "./codex-app-server-threads";
 import { codexSessionRef } from "./codex-session-ref";
-import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
+import { requireCodexRuntimePolicy } from "./codex-session-policy";
 import { CODEX_MODEL_PROVIDER_ID, CODEX_STANDARD_SERVICE_TIER } from "./model-catalog";
 import type {
   CodexSessionState,
@@ -108,7 +108,7 @@ const applyRuntimeContextToSession = (
   assertRuntimeContextCompatibleWithSession(session, input, action);
   const sessionScope = input.sessionScope;
   if (sessionScope) {
-    resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
+    requireCodexRuntimePolicy(input.runtimePolicy, action);
     // A summary title comes from the runtime or from a successful title update.
     // A scope update must not claim a title the runtime did not accept.
     session.summary = {

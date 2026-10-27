@@ -36,8 +36,10 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   open: true,
   taskId: "task-1",
   activeSection: "spec",
-  loadSpecDocument: async () => ({ markdown: "# Spec", updatedAt: "2026-02-20T10:00:00Z" }),
-  loadPlanDocument: async () => ({ markdown: "## Plan", updatedAt: "2026-02-20T10:00:00Z" }),
+  loadDocument: async (_taskId, code) => ({
+    markdown: code === "spec" ? "# Spec" : "## Plan",
+    updatedAt: "2026-02-20T10:00:00Z",
+  }),
   ...overrides,
 });
 
@@ -68,7 +70,7 @@ describe("useTaskDocumentEditorState", () => {
   test("captures loader failure and clears loading", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        loadSpecDocument: async () => {
+        loadDocument: async () => {
           throw new Error("spec failed");
         },
       }),
@@ -90,7 +92,7 @@ describe("useTaskDocumentEditorState", () => {
     const harness = createHookHarness(
       createBaseProps({
         loadTimeoutMs: 20,
-        loadSpecDocument: async () => await new Promise(() => {}),
+        loadDocument: async () => await new Promise(() => {}),
       }),
     );
 
@@ -115,7 +117,7 @@ describe("useTaskDocumentEditorState", () => {
     const harness = createHookHarness(
       createBaseProps({
         taskId: "task-1",
-        loadSpecDocument: async (taskId: string) => {
+        loadDocument: async (taskId: string) => {
           if (taskId === "task-1") {
             return first.promise;
           }
@@ -131,7 +133,7 @@ describe("useTaskDocumentEditorState", () => {
     await harness.update(
       createBaseProps({
         taskId: "task-2",
-        loadSpecDocument: async (taskId: string) => {
+        loadDocument: async (taskId: string) => {
           if (taskId === "task-1") {
             return first.promise;
           }
@@ -165,7 +167,7 @@ describe("useTaskDocumentEditorState", () => {
     const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const second = createDeferred<{ markdown: string; updatedAt: string | null }>();
 
-    const loadSpecDocument = async (taskId: string) => {
+    const loadDocument = async (taskId: string) => {
       if (taskId === "task-1") {
         return first.promise;
       }
@@ -178,7 +180,7 @@ describe("useTaskDocumentEditorState", () => {
     const harness = createHookHarness(
       createBaseProps({
         taskId: "task-1",
-        loadSpecDocument,
+        loadDocument,
       }),
     );
 
@@ -186,7 +188,7 @@ describe("useTaskDocumentEditorState", () => {
     await harness.update(
       createBaseProps({
         taskId: "task-2",
-        loadSpecDocument,
+        loadDocument,
       }),
     );
 
@@ -214,7 +216,7 @@ describe("useTaskDocumentEditorState", () => {
   test("ignores stale loadSection callbacks after task context changes", async () => {
     const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const loadedTaskIds: string[] = [];
-    const loadSpecDocument = async (taskId: string) => {
+    const loadDocument = async (taskId: string) => {
       loadedTaskIds.push(taskId);
       if (taskId === "task-1") {
         return first.promise;
@@ -225,7 +227,7 @@ describe("useTaskDocumentEditorState", () => {
       createBaseProps({
         activeSection: null,
         taskId: "task-1",
-        loadSpecDocument,
+        loadDocument,
       }),
     );
 
@@ -237,7 +239,7 @@ describe("useTaskDocumentEditorState", () => {
         createBaseProps({
           activeSection: null,
           taskId: "task-2",
-          loadSpecDocument,
+          loadDocument,
         }),
       );
 
@@ -264,7 +266,7 @@ describe("useTaskDocumentEditorState", () => {
     let attempts = 0;
     const harness = createHookHarness(
       createBaseProps({
-        loadSpecDocument: async () => {
+        loadDocument: async () => {
           attempts += 1;
           if (attempts === 1) {
             throw new Error("first failure");
@@ -295,7 +297,7 @@ describe("useTaskDocumentEditorState", () => {
   test("keeps document-level payload errors without treating the load as failed", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        loadSpecDocument: async () => ({
+        loadDocument: async () => ({
           markdown: "",
           updatedAt: "2026-02-20T12:00:00Z",
           error: "Failed to decode openducktor.documents.spec[0]: invalid gzip payload",

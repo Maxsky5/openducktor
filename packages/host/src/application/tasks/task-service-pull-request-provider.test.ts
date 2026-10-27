@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { GitProviderDescriptor, PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -25,6 +26,7 @@ test.each(["not_configured", "disabled"] as const)(
   async (reason) => {
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([]));
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitProviderResolver,
       taskStore: {},
       workspaceSettingsService: createBuildWorkspaceSettingsService({
@@ -166,13 +168,13 @@ const createClosedLinkService = (persistedProviderId: string) => {
   const setPullRequest = mock(() => Effect.succeed(true));
   const transitionTask = mock(() => Effect.succeed(task({ status: "closed" })));
   const service = createTaskService({
+    taskWorkflows: builtinTaskWorkflows,
     gitProviderResolver,
     taskStore: {
       listTasks: () => Effect.succeed([task({ status: "closed" })]),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           pullRequest: mergedPullRequest(persistedProviderId),
           agentSessions: [],
         }),
@@ -195,13 +197,13 @@ describe("createTaskService Pull Request provider ports", () => {
       getTask: () => Effect.succeed(task({ status: "human_review" })),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         }),
       setPullRequest,
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({
         calls: [],
         currentBranches: {
@@ -240,6 +242,7 @@ describe("createTaskService Pull Request provider ports", () => {
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const setPullRequest = mock(() => Effect.succeed(true));
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({
         calls: [],
         currentBranches: {
@@ -251,8 +254,7 @@ describe("createTaskService Pull Request provider ports", () => {
         getTask: () => Effect.succeed(task({ status: "human_review" })),
         getTaskMetadata: () =>
           Effect.succeed({
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           }),
         setPullRequest,
@@ -283,13 +285,13 @@ describe("createTaskService Pull Request provider ports", () => {
       getTask: () => Effect.succeed(task({ status: "human_review" })),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         }),
       setPullRequest,
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitProviderResolver,
       taskStore,
       workspaceSettingsService,
@@ -322,13 +324,13 @@ describe("createTaskService Pull Request provider ports", () => {
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const setPullRequest = mock(() => Effect.succeed(true));
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitProviderResolver,
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "human_review" })),
         getTaskMetadata: () =>
           Effect.succeed({
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           }),
         setPullRequest,
@@ -368,6 +370,7 @@ describe("createTaskService Pull Request provider ports", () => {
         ]),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitProviderResolver,
       taskStore,
       workspaceSettingsService,
@@ -398,8 +401,7 @@ describe("createTaskService Pull Request provider ports", () => {
       getTask: () => Effect.succeed(task({ status: "human_review" })),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         }),
       setPullRequest: () => Effect.succeed(true),
@@ -429,6 +431,7 @@ describe("createTaskService Pull Request provider ports", () => {
       },
     );
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort,
       gitProviderResolver,
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
@@ -471,12 +474,12 @@ describe("createTaskService Pull Request provider ports", () => {
       listTasks: () => Effect.succeed([task({ status: "human_review" })]),
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
           agentSessions: [],
         }),
     };
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       gitPort: createDirectMergeGitPort({ calls: [] }),
       gitProviderResolver,
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),

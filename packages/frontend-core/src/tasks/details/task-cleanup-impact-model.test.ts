@@ -30,7 +30,7 @@ describe("buildTaskConfirmImpact", () => {
     const impact = buildTaskConfirmImpact(sessionCleanup(), stopImpact());
 
     expect(impact).toMatchObject({ hasManagedSessionCleanup: false, managedWorktreeCount: 0 });
-    const lines = buildTaskDeleteConfirmCopy(subject, impact, 0).lines.map((line) => line.text);
+    const lines = buildTaskDeleteConfirmCopy(subject, impact).lines.map((line) => line.text);
     expect(lines.some((text) => text.includes("worktree"))).toBe(false);
   });
 

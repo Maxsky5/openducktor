@@ -1,3 +1,4 @@
+import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
 import { Save } from "lucide-react";
 import { RuntimeImpactDialog } from "@/components/features/runtimes/runtime-impact-dialog";
 import { runtimeImpactPathChanges } from "./settings-save/runtime-settings-application";
@@ -24,11 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { SettingsContentFocusRequest, SettingsDeepLink } from "./settings-deep-link";
-import type {
-  PromptRoleTabId,
-  RepositorySectionId,
-  SettingsSectionId,
-} from "./settings-modal-constants";
+import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
 import { isSettingsInteractionDisabled } from "./settings-modal-model";
@@ -189,11 +186,11 @@ function SettingsDialog({
     setNavigation((current) => ({ ...current, repositorySection }));
   };
 
-  const handleGlobalPromptRoleTabChange = (globalPromptRoleTab: PromptRoleTabId): void => {
+  const handleGlobalPromptRoleTabChange = (globalPromptRoleTab: BuiltinPromptRoleTabId): void => {
     setNavigation((current) => ({ ...current, globalPromptRoleTab }));
   };
 
-  const handleRepoPromptRoleTabChange = (repoPromptRoleTab: PromptRoleTabId): void => {
+  const handleRepoPromptRoleTabChange = (repoPromptRoleTab: BuiltinPromptRoleTabId): void => {
     setNavigation((current) => ({ ...current, repoPromptRoleTab }));
   };
 

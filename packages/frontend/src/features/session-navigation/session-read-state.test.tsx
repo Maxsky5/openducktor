@@ -1,9 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import type {
-  AgentSessionLiveEnvelope,
-  AgentSessionLiveSnapshot,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -46,6 +42,7 @@ import {
 import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const observers: ReturnType<typeof createWorkspaceActivityObserver>[] = [];
 const clients: QueryClient[] = [];

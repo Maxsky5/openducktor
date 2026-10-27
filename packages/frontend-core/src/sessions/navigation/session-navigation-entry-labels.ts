@@ -1,7 +1,7 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { formatElapsedAgo, formatElapsedShort } from "../../lib/relative-time";
 import { statusLabel } from "../../tasks/presentation/task-status-presentation";
-import { AGENT_ROLE_LABELS } from "../../types/agent-role-labels";
+import { BUILTIN_ROLE_LABELS, taskNeedsInput } from "@openducktor/workflows";
 import type {
   SessionNavigationAttentionReason,
   SessionNavigationEntry,
@@ -37,7 +37,7 @@ export const visibleSessionNavigationGroups = (
 export const visibleAttentionReasons = (
   entry: SessionNavigationEntry,
 ): SessionNavigationAttentionReason[] => {
-  const taskIsBlocked = entry.context.kind === "task" && entry.context.task.status === "blocked";
+  const taskIsBlocked = entry.context.kind === "task" && taskNeedsInput(entry.context.task);
   return entry.attention.filter((reason) => reason !== "blocked" || !taskIsBlocked);
 };
 
@@ -55,7 +55,7 @@ export const sessionEntryTypeLabel = (entry: SessionNavigationEntry): string => 
 };
 
 export const sessionEntryRoleLabel = (entry: SessionNavigationEntry): string | null =>
-  entry.target.kind === "task_session" ? AGENT_ROLE_LABELS[entry.target.role] : null;
+  entry.target.kind === "task_session" ? BUILTIN_ROLE_LABELS[entry.target.role] : null;
 
 export const sessionEntryRuntimeLabel = (entry: SessionNavigationEntry): string | null =>
   entry.runtimeKind === null ? null : RUNTIME_DESCRIPTORS_BY_KIND[entry.runtimeKind].label;

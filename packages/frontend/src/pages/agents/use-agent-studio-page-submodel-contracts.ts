@@ -1,5 +1,5 @@
-import type { AgentRole } from "@openducktor/core";
 import type { WorkflowModelContext } from "./use-agent-studio-page-model-builders";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export type WorkflowHeaderContext = Pick<
   WorkflowModelContext,

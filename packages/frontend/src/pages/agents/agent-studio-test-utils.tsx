@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
@@ -36,6 +35,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]

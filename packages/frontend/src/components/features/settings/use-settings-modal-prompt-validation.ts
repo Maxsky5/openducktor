@@ -1,11 +1,11 @@
-import type { AgentPromptTemplateId, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  type BuiltinPromptRoleTabId,
+  type BuiltinPromptTemplateId as AgentPromptTemplateId,
+} from "@openducktor/workflows";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { buildPromptOverrideValidationErrors } from "@/components/features/settings";
-import {
-  countPromptErrorsByRoleTab,
-  type PromptRoleTabId,
-  type SettingsSectionId,
-} from "./settings-modal-constants";
+import { countPromptErrorsByRoleTab, type SettingsSectionId } from "./settings-modal-constants";
 import {
   EMPTY_PROMPT_VALIDATION_STATE,
   type PromptValidationState,
@@ -21,8 +21,8 @@ type SettingsModalPromptValidation = {
   hasPromptValidationErrors: boolean;
   selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   selectedRepoPromptValidationErrorCount: number;
-  globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
-  selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
+  globalPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
+  selectedRepoPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
 };
 

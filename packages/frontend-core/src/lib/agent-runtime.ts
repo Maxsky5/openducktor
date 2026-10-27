@@ -1,22 +1,24 @@
 import {
+  getMissingRequiredRuntimeSupportedScopes,
+  runtimeRequiredScopesByRole,
+  SESSION_LAUNCH_ACTIONS,
+  type BuiltinRoleId as AgentRole,
+  BUILTIN_ROLE_IDS,
+} from "@openducktor/workflows";
+import {
   type AgentRuntimes,
-  agentRoleValues,
   type AgentSessionStartMode,
   formatRuntimeDescriptorSchemaIssue,
-  getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
   runtimeDescriptorSchema,
-  runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { SESSION_LAUNCH_ACTIONS, sessionLaunchActionIds } from "./session-launch-actions";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
-const agentRoles: readonly AgentRole[] = agentRoleValues;
+const agentRoles: readonly AgentRole[] = BUILTIN_ROLE_IDS;
 
 export const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
   agentRuntimes[runtimeKind]?.enabled === true;
@@ -278,7 +280,7 @@ export const getRuntimeDescriptorCapabilityConfigErrors = (
   return errors;
 };
 
-const launchStartModeRequirements = sessionLaunchActionIds.map((id) => SESSION_LAUNCH_ACTIONS[id]);
+const launchStartModeRequirements = SESSION_LAUNCH_ACTIONS;
 
 const formatStartModes = (startModes: readonly AgentSessionStartMode[]): string => {
   return startModes.length > 0 ? startModes.join(", ") : "none";
@@ -300,13 +302,13 @@ export const getRuntimeDescriptorLaunchConfigErrors = (
     if (!runtimeSupportsRole(runtimeDescriptor, launch.role)) {
       return [];
     }
-    if (runtimeSupportsAnyLaunchStartMode(runtimeDescriptor, launch.allowedStartModes)) {
+    if (runtimeSupportsAnyLaunchStartMode(runtimeDescriptor, launch.startModes)) {
       return [];
     }
 
     const supportedStartModes = runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes;
     return [
-      `[launch_scoped] launch ${launch.id} has no supported start mode (allowed: ${formatStartModes(launch.allowedStartModes)}; runtime supports: ${formatStartModes(supportedStartModes)})`,
+      `[launch_scoped] launch ${launch.id} has no supported start mode (allowed: ${formatStartModes(launch.startModes)}; runtime supports: ${formatStartModes(supportedStartModes)})`,
     ];
   });
 };

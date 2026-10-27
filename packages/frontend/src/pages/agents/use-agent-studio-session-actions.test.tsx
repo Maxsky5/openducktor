@@ -551,7 +551,7 @@ describe("useAgentStudioSessionActions", () => {
       agentStudioReady: false,
       selectedTask: createTask({
         status: "in_progress",
-        artifactSummary: { qaReport: { has: true, verdict: "rejected" } },
+        artifactSummary: { qaReport: { present: true, verdict: "rejected" } },
       }),
       selectedSession: selectedSessionFromSession(existingSession),
       sessionsForTask: summarizeSessions([existingSession]),
@@ -682,7 +682,7 @@ describe("useAgentStudioSessionActions", () => {
       launchActionId: "build_implementation_start",
       selectedTask: createTask({
         agentWorkflows: {
-          builder: { required: true, canSkip: false, available: true, completed: false },
+          build: { required: true, canSkip: false, available: true, completed: false },
         },
       }),
       selectionForNewSession: {
@@ -752,7 +752,7 @@ describe("useAgentStudioSessionActions", () => {
         agentWorkflows: {
           spec: { required: true, canSkip: false, available: false, completed: true },
           planner: { required: true, canSkip: false, available: false, completed: true },
-          builder: { required: true, canSkip: false, available: true, completed: false },
+          build: { required: true, canSkip: false, available: true, completed: false },
           qa: { required: true, canSkip: false, available: false, completed: true },
         },
       }),

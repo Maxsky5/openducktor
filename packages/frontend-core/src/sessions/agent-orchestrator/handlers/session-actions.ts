@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { ClientFeedback } from "../../../platform/client-feedback";
 import type { AgentMessageQueuesStore } from "../../agent-message-queues-store";
@@ -13,6 +13,7 @@ import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStopAgentSession } from "./stop-session";
 import { createRefreshStoppedWorkflowSession } from "./workflow-session-operation-policy";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type SessionActionsDependencies = {
   feedback: ClientFeedback;

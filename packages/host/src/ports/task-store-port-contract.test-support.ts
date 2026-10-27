@@ -3,12 +3,11 @@ import type {
   AgentSessionRecord,
   DirectMergeRecord,
   PullRequest,
-  TaskCard,
   TaskCreateInput,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
-import type { TaskStorePort } from "./task-repository-ports";
+import type { TaskStorePort, TaskRecord } from "./task-repository-ports";
 
 export type TaskStorePortContractHarness = {
   readonly cleanup?: (() => Promise<void>) | undefined;
@@ -85,7 +84,7 @@ const createTask = (
   store: TaskStorePort,
   repoPath: string,
   input: TaskCreateInput,
-): Promise<TaskCard> => run(store.createTask({ repoPath, task: input }));
+): Promise<TaskRecord> => run(store.createTask({ repoPath, status: "open", task: input }));
 
 export const describeTaskStorePortContract = (
   name: string,
@@ -107,22 +106,14 @@ export const describeTaskStorePortContract = (
       await Promise.all(pendingCleanups.map((cleanup) => cleanup()));
     });
 
-    test("creates, updates, lists, and derives subtasks through the port", async () => {
+    test("creates, updates, and lists tasks through the port", async () => {
       const { repoPath, store } = await createTrackedHarness();
 
       const parent = await createTask(store, repoPath, {
         title: "Parent",
         issueType: "feature",
         priority: 3,
-        aiReviewEnabled: false,
         labels: [" backend ", "backend", "ui"],
-      });
-      const child = await createTask(store, repoPath, {
-        title: "Child",
-        issueType: "task",
-        priority: 2,
-        aiReviewEnabled: true,
-        parentId: parent.id,
       });
       const updated = await run(
         store.updateTask({
@@ -138,7 +129,6 @@ export const describeTaskStorePortContract = (
       );
 
       expect(updated).toMatchObject({
-        aiReviewEnabled: false,
         description: "Updated description",
         labels: ["ops", "ui"],
         targetBranch: { remote: "origin", branch: "main" },
@@ -146,8 +136,7 @@ export const describeTaskStorePortContract = (
       });
       await expect(run(store.listTasks({ repoPath }))).resolves.toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: child.id }),
-          expect.objectContaining({ id: parent.id, subtaskIds: [child.id] }),
+          expect.objectContaining({ id: parent.id, title: "Updated parent" }),
         ]),
       );
     });
@@ -161,31 +150,26 @@ export const describeTaskStorePortContract = (
           title: "Older high priority open",
           issueType: "task",
           priority: 1,
-          aiReviewEnabled: true,
         });
         const newerHighPriorityOpen = await createTask(store, repoPath, {
           title: "Newer high priority open",
           issueType: "task",
           priority: 1,
-          aiReviewEnabled: true,
         });
         const newestLowPriorityOpen = await createTask(store, repoPath, {
           title: "Newest low priority open",
           issueType: "task",
           priority: 4,
-          aiReviewEnabled: true,
         });
         const olderSpecReady = await createTask(store, repoPath, {
           title: "Older spec ready",
           issueType: "task",
           priority: 2,
-          aiReviewEnabled: true,
         });
         const newerSpecReady = await createTask(store, repoPath, {
           title: "Newer spec ready",
           issueType: "task",
           priority: 2,
-          aiReviewEnabled: true,
         });
 
         await run(
@@ -224,41 +208,66 @@ export const describeTaskStorePortContract = (
         title: "Workflow task",
         issueType: "task",
         priority: 2,
-        aiReviewEnabled: true,
       });
 
-      await run(store.setSpecArtifact({ repoPath, taskId: task.id, markdown: " # First spec " }));
+      await run(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath,
+          taskId: task.id,
+          markdown: " # First spec ",
+          code: "spec",
+        }),
+      );
       const latestSpec = await run(
-        store.setSpecArtifact({ repoPath, taskId: task.id, markdown: "# Second spec" }),
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath,
+          taskId: task.id,
+          markdown: "# Second spec",
+          code: "spec",
+        }),
       );
       const plan = await run(
-        store.setPlanArtifact({ repoPath, taskId: task.id, markdown: "# Plan" }),
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath,
+          taskId: task.id,
+          markdown: "# Plan",
+          code: "plan",
+        }),
       );
       const reviewed = await run(
-        store.recordQaOutcome({
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
           repoPath,
           taskId: task.id,
           status: "closed",
           markdown: "# Approved",
           verdict: "approved",
+          code: "qaReport",
         }),
       );
       const metadata = await run(store.getTaskMetadata({ repoPath, taskId: task.id }));
 
-      expect(latestSpec).toMatchObject({ markdown: "# Second spec", revision: 2 });
-      expect(plan).toMatchObject({ markdown: "# Plan", revision: 1 });
+      expect(latestSpec.artifact).toMatchObject({ markdown: "# Second spec", revision: 2 });
+      expect(plan.artifact).toMatchObject({ markdown: "# Plan", revision: 1 });
       expect(reviewed).toMatchObject({
         task: {
           artifactSummary: {
-            plan: { has: true },
-            qaReport: { has: true, verdict: "approved" },
-            spec: { has: true },
+            plan: { present: true },
+            qaReport: { present: true, verdict: "approved" },
+            spec: { present: true },
           },
           status: "closed",
         },
         artifact: { markdown: "# Approved", revision: 1, updatedAt: expect.any(String) },
       });
-      expect(metadata).toMatchObject({
+      expect(metadata.artifacts).toMatchObject({
         plan: { markdown: "# Plan", revision: 1 },
         qaReport: { markdown: "# Approved", revision: 1, verdict: "approved" },
         spec: { markdown: "# Second spec", revision: 2 },
@@ -271,37 +280,52 @@ export const describeTaskStorePortContract = (
         title: "Artifacts",
         issueType: "task",
         priority: 2,
-        aiReviewEnabled: true,
       });
 
-      await run(store.setSpecArtifact({ repoPath, taskId: task.id, markdown: "# Spec" }));
-      await run(store.setPlanArtifact({ repoPath, taskId: task.id, markdown: "# Plan" }));
       await run(
-        store.recordQaOutcome({
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath,
+          taskId: task.id,
+          markdown: "# Spec",
+          code: "spec",
+        }),
+      );
+      await run(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          repoPath,
+          taskId: task.id,
+          markdown: "# Plan",
+          code: "plan",
+        }),
+      );
+      await run(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
           repoPath,
           taskId: task.id,
           status: "ai_review",
           markdown: "# Rejected",
           verdict: "rejected",
+          code: "qaReport",
         }),
       );
-      await run(store.clearQaReports({ repoPath, taskId: task.id }));
-      await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
-      ).resolves.toMatchObject({
+      await run(store.clearWorkflowArtifacts({ repoPath, taskId: task.id, codes: ["qaReport"] }));
+      const cleared = await run(store.getTaskMetadata({ repoPath, taskId: task.id }));
+      expect(Object.keys(cleared.artifacts).toSorted()).toEqual(["plan", "spec"]);
+      expect(cleared.artifacts).toMatchObject({
         plan: { markdown: "# Plan" },
-        qaReport: undefined,
         spec: { markdown: "# Spec" },
       });
 
       await run(store.clearTaskArtifacts({ repoPath, taskId: task.id }));
-      await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
-      ).resolves.toMatchObject({
-        plan: { markdown: "" },
-        qaReport: undefined,
-        spec: { markdown: "" },
-      });
+      expect((await run(store.getTaskMetadata({ repoPath, taskId: task.id }))).artifacts).toEqual(
+        {},
+      );
     });
 
     test("persists delivery records without clearing unrelated empty records", async () => {
@@ -310,7 +334,6 @@ export const describeTaskStorePortContract = (
         title: "Delivery",
         issueType: "task",
         priority: 2,
-        aiReviewEnabled: true,
       });
       const pullRequest = createPullRequestRecord();
       const directMerge = createDirectMergeRecord();
@@ -338,7 +361,6 @@ export const describeTaskStorePortContract = (
         title: "Agent sessions",
         issueType: "task",
         priority: 2,
-        aiReviewEnabled: true,
       });
       const buildSession = createAgentSessionRecord({
         externalSessionId: "build-session",
@@ -424,33 +446,17 @@ export const describeTaskStorePortContract = (
       });
     });
 
-    test("filters closed tasks and recursively deletes task trees", async () => {
+    test("filters closed tasks and deletes tasks", async () => {
       const { repoPath, store } = await createTrackedHarness();
       const root = await createTask(store, repoPath, {
         title: "Root",
         issueType: "feature",
         priority: 2,
-        aiReviewEnabled: true,
-      });
-      const child = await createTask(store, repoPath, {
-        title: "Child",
-        issueType: "task",
-        priority: 2,
-        aiReviewEnabled: true,
-        parentId: root.id,
-      });
-      const grandchild = await createTask(store, repoPath, {
-        title: "Grandchild",
-        issueType: "task",
-        priority: 2,
-        aiReviewEnabled: true,
-        parentId: child.id,
       });
       const closed = await createTask(store, repoPath, {
         title: "Closed",
         issueType: "task",
         priority: 2,
-        aiReviewEnabled: true,
       });
       await run(store.transitionTask({ repoPath, taskId: closed.id, status: "closed" }));
 
@@ -461,13 +467,9 @@ export const describeTaskStorePortContract = (
         expect.arrayContaining([expect.objectContaining({ id: closed.id })]),
       );
 
-      await run(store.deleteTask({ repoPath, taskId: root.id, deleteSubtasks: true }));
+      await run(store.deleteTask({ repoPath, taskId: root.id }));
       await expect(run(store.listTasks({ repoPath }))).resolves.not.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: root.id }),
-          expect.objectContaining({ id: child.id }),
-          expect.objectContaining({ id: grandchild.id }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ id: root.id })]),
       );
     });
 

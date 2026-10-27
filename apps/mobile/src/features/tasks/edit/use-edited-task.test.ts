@@ -1,6 +1,6 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "@openducktor/frontend-core/test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { renderHook } from "@testing-library/react";
 import { useEditedTask } from "./use-edited-task";

@@ -1,3 +1,4 @@
+import { testWorkflowRolePolicy } from "./codex-app-server-adapter.test-harness";
 import { describe, expect, mock, test } from "bun:test";
 import { type AgentRole, CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
@@ -49,6 +50,7 @@ const createRequestContext = ({
   bindActiveTurnId?: CodexServerRequestHandlerContext["bindActiveTurnId"];
 }): CodexServerRequestHandlerContext => ({
   respondServerRequest,
+  resolveWorkflowRolePolicy: testWorkflowRolePolicy,
   pendingInput,
   activeTurnsBySessionId,
   subagents,

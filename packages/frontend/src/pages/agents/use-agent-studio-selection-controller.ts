@@ -1,5 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
@@ -13,6 +11,10 @@ import {
   useAgentStudioSelectedSessionView,
 } from "./selected-session/use-agent-studio-selected-session-view";
 import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
+import type {
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspaceId: string | null;

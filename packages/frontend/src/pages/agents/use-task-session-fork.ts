@@ -14,6 +14,7 @@ import {
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { builtinRoleId } from "@openducktor/workflows";
 
 export function useTaskSessionFork({
   repoPath,
@@ -64,7 +65,7 @@ export function useTaskSessionFork({
                 kind: "task_session",
                 workspaceId,
                 taskId,
-                role,
+                role: builtinRoleId(role),
                 identity: result.runtimeSession,
               },
               repoPath,

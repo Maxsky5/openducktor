@@ -1,12 +1,11 @@
+import { AUTOPILOT_EVENTS, getAutopilotAction, isAutopilotActionId } from "@openducktor/workflows";
 import type { AutopilotSettings } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  AUTOPILOT_ACTION_DEFINITIONS,
   AUTOPILOT_DISABLED_VALUE,
-  AUTOPILOT_EVENT_DEFINITIONS,
   type AutopilotSelectValue,
   getAutopilotRule,
   getAutopilotSelectedValue,
@@ -67,7 +66,7 @@ export function SettingsAutopilotSection({
       </div>
 
       <div className="grid gap-3 rounded-md border border-border bg-card p-4">
-        {AUTOPILOT_EVENT_DEFINITIONS.map((eventDefinition) => {
+        {AUTOPILOT_EVENTS.map((eventDefinition) => {
           const rule = getAutopilotRule(autopilot, eventDefinition.id);
           const selectedValue = getAutopilotSelectedValue(rule);
           const labelId = `autopilot-${eventDefinition.id}-label`;
@@ -77,10 +76,10 @@ export function SettingsAutopilotSection({
               label: "Disabled",
               description: "Do not trigger an automatic workflow action for this event.",
             },
-            ...eventDefinition.availableActionIds.map((actionId) => ({
+            ...eventDefinition.automations.map((actionId) => ({
               value: actionId,
-              label: AUTOPILOT_ACTION_DEFINITIONS[actionId].label,
-              description: AUTOPILOT_ACTION_DEFINITIONS[actionId].description,
+              label: getAutopilotAction(actionId).label,
+              description: getAutopilotAction(actionId).description,
             })),
           ];
 
@@ -129,4 +128,4 @@ export function SettingsAutopilotSection({
 }
 
 const isAutopilotSelectValue = (value: string): value is AutopilotSelectValue =>
-  value === AUTOPILOT_DISABLED_VALUE || Object.hasOwn(AUTOPILOT_ACTION_DEFINITIONS, value);
+  value === AUTOPILOT_DISABLED_VALUE || isAutopilotActionId(value);

@@ -8,7 +8,6 @@ import {
   type RepoPromptOverrides,
   type SettingsSnapshot,
   type TaskApprovalContext,
-  type TaskCard,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentRuntimeCatalog } from "@openducktor/core";
@@ -25,7 +24,7 @@ import {
   ActiveWorkspaceContext,
   DelegationStateContext,
   RuntimeDefinitionsContext,
-  SpecStateContext,
+  DocumentStateContext,
   TasksStateContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
@@ -59,7 +58,7 @@ import type {
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import type {
   DelegationStateContextValue,
-  SpecStateContextValue,
+  DocumentStateContextValue,
   TasksStateContextValue,
 } from "@openducktor/frontend-core/types/state-slices";
 import type {
@@ -90,6 +89,7 @@ import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 
@@ -441,14 +441,9 @@ const delegationStateValue: DelegationStateContextValue = {
   delegateTask: async () => {},
 };
 
-const specStateValue: SpecStateContextValue = {
-  loadSpec: async () => "",
-  loadSpecDocument: async () => ({ markdown: "", updatedAt: null }),
-  loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
-  loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
-  saveSpec: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
-  saveSpecArtifact: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
-  savePlanArtifact: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
+const documentStateValue: DocumentStateContextValue = {
+  loadDocument: async () => ({ markdown: "", updatedAt: null }),
+  saveDocument: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
 };
 
 function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): RepoConfig {
@@ -637,7 +632,7 @@ const renderPage = async (
                 <ChecksStateContext.Provider value={checksStateValue}>
                   <TasksStateContext.Provider value={createTasksStateValue(renderState)}>
                     <DelegationStateContext.Provider value={delegationStateValue}>
-                      <SpecStateContext.Provider value={specStateValue}>
+                      <DocumentStateContext.Provider value={documentStateValue}>
                         <AgentSessionsContext.Provider value={sessionStore}>
                           <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
                             <AgentSessionReadModelStateContext.Provider
@@ -675,7 +670,7 @@ const renderPage = async (
                             </AgentSessionReadModelStateContext.Provider>
                           </AgentOperationsContext.Provider>
                         </AgentSessionsContext.Provider>
-                      </SpecStateContext.Provider>
+                      </DocumentStateContext.Provider>
                     </DelegationStateContext.Provider>
                   </TasksStateContext.Provider>
                 </ChecksStateContext.Provider>
@@ -1371,7 +1366,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitFor(() => {
       expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
+        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token". Edit or disable this prompt override in Settings.',
       );
     });
     expect(startAgentSessionMock).not.toHaveBeenCalled();
@@ -1431,7 +1426,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   kanbanTest(
-    "continue spec action navigates to latest spec session without opening modal",
+    "open spec action navigates to the latest spec session without opening modal",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1440,10 +1435,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        requireCallback(renderer.getKanbanColumnProps().onPlan, "plan task")(
-          "TASK-123",
-          "set_spec",
-        );
+        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "spec");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1934,7 +1926,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "in_progress",
       });
       currentTaskFixture.artifactSummary.qaReport = {
-        has: true,
+        present: true,
         updatedAt: "2026-03-09T10:00:00.000Z",
         verdict: "rejected",
       };

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   TasksStateContext,
   useRequiredContext,
@@ -83,7 +83,7 @@ function RequestedTaskConfirm({
     const runAction = (taskId: string): Promise<void> => {
       switch (action) {
         case "delete":
-          return deleteTask(taskId, true);
+          return deleteTask(taskId);
         case "close":
           return closeTask(taskId);
         case "reset_task":
@@ -96,10 +96,9 @@ function RequestedTaskConfirm({
     };
   }, [action, closeTask, deleteTask, onStarted, request, resetTask]);
   const task = currentTask ?? lastTask;
-  const { dialog, subtasksCount } = useTaskConfirmDialog({
+  const { dialog } = useTaskConfirmDialog({
     action,
     task,
-    allTasks: tasks,
     enabled: true,
     initiallyOpen: true,
     run,
@@ -111,32 +110,29 @@ function RequestedTaskConfirm({
   // After Confirm, the sheet keeps the impact that the user confirmed until it closes. The action
   // changes the task and its worktrees, so the impact reads again while it runs, and each new read
   // changed the text and the button of the sheet. A failure shows the current impact again.
-  const [confirmed, setConfirmed] = useState<{
-    impact: typeof dialog.impact;
-    subtasksCount: number;
-  } | null>(null);
+  const [confirmed, setConfirmed] = useState<typeof dialog.impact | null>(null);
   const { error, errorOutcomeUnknown } = dialog.operation;
-  const shown = confirmed && error === null ? confirmed : { impact: dialog.impact, subtasksCount };
+  const impact = confirmed && error === null ? confirmed : dialog.impact;
   const subject = { id: request.taskId, title: task?.title ?? null };
   const copy =
     action === "delete"
-      ? buildTaskDeleteConfirmCopy(subject, shown.impact, shown.subtasksCount)
+      ? buildTaskDeleteConfirmCopy(subject, impact)
       : action === "close"
-        ? buildTaskCloseConfirmCopy(subject, shown.impact)
-        : buildTaskResetConfirmCopy(subject, shown.impact);
-  const confirm = confirmButtonState(shown.impact, dialog.operation, copy.confirmLabel);
+        ? buildTaskCloseConfirmCopy(subject, impact)
+        : buildTaskResetConfirmCopy(subject, impact);
+  const confirm = confirmButtonState(impact, dialog.operation, copy.confirmLabel);
   return (
     <TaskConfirmView
       visible={dialog.open}
       copy={copy}
       confirm={confirm}
       isPending={dialog.operation.isPending}
-      impactError={shown.impact.error}
+      impactError={impact.error}
       failure={error ? toFlowFailure(error, errorOutcomeUnknown, FAILURE_TITLES[action]) : null}
       icon={CONFIRM_ICONS[action]}
       onCancel={dialog.onCancel}
       onConfirm={() => {
-        setConfirmed({ impact: dialog.impact, subtasksCount });
+        setConfirmed(dialog.impact);
         dialog.onConfirm();
       }}
     />

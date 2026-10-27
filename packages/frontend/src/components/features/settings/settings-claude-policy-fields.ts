@@ -1,7 +1,4 @@
-import type { AgentRole } from "@openducktor/contracts";
 import type { ClaudePolicyFieldPath } from "./settings-claude-policy";
-
-export const CLAUDE_POLICY_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 
 export type ClaudePolicyField = {
   path: ClaudePolicyFieldPath;

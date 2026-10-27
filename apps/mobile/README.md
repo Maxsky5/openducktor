@@ -120,14 +120,16 @@ The app needs a host with Remote control turned on. Open Settings, Remote contro
 
 Do these steps once on each development machine.
 
-1. Install JDK 21 or later. `java -version` must show version 21 or later in a new terminal.
-2. Install Android Studio, for example with `brew install --cask android-studio`. Open it once. Its setup wizard installs the Android SDK, the emulator, and the platform tools in `~/Library/Android/sdk`.
-3. Add these lines to your shell profile, such as `~/.zshrc`, and open a new terminal. Gradle needs `ANDROID_HOME` to find the SDK.
+1. Install Android Studio, for example with `brew install --cask android-studio`. Open it once. Its setup wizard installs the Android SDK, the emulator, and the platform tools in `~/Library/Android/sdk`.
+2. Add these lines to your shell profile, such as `~/.zshrc`, and open a new terminal. Gradle needs JDK 21 or later and `ANDROID_HOME`. The first line uses the JDK that Android Studio includes.
 
    ```sh
+   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
    export ANDROID_HOME="$HOME/Library/Android/sdk"
-   export PATH="$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"
+   export PATH="$JAVA_HOME/bin:$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"
    ```
+
+3. In a new terminal, make sure that `java -version` shows version 21 or later.
 
 4. In Android Studio, open Device Manager and create a virtual device with a recent Pixel profile and an API 36 system image. Use an ARM64 image on Apple silicon.
 
@@ -139,7 +141,8 @@ Run these commands from the repository root. They also work in `apps/mobile`.
 |---|---|
 | Develop with hot reload | `bun run android`. Expo uses the first running device or virtual device, and starts a virtual device when none runs. It builds the debug app, installs it, and starts Metro. A saved TypeScript change shows at once. Add `--device` to choose the device from a list. |
 | Use a physical phone | Turn on Developer options and USB debugging on the phone, connect it by USB, then run `bun run android --device` and select it. |
-| Check speed and memory | `bun run android --variant release`. A debug build is much slower than a release build. |
+| Install the app on a phone | Connect the phone by USB, then run `bun run android:release`. It builds the release app, installs it, and opens it. It starts no Metro, so the app runs without this computer. Add `--device` to choose from more than one device. |
+| Check speed and memory | `bun run android:release`. A debug build is much slower than a release build. |
 
 A change in `modules/`, `plugins/`, or `app.config.ts` needs a new `bun run android`, because it changes native code. Press `Cmd+M` in the emulator, or shake a phone, to open the developer menu.
 
@@ -147,13 +150,14 @@ To connect, enter the address that Remote control shows on the host. The emulato
 
 ## Commands
 
-Run these commands in `apps/mobile`. `bun run ios` and `bun run android` also work from the repository root.
+Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun run android:release` also work from the repository root.
 
 | Command | Purpose |
 |---|---|
 | `bun run start` | Starts Metro for a development build |
 | `bun run ios` | Generates the iOS project and runs the app on a simulator or device |
 | `bun run android` | Generates the Android project and runs the app on an emulator or device |
+| `bun run android:release` | Builds the release app and installs it on an emulator or device, without Metro |
 | `bun run native` | Generates `ios/` and `android/` from the app config. The name is not `prebuild`, because `bun run build` would run a `prebuild` script first. |
 | `bun run build` | Builds the isolated pages and exports the iOS and Android JavaScript bundles |
 | `bun run typecheck` | Checks the app and test TypeScript projects |

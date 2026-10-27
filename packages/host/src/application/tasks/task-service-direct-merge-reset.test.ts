@@ -126,8 +126,7 @@ const createHarness = (
       getTaskMetadata: () =>
         Effect.sync(() => {
           const metadata: TaskMetadataPayload = {
-            spec: { markdown: "# Spec" },
-            plan: { markdown: "# Plan" },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
             agentSessions: [],
           };
           if (directMerge) metadata.directMerge = directMerge;
@@ -140,17 +139,17 @@ const createHarness = (
             taskId: "task-1",
             name: "Specification",
             classification: "workflow",
-            workflowKind: "spec",
+            code: "spec",
             mediaType: "text/markdown",
             revision: 1,
             updatedAt: null,
           },
           {
-            artifactId: "workflow:task-1:implementation_plan",
+            artifactId: "workflow:task-1:plan",
             taskId: "task-1",
             name: "Implementation Plan",
             classification: "workflow",
-            workflowKind: "plan",
+            code: "plan",
             mediaType: "text/markdown",
             revision: 1,
             updatedAt: null,
@@ -158,7 +157,7 @@ const createHarness = (
         ]),
       clearTaskArtifacts: () => Effect.succeed(true),
       clearAgentSessionsByRoles: () => Effect.succeed(true),
-      clearQaReports: () => Effect.succeed(true),
+      clearWorkflowArtifacts: () => Effect.succeed(true),
       setPullRequest: () => Effect.succeed(true),
       setDirectMerge: ({ directMerge: nextMerge }) =>
         Effect.gen(function* () {

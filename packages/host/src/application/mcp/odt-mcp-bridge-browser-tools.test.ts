@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { type BrowserTabOwner, type OdtBrowserToolResult } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -42,6 +43,7 @@ const createBridge = ({
     },
   };
   const bridge = createOdtMcpBridgeService({
+    taskWorkflows: builtinTaskWorkflows,
     browserAgentTools,
     managedCallers: {
       resolve: () => Effect.die(new Error("This tool does not resolve managed callers.")),
@@ -57,8 +59,6 @@ const createBridge = ({
     },
     taskService: {
       ...createTaskServiceTestDouble({}),
-      qaApproved: () => Effect.die(new Error("Browser tools never approve QA.")),
-      qaRejected: () => Effect.die(new Error("Browser tools never reject QA.")),
     },
     workspaceSettingsService: {
       getRepoConfig: () => Effect.die(new Error("Browser tools resolve the workspace themselves.")),

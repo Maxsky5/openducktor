@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskCard, WorkspaceSession } from "@openducktor/contracts";
+import type { WorkspaceSession } from "@openducktor/contracts";
 import {
   createTaskCardFixture,
   createWorkspaceRecordFixture,
@@ -7,6 +7,7 @@ import {
 import { searchGroups } from "./command-palette-groups";
 import { rankActions, rankChats, rankTasks, type ScoredMatch } from "./command-palette-search";
 import type { PaletteAction, PaletteChat, PaletteTask } from "./command-palette-types";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const workspace = createWorkspaceRecordFixture();
 

@@ -1,3 +1,4 @@
+import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
 import type {
   AgentModelFavorite,
   GitProviderRepository,
@@ -178,7 +179,7 @@ export function useRepoSettingsOperations({
       };
       requireComplete("Default Model", draft.defaultModel);
       const agentDefaults: RepoAgentDefaults = {};
-      for (const role of ["spec", "planner", "build", "qa"] as const) {
+      for (const role of BUILTIN_ROLE_IDS) {
         const entry = draft.agentDefaults[role];
         requireComplete(`${role} default`, entry);
         const normalized = normalizeRepoAgentDefaultForSave(role, entry);

@@ -1,15 +1,13 @@
 import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
+import type { BuiltinDocumentCode } from "@openducktor/workflows";
 import type { ComposerState, EditTaskSection } from "./task-composer-types";
 
-type DocumentSection = Extract<EditTaskSection, "spec" | "plan">;
-
-export const isDocumentSection = (section: EditTaskSection): section is DocumentSection =>
-  section === "spec" || section === "plan";
+export const isDocumentSection = (section: EditTaskSection): section is BuiltinDocumentCode =>
+  section !== "details";
 
 export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
   title: state.title.trim(),
   issueType: state.issueType,
-  aiReviewEnabled: state.aiReviewEnabled,
   priority: state.priority,
   description: state.description.trim() || undefined,
   labels: state.labels,
@@ -17,27 +15,15 @@ export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
 
 export const toTaskUpdatePatch = (state: ComposerState): TaskUpdatePatch => ({
   title: state.title.trim(),
-  aiReviewEnabled: state.aiReviewEnabled,
   priority: state.priority,
   description: state.description.trim(),
   labels: state.labels,
 });
 
 export const hasUnsavedDocumentChanges = (
-  section: DocumentSection | null,
-  options: {
-    isSpecDirty: boolean;
-    isPlanDirty: boolean;
-  },
-): boolean => {
-  if (section === "spec") {
-    return options.isSpecDirty;
-  }
-  if (section === "plan") {
-    return options.isPlanDirty;
-  }
-  return false;
-};
+  section: BuiltinDocumentCode | null,
+  dirtyDocuments: Record<BuiltinDocumentCode, boolean>,
+): boolean => (section === null ? false : dirtyDocuments[section]);
 
 /**
  * True when the live task card reports a newer document than the one the editor loaded. A card

@@ -1,4 +1,5 @@
 import type {
+  AgentToolName,
   AgentGeneratedImageDescribeInput,
   AgentGeneratedImageDescribeResult,
   AgentGeneratedImageReadInput,
@@ -80,6 +81,15 @@ import type {
   AgentRuntimePolicyBinding,
   PolicyBoundSessionRef,
 } from "@openducktor/contracts";
+
+/** The tools and workspace access of a workflow role. The task workflow of the session task defines them. */
+export type WorkflowRolePolicy = {
+  readonly tools: readonly AgentToolName[];
+  readonly readOnly: boolean;
+};
+export type WorkflowRolePolicyResolver = (
+  scope: Pick<AgentSessionWorkflowScope, "taskId" | "role">,
+) => WorkflowRolePolicy;
 
 export const workflowAgentSessionScope = (
   taskId: string,

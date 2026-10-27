@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import * as fsPromises from "node:fs/promises";
@@ -113,6 +114,7 @@ const createServiceInput = (events?: {
   resolvedBridgeRepoPaths?: string[];
 }): CreateClaudeAgentSdkServiceInput => ({
   claudeExecutablePath: process.execPath,
+  resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
   launchPolicy: {
     resolve: () => Effect.succeed({}),
   },

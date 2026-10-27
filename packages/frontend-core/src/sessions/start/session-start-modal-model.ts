@@ -1,6 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { SelectOption } from "../../lib/select-option";
+import { selectableModelPickerCatalog } from "../model-selection/model-picker-model";
 import type {
   ModelPickerFavoriteState,
   ModelPickerRuntime,
@@ -97,6 +98,14 @@ export type SessionStartAvailability = {
   variantDisabled: boolean;
 };
 
+/** The selectable catalog of the selected runtime. */
+const selectedRuntimeCatalog = (model: SessionStartModalModel) =>
+  selectableModelPickerCatalog(
+    model.modelPickerRuntimes.find(
+      (runtime) => runtime.descriptor.kind === model.selectedRuntimeKind,
+    )?.resource,
+  );
+
 /** The first cause that blocks Start, in the order that the user can fix the causes. */
 const sessionStartBlockedReason = (
   model: SessionStartModalModel,
@@ -122,6 +131,9 @@ const sessionStartBlockedReason = (
   }
   if (!reuse && (!model.selectedRuntimeKind || !model.selectedModelSelection)) {
     return "Choose a model to start.";
+  }
+  if (!reuse && model.supportsProfiles && selectedRuntimeCatalog(model)?.profiles?.length === 0) {
+    return "The runtime has no profiles to start a session.";
   }
   if (
     needsSource &&

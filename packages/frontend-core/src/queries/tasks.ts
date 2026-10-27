@@ -1,7 +1,7 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
 

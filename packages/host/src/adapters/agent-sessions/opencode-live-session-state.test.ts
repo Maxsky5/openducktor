@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
@@ -28,6 +29,7 @@ const summary = (externalSessionId = "session-1"): AgentSessionSummary => ({
 const createState = () => {
   let nextOccurrence = 1;
   return createOpenCodeLiveSessionState({
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     runtime,
     nextOccurrenceId: () => `opaque-${nextOccurrence++}`,
   });
@@ -725,6 +727,7 @@ describe("OpenCode host live-session state", () => {
 
   test("does not retain a pending route when event validation fails", () => {
     const state = createOpenCodeLiveSessionState({
+      resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       runtime,
       nextOccurrenceId: () => "",
     });

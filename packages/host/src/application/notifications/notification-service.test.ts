@@ -1,9 +1,12 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
+import { withTaskWorkflowSettings } from "../workspaces/task-workflow-settings";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { expect, mock, test } from "bun:test";
 import {
   globalConfigSchema,
   repoConfigSchema,
-  taskCardSchema,
   type AgentSessionLiveSnapshot,
   type AgentSessionLiveRef,
   type ExternalTaskSyncEvent,
@@ -12,6 +15,7 @@ import {
   type NotificationStreamFrame,
   type WorkspaceSession,
 } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Stream, Effect } from "effect";
 import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -29,6 +33,7 @@ import {
 } from "../agent-sessions/agent-session-live-state-service";
 import { createNotificationService } from "./notification-service";
 import type { TaskService } from "../tasks/task-service";
+import { taskCardFixture } from "../../test-support/task-card-fixture";
 const config = () =>
   globalConfigSchema.parse({
     version: 4,
@@ -110,6 +115,7 @@ const harness = (
     initialRead?: Promise<void>;
     failWorkspace?: string;
     live?: Pick<AgentSessionLiveStateService, "attach">;
+    taskWorkflows?: TaskWorkflowResolver;
   } = {},
 ) => {
   let saved = config();
@@ -148,7 +154,11 @@ const harness = (
     }),
   );
   const service = createNotificationService({
-    settingsConfig: port,
+    taskWorkflows: options.taskWorkflows ?? builtinTaskWorkflows,
+    // Some tests replace port methods after this call, so only a custom workflow wraps the port.
+    settingsConfig: options.taskWorkflows
+      ? withTaskWorkflowSettings(port, options.taskWorkflows)
+      : port,
     tasks: { listTasks, agentSessionsListForTasks: listAssociations },
     live: options.live ?? { attach: attachLive },
     workspaceSessions: { listActive },
@@ -250,6 +260,7 @@ test.each(["before", "after"])(
     const rootBatches: Array<{ repoPath: string; roots: AgentSessionLiveRef[] }> = [];
     const prepared = await Effect.runPromise(
       createOpenCodeLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         liveSessionLifecycle: live,
         prepareRuntime: async (input) => {
           const prepared = await native.prepareRuntime(input);
@@ -394,6 +405,31 @@ test("two browsers add no notification baseline reads and share ordered committe
     await Effect.runPromise(h.service.dispose());
   }
 });
+test("delivers the state notifications of a custom workflow with its default settings", async () => {
+  const h = harness({ taskWorkflows: reviewTaskWorkflows });
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    const event = transition("review");
+    if (event.kind === "tasks_updated")
+      event.statusChanges = [
+        { previousStatus: "writing", task: { id: "task", title: "Task", status: "reviewing" } },
+        { previousStatus: "approval", task: { id: "task", title: "Task", status: "published" } },
+      ];
+    h.service.acceptTask(event);
+    await flush();
+    const [reviewing, published] = occurrences(h.frames).map((frame) => frame.selected);
+    expect(reviewing?.occurrence).toMatchObject({ kind: "workflow.reviewing", role: "editor" });
+    expect(published?.occurrence.kind).toBe("workflow.published");
+    expect(reviewing?.settings.kinds).toMatchObject({
+      "workflow.reviewing": { enabled: true, target: "both", sound: "inherit" },
+      "workflow.published": { enabled: true, target: "in_app", sound: "none" },
+    });
+    expect(Object.keys(reviewing?.settings.kinds ?? {})).not.toContain("workflow.human_review");
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
 test.each(["baseline", "committed", "deferred"] as const)(
   "workspace notifications use saved titles from %s associations and later renames",
   async (source) => {
@@ -490,7 +526,8 @@ test.each(["baseline", "committed", "deferred"] as const)(
 test.each(["baseline", "committed"] as const)(
   "workflow session notifications use %s task labels without leaking task records",
   async (source) => {
-    const task = taskCardSchema.parse({
+    const task = taskCardFixture({
+      artifactSummary: emptyArtifactSummary(),
       id: "task",
       title: "Saved task",
       description: "Private task description",

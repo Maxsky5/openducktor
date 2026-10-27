@@ -1,13 +1,19 @@
-import { ClipboardList, FileCode, ScrollText } from "lucide-react";
+import {
+  BUILTIN_DOCUMENT_CODES,
+  type BuiltinDocumentCode,
+  workflowArtifactRole,
+  workflowArtifactShortLabel,
+} from "@openducktor/workflows";
+import { ClipboardList, FileText } from "lucide-react";
 import type { ReactElement } from "react";
+import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 type TaskEditSectionSwitcherProps = {
   section: EditTaskSection;
-  hasUnsavedSpec: boolean;
-  hasUnsavedPlan: boolean;
+  dirtyDocuments: Record<BuiltinDocumentCode, boolean>;
   disabled?: boolean;
   onSectionChange: (section: EditTaskSection) => void;
 };
@@ -15,14 +21,13 @@ type TaskEditSectionSwitcherProps = {
 type SectionItem = {
   id: EditTaskSection;
   label: string;
-  icon: typeof ClipboardList;
+  icon: typeof ClipboardList | (typeof AGENT_ROLE_ICONS)[keyof typeof AGENT_ROLE_ICONS];
   hasUnsaved: boolean;
 };
 
 export function TaskEditSectionSwitcher({
   section,
-  hasUnsavedSpec,
-  hasUnsavedPlan,
+  dirtyDocuments,
   disabled = false,
   onSectionChange,
 }: TaskEditSectionSwitcherProps): ReactElement {
@@ -33,18 +38,16 @@ export function TaskEditSectionSwitcher({
       icon: ClipboardList,
       hasUnsaved: false,
     },
-    {
-      id: "spec",
-      label: "Spec",
-      icon: FileCode,
-      hasUnsaved: hasUnsavedSpec,
-    },
-    {
-      id: "plan",
-      label: "Plan",
-      icon: ScrollText,
-      hasUnsaved: hasUnsavedPlan,
-    },
+    // Each document shows the icon of the role that writes it.
+    ...BUILTIN_DOCUMENT_CODES.map((code): SectionItem => {
+      const role = workflowArtifactRole(code);
+      return {
+        id: code,
+        label: workflowArtifactShortLabel(code),
+        icon: role ? AGENT_ROLE_ICONS[role] : FileText,
+        hasUnsaved: dirtyDocuments[code],
+      };
+    }),
   ];
 
   return (

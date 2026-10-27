@@ -65,7 +65,8 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
     input: AgentSessionControlSendInput,
     options: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentInput | undefined, HostError>;
-  initial: (request: Request) => Result;
+  /** The result before the launch runs. A request that cannot launch fails here. */
+  initial: (request: Request) => Effect.Effect<Result, HostValidationError>;
   key: (request: Request) => string;
   target?: (request: Request) => AgentSessionLiveRef | undefined;
   run: (context: SessionLaunchContext<Request, Result>) => Effect.Effect<unknown, unknown>;
@@ -225,7 +226,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             );
           const attempt: Attempt<Request, Result> = {
             request,
-            result: deps.initial(request),
+            result: yield* deps.initial(request),
             ownershipSaved: false,
             held: false,
             canceled: false,

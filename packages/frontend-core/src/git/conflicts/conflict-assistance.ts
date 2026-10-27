@@ -1,5 +1,8 @@
-import type { RepoPromptOverrides, TaskCard, WorkspaceSession } from "@openducktor/contracts";
-import { buildGitConflictAssistancePrompt } from "@openducktor/core";
+import type { RepoPromptOverrides, WorkspaceSession } from "@openducktor/contracts";
+import {
+  buildGitConflictAssistancePrompt,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { matchesAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "../../lib/working-directory";
 import type { AgentMessageSendReceipt, AgentSessionIdentity } from "../../types/agent-orchestrator";
@@ -123,7 +126,6 @@ export const buildTaskConflictPrompt = ({
       title: task.title,
       issueType: task.issueType,
       status: task.status,
-      qaRequired: task.aiReviewEnabled,
       description: task.description,
     };
   }
@@ -142,7 +144,7 @@ export type ConflictRequestOutcome =
 /** The result of an accepted, queued, or uncertain conflict request. */
 export const describeConflictRequestReceipt = (
   receipt: AgentMessageSendReceipt,
-  recipientLabel: "Builder" | "agent",
+  recipientLabel: string,
 ): ConflictRequestOutcome => {
   if (
     (receipt.outcome === "accepted" || receipt.outcome === "acknowledged") &&

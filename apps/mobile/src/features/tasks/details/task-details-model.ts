@@ -1,10 +1,12 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { KanbanTaskSession } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
   resolveTaskCardActions,
+  taskActionLabel,
   type TaskWorkflowAction,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+  type BuiltinTaskCard as TaskCard,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import {
   resolveHistoricalSessionRoles,
   resolveSessionTargetOptions,
@@ -13,7 +15,6 @@ import {
 import {
   type TaskActionTone,
   taskActionIsDestructive,
-  taskActionLabel,
   taskActionTone,
 } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { TASK_DETAILS_WORKFLOW_ACTIONS } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
@@ -50,9 +51,9 @@ export const taskTargetBranchPresentation = (
  */
 export const taskDocumentsSummary = (summary: TaskCard["artifactSummary"]): string | null => {
   const names = [
-    summary.spec.has ? "Spec" : null,
-    summary.plan.has ? "Plan" : null,
-    summary.qaReport.has ? "QA report" : null,
+    summary.spec?.present ? "Spec" : null,
+    summary.plan?.present ? "Plan" : null,
+    summary.qaReport?.present ? "QA report" : null,
   ].filter((name) => name !== null);
   if (names.length === 0) return null;
   if (names.length === 1) return names.join("");

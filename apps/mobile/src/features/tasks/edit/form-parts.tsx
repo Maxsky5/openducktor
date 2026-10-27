@@ -10,8 +10,6 @@ import {
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
-import { Toggle } from "@/ui/fields";
-import { haptics } from "@/ui/haptics";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
@@ -154,51 +152,6 @@ export function ToolbarButton({
 }
 
 /**
- * A switch with its sentence in one outlined box, as the desktop switch and its label. The whole
- * box toggles the switch.
- */
-export function SwitchBox({
-  label,
-  text,
-  value,
-  onValueChange,
-  disabled = false,
-}: {
-  /** The accessible name, such as the field label. */
-  label: string;
-  /** The sentence next to the switch. */
-  text: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-  disabled?: boolean;
-}): ReactElement {
-  const theme = useAppTheme();
-  return (
-    <Touchable
-      feedback="highlight"
-      onPress={() => {
-        haptics.selection();
-        onValueChange(!value);
-      }}
-      disabled={disabled}
-      radius={theme.radius.md}
-      accessibilityRole="switch"
-      accessibilityLabel={label}
-      accessibilityHint={text}
-      accessibilityState={{ checked: value }}
-      style={[styles.box, styles.switchBox]}
-    >
-      <Text variant="callout" weight="semibold" style={styles.grow}>
-        {text}
-      </Text>
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Toggle value={value} disabled={disabled} />
-      </View>
-    </Touchable>
-  );
-}
-
-/**
  * Two or three views of a text as the desktop inline view switch: a quiet track with the
  * selected view on a white segment. Each option has an icon and a short name.
  */
@@ -300,15 +253,6 @@ const styles = StyleSheet.create((theme) => ({
         danger: { borderColor: "transparent" },
       },
     },
-  },
-  switchBox: {
-    minHeight: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.space.md,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: theme.space.sm,
-    borderColor: theme.desktop.input,
   },
   switchTrack: {
     flexDirection: "row",

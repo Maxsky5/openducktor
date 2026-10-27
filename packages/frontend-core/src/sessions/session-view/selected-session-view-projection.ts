@@ -1,5 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import {
   getAgentSessionActivityStateFromSession,
   visibleSessionActivity,
@@ -25,6 +23,10 @@ import type { AgentSessionActivityState } from "../../types/agent-session-activi
 import type { AgentSessionReadModelLoadState } from "../../types/agent-session-read-model";
 import type { AgentSessionTransientFault } from "../../types/agent-session-transient-fault";
 import type { RepoSettingsInput } from "../../types/session-slices";
+import type {
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 export type SelectedSessionViewProjection = {
   activityState: AgentSessionActivityState | null;

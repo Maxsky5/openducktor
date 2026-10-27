@@ -1,4 +1,4 @@
-import type { SessionLaunchActionId } from "@openducktor/frontend-core/lib/session-launch-actions";
+import type { BuiltinLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ChangedFileGroup } from "@/features/review/changes-model";
 import type { ChangesFocus } from "@/features/review/changes-view-state";

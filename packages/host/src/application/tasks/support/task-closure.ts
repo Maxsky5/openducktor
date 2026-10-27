@@ -1,14 +1,19 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
 import { HostDependencyError, type HostOperationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
-import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
+import type {
+  TaskRecord,
+  TaskStoreError,
+  TaskStorePort,
+} from "../../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
+import { decisionTransition, type AdmittedTaskEvent } from "./task-workflow-events";
 
 type TaskClosureStore = Pick<TaskStorePort, "transitionTask">;
 
 export const completeTaskClosure = <CleanupError>({
   cleanup,
+  decision,
   gitPort,
   operation,
   repoPath,
@@ -17,6 +22,8 @@ export const completeTaskClosure = <CleanupError>({
   taskStore,
 }: {
   cleanup: Effect.Effect<void, CleanupError, Scope.Scope>;
+  /** The admitted closing event. Its transition carries the signal and source role. */
+  decision: AdmittedTaskEvent;
   gitPort: Pick<GitPort, "canonicalizePath"> | undefined;
   operation: string;
   repoPath: string;
@@ -24,7 +31,7 @@ export const completeTaskClosure = <CleanupError>({
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator | undefined;
   taskStore: TaskClosureStore;
 }): Effect.Effect<
-  TaskCard,
+  TaskRecord,
   CleanupError | HostDependencyError | HostOperationError | TaskStoreError
 > =>
   Effect.scoped(
@@ -55,7 +62,7 @@ export const completeTaskClosure = <CleanupError>({
       );
       yield* cleanup;
       return yield* Effect.suspend(() =>
-        taskStore.transitionTask({ repoPath, taskId, status: "closed" }),
+        taskStore.transitionTask({ repoPath, taskId, ...decisionTransition(decision) }),
       );
     }),
   );

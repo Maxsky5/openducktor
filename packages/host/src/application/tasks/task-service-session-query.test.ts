@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -25,6 +26,7 @@ describe("single-task session queries", () => {
   test("requires a result from the single-ID batch call", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
       taskStore: createTaskStoreTestDouble({
         listAgentSessionsForTasks: (input) => {
           calls.push(input);
@@ -48,15 +50,40 @@ describe("single-task session queries", () => {
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
-          task: { title: "Session query", issueType: "task", priority: 2, aiReviewEnabled: true },
+          status: "open",
+          task: { title: "Session query", issueType: "task", priority: 2 },
         }),
       );
       const input = { repoPath, taskId: task.id };
       const markdown = "Unrelated document content.";
-      await Effect.runPromise(store.setSpecArtifact({ ...input, markdown }));
-      await Effect.runPromise(store.setPlanArtifact({ ...input, markdown }));
       await Effect.runPromise(
-        store.recordQaOutcome({ ...input, markdown, verdict: "approved", status: "human_review" }),
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          ...input,
+          markdown,
+          code: "spec",
+        }),
+      );
+      await Effect.runPromise(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          ...input,
+          markdown,
+          code: "plan",
+        }),
+      );
+      await Effect.runPromise(
+        store.saveWorkflowArtifact({
+          sourceTool: "workflow_artifact_save",
+          updatedBy: "user",
+          ...input,
+          markdown,
+          verdict: "approved",
+          status: "human_review",
+          code: "qaReport",
+        }),
       );
 
       await Effect.runPromise(
@@ -81,7 +108,7 @@ describe("single-task session queries", () => {
                   use({ ...context, session: connection.session }),
                 ),
             });
-            const service = createTaskService({ taskStore });
+            const service = createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore });
             expect(yield* service.agentSessionsList(input)).toEqual([]);
             expectSingleAgentSessionSelect(queries, input.taskId);
 
@@ -113,9 +140,11 @@ describe("single-task session queries", () => {
 
             const metadata = yield* service.getTaskMetadata(input);
             expect(metadata).toMatchObject({
-              spec: { markdown },
-              plan: { markdown },
-              qaReport: { markdown, verdict: "approved" },
+              artifacts: {
+                spec: { markdown },
+                plan: { markdown },
+                qaReport: { markdown, verdict: "approved" },
+              },
               agentSessions: [newer, older],
             });
           }),

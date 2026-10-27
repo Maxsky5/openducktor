@@ -2,7 +2,6 @@ import { createHostRuntimeServiceTestDouble } from "../../test-support/host-runt
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import {
   DEFAULT_AGENT_RUNTIMES,
-  DEFAULT_NOTIFICATION_SETTINGS,
   settingsSnapshotSchema,
   type SidebarSessionGrouping,
 } from "@openducktor/contracts";
@@ -17,6 +16,7 @@ import {
 } from "../router/host-command-router";
 
 import { createWorkspaceSettingsCommandHandlers } from "./workspace-settings-command-handlers";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
@@ -315,7 +315,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             reusablePrompts: [],
             kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
             autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-            notifications: DEFAULT_NOTIFICATION_SETTINGS,
+            notifications: createBuiltinNotificationSettings(),
             agentRuntimes: DEFAULT_AGENT_RUNTIMES,
             agentModelFavorites: [],
             workspaces: {},
@@ -347,7 +347,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             reusablePrompts: [],
             kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
             autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-            notifications: DEFAULT_NOTIFICATION_SETTINGS,
+            notifications: createBuiltinNotificationSettings(),
             agentRuntimes: DEFAULT_AGENT_RUNTIMES,
             agentModelFavorites: [
               { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
@@ -380,7 +380,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           reusablePrompts: [],
           kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView },
           autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-          notifications: DEFAULT_NOTIFICATION_SETTINGS,
+          notifications: createBuiltinNotificationSettings(),
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           agentModelFavorites: [],
           workspaces: {},
@@ -517,7 +517,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           reusablePrompts: [],
           kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
           autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-          notifications: DEFAULT_NOTIFICATION_SETTINGS,
+          notifications: createBuiltinNotificationSettings(),
           agentRuntimes: {
             opencode: { enabled: true, executablePath: "/bin/opencode" },
             codex: { enabled: false, executablePath: "/bin/codex" },
@@ -801,7 +801,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       reusablePrompts: [],
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
       autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-      notifications: DEFAULT_NOTIFICATION_SETTINGS,
+      notifications: createBuiltinNotificationSettings(),
       agentRuntimes: {
         opencode: { enabled: false, executablePath: "/bin/opencode" },
         codex: { enabled: false, executablePath: "/bin/codex" },

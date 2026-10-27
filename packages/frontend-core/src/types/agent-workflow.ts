@@ -1,6 +1,6 @@
 import type { AgentSessionActivityState } from "./agent-session-activity";
 
-export type AgentWorkflowStepTone =
+export type WorkflowStepTone =
   | "done"
   | "in_progress"
   | "available"
@@ -10,15 +10,22 @@ export type AgentWorkflowStepTone =
   | "waiting_input"
   | "failed";
 
-export type AgentWorkflowStepAvailability = "available" | "optional" | "blocked";
+export type WorkflowStepAvailability = "available" | "optional" | "blocked";
 
-export type AgentWorkflowStepCompletion = "not_started" | "in_progress" | "done" | "rejected";
+export type WorkflowStepCompletion = "not_started" | "in_progress" | "done" | "rejected";
 
-export type AgentWorkflowStepLiveSession = AgentSessionActivityState | "none";
+export type WorkflowStepLiveSession = AgentSessionActivityState | "none";
 
-export type AgentWorkflowStepState = {
-  tone: AgentWorkflowStepTone;
-  availability: AgentWorkflowStepAvailability;
-  completion: AgentWorkflowStepCompletion;
-  liveSession: AgentWorkflowStepLiveSession;
+export type WorkflowStepPresentation = {
+  tone: WorkflowStepTone;
+  availability: WorkflowStepAvailability;
+  completion: WorkflowStepCompletion;
+  liveSession: WorkflowStepLiveSession;
+};
+
+export type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
+
+export type WorkflowStepRailState = {
+  hint: string;
+  attentionVariant: WorkflowStepAttentionVariant;
 };

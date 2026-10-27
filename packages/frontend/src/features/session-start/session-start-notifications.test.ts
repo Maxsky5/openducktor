@@ -1,12 +1,10 @@
+import { BUILTIN_ROLE_LABELS, createBuiltinNotificationSettings } from "@openducktor/workflows";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { showSessionStartMessageRecovery } from "./session-start-message-recovery";
 import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type NotificationOccurrence,
-} from "@openducktor/contracts";
+import { type NotificationOccurrence } from "@openducktor/contracts";
 import { toast } from "sonner";
 import { createNotificationPolicy } from "@openducktor/frontend-core/notifications/notification-policy";
 import { navigateToNotificationTarget } from "@/features/notifications/notification-navigation-logic";
@@ -62,7 +60,7 @@ describe("session-start notifications", () => {
   ] as const)(
     "preserves background kickoff failure feedback with %s notifications",
     async (scenario) => {
-      const settings = createDefaultNotificationSettings();
+      const settings = createBuiltinNotificationSettings();
       settings.volumePercent = 0;
       settings.kinds["agent.session_error"] = {
         enabled: scenario !== "disabled",
@@ -84,7 +82,7 @@ describe("session-start notifications", () => {
         if (scenario === "publisher_failed") throw new Error("Publication failed");
         const occurrence = buildSessionStartErrorOccurrence(
           { repoPath: "/repo", repositoryLabel: "Repo" },
-          input,
+          { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
         );
         const local = await policy.dispatch(
           occurrence,
@@ -429,15 +427,17 @@ describe("session-start notifications", () => {
     const occurrences: NotificationOccurrence[] = [];
     const notifications: SessionStartNotificationPublisher = {
       publishSessionStarted: mock(() => {}),
-      publishSessionError: mock(async (input) => {
-        occurrences.push(
-          buildSessionStartErrorOccurrence(
-            { repoPath: "/tmp/repo", repositoryLabel: "OpenDucktor" },
-            input,
-          ),
-        );
-        return true;
-      }),
+      publishSessionError: mock(
+        async (input: Parameters<SessionStartNotificationPublisher["publishSessionError"]>[0]) => {
+          occurrences.push(
+            buildSessionStartErrorOccurrence(
+              { repoPath: "/tmp/repo", repositoryLabel: "OpenDucktor" },
+              { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
+            ),
+          );
+          return true;
+        },
+      ),
       markInAppFeedbackHandled: () => {},
       reportFailure: mock(() => {}),
     };

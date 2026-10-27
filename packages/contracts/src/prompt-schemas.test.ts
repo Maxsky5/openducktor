@@ -36,33 +36,13 @@ describe("prompt placeholder validation", () => {
     expect(result.missingRequiredPlaceholders).toEqual([]);
   });
 
-  test("reports missing required placeholders for human-review kickoff overrides", () => {
-    const result = validatePromptTemplatePlaceholders(
-      "Review {{task.id}} before editing.",
-      "kickoff.build_after_human_request_changes",
-    );
+  test("reports the required placeholders that the template omits", () => {
+    const result = validatePromptTemplatePlaceholders("Review {{task.id}} before editing.", [
+      "humanFeedback",
+      "task.id",
+    ]);
 
     expect(result.unsupportedPlaceholders).toEqual([]);
     expect(result.missingRequiredPlaceholders).toEqual(["humanFeedback"]);
-  });
-
-  test("requires one target placeholder for pull request kickoff overrides", () => {
-    const result = validatePromptTemplatePlaceholders(
-      "Publish the current branch.",
-      "kickoff.build_pull_request_generation",
-    );
-
-    expect(result.unsupportedPlaceholders).toEqual([]);
-    expect(result.missingRequiredPlaceholders).toEqual(["git.targetBranch"]);
-  });
-
-  test("accepts the target placeholder for pull request kickoff overrides", () => {
-    const result = validatePromptTemplatePlaceholders(
-      "Publish against {{git.targetBranch}}.",
-      "kickoff.build_pull_request_generation",
-    );
-
-    expect(result.unsupportedPlaceholders).toEqual([]);
-    expect(result.missingRequiredPlaceholders).toEqual([]);
   });
 });

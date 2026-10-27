@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@openducktor/contracts";
+import { type BuiltinStateId as TaskStatus } from "@openducktor/workflows";
 import { memo, type ReactElement } from "react";
 import { StatusLabel } from "@/ui/badge";
 import { TaskChip } from "./task-chip";

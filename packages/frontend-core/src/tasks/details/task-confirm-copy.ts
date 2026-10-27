@@ -187,23 +187,13 @@ export const buildTaskResetConfirmCopy = (
   };
 };
 
-/** The Delete confirmation. Delete also removes the direct subtasks of the task. */
+/** The Delete confirmation. */
 export const buildTaskDeleteConfirmCopy = (
   task: TaskConfirmSubject,
   impact: TaskConfirmImpact,
-  subtasksCount: number,
 ): TaskConfirmCopy => {
-  const hasSubtasks = subtasksCount > 0;
-  const subtasks = hasSubtasks
-    ? ` and its ${subtasksCount} direct ${plural(subtasksCount, "subtask")}`
-    : "";
   const lines = [
     line("This action permanently removes the task and all its workflow and free artifacts.", true),
-    line(
-      hasSubtasks
-        ? "Direct subtasks will also be deleted to avoid orphaned children in the workflow."
-        : "Any descendant subtasks will also be deleted to avoid orphaned children.",
-    ),
   ];
   if (impact.terminalCount > 0) {
     lines.push(
@@ -217,7 +207,7 @@ export const buildTaskDeleteConfirmCopy = (
   if (cleanupMessage) lines.push(line(cleanupMessage));
   return {
     title: "Delete Task",
-    ...namedDescription("Delete ", task, `${subtasks}? This cannot be undone.`),
+    ...namedDescription("Delete ", task, "? This cannot be undone."),
     tone: "destructive",
     lines,
     confirmLabel: { idle: "Delete", pending: "Deleting...", checking: CHECKING_LABEL },

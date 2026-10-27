@@ -1,9 +1,4 @@
-import type {
-  RepositoryGitProviderContext,
-  TaskAction,
-  TaskCard,
-  TaskStatus,
-} from "@openducktor/contracts";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./task-approval-types";
 import {
   isTaskApprovalReady,
@@ -12,34 +7,10 @@ import {
   type TaskApprovalFlowState,
 } from "./task-approval-flow-state";
 
-type ReviewStatus = Extract<TaskStatus, "ai_review" | "human_review">;
-type ApprovalCompletionPath = "direct_merge" | "pull_request";
-type TaskApprovalWorkflowCommand = "approve" | "request_changes";
 type MissingBuilderWorktreeApprovalState = TaskApprovalFlowOpenState & {
   phase: "ready";
   stage: "missing_builder_worktree";
 };
-
-export type TaskApprovalWorkflowTransition =
-  | {
-      kind: "approved";
-      action: "human_approve";
-      fromStatus: ReviewStatus;
-      toStatus: "closed";
-      completionPath: ApprovalCompletionPath;
-    }
-  | {
-      kind: "changes_requested";
-      action: "human_request_changes";
-      fromStatus: ReviewStatus;
-      toStatus: "in_progress";
-    }
-  | {
-      kind: "unavailable";
-      status: TaskStatus;
-      reason: "not_reviewable_status" | "action_unavailable";
-      requiredAction: "human_approve" | "human_request_changes";
-    };
 
 export type TaskApprovalSubmissionRoute =
   | { kind: "ignore" }
@@ -50,59 +21,10 @@ export type TaskApprovalSubmissionRoute =
   | { kind: "submit_direct_merge"; approval: TaskApprovalFlowReadyState; repoPath: string }
   | { kind: "submit_pull_request"; approval: TaskApprovalFlowReadyState; repoPath: string };
 
-const REVIEW_STATUSES = new Set<TaskStatus>(["ai_review", "human_review"]);
-
-const isReviewStatus = (status: TaskStatus): status is ReviewStatus => REVIEW_STATUSES.has(status);
-
-const hasTaskAction = (task: Pick<TaskCard, "availableActions">, action: TaskAction): boolean =>
-  task.availableActions.includes(action);
-
 const isMissingBuilderWorktreeApprovalState = (
   state: TaskApprovalFlowState,
 ): state is MissingBuilderWorktreeApprovalState =>
   state.kind === "open" && state.phase === "ready" && state.stage === "missing_builder_worktree";
-
-export const resolveTaskApprovalWorkflowTransition = (
-  task: Pick<TaskCard, "availableActions" | "pullRequest" | "status">,
-  command: TaskApprovalWorkflowCommand,
-): TaskApprovalWorkflowTransition => {
-  const requiredAction = command === "approve" ? "human_approve" : "human_request_changes";
-
-  if (!isReviewStatus(task.status)) {
-    return {
-      kind: "unavailable",
-      status: task.status,
-      reason: "not_reviewable_status",
-      requiredAction,
-    };
-  }
-
-  if (!hasTaskAction(task, requiredAction)) {
-    return {
-      kind: "unavailable",
-      status: task.status,
-      reason: "action_unavailable",
-      requiredAction,
-    };
-  }
-
-  if (command === "request_changes") {
-    return {
-      kind: "changes_requested",
-      action: "human_request_changes",
-      fromStatus: task.status,
-      toStatus: "in_progress",
-    };
-  }
-
-  return {
-    kind: "approved",
-    action: "human_approve",
-    fromStatus: task.status,
-    toStatus: "closed",
-    completionPath: task.pullRequest ? "pull_request" : "direct_merge",
-  };
-};
 
 export const resolveTaskApprovalOpenMode = (args: {
   gitProviderContext: RepositoryGitProviderContext;

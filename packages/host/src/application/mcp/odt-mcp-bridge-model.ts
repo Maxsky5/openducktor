@@ -3,20 +3,18 @@ import {
   type McpTaskArtifact,
   type OdtToolName,
   type PublicTask,
-  type PublicTaskSummaryTask,
+  type PublicWorkflowArtifactStates,
   type TaskCard,
   type TaskArtifact,
   type TaskSummary,
   type TaskUpdatePatch,
   type UpdateTaskInput,
-  type WorkflowArtifactKind,
-  workflowArtifactKindSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import { HostValidationError } from "../../effect/host-errors";
-import type { TaskReference } from "../../ports/task-repository-ports";
+import type { TaskReference, TaskRecord } from "../../ports/task-repository-ports";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
@@ -25,7 +23,7 @@ const MAX_TASK_CANDIDATES = 5;
 export const normalizeKey = (value: string): string => value.trim().toLowerCase();
 
 export const buildTaskUpdatePatch = (
-  current: TaskCard,
+  current: TaskRecord,
   input: UpdateTaskInput,
 ): TaskUpdatePatch => {
   const patch: TaskUpdatePatch = {};
@@ -46,9 +44,6 @@ export const buildTaskUpdatePatch = (
   }
   if (input.issueType !== undefined && input.issueType !== current.issueType) {
     patch.issueType = input.issueType;
-  }
-  if (input.aiReviewEnabled !== undefined && input.aiReviewEnabled !== current.aiReviewEnabled) {
-    patch.aiReviewEnabled = input.aiReviewEnabled;
   }
   return patch;
 };
@@ -167,7 +162,6 @@ export const mapPublicTask = (task: TaskCard): PublicTask => {
     status: task.status,
     priority: task.priority,
     issueType: task.issueType,
-    aiReviewEnabled: task.aiReviewEnabled,
     labels: task.labels,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -179,24 +173,25 @@ export const mapPublicTask = (task: TaskCard): PublicTask => {
 };
 
 export const mapTaskSummary = (task: TaskCard): TaskSummary => ({
-  task: {
-    ...mapPublicTask(task),
-    qaVerdict: task.artifactSummary.qaReport.verdict,
-    artifacts: taskArtifacts(task),
-  },
+  task: { ...mapPublicTask(task), workflowArtifacts: publicWorkflowArtifacts(task) },
 });
+
+/** The present state and verdict of each workflow artifact, without storage times. */
+export const publicWorkflowArtifacts = (task: TaskCard): PublicWorkflowArtifactStates => {
+  const states: PublicWorkflowArtifactStates = {};
+  for (const [code, state] of Object.entries(task.artifactSummary)) {
+    states[code] =
+      state.verdict === undefined
+        ? { present: state.present }
+        : { present: state.present, verdict: state.verdict };
+  }
+  return states;
+};
 
 export const toMcpTaskArtifact = (artifact: TaskArtifact): McpTaskArtifact => {
   const { artifactId: _artifactId, ...metadata } = artifact;
-  if (metadata.classification === "workflow") {
-    const { workflowKind, ...workflow } = metadata;
-    return { ...workflow, code: workflowKind };
-  }
   return metadata;
 };
-
-export const isWorkflowArtifactCode = (code: string): code is WorkflowArtifactKind =>
-  workflowArtifactKindSchema.safeParse(code).success;
 
 export const findFreeTaskArtifact = (
   artifacts: readonly TaskArtifact[],
@@ -212,16 +207,6 @@ export const missingFreeTaskArtifact = (code: string): HostValidationError =>
     field: "code",
     message: `Free artifact "${code}" was not found. Read the task to get its current artifact codes.`,
   });
-
-export const activeStatuses = new Set([
-  "open",
-  "spec_ready",
-  "ready_for_dev",
-  "in_progress",
-  "blocked",
-  "ai_review",
-  "human_review",
-]);
 
 export const parseToolInput = <Output>(
   toolName: OdtToolName,
@@ -285,9 +270,3 @@ const singleMatch = <Task extends TaskReference>(matches: readonly Task[]): Task
   const [match] = matches;
   return matches.length === 1 && match ? match : null;
 };
-
-const taskArtifacts = (task: TaskCard): PublicTaskSummaryTask["artifacts"] => ({
-  hasSpec: Boolean(task.artifactSummary.spec.has),
-  hasPlan: Boolean(task.artifactSummary.plan.has),
-  hasQaReport: Boolean(task.artifactSummary.qaReport.has),
-});

@@ -1,6 +1,7 @@
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
+import { workflowStepRailState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ComponentProps, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,7 +9,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { TEST_ROLE_OPTIONS } from "./agent-chat/agent-chat-test-fixtures";
 import { AgentStudioHeader } from "./agent-studio-header";
 import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
-import { WorkflowRail } from "./agent-studio-header-workflow-rail";
+import { WorkflowRail, WorkflowRailPreview } from "./agent-studio-header-workflow-rail";
+import type { AgentWorkflowStep } from "./agent-studio-header.types";
+import type { WorkflowRailStep } from "@/types/agent-workflow";
 import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -42,6 +45,14 @@ const roleIcon = (index: number) => {
 };
 
 const noPullRequest: PullRequest | null = null;
+
+type BuiltinWorkflowFixture = Omit<AgentWorkflowStep, "id" | "hint" | "attentionVariant">;
+
+const presentWorkflowStep = (step: BuiltinWorkflowFixture): AgentWorkflowStep => ({
+  ...step,
+  id: step.role,
+  ...workflowStepRailState(step),
+});
 
 const buildModel = () => ({
   taskTitle: "Rework Agent Studio UI",
@@ -98,7 +109,7 @@ const buildModel = () => ({
       },
       sessionValue: null,
     },
-  ],
+  ].map(presentWorkflowStep),
   onWorkflowStepSelect: () => {},
   sessionSelector: {
     value: "spec-session",
@@ -171,15 +182,19 @@ const buildModel = () => ({
   agentStudioReady: true,
 });
 
-const renderWorkflow = (props: Partial<ComponentProps<typeof WorkflowRail>> = {}) => {
+const renderWorkflow = (
+  props: Partial<Omit<ComponentProps<typeof WorkflowRail>, "steps">> & {
+    steps?: BuiltinWorkflowFixture[];
+  } = {},
+) => {
   const model = buildModel();
   return renderToStaticMarkup(
     createElement(WorkflowRail, {
-      steps: model.workflowSteps,
-      selectedRole: model.selectedRole,
-      agentStudioReady: model.agentStudioReady,
+      selectedStepId: model.selectedRole,
+      disabled: !model.agentStudioReady,
       onStepSelect: model.onWorkflowStepSelect,
       ...props,
+      steps: (props.steps ?? model.workflowSteps).map(presentWorkflowStep),
     }),
   );
 };
@@ -905,7 +920,7 @@ describe("AgentStudioHeader", () => {
 
   test("keeps unavailable workflow step clickable without existing session", () => {
     const html = renderWorkflow({
-      selectedRole: "qa",
+      selectedStepId: "qa",
       steps: [
         {
           role: "spec" as const,
@@ -940,7 +955,7 @@ describe("AgentStudioHeader", () => {
 
   test("highlights selected role with a ring without changing done status color", () => {
     const html = renderWorkflow({
-      selectedRole: "planner",
+      selectedStepId: "planner",
       steps: [
         {
           role: "planner" as const,
@@ -963,16 +978,81 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("text-success-muted");
   });
 
-  test("marks workflow step buttons with pressed state for the selected role", () => {
-    const html = renderWorkflow();
+  for (const Rail of [WorkflowRail, WorkflowRailPreview]) {
+    test(`${Rail.name} selects distinct steps by ID and keeps their order`, () => {
+      const buildStep = buildModel().workflowSteps[2]!;
+      const steps: WorkflowRailStep[] = [
+        { ...buildStep, id: "implementation:retry", label: "Retry implementation" },
+        {
+          id: "human:release",
+          label: "Approve release",
+          icon: roleIcon(0),
+          state: {
+            tone: "available",
+            availability: "available",
+            completion: "not_started",
+            liveSession: "none",
+          },
+          hint: "Review the release and approve it",
+          attentionVariant: "none",
+        },
+        { ...buildStep, id: "implementation:initial", label: "Initial implementation" },
+      ];
+      const onStepSelect = mock((_stepId: string) => {});
+      const view = render(
+        createElement(Rail, {
+          steps,
+          selectedStepId: "implementation:initial",
+          disabled: false,
+          onStepSelect,
+        }),
+      );
+      try {
+        const buttons = view.getAllByRole("button");
+        expect(buttons.map((button) => button.textContent)).toEqual([
+          "Retry implementation",
+          "Approve release",
+          "Initial implementation",
+        ]);
+        expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual([
+          "false",
+          "false",
+          "true",
+        ]);
+        expect(buttons[1]!.getAttribute("title")).toBe("Review the release and approve it");
+        for (const button of buttons) fireEvent.click(button);
+        expect(onStepSelect.mock.calls).toEqual([
+          ["implementation:retry"],
+          ["human:release"],
+          ["implementation:initial"],
+        ]);
 
-    expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain('aria-pressed="false"');
-  });
+        view.rerender(
+          createElement(Rail, {
+            steps: steps.toReversed(),
+            selectedStepId: "implementation:retry",
+            disabled: false,
+            onStepSelect,
+          }),
+        );
+        const reordered = view.getAllByRole("button");
+        for (const [index, button] of reordered.entries()) {
+          expect(button).toBe(buttons[buttons.length - index - 1]!);
+        }
+        expect(reordered.map((button) => button.getAttribute("aria-pressed"))).toEqual([
+          "false",
+          "false",
+          "true",
+        ]);
+      } finally {
+        view.unmount();
+      }
+    });
+  }
 
   test("renders waiting-input workflow step hint and warning styling", () => {
     const html = renderWorkflow({
-      selectedRole: "qa",
+      selectedStepId: "qa",
       steps: [
         {
           role: "qa" as const,
@@ -996,7 +1076,7 @@ describe("AgentStudioHeader", () => {
 
   test("renders blocked builder warning with alert icon and blocked-task copy", () => {
     const html = renderWorkflow({
-      selectedRole: "build",
+      selectedStepId: "build",
       steps: [
         {
           role: "build" as const,
@@ -1021,7 +1101,7 @@ describe("AgentStudioHeader", () => {
 
   test("renders optional workflow step as neutral dashed styling", () => {
     const html = renderWorkflow({
-      selectedRole: "qa",
+      selectedStepId: "qa",
       steps: [
         {
           role: "qa" as const,

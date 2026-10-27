@@ -1,4 +1,5 @@
-import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export const boardEvent = (
   repoPath: string,

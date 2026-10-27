@@ -1,9 +1,8 @@
-import type {
-  IssueType,
-  PullRequest,
-  SourceIssueReference,
-  TaskCard,
-} from "@openducktor/contracts";
+import {
+  type BuiltinIssueTypeId as IssueType,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
+import type { PullRequest, SourceIssueReference } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -129,18 +128,6 @@ export const QaRejectedBadge = memo(function QaRejectedBadge({
   );
 });
 
-/** The subtask count of a task, as the desktop card badge "2 subtasks". */
-const SubtaskBadge = memo(function SubtaskBadge({
-  count,
-  size = "md",
-}: {
-  count: number;
-  size?: ChipSize;
-}): ReactElement {
-  const label = count === 1 ? "1 subtask" : `${count} subtasks`;
-  return <TaskChip label={label} paint="card-strong" size={size} />;
-});
-
 /** A task label, as the desktop label chip: a muted capsule with a tag icon. */
 export const TaskLabelChip = memo(function TaskLabelChip({
   label,
@@ -173,24 +160,22 @@ export const TaskLabelCountChip = memo(function TaskLabelCountChip({
 });
 
 /**
- * The status badges of a task, as the desktop card status row: QA Rejected, the subtask count,
- * the pull request, and the source issue. It renders nothing when the task has none.
+ * The status badges of a task, as the desktop card status row: QA Rejected, the pull request,
+ * and the source issue. It renders nothing when the task has none.
  */
 export const TaskStatusChips = memo(function TaskStatusChips({
   task,
   qaRejected,
   size = "md",
 }: {
-  task: Pick<TaskCard, "subtaskIds" | "pullRequest" | "sourceIssue">;
+  task: Pick<TaskCard, "pullRequest" | "sourceIssue">;
   qaRejected: boolean;
   size?: ChipSize;
 }): ReactElement | null {
-  const subtasks = task.subtaskIds.length;
-  if (!qaRejected && subtasks === 0 && !task.pullRequest && !task.sourceIssue) return null;
+  if (!qaRejected && !task.pullRequest && !task.sourceIssue) return null;
   return (
     <View pointerEvents="box-none" style={styles.row}>
       {qaRejected ? <QaRejectedBadge size={size} /> : null}
-      {subtasks > 0 ? <SubtaskBadge count={subtasks} size={size} /> : null}
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} size={size} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} size={size} /> : null}
     </View>

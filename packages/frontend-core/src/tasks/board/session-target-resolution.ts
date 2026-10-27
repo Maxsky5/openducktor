@@ -1,5 +1,4 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "./kanban-task-activity";
 import {
   compareActiveAgentSessionActivityState,
@@ -7,6 +6,7 @@ import {
 } from "../../lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
+import { type BuiltinRoleId as AgentRole, builtinRoleId } from "@openducktor/workflows";
 
 export type SessionTargetOptions = {
   session: AgentSessionIdentity;
@@ -97,11 +97,12 @@ export const resolveHistoricalSessionRoles = (
   const seenRoles = new Set<AgentRole>();
 
   for (const session of sortedTaskAgentSessions) {
-    if (seenRoles.has(session.role)) {
+    const role = builtinRoleId(session.role);
+    if (seenRoles.has(role)) {
       continue;
     }
-    seenRoles.add(session.role);
-    roles.push(session.role);
+    seenRoles.add(role);
+    roles.push(role);
   }
 
   return roles;

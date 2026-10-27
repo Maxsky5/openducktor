@@ -1,4 +1,3 @@
-import type { QaWorkflowVerdict } from "@openducktor/contracts";
 import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
 import type { Tone } from "@/ui/tones";
 
@@ -8,12 +7,15 @@ export const taskDescriptionForReading = (description: string): string => {
   return split.kind === "valid" ? split.body : description;
 };
 
-const QA_VERDICTS = {
-  approved: { label: "QA approved", tone: "success" },
-  rejected: { label: "QA rejected", tone: "rejected" },
-  not_reviewed: { label: "Not reviewed", tone: "neutral" },
-} as const satisfies Record<QaWorkflowVerdict, { label: string; tone: Tone }>;
+type VerdictPresentation = { label: string; tone: Tone };
 
-export const qaVerdictPresentation = (
-  verdict: QaWorkflowVerdict,
-): (typeof QA_VERDICTS)[QaWorkflowVerdict] => QA_VERDICTS[verdict];
+const NOT_REVIEWED: VerdictPresentation = { label: "Not reviewed", tone: "neutral" };
+
+const QA_VERDICTS = new Map<string, VerdictPresentation>([
+  ["approved", { label: "QA approved", tone: "success" }],
+  ["rejected", { label: "QA rejected", tone: "rejected" }],
+]);
+
+/** The QA verdict of a task. A task without a QA verdict is not reviewed. */
+export const qaVerdictPresentation = (verdict: string | undefined): VerdictPresentation =>
+  (verdict === undefined ? undefined : QA_VERDICTS.get(verdict)) ?? NOT_REVIEWED;

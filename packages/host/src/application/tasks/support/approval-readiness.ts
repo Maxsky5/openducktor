@@ -1,9 +1,8 @@
-import type { RepoConfig, TaskCard, TaskMetadataPayload } from "@openducktor/contracts";
+import type { RepoConfig, TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect, Equal } from "effect";
 import {
   canonicalTargetBranch,
   ensureCleanTaskWorktree,
-  ensureHumanApprovalStatus,
   normalizeApprovalTargetBranch,
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
@@ -12,12 +11,19 @@ import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
-import { loadDefaultMergeMethod, taskListWithCurrent } from "./task-workflow-helpers";
+import { loadDefaultMergeMethod } from "./task-workflow-helpers";
 import { effectiveTargetBranchForTask } from "./task-worktree-cleanup";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { DirectMergeInput } from "../task-inputs";
 import { requireDependencies, requireDirectMergeDependencies } from "./required-task-dependencies";
-import { validateTaskTransitionEffect } from "./task-validation-effects";
+import { ensureNoDirectMergeEffect } from "./direct-merge-block";
+import {
+  requireEffect,
+  requireHumanReviewStatus,
+  startWorktreeSessionHint,
+} from "./task-workflow-events";
+import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 export const loadOpenApprovalContext = (
   dependencies: {
@@ -26,20 +32,14 @@ export const loadOpenApprovalContext = (
     taskWorktreeService: TaskWorktreeService;
     workspaceSettingsService: WorkspaceSettingsService;
   },
+  workflow: TaskWorkflow,
   taskId: string,
-  current: TaskCard,
+  current: TaskRecord,
   metadata: TaskMetadataPayload,
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    yield* Effect.try({
-      try: () => ensureHumanApprovalStatus(current.status),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
+    yield* requireHumanReviewStatus(workflow, current);
     const effectiveRepoPath = repoConfig.repoPath;
     const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
@@ -50,7 +50,7 @@ export const loadOpenApprovalContext = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Human approval requires a task worktree for task ${taskId}. Start Builder first.`,
+          message: `Human approval requires a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
           details: { repoPath: effectiveRepoPath, taskId },
         }),
       );
@@ -127,6 +127,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       worktreeFiles,
       workspaceSettingsService,
       completionState,
+      taskWorkflows,
     } = services;
     const { repoPath, taskId } = input;
     const mergeInput = input.input;
@@ -149,21 +150,15 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       [taskId],
       "direct merge",
     );
-    const { current, currentTasks } = yield* taskListWithCurrent(
-      taskStore,
-      effectiveRepoPath,
-      taskId,
-    );
+    const current = yield* taskStore.getTask({ repoPath: effectiveRepoPath, taskId });
+    const workflow = taskWorkflows.forTask(current);
     const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
-    if (metadata.directMerge !== undefined) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before trying again.`,
-          details: { repoPath: effectiveRepoPath, taskId },
-        }),
-      );
-    }
+    yield* ensureNoDirectMergeEffect({
+      operation: "direct_merge",
+      repoPath: effectiveRepoPath,
+      taskId,
+      directMerge: metadata.directMerge,
+    });
 
     if (metadata.agentSessions.length > 0) {
       if (!taskActivityGuard) {
@@ -192,6 +187,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
 
     const approval = yield* loadOpenApprovalContext(
       dependencies,
+      workflow,
       taskId,
       current,
       metadata,
@@ -235,13 +231,19 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
           cause,
         }),
     });
-    if (!approval.publishTarget || current.status === "ai_review")
-      yield* validateTaskTransitionEffect(
-        current,
-        currentTasks,
-        current.status,
-        approval.publishTarget ? "human_review" : "closed",
-      );
+    const decision = yield* requireEffect(
+      workflow,
+      approval.publishTarget ? "direct_merge.publish" : "direct_merge.local",
+      current,
+    );
 
-    return { dependencies, effectiveRepoPath, current, currentTasks, approval, state };
+    return {
+      dependencies,
+      effectiveRepoPath,
+      current,
+      workflow,
+      approval,
+      state,
+      decision,
+    };
   });

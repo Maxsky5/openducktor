@@ -14,15 +14,17 @@ import {
   TaskMutationProgressFailure,
   createTaskMutationProgressFailure,
 } from "../task-mutation-progress-failure";
-import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
+import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
-export const createTaskDirectMergeUseCase = (services: TaskServiceUseCaseInput) => ({
-  directMerge(input: Parameters<TaskService["directMerge"]>[0]) {
+export const createTaskDirectMergeUseCase = (
+  services: TaskServiceUseCaseInput,
+): Pick<TaskServiceWithMutationProgress, "directMerge"> => ({
+  directMerge(input) {
     return Effect.gen(function* () {
       const { taskStore, completionState, taskActivityGuard, taskSessionLifecycleCoordinator } =
         services;
       const { taskId, input: mergeInput } = input;
-      const { dependencies, effectiveRepoPath, current, currentTasks, approval, state } =
+      const { dependencies, effectiveRepoPath, current, workflow, approval, state, decision } =
         yield* prepareDirectMerge(services, input);
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -97,11 +99,12 @@ export const createTaskDirectMergeUseCase = (services: TaskServiceUseCaseInput) 
                     completionState,
                     taskActivityGuard,
                     taskSessionLifecycleCoordinator,
+                    workflow,
                   },
                   { repoPath: effectiveRepoPath, taskId },
                   directMerge,
-                  currentTasks,
                   state,
+                  decision,
                   "direct-merge",
                 );
                 return { outcome: "completed" as const, task };
@@ -109,19 +112,17 @@ export const createTaskDirectMergeUseCase = (services: TaskServiceUseCaseInput) 
               // A recorded remote merge waits for a separate explicit publication intent.
               stage = "review_task";
               const task =
-                current.status === "ai_review"
+                decision.kind === "transition"
                   ? yield* taskStore.transitionTask({
                       repoPath: effectiveRepoPath,
                       taskId,
-                      status: "human_review",
+                      status: decision.to,
+                      cause: decision.cause,
                     })
                   : current;
               return {
                 outcome: "completed" as const,
-                task: enrichTask(
-                  task,
-                  currentTasks.map((entry) => (entry.id === taskId ? task : entry)),
-                ),
+                task: enrichTask(workflow, task),
               };
             }),
           );

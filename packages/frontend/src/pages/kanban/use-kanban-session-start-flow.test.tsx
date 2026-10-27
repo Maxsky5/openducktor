@@ -9,7 +9,6 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
-import { resolveBuildContinuationLaunchAction } from "@openducktor/frontend-core/lib/session-launch-actions";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
@@ -271,31 +270,6 @@ const createBaseArgs = (): HookArgs => ({
   ],
   navigate: mock(() => {}),
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
-});
-
-describe("resolveBuildContinuationLaunchAction", () => {
-  test("uses implementation start for regular build starts", () => {
-    const task = createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" });
-
-    expect(resolveBuildContinuationLaunchAction(task)).toBe("build_implementation_start");
-  });
-
-  test("uses QA rejection follow-up for QA-rejected tasks", () => {
-    const task = createTaskCardFixture({ id: "TASK-1", status: "in_progress" });
-    task.artifactSummary.qaReport = {
-      has: true,
-      updatedAt: "2026-03-09T10:00:00.000Z",
-      verdict: "rejected",
-    };
-
-    expect(resolveBuildContinuationLaunchAction(task)).toBe("build_after_qa_rejected");
-  });
-
-  test("uses human-feedback follow-up for human-review tasks", () => {
-    const task = createTaskCardFixture({ id: "TASK-1", status: "human_review" });
-
-    expect(resolveBuildContinuationLaunchAction(task)).toBe("build_after_human_request_changes");
-  });
 });
 
 describe("useKanbanSessionStartFlow", () => {

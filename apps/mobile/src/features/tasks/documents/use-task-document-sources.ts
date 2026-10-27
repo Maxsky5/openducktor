@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { TASK_DOCUMENT_SECTION_COPY } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import { useTaskDocuments } from "@openducktor/frontend-core/tasks/details/use-task-documents";
 import { useCallback, useMemo } from "react";
@@ -73,7 +73,7 @@ export function useTaskDocumentSources({
   );
   const qaDocument = useMarkdownBlocks(qaDoc.markdown, `${task.id}:qa:${qaDoc.updatedAt ?? ""}`);
   const summary = task.artifactSummary;
-  const verdict = qaVerdictPresentation(summary.qaReport.verdict);
+  const verdict = qaVerdictPresentation(summary.qaReport?.verdict);
 
   const sources = useMemo(
     () =>
@@ -81,8 +81,8 @@ export function useTaskDocumentSources({
         spec: {
           key: "spec",
           ...TASK_DOCUMENT_SECTION_COPY.spec,
-          updatedAt: specDoc.updatedAt ?? summary.spec.updatedAt ?? null,
-          exists: summary.spec.has || specDoc.markdown.length > 0,
+          updatedAt: specDoc.updatedAt ?? summary.spec?.updatedAt ?? null,
+          exists: summary.spec?.present || specDoc.markdown.length > 0,
           isLoading: specDoc.isLoading,
           error: specDoc.error,
           blocks: specDoc.loaded ? specDocument.blocks : null,
@@ -93,8 +93,8 @@ export function useTaskDocumentSources({
         plan: {
           key: "plan",
           ...TASK_DOCUMENT_SECTION_COPY.plan,
-          updatedAt: planDoc.updatedAt ?? summary.plan.updatedAt ?? null,
-          exists: summary.plan.has || planDoc.markdown.length > 0,
+          updatedAt: planDoc.updatedAt ?? summary.plan?.updatedAt ?? null,
+          exists: summary.plan?.present || planDoc.markdown.length > 0,
           isLoading: planDoc.isLoading,
           error: planDoc.error,
           blocks: planDoc.loaded ? planDocument.blocks : null,
@@ -105,14 +105,14 @@ export function useTaskDocumentSources({
         qa: {
           key: "qa",
           ...TASK_DOCUMENT_SECTION_COPY.qa,
-          updatedAt: qaDoc.updatedAt ?? summary.qaReport.updatedAt ?? null,
-          exists: summary.qaReport.has || qaDoc.markdown.length > 0,
+          updatedAt: qaDoc.updatedAt ?? summary.qaReport?.updatedAt ?? null,
+          exists: summary.qaReport?.present || qaDoc.markdown.length > 0,
           isLoading: qaDoc.isLoading,
           error: qaDoc.error,
           blocks: qaDoc.loaded ? qaDocument.blocks : null,
           definitions: qaDocument.definitions,
           imageContext: null,
-          badge: summary.qaReport.has ? { label: verdict.label, tone: verdict.tone } : null,
+          badge: summary.qaReport?.present ? { label: verdict.label, tone: verdict.tone } : null,
         },
       }) satisfies Record<HostDocumentKey, DocumentSource>,
     [

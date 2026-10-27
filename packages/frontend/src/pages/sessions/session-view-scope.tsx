@@ -3,7 +3,7 @@ import { UNSAFE_LocationContext } from "react-router";
 import {
   ActiveWorkspaceContext,
   DelegationStateContext,
-  SpecStateContext,
+  DocumentStateContext,
   TasksStateContext,
   TaskControlContext,
   TaskSnapshotContext,
@@ -33,7 +33,7 @@ export function useSessionViewScope(): SessionViewScope {
     useBinding(TaskSnapshotContext),
     useBinding(TaskControlContext),
     useBinding(ChecksStateContext),
-    useBinding(SpecStateContext),
+    useBinding(DocumentStateContext),
     useBinding(DelegationStateContext),
     useBinding(AgentOperationsContext),
     useBinding(AgentSessionsContext),

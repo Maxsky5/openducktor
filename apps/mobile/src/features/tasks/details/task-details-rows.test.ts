@@ -24,14 +24,12 @@ const descriptionRows = buildDocumentRows([
 const kinds = (
   options: Partial<{
     summaryInList: boolean;
-    showsSubtasks: boolean;
     collapsed: ReadonlySet<DetailsSectionKey>;
   }> = {},
 ) =>
   buildTaskDetailsRows({
     summaryInList: true,
     descriptionRows,
-    showsSubtasks: false,
     collapsed: new Set(),
     ...options,
   }).map((row) => row.kind);
@@ -50,13 +48,12 @@ describe("buildTaskDetailsRows", () => {
     ]);
   });
 
-  test("shows the subtasks after the description, and the summary only in the list", () => {
-    expect(kinds({ summaryInList: false, showsSubtasks: true })).toEqual([
+  test("shows the summary only in the list", () => {
+    expect(kinds({ summaryInList: false })).toEqual([
       "notices",
       "doc_header",
       "doc_block",
       "doc_block",
-      "subtasks",
       "sessions",
       "work",
       "metadata",

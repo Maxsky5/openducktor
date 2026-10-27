@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { useRouter } from "expo-router";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";

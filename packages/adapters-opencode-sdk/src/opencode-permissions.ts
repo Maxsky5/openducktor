@@ -6,6 +6,7 @@ import {
   type OpenCodeCreationSettings,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
+import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import { z } from "zod";
 import { operationError, type OperationIdentity } from "./opencode-client";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
@@ -183,14 +184,17 @@ export const installOpenCodePolicy = async (input: {
   client: OpenCodeClient;
   detail: SessionInfo;
   scope: AgentSessionScope;
+  repoPath: string;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   creationSettings?: OpenCodeCreationSettings;
   native?: PermissionRule[];
 }): Promise<void> => {
   const { client, detail, scope, creationSettings } = input;
   const policy = resolveOpencodeSessionPolicy(
-    scope,
+    { sessionScope: scope },
     OPENCODE_RUNTIME_DESCRIPTOR,
     "install V2 session controls",
+    input.resolveWorkflowRolePolicy,
   );
   const mandatory = policy.permission;
   let permissions = [...(input.native ?? detail.permissions ?? [])];

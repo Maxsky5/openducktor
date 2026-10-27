@@ -1,13 +1,16 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import {
+  SESSION_VIEW_ACTIONS,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+  type TaskWorkflowAction,
+} from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
 import type { ActiveWorkspace } from "../../types/session-slices";
-import { SESSION_VIEW_ACTIONS, type TaskWorkflowAction } from "../board/kanban-task-workflow";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import { runTaskWorkflowAction } from "../workflow/run-task-workflow-action";
 import type { TaskWorkflowActions } from "../workflow/task-workflow-actions-context";
-import { showsTaskSubtasks, toSubtasks, toTaskLabels } from "./task-details-sheet-model";
+import { toTaskLabels } from "./task-details-sheet-model";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 import { type TaskConfirmDialog, useTaskConfirmDialog } from "./use-task-confirm-dialog";
 
@@ -16,8 +19,6 @@ export type TaskDetailsSheetViewModel = {
   deleteConfirm: TaskConfirmDialog;
   resetConfirm: TaskConfirmDialog;
   closeConfirm: TaskConfirmDialog;
-  subtasks: TaskCard[];
-  shouldRenderSubtasks: boolean;
   taskLabels: string[];
   runWorkflowAction: (action: TaskWorkflowAction) => void;
 };
@@ -25,7 +26,6 @@ export type TaskDetailsSheetViewModel = {
 export type UseTaskDetailsSheetViewModelOptions = {
   activeWorkspace?: ActiveWorkspace | null;
   task: TaskCard | null;
-  allTasks: TaskCard[];
   /** The details view shows. Documents and confirmations load only while it is true. */
   open: boolean;
   /** Called with false after a confirmed action succeeds or a session view opens. */
@@ -49,7 +49,6 @@ export type UseTaskDetailsSheetViewModelOptions = {
 
 export function useTaskDetailsSheetViewModel({
   task,
-  allTasks,
   open,
   onOpenChange,
   onPlan,
@@ -69,14 +68,10 @@ export function useTaskDetailsSheetViewModel({
   taskStopImpactHook = useTaskStopImpact,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const taskId = task?.id ?? null;
-  const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
-  const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
-  const shouldRenderSubtasks = showsTaskSubtasks(task);
   const taskLabels = useMemo(() => toTaskLabels(task?.labels), [task?.labels]);
 
   const confirmOptions = {
     task,
-    allTasks,
     enabled: open,
     onSucceeded: () => onOpenChange(false),
     taskCleanupImpactHook,
@@ -85,7 +80,7 @@ export function useTaskDetailsSheetViewModel({
   const deleteConfirm = useTaskConfirmDialog({
     ...confirmOptions,
     action: "delete",
-    run: onDelete && ((id) => onDelete(id, { deleteSubtasks: true })),
+    run: onDelete,
   });
   const resetConfirm = useTaskConfirmDialog({
     ...confirmOptions,
@@ -147,8 +142,6 @@ export function useTaskDetailsSheetViewModel({
     deleteConfirm,
     resetConfirm,
     closeConfirm,
-    subtasks,
-    shouldRenderSubtasks,
     taskLabels,
     runWorkflowAction,
   };

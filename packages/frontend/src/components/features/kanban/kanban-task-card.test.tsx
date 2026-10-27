@@ -229,9 +229,9 @@ describe("KanbanTaskCard active sessions", () => {
       title: "Fix OAuth flow",
       status: "in_progress",
       artifactSummary: {
-        spec: { has: false, updatedAt: undefined },
-        plan: { has: false, updatedAt: undefined },
-        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+        spec: { present: false, updatedAt: undefined },
+        plan: { present: false, updatedAt: undefined },
+        qaReport: { present: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
       },
     });
 
@@ -360,7 +360,6 @@ describe("KanbanTaskCard active sessions", () => {
       issueType: "feature",
       priority: 1,
       labels: ["frontend", "phase:open"],
-      subtaskIds: ["SUB-1"],
       availableActions: ["set_spec"],
     });
 
@@ -391,7 +390,6 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("Compact card title");
     expect(html).toContain("text-sky-600");
     expect(html).toContain("bg-orange-500");
-    expect(html).toContain("1 subtask");
     expect(html).toContain("rounded-lg shadow-none");
     expect(html).toContain("[&amp;_button]:h-7");
     expect(html).not.toContain("border-t border-border pt-2.5");

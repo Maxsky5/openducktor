@@ -3,8 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { errorMessage } from "../../lib/errors";
 import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
-import { documentQueryKeys } from "../../queries/documents";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
+import { invalidateCachedTaskDocumentQueries } from "../../queries/documents";
 import {
   type AgentSessionReadPort,
   refreshAgentSessionListQuery,
@@ -133,22 +133,8 @@ const invalidateTaskWorkflowQueries = async (
   agentSessionReadPort: AgentSessionReadPort,
 ): Promise<void> => {
   await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: documentQueryKeys.qaReport(repoPath, taskId),
-      exact: true,
-      refetchType: "none",
-    }),
+    invalidateCachedTaskDocumentQueries(queryClient, repoPath, [taskId]),
     refreshAgentSessionListQuery(queryClient, repoPath, taskId, agentSessionReadPort),
-    queryClient.invalidateQueries({
-      queryKey: documentQueryKeys.spec(repoPath, taskId),
-      exact: true,
-      refetchType: "none",
-    }),
-    queryClient.invalidateQueries({
-      queryKey: documentQueryKeys.plan(repoPath, taskId),
-      exact: true,
-      refetchType: "none",
-    }),
     queryClient.invalidateQueries({
       queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
     }),

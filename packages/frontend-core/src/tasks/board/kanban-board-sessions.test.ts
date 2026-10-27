@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import {
   type AgentSessionSummary,
   toAgentSessionSummary,
@@ -14,6 +13,7 @@ import {
   buildTaskSessionsByTaskId,
   sortTasksByActivityState,
 } from "./kanban-board-sessions";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -22,21 +22,18 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "in_progress",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  parentId: undefined,
-  subtaskIds: [],
   pullRequest: undefined,
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: false, completed: false },
     planner: { required: false, canSkip: true, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-03-17T10:00:00.000Z",

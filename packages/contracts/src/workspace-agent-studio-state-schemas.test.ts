@@ -46,7 +46,7 @@ describe("workspace Agent Studio state schemas", () => {
     expect(
       workspaceAgentStudioStateSchema.safeParse({
         openTaskIds: [],
-        activeTask: { taskId: "task-1", role: "operator" },
+        activeTask: { taskId: "task-1", role: " " },
       }).success,
     ).toBe(false);
   });

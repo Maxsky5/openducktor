@@ -1,8 +1,13 @@
 import type { SessionStartWorkflowResult } from "../../sessions/start/session-start-workflow";
 import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
 import { createSessionStartKickoffResolver } from "../../sessions/start/session-start-kickoff";
-import type { GitBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { GitBranch } from "@openducktor/contracts";
+import {
+  defaultSessionLaunchActionForRole,
+  resolveSessionContinuationLaunchAction,
+  type BuiltinRoleId as AgentRole,
+  type BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
@@ -22,8 +27,6 @@ import {
   buildSessionStartModalRequest,
   type RunSessionStartWorkflow,
 } from "../../sessions/start/session-start-orchestration";
-import { firstLaunchAction } from "../../sessions/start/session-start-prompts";
-import { resolveBuildContinuationLaunchAction } from "../../lib/session-launch-actions";
 import { useSessionStartModalRunner } from "../../sessions/start/use-session-start-modal-runner";
 import type { SessionNavigationTarget } from "../../sessions/navigation/session-navigation-target";
 import {
@@ -119,18 +122,6 @@ const findSessionsByRoleForTask = (
   return sessions
     .filter((session) => session.taskId === taskId && session.role === role)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-};
-
-const resolveKanbanPlanningStartPreference = (
-  tasks: TaskCard[],
-  taskId: string,
-  action: "set_spec" | "set_plan",
-): "fresh" | "continue" => {
-  if (action === "set_plan") {
-    return "fresh";
-  }
-  const task = tasks.find((entry) => entry.id === taskId);
-  return task?.status === "spec_ready" ? "continue" : "fresh";
 };
 
 /**
@@ -287,7 +278,8 @@ export function useTaskSessionStartFlow({
       void startSessionIntent({
         taskId,
         role: "build",
-        launchActionId: resolveBuildContinuationLaunchAction(
+        launchActionId: resolveSessionContinuationLaunchAction(
+          "build",
           tasks.find((entry) => entry.id === taskId) ?? null,
         ),
         postStartAction: "kickoff",
@@ -326,7 +318,12 @@ export function useTaskSessionStartFlow({
       const sessionToOpen = preferredSessionByRole ?? fallbackLatestSessionByRole;
       if (sessionToOpen) {
         openStartedSession(
-          { taskId, role, launchActionId: firstLaunchAction(role), postStartAction: "none" },
+          {
+            taskId,
+            role,
+            launchActionId: defaultSessionLaunchActionForRole(role),
+            postStartAction: "none",
+          },
           sessionToOpen,
         );
         return;
@@ -348,21 +345,14 @@ export function useTaskSessionStartFlow({
   const onPlan = useCallback(
     (taskId: string, action: "set_spec" | "set_plan"): void => {
       const role: AgentRole = action === "set_spec" ? "spec" : "planner";
-      const startPreference = resolveKanbanPlanningStartPreference(tasks, taskId, action);
-
-      if (action === "set_spec" && startPreference === "continue") {
-        onOpenSession(taskId, "spec");
-        return;
-      }
-
       void startSessionIntent({
         taskId,
         role,
-        launchActionId: firstLaunchAction(role),
-        postStartAction: startPreference === "fresh" ? "kickoff" : "none",
+        launchActionId: defaultSessionLaunchActionForRole(role),
+        postStartAction: "kickoff",
       });
     },
-    [onOpenSession, startSessionIntent, tasks],
+    [startSessionIntent],
   );
 
   const onBuild = useCallback(

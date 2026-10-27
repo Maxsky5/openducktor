@@ -4,45 +4,37 @@ import { taskMetadataPayloadSchema } from "./index";
 describe("workflow artifact metadata contracts", () => {
   test("task metadata artifacts accept optional decode errors", () => {
     const parsed = taskMetadataPayloadSchema.parse({
-      spec: {
-        markdown: "",
-        updatedAt: "2026-02-20T09:00:00Z",
-        error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
-      },
-      plan: {
-        markdown: "# Plan",
-        updatedAt: null,
+      artifacts: {
+        spec: {
+          markdown: "",
+          updatedAt: "2026-02-20T09:00:00Z",
+          error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
+        },
+        plan: { markdown: "# Plan", updatedAt: null },
+        qaReport: {
+          markdown: "",
+          verdict: "rejected",
+          updatedAt: null,
+          revision: null,
+          error: "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload",
+        },
       },
       targetBranch: {
         remote: "origin",
         branch: "release/2026.04",
       },
-      qaReport: {
-        markdown: "",
-        verdict: "not_reviewed",
-        updatedAt: null,
-        revision: null,
-        error: "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload",
-      },
       agentSessions: [],
     });
 
-    expect(parsed.spec.error).toContain("invalid base64 payload");
+    expect(parsed.artifacts.spec?.error).toContain("invalid base64 payload");
     expect(parsed.targetBranch).toEqual({ remote: "origin", branch: "release/2026.04" });
-    expect(parsed.qaReport?.verdict).toBe("not_reviewed");
-    expect(parsed.qaReport?.error).toContain("invalid gzip payload");
+    expect(parsed.artifacts.qaReport?.verdict).toBe("rejected");
+    expect(parsed.artifacts.qaReport?.error).toContain("invalid gzip payload");
   });
 
   test("task metadata payload normalizes legacy delivery fields and validates canonical sessions", () => {
     const parsed = taskMetadataPayloadSchema.parse({
-      spec: {
-        markdown: "",
-        updatedAt: null,
-      },
-      plan: {
-        markdown: "",
-        updatedAt: null,
-      },
+      artifacts: {},
       delivery: {
         linkedPullRequest: {
           providerId: "github",
@@ -90,14 +82,7 @@ describe("workflow artifact metadata contracts", () => {
 
   test("task metadata payload normalizes missing top-level delivery fields independently", () => {
     const parsed = taskMetadataPayloadSchema.parse({
-      spec: {
-        markdown: "",
-        updatedAt: null,
-      },
-      plan: {
-        markdown: "",
-        updatedAt: null,
-      },
+      artifacts: {},
       pullRequest: {
         providerId: "github",
         number: 77,
@@ -134,8 +119,7 @@ describe("workflow artifact metadata contracts", () => {
 
   test("task metadata payload accepts null legacy delivery fields", () => {
     const payload = {
-      spec: { markdown: "", updatedAt: null },
-      plan: { markdown: "", updatedAt: null },
+      artifacts: {},
       agentSessions: [],
     };
 

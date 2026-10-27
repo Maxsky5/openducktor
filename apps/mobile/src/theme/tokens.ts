@@ -1,4 +1,4 @@
-import type { KanbanColumnId } from "@openducktor/core";
+import type { KanbanColumnId } from "@openducktor/workflows";
 import { type Insets, Platform, type TextStyle, type ViewStyle } from "react-native";
 import { type CSSStyle, cubicBezier, Easing } from "react-native-reanimated";
 import { withAlpha } from "./color-alpha";

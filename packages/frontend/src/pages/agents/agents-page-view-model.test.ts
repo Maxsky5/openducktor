@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
@@ -8,6 +7,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { buildAgentStudioHeaderModel, buildRoleLabelByRole } from "./agents-page-view-model";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createTaskCard = (id: string): TaskCard => ({
   id,
@@ -16,20 +16,17 @@ const createTaskCard = (id: string): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  parentId: undefined,
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-02-22T12:00:00.000Z",
@@ -99,8 +96,10 @@ describe("agents-page-view-model", () => {
       selectedTask: createTaskCard("task-1"),
       onOpenTaskDetails: mock(() => {}),
       roleOptions: [
-        { role: "spec", label: "Spec", icon: Sparkles },
-        { role: "planner", label: "Planner", icon: Sparkles },
+        { role: "qa", label: "Review option", icon: Sparkles },
+        { role: "build", label: "Implementation option", icon: Sparkles },
+        { role: "planner", label: "Plan option", icon: Sparkles },
+        { role: "spec", label: "Specification option", icon: Sparkles },
       ],
       workflowStateByRole: {
         spec: {
@@ -157,7 +156,15 @@ describe("agents-page-view-model", () => {
       isStarting: true,
     });
 
-    expect(model.workflowSteps).toHaveLength(2);
+    expect(model.workflowSteps.map(({ id, label, role }) => ({ id, label, role }))).toEqual([
+      { id: "specification", label: "Spec", role: "spec" },
+      { id: "planning", label: "Planner", role: "planner" },
+      { id: "implementation", label: "Builder", role: "build" },
+      { id: "quality-review", label: "QA", role: "qa" },
+    ]);
+    expect(model.workflowSteps[0]?.sessionValue).toContain(activeSession.externalSessionId);
+    expect(model.workflowSteps[0]?.hint).toBe("Session is waiting for input");
+    expect(model.workflowSteps[0]?.attentionVariant).toBe("session_waiting_input");
     expect(model.onOpenTaskDetails).toBeInstanceOf(Function);
     expect(model.sessionSelector.disabled).toBe(true);
     expect(

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   type ActiveAgentSessionSummary,
   type ActiveTaskSessionContext,

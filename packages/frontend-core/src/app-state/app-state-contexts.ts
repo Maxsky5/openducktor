@@ -1,9 +1,5 @@
-import type {
-  AgentRuntimes,
-  RuntimeDescriptor,
-  TaskCard,
-  WorkspaceRecord,
-} from "@openducktor/contracts";
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { AgentRuntimes, RuntimeDescriptor, WorkspaceRecord } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentRuntimeCatalog,
@@ -20,13 +16,13 @@ import {
 import type { ActiveWorkspace } from "../types/session-slices";
 import type {
   DelegationStateContextValue,
-  SpecStateContextValue,
+  DocumentStateContextValue,
   TasksStateContextValue,
 } from "../types/state-slices";
 
 export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
 export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
-export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
+export const DocumentStateContext = createContext<DocumentStateContextValue | null>(null);
 
 export type ActiveWorkspaceContextValue = {
   activeWorkspace: ActiveWorkspace | null;

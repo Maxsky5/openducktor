@@ -1,4 +1,5 @@
-import { buildAgentSystemPrompt, mergePromptOverrides } from "@openducktor/core";
+import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { commandPreparationFixture } from "./command-preparation-fixture";
 import { createAgentMessageDeliveryService } from "../agent-message-delivery-service";
 import { createTaskSessionOperations } from "../task-session-operations";
@@ -11,7 +12,6 @@ import {
   type AgentSessionModelSelection,
   type AgentSessionRecord,
   type AgentSessionLiveSnapshot,
-  type AgentRole,
   type RuntimeKind,
   type WorkflowLaunchRequest,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -52,6 +52,7 @@ import {
   AgentSessionBusyError,
 } from "../../../ports/agent-session-send-error";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import { taskCardFixture } from "../../../test-support/task-card-fixture";
 
 const unexpected = (operation: string) => () =>
   Effect.die(new Error(`Unexpected ${operation} in the workflow launch harness.`));
@@ -72,19 +73,27 @@ export const createLaunchHarness = async (
     beforeModelUpdate?: Effect.Effect<void>;
     startingHold?: Effect.Effect<void>;
     completion?: Effect.Effect<void, HostOperationError>;
+    taskWorkflows?: TaskWorkflowResolver;
+    /** The first issue type and status of the task. Defaults suit the built-in workflow. */
+    task?: { issueType: string; status: string };
   } = {},
 ) => {
-  let task = taskCardSchema.parse({
-    id: "task",
-    title: "Task",
-    description: "Task context",
-    status: "ready_for_dev",
-    issueType: "task",
-    priority: 2,
-    aiReviewEnabled: true,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  });
+  const taskWorkflows = gates.taskWorkflows ?? builtinTaskWorkflows;
+  const workflow = taskWorkflows.forNewTask("/repo");
+  let task = taskCardFixture(
+    {
+      artifactSummary: workflow.emptyArtifactSummary(),
+      id: "task",
+      title: "Task",
+      description: "Task context",
+      status: gates.task?.status ?? "ready_for_dev",
+      issueType: gates.task?.issueType ?? "task",
+      priority: 2,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    workflow,
+  );
   let config = repoConfigSchema.parse({
     workspaceId: "workspace",
     workspaceName: "Workspace",
@@ -310,6 +319,7 @@ export const createLaunchHarness = async (
         : Effect.fail(new HostValidationError({ message: "Task not found" })),
   });
   const tasks = createEventPublishingTaskService({
+    taskWorkflows,
     taskService: createTaskServiceWithMutationProgressTestDouble({
       agentSessionsList: () => Effect.succeed([...records]),
       agentSessionUpsert: (input) =>
@@ -338,6 +348,12 @@ export const createLaunchHarness = async (
       transitionTask: (input) =>
         Effect.sync(() => {
           task = { ...task, status: input.status };
+          return task;
+        }),
+      applyStartEvent: (input) =>
+        Effect.sync(() => {
+          const decision = workflow.decide(input.eventId, task);
+          if (decision.kind === "transition") task = { ...task, status: decision.to };
           return task;
         }),
       humanRequestChanges: () =>
@@ -427,6 +443,7 @@ export const createLaunchHarness = async (
       }),
   });
   const preparation = createTaskSessionStartPreparationService({
+    taskWorkflows,
     taskStore: taskReader,
     gitPort: git,
     settingsConfig,
@@ -456,26 +473,26 @@ export const createLaunchHarness = async (
   });
   // The first instruction uses the same workflow send policy as a composer message.
   const commands = createAgentSessionCommandService({
+    taskWorkflows,
     turnPreparation: {
       ...commandPreparationFixture,
       context: (target) =>
         Effect.gen(function* () {
           yield* gates.beforeSendContext ?? Effect.void;
-          return buildAgentSystemPrompt({
+          return workflow.prompts.systemPrompt({
             role: target.sessionScope.kind === "workflow" ? target.sessionScope.role : "build",
             task: {
               taskId: task.id,
               title: task.title,
               issueType: task.issueType,
               status: task.status,
-              qaRequired: task.aiReviewEnabled,
               description: task.description,
             },
-            overrides: mergePromptOverrides({
+            overrides: workflow.prompts.mergeOverrides({
               globalOverrides: settings.globalPromptOverrides,
               repoOverrides: config.promptOverrides,
             }),
-          });
+          }).prompt;
         }),
     },
     readSessionRootRefs: (repoPath) =>
@@ -520,6 +537,7 @@ export const createLaunchHarness = async (
     },
   });
   const service = createWorkflowLaunchService({
+    taskWorkflows,
     messageDelivery,
     resolveParts: (parts) => Effect.succeed(parts),
     settings: workspaceSettings,
@@ -574,6 +592,7 @@ export const createLaunchHarness = async (
         ),
     },
     sessions: createTaskSessionOperations({
+      taskWorkflows,
       canonicalizeRepoPath: git.canonicalizePath,
       runtime,
       tasks: {
@@ -592,9 +611,9 @@ export const createLaunchHarness = async (
       },
       writes: {
         saveSession: tasks.agentSessionUpsertDeferredPublication,
-        transitionTask: (input) =>
+        applyStartEvent: (input) =>
           (gates.completion ?? Effect.void).pipe(
-            Effect.andThen(tasks.transitionTaskDeferredPublication(input)),
+            Effect.andThen(tasks.applyStartEventDeferredPublication(input)),
           ),
       },
     }),
@@ -651,7 +670,7 @@ export const createLaunchHarness = async (
     addTaskSession: (
       externalSessionId: string,
       options: {
-        role?: AgentRole;
+        role?: string;
         selectedModel?: AgentSessionModelSelection;
         live?: boolean;
         working?: boolean;
@@ -704,6 +723,9 @@ export const createLaunchHarness = async (
     },
     setModelDefault: (value: typeof config.defaultModel) => {
       config = { ...config, defaultModel: value };
+    },
+    setPromptOverrides: (value: typeof config.promptOverrides) => {
+      config = { ...config, promptOverrides: value };
     },
     setSendFailure: (value: typeof sendFailure) => {
       sendFailure = value;

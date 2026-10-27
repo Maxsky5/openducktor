@@ -243,8 +243,14 @@ describe("runtime schemas", () => {
     },
   );
 
-  test("task card parses workflow status from host payloads", () => {
-    const parsed = taskCardSchema.parse({
+  const stepState = { required: false, canSkip: true, available: false, completed: false };
+  const projection = {
+    availableActions: [],
+    agentWorkflows: { spec: stepState, planner: stepState, build: stepState, qa: stepState },
+  };
+
+  test("task card parses workflow status from host payloads and requires its projection", () => {
+    const payload = {
       id: "task-1",
       title: "Sample",
       description: "",
@@ -252,45 +258,18 @@ describe("runtime schemas", () => {
       priority: 2,
       issueType: "task",
       labels: [],
+      artifactSummary: { spec: { present: false } },
       updatedAt: "2026-01-01T00:00:00.000Z",
       createdAt: "2026-01-01T00:00:00.000Z",
-    });
+    };
+    const parsed = taskCardSchema.parse({ ...payload, ...projection });
 
     expect(parsed.status).toBe("spec_ready");
-    expect(parsed.aiReviewEnabled).toBe(true);
-    expect(parsed.availableActions).toEqual([]);
     expect(parsed.targetBranch).toBeUndefined();
     expect(parsed.targetBranchError).toBeUndefined();
-    expect(parsed.artifactSummary.spec.has).toBe(false);
-    expect(parsed.artifactSummary.plan.has).toBe(false);
-    expect(parsed.artifactSummary.qaReport.has).toBe(false);
-    expect(parsed.artifactSummary.qaReport.verdict).toBe("not_reviewed");
-    expect(parsed.agentWorkflows).toEqual({
-      spec: {
-        required: false,
-        canSkip: true,
-        available: false,
-        completed: false,
-      },
-      planner: {
-        required: false,
-        canSkip: true,
-        available: false,
-        completed: false,
-      },
-      builder: {
-        required: true,
-        canSkip: false,
-        available: false,
-        completed: false,
-      },
-      qa: {
-        required: false,
-        canSkip: true,
-        available: false,
-        completed: false,
-      },
-    });
+    expect(parsed.artifactSummary).toEqual({ spec: { present: false } });
+    expect(parsed.agentWorkflows).toEqual(projection.agentWorkflows);
+    expect(taskCardSchema.safeParse(payload).success).toBe(false);
   });
 
   test("task card rejects unsupported issue types", () => {
@@ -317,14 +296,11 @@ describe("runtime schemas", () => {
       priority: 2,
       issueType: "task",
       labels: [],
+      availableActions: [],
       artifactSummary: {
-        spec: { has: true, updatedAt: "2026-02-20T12:00:00.000Z" },
-        plan: { has: false, updatedAt: null },
-        qaReport: {
-          has: true,
-          updatedAt: "2026-02-20T13:00:00.000Z",
-          verdict: "approved",
-        },
+        spec: { present: true, updatedAt: "2026-02-20T12:00:00.000Z" },
+        plan: { present: false, updatedAt: null },
+        qaReport: { present: true, updatedAt: "2026-02-20T13:00:00.000Z", verdict: "approved" },
       },
       agentWorkflows: {
         spec: {
@@ -339,7 +315,7 @@ describe("runtime schemas", () => {
           available: true,
           completed: false,
         },
-        builder: {
+        build: {
           required: true,
           canSkip: false,
           available: true,
@@ -356,11 +332,11 @@ describe("runtime schemas", () => {
       createdAt: "2026-02-20T12:00:00.000Z",
     });
 
-    expect(parsed.artifactSummary.spec.has).toBe(true);
-    expect(parsed.artifactSummary.spec.updatedAt).toBe("2026-02-20T12:00:00.000Z");
-    expect(parsed.artifactSummary.plan.updatedAt).toBeUndefined();
-    expect(parsed.artifactSummary.qaReport.has).toBe(true);
-    expect(parsed.artifactSummary.qaReport.verdict).toBe("approved");
+    expect(parsed.artifactSummary).toEqual({
+      spec: { present: true, updatedAt: "2026-02-20T12:00:00.000Z" },
+      plan: { present: false },
+      qaReport: { present: true, updatedAt: "2026-02-20T13:00:00.000Z", verdict: "approved" },
+    });
     expect(parsed.agentWorkflows.spec.completed).toBe(true);
   });
 
@@ -372,6 +348,8 @@ describe("runtime schemas", () => {
       priority: 2,
       issueType: "task",
       labels: [],
+      artifactSummary: {},
+      ...projection,
       targetBranch: {
         remote: "origin",
         branch: "release/2026.04",
@@ -394,6 +372,8 @@ describe("runtime schemas", () => {
       priority: 2,
       issueType: "task",
       labels: [],
+      artifactSummary: {},
+      ...projection,
       targetBranchError:
         "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
       updatedAt: "2026-02-20T13:00:00.000Z",
@@ -1766,7 +1746,7 @@ describe("runtime schemas", () => {
         agentSessions: [
           {
             externalSessionId: "session-opencode-1",
-            role: "invalid-role",
+            role: " ",
             startedAt: "2026-02-18T17:11:00.000Z",
             runtimeKind: "opencode",
             workingDirectory: "/repo",

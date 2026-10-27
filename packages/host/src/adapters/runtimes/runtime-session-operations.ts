@@ -9,6 +9,7 @@ import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type { RuntimeRegistryError, RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
 import { stopCodexSession } from "../codex/codex-session-stop";
+import type { CodexDirectoryMatcher } from "../codex/codex-directory-identity";
 
 export type ClaudeRuntimeSessionOperationsPort = {
   stopSession(input: RuntimeSessionTarget): Effect.Effect<void, unknown>;
@@ -33,6 +34,7 @@ export type RuntimeSessionOperationsByKind = Record<RuntimeKind, RuntimeSessionO
 export type CreateRuntimeSessionOperationsInput = {
   opencode: RuntimeSessionOperations;
   codexAppServer: Pick<CodexAppServerPort, "request">;
+  directoriesMatch: CodexDirectoryMatcher;
   claudeAgentSdk: ClaudeRuntimeSessionOperationsPort;
 };
 
@@ -50,12 +52,14 @@ const toClaudeSessionOperationError = (
 
 const createCodexSessionOperations = (
   codexAppServer: Pick<CodexAppServerPort, "request">,
+  directoriesMatch: CodexDirectoryMatcher,
 ): RuntimeSessionOperations => ({
   stopSession(input, runtime) {
     return Effect.gen(function* () {
       const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
       return yield* stopCodexSession({
         codexAppServer,
+        directoriesMatch,
         runtimeId,
         externalSessionId: input.externalSessionId,
         workingDirectory: input.workingDirectory,
@@ -67,6 +71,7 @@ const createCodexSessionOperations = (
       const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
       return yield* probeCodexSessionStatus({
         codexAppServer,
+        directoriesMatch,
         runtimeId,
         externalSessionId: input.externalSessionId,
         workingDirectory: input.workingDirectory,
@@ -108,12 +113,13 @@ const createClaudeSessionOperations = (
 
 export const createRuntimeSessionOperations = ({
   codexAppServer,
+  directoriesMatch,
   claudeAgentSdk,
   opencode,
 }: CreateRuntimeSessionOperationsInput) =>
   ({
     opencode,
-    codex: createCodexSessionOperations(codexAppServer),
+    codex: createCodexSessionOperations(codexAppServer, directoriesMatch),
     claude: createClaudeSessionOperations(claudeAgentSdk),
   }) satisfies RuntimeSessionOperationsByKind;
 

@@ -2,7 +2,7 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_RUNTIME_DESCRIPTOR, claudeToolName } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
+import type { AgentEvent, WorkflowRolePolicy } from "@openducktor/core";
 import {
   normalizePathForComparison,
   pathStartsWith,
@@ -28,7 +28,6 @@ import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import {
   canonicalOdtToolName,
   claudeWorkflowRole,
-  isReadOnlyWorkflowRole,
   mutationForTool,
   permissionRequestTypeForTool,
   readStringProp,
@@ -36,6 +35,8 @@ import {
 
 type CreateClaudeCanUseToolInput = {
   session: ClaudeSessionContext;
+  /** The policy of the workflow role, or null for a repository session. */
+  rolePolicy: WorkflowRolePolicy | null;
   now: () => string;
   randomId: () => string;
   emit: (session: ClaudeSessionContext, event: AgentEvent) => void;
@@ -55,6 +56,7 @@ export type ClaudeToolUseAuthorization =
 
 type AuthorizeClaudeToolUseInput = {
   session: ClaudeSessionContext;
+  rolePolicy: WorkflowRolePolicy | null;
   toolInput: ClaudeProtocolObject;
   toolName: string;
   blockedPath?: string;
@@ -199,6 +201,7 @@ const findReadOnlyPathPolicyViolation = async (
 export const authorizeClaudeToolUse = ({
   blockedPath,
   canonicalizePath = realpath,
+  rolePolicy,
   session,
   toolInput,
   toolName,
@@ -218,8 +221,8 @@ export const authorizeClaudeToolUse = ({
   if (odtToolName && session.input.sessionScope.kind === "repository") {
     return { behavior: "allow", approval: "trusted_odt", toolInput: effectiveToolInput };
   }
-  if (odtToolName && role) {
-    if (!AGENT_ROLE_TOOL_POLICY[role].some((allowedToolName) => allowedToolName === odtToolName)) {
+  if (odtToolName && rolePolicy) {
+    if (!rolePolicy.tools.some((allowedToolName) => allowedToolName === odtToolName)) {
       return {
         behavior: "deny",
         message: `Tool ${odtToolName} is not allowed for ${role} sessions.`,
@@ -229,7 +232,7 @@ export const authorizeClaudeToolUse = ({
   }
 
   const mutation = mutationForTool(toolName, effectiveToolInput);
-  if (isReadOnlyWorkflowRole(role)) {
+  if (rolePolicy?.readOnly) {
     if (
       CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools.some(
         (blockedTool) => blockedTool.toLowerCase() === toolName.toLowerCase(),
@@ -282,7 +285,7 @@ export const authorizeClaudeToolUse = ({
 };
 
 export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanUseTool => {
-  const { canonicalizePath = realpath, emit, now, randomId, session } = input;
+  const { canonicalizePath = realpath, emit, now, randomId, rolePolicy, session } = input;
   return async (toolName, toolInput, options) => {
     const handleAuthorization = (
       authorization: ClaudeToolUseAuthorization,
@@ -444,6 +447,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
 
     const authorizationInput: Parameters<typeof authorizeClaudeToolUse>[0] = {
       session,
+      rolePolicy,
       toolName,
       toolInput: parseClaudeCanonicalJsonObject(toolInput, "claudeToolInput"),
       canonicalizePath,

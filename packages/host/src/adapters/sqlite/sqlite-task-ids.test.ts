@@ -19,7 +19,7 @@ describe("SQLite task IDs", () => {
     });
   });
 
-  test("keeps card ordering, ID ties, subtasks, and old closed tasks", async () => {
+  test("keeps card ordering, ID ties, and old closed tasks", async () => {
     const { cleanup, repoPath, store, contextProvider } = await createSqliteTaskStoreHarness();
     const older = new Date("2020-01-01T00:00:00.000Z");
     const newer = new Date("2020-01-02T00:00:00.000Z");
@@ -30,12 +30,7 @@ describe("SQLite task IDs", () => {
       taskRowFixture({ id: "open-newer-a", priority: 1, createdAt: newer }),
       taskRowFixture({ id: "active-newer", status: "in_progress", updatedAt: newer }),
       taskRowFixture({ id: "closed-b", status: "closed", updatedAt: older }),
-      taskRowFixture({
-        id: "closed-a",
-        status: "closed",
-        parentId: "open-low",
-        updatedAt: older,
-      }),
+      taskRowFixture({ id: "closed-a", status: "closed", updatedAt: older }),
     ];
     try {
       await Effect.runPromise(
@@ -59,9 +54,7 @@ describe("SQLite task IDs", () => {
       const visible = await Effect.runPromise(store.listTasks({ repoPath, doneVisibleDays: 1 }));
       expect(visible.map((task) => task.id)).not.toContain("closed-a");
 
-      await Effect.runPromise(
-        store.deleteTask({ repoPath, taskId: "closed-a", deleteSubtasks: false }),
-      );
+      await Effect.runPromise(store.deleteTask({ repoPath, taskId: "closed-a" }));
       expect(await Effect.runPromise(store.listTaskIds({ repoPath }))).toEqual(
         ids.filter((id) => id !== "closed-a"),
       );

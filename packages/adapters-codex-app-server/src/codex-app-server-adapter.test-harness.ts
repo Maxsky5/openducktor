@@ -1,4 +1,5 @@
-import type { ManagedMcpServer } from "@openducktor/core";
+import type { ManagedMcpServer, WorkflowRolePolicyResolver } from "@openducktor/core";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { expect, mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -26,6 +27,12 @@ import {
   type CodexJsonRpcTransport,
 } from "./index";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
+
+/** The role policy of the built-in task workflow. */
+export const testWorkflowRolePolicy: WorkflowRolePolicyResolver = ({ role }) => {
+  const workflowRole = builtinTaskWorkflow.role(role);
+  return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
+};
 
 export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary => ({
   kind: "codex",
@@ -598,8 +605,10 @@ export const createAdapterWithTransport = (
   overrides: Partial<CodexAppServerAdapterOptions> = {},
 ) =>
   new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     runtime: makeRuntimeSummary("runtime-live"),
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     transportFactory: () => transport,
     onRuntimeEventQueueFailure: () => {
       return undefined;
@@ -626,8 +635,10 @@ export const createHarness = (
   const respondServerRequest = mock(async () => {});
 
   const adapter = new CodexAppServerAdapter({
+    resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     runtime: makeRuntimeSummary("runtime-live"),
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     transportFactory,
     onRuntimeEventQueueFailure: () => {
       return undefined;

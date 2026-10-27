@@ -1,4 +1,8 @@
-import type { IssueType, PullRequest, TaskStatus } from "@openducktor/contracts";
+import {
+  type BuiltinIssueTypeId as IssueType,
+  type BuiltinStateId as TaskStatus,
+} from "@openducktor/workflows";
+import type { PullRequest } from "@openducktor/contracts";
 import { toPriorityLevel } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
 import {
   statusTone,
@@ -208,11 +212,10 @@ export const chipColors = (theme: AppTheme, paint: ChipPaint): ChipColors => {
 const ISSUE_TYPE_FAMILIES = {
   bug: "rose",
   feature: "sky",
-  epic: "violet",
   task: null,
 } as const satisfies Record<IssueType, Family | null>;
 
-/** The desktop issue type paint: Bug rose, Feature sky, Epic violet, and Task neutral. */
+/** The desktop issue type paint: Bug rose, Feature sky, and Task neutral. */
 export const issueTypeChipPaint = (issueType: IssueType): ChipPaint =>
   ISSUE_TYPE_FAMILIES[issueType] ?? "task-type";
 

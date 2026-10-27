@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
@@ -30,6 +31,7 @@ const setup = async (
   });
   const prepared = await Effect.runPromise(
     createOpenCodeLiveSessionAdapterPreparer({
+      resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       liveSessionLifecycle: {
         releaseRuntime: service.releaseRuntime,
         createRuntimeRegistration: service.createRuntimeRegistration,

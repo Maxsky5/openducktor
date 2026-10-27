@@ -239,11 +239,13 @@ function renderChatTaskTool(
     priority: 2,
     issueType: "task",
     labels: [],
-    aiReviewEnabled: true,
     createdAt: "2026-09-09T10:00:00.000Z",
     updatedAt: "2026-09-09T10:00:00.000Z",
-    qaVerdict: "not_reviewed",
-    artifacts: { hasSpec: false, hasPlan: false, hasQaReport: false },
+    workflowArtifacts: {
+      spec: { present: false },
+      plan: { present: false },
+      qaReport: { present: false },
+    },
   };
   return render(
     <QueryProvider>

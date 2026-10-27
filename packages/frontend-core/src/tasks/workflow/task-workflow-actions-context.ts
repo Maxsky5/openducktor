@@ -1,11 +1,11 @@
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { createContext, useContext } from "react";
 import type { ActiveTaskSessionContext, KanbanTaskSession } from "../board/kanban-task-activity";
 import type { WorkflowPendingState } from "../board/kanban-task-footer";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { EditTaskSection } from "../create/task-composer-types";
 import type { TaskConfirmRequestAction } from "./task-confirm-actions";
+import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export type TaskWorkflowActions = {
   kanbanPendingState?: WorkflowPendingState;
@@ -25,7 +25,7 @@ export type TaskWorkflowActions = {
   onResetImplementation: (taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void;
   onResetTask: (taskId: string) => Promise<void>;
   onCloseTask: (taskId: string) => Promise<void>;
-  onDelete: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
+  onDelete: (taskId: string) => Promise<void>;
   /** Open the confirmation of `action` for a task of the active workspace, on any page. */
   onConfirmTaskAction: (taskId: string, action: TaskConfirmRequestAction) => void;
   onDetectPullRequest: (taskId: string) => void;

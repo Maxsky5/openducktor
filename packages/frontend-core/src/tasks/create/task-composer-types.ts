@@ -1,16 +1,15 @@
-import type { IssueType } from "@openducktor/contracts";
+import type { BuiltinDocumentCode, BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 
 export type ComposerMode = "create" | "edit";
 
 export type ComposerStep = "type" | "details";
 
-export type EditTaskSection = "details" | "spec" | "plan";
+export type EditTaskSection = "details" | BuiltinDocumentCode;
 
 export type DocumentEditorView = "write" | "split" | "preview";
 
 export type ComposerState = {
   issueType: IssueType;
-  aiReviewEnabled: boolean;
   title: string;
   priority: number;
   description: string;

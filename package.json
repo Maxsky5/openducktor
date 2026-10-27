@@ -17,6 +17,7 @@
     "browser:client": "cd packages/openducktor-web && bun run dev:client",
     "marketing:dev": "bun run --filter @openducktor/marketing-website dev",
     "android": "cd apps/mobile && bun run android",
+    "android:release": "cd apps/mobile && bun run android:release",
     "ios": "cd apps/mobile && bun run ios",
     "hooks:install": "husky",
     "prepare": "bun run hooks:install",

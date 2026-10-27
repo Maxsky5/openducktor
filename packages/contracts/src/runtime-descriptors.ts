@@ -2,7 +2,8 @@ import {
   type RuntimeCapabilities,
   type RuntimeDescriptor,
   type RuntimeKind,
-  requiredRuntimeSupportedScopes,
+  type RuntimeSupportedScope,
+  runtimeSupportedScopeValues,
 } from "./agent-runtime-schemas";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
@@ -13,6 +14,8 @@ const OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
   "ast_grep_replace",
   "lsp_rename",
 ] as const;
+const NATIVE_RUNTIME_SUPPORTED_SCOPES: RuntimeSupportedScope[] = [...runtimeSupportedScopeValues];
+
 export const OPENCODE_ODT_TOOL_ID_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
 
 export const toOpencodeOdtToolAliases = (canonicalOdtToolName: string): string[] =>
@@ -42,7 +45,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
   provisioningMode: "host_managed",
   workflow: {
     supportsOdtWorkflowTools: true,
-    supportedScopes: requiredRuntimeSupportedScopes,
+    supportedScopes: NATIVE_RUNTIME_SUPPORTED_SCOPES,
   },
   sessionLifecycle: {
     supportedStartModes: ["fresh", "reuse", "fork"],
@@ -126,7 +129,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
   provisioningMode: "host_managed",
   workflow: {
     supportsOdtWorkflowTools: true,
-    supportedScopes: requiredRuntimeSupportedScopes,
+    supportedScopes: NATIVE_RUNTIME_SUPPORTED_SCOPES,
   },
   sessionLifecycle: {
     supportedStartModes: ["fresh", "reuse", "fork"],
@@ -224,7 +227,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
   provisioningMode: "host_managed",
   workflow: {
     supportsOdtWorkflowTools: true,
-    supportedScopes: requiredRuntimeSupportedScopes,
+    supportedScopes: NATIVE_RUNTIME_SUPPORTED_SCOPES,
   },
   sessionLifecycle: {
     supportedStartModes: ["fresh", "reuse", "fork"],

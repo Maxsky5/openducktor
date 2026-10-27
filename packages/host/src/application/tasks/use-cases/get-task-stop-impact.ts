@@ -5,18 +5,17 @@ import {
   type TaskStopImpactOperation,
   type TaskStopImpactRequest,
 } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
-import {
-  collectTaskDeleteTargets,
-  selectWorkflowCleanupSessionRecords,
-} from "../support/task-cleanup-support";
+import { selectWorkflowCleanupSessionRecords } from "../support/task-cleanup-support";
 import { countRemovedWorktrees } from "../support/task-removed-worktrees";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -27,8 +26,10 @@ type TaskStopImpactDependencies = {
 };
 
 type StopImpactTarget = {
+  task: TaskRecord;
   taskId: string;
   sessions: AgentSessionRecord[];
+  workflow: TaskWorkflow;
 };
 
 const requireTaskStopImpactDependencies = (
@@ -62,11 +63,12 @@ const requireTaskStopImpactDependencies = (
 
 // Keep this filter in step with each stop path.
 const selectStopCandidates = (
+  workflow: TaskWorkflow,
   operation: TaskStopImpactOperation,
   sessions: AgentSessionRecord[],
 ): AgentSessionRecord[] => {
   if (operation === "reset_task" || operation === "close" || operation === "delete") {
-    return selectWorkflowCleanupSessionRecords(sessions);
+    return selectWorkflowCleanupSessionRecords(workflow, sessions);
   }
   return sessions;
 };
@@ -81,12 +83,13 @@ const countStoppableSessions = (
 ) =>
   Effect.gen(function* () {
     const tasksWithSessions = targets.filter((target) => target.sessions.length > 0);
-    const previewTasks: StopImpactTarget[] = [];
-    for (const { taskId, sessions } of tasksWithSessions) {
-      let candidates = selectStopCandidates(input.operation, sessions);
+    const previewTasks: { taskId: string; sessions: AgentSessionRecord[] }[] = [];
+    for (const { taskId, sessions, workflow } of tasksWithSessions) {
+      let candidates = selectStopCandidates(workflow, input.operation, sessions);
       if (input.operation === "reset_implementation") {
         const { sessionState } = yield* collectImplementationResetSessionState(
           dependencies,
+          workflow,
           repoConfig,
           taskId,
           sessions,
@@ -123,6 +126,7 @@ const countStoppableSessions = (
 export const createTaskStopImpactUseCase = ({
   gitPort,
   taskStore,
+  taskWorkflows,
   taskActivityGuard,
   settingsConfig,
   taskWorktreeService,
@@ -137,23 +141,12 @@ export const createTaskStopImpactUseCase = ({
         input.repoPath,
       );
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const requestedTaskIds = [...new Set(input.taskIds)];
-      const currentTasks = yield* taskStore.listTasks({ repoPath: input.repoPath });
-      let taskIds = requestedTaskIds;
-      if (input.operation === "delete") {
-        const deleteTargetIds = new Set(
-          requestedTaskIds.flatMap((taskId) =>
-            collectTaskDeleteTargets(currentTasks, taskId, true).map((task) => task.id),
-          ),
-        );
-        taskIds = currentTasks
-          .filter((task) => deleteTargetIds.has(task.id))
-          .map((task) => task.id);
-      }
       const targets: StopImpactTarget[] = [];
-      for (const taskId of taskIds) {
+      for (const taskId of new Set(input.taskIds)) {
+        const task = yield* taskStore.getTask({ repoPath: input.repoPath, taskId });
         const metadata = yield* taskStore.getTaskMetadata({ repoPath: input.repoPath, taskId });
-        targets.push({ taskId, sessions: metadata.agentSessions });
+        const workflow = taskWorkflows.forTask(task);
+        targets.push({ task, taskId, sessions: metadata.agentSessions, workflow });
       }
       const stoppableSessionCount = yield* countStoppableSessions(
         dependencies,
@@ -171,10 +164,7 @@ export const createTaskStopImpactUseCase = ({
         input.operation,
         repoConfig,
         effectiveRepoPath,
-        targets.flatMap((target) => {
-          const task = currentTasks.find((entry) => entry.id === target.taskId);
-          return task ? [{ ...target, task }] : [];
-        }),
+        targets,
       );
       return { stoppableSessionCount, removedWorktreeCount } satisfies TaskStopImpact;
     });

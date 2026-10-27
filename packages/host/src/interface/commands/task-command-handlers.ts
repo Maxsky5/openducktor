@@ -8,10 +8,7 @@ import {
 import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import { Effect } from "effect";
-import type {
-  TaskService,
-  TaskServiceWithMutationProgress,
-} from "../../application/tasks/task-service";
+import type { TaskService } from "../../application/tasks/task-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
 import {
@@ -20,22 +17,22 @@ import {
   parseBuildCompletedInput,
   parseBuildStartInput,
   parseCreateTaskInput,
+  parseApplyTaskEventInput,
   parseDeleteTaskInput,
   parseDirectMergeInput,
   parseDirectMergeCompleteInput,
   parseListAgentSessionsForTasksInput,
-  parseMarkdownArtifactInput,
   parseOptionalNoteInput,
   parsePullRequestLinkMergedInput,
   parsePullRequestUpsertInput,
-  parseQaOutcomeInput,
   parseRepoPathInput,
   parseRepoPullRequestSyncInput,
-  parseSetPlanInput,
   parseTaskIdInput,
   parseTaskStopImpactInput,
   parseTransitionTaskInput,
   parseUpdateTaskInput,
+  parseWorkflowArtifactInput,
+  parseWorkflowArtifactSaveInput,
 } from "./task-command-inputs";
 
 const parseArtifactCommand = <T>(schema: z.ZodType<T>, input: HostCommandArgs): T => {
@@ -49,10 +46,7 @@ const parseArtifactCommand = <T>(schema: z.ZodType<T>, input: HostCommandArgs): 
   return parsed.data;
 };
 
-type TaskCommandService = Omit<TaskService, "qaApproved" | "qaRejected"> &
-  Pick<TaskServiceWithMutationProgress, "qaApproved" | "qaRejected">;
-
-export const createTaskCommandHandlers = (taskService: TaskCommandService) =>
+export const createTaskCommandHandlers = (taskService: TaskService) =>
   ({
     agent_session_delete: (args) =>
       taskService.agentSessionDelete(parseAgentSessionDeleteInput(args)),
@@ -71,15 +65,6 @@ export const createTaskCommandHandlers = (taskService: TaskCommandService) =>
       taskService.humanRequestChanges(
         parseOptionalNoteInput(args, "human_request_changes input", "human_request_changes note"),
       ),
-    qa_approved: (args) =>
-      taskService
-        .qaApproved(parseQaOutcomeInput(args, "qa_approved input"))
-        .pipe(Effect.map(({ task }) => task)),
-    qa_get_report: (args) => taskService.qaGetReport(parseTaskIdInput(args, "qa_get_report input")),
-    qa_rejected: (args) =>
-      taskService
-        .qaRejected(parseQaOutcomeInput(args, "qa_rejected input"))
-        .pipe(Effect.map(({ task }) => task)),
     repo_pull_request_sync: (args) =>
       taskService.repoPullRequestSync(parseRepoPullRequestSyncInput(args)),
     task_approval_context_get: (args) =>
@@ -118,24 +103,17 @@ export const createTaskCommandHandlers = (taskService: TaskCommandService) =>
       taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),
     task_stop_impact_get: (args) => taskService.getTaskStopImpact(parseTaskStopImpactInput(args)),
     task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),
+    task_apply_event: (args) => taskService.applyTaskEvent(parseApplyTaskEventInput(args)),
     task_update: (args) => taskService.updateTask(parseUpdateTaskInput(args)),
-    set_plan: (args) =>
-      taskService.setPlan(parseSetPlanInput(args)).pipe(Effect.map(({ artifact }) => artifact)),
-    set_spec: (args) =>
-      taskService.setSpec(parseMarkdownArtifactInput(args, "set_spec input", "spec")),
-    plan_get: (args) => taskService.planGet(parseTaskIdInput(args, "plan_get input")),
-    plan_save_artifact: (args) =>
-      taskService.savePlanArtifact(
-        parseMarkdownArtifactInput(args, "plan_save_artifact input", "implementation plan"),
-      ),
-    spec_get: (args) => taskService.specGet(parseTaskIdInput(args, "spec_get input")),
-    spec_save_artifact: (args) =>
-      taskService.saveSpecArtifact(
-        parseMarkdownArtifactInput(args, "spec_save_artifact input", "spec"),
-      ),
     tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),
     tasks_list_all: (args) =>
       taskService.listTasks(parseRepoPathInput(args, "tasks_list_all input")),
     task_ids_list: (args) =>
       taskService.listTaskIds(parseRepoPathInput(args, "task_ids_list input")),
+    workflow_artifact_get: (args) =>
+      taskService.workflowArtifactGet(parseWorkflowArtifactInput(args)),
+    workflow_artifact_save: (args) =>
+      taskService
+        .workflowArtifactSave(parseWorkflowArtifactSaveInput(args))
+        .pipe(Effect.map(({ artifact }) => artifact)),
   }) satisfies HostCommandHandlerDefinitions;

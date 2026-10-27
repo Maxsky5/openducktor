@@ -1,8 +1,8 @@
 import { type CodexEffectivePolicy, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
-  AGENT_ROLE_TOOL_POLICY,
   type AgentSessionRuntimePolicy,
   type AgentSessionScope,
+  type WorkflowRolePolicyResolver,
   withAgentSessionTitle,
 } from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
@@ -25,10 +25,17 @@ export type CodexSessionScopePolicy =
       sessionScope: Extract<AgentSessionScope, { kind: "repository" }>;
     });
 
+/** A workflow session enables the tools of its role in the task workflow of its task. */
 export const resolveCodexSessionScopePolicy = (
-  sessionScope: AgentSessionScope | null | undefined,
-  runtimePolicy: AgentSessionRuntimePolicy | undefined,
+  {
+    sessionScope,
+    runtimePolicy,
+  }: {
+    sessionScope?: AgentSessionScope | null | undefined;
+    runtimePolicy?: AgentSessionRuntimePolicy | undefined;
+  },
   action: string,
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
 ): CodexSessionScopePolicy => {
   if (!sessionScope) {
     throw new Error(`Cannot ${action} without session context.`);
@@ -46,7 +53,7 @@ export const resolveCodexSessionScopePolicy = (
           kind: "workflow",
           sessionScope,
           runtimePolicy: effectivePolicy,
-          enabledTools: [...AGENT_ROLE_TOOL_POLICY[sessionScope.role]],
+          enabledTools: [...resolveWorkflowRolePolicy(sessionScope).tools],
         };
   return withAgentSessionTitle(policy, sessionScope);
 };

@@ -1,32 +1,26 @@
 import { z } from "zod";
 import { taskEventCursorSchema } from "./external-task-sync-schemas";
-import { qaWorkflowVerdictSchema } from "./task-schemas";
+import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
 export const TASK_ARTIFACT_MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES = 16 * 1024;
 export const TASK_ARTIFACT_MCP_MAX_READ_BYTES = 1024 * 1024;
 
-export const workflowArtifactKindSchema = z.enum(["spec", "plan", "qaReport"]);
-export type WorkflowArtifactKind = z.infer<typeof workflowArtifactKindSchema>;
-
+/** The host rejects a free code that equals a workflow artifact ID. */
 export const freeArtifactCodeSchema = z
   .string()
   .min(1)
   .max(128)
-  .refine(
-    (code) => !workflowArtifactKindSchema.options.some((kind) => kind === code),
-    "The spec, plan, and qaReport codes identify workflow artifacts. Choose another code for a free artifact.",
-  )
   .regex(
     /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u,
     "Use a lowercase artifact code that starts with a letter and separates words with hyphens.",
   );
-export const taskArtifactCodeSchema = z.union([workflowArtifactKindSchema, freeArtifactCodeSchema]);
+/** A workflow artifact ID or a free artifact code. The host checks which one it is. */
+export const taskArtifactCodeSchema = z.string().min(1).max(128);
 
-export const workflowArtifactId = (taskId: string, kind: WorkflowArtifactKind): string => {
-  const storedKind = { spec: "spec", plan: "implementation_plan", qaReport: "qa_report" }[kind];
-  return `workflow:${taskId}:${storedKind}`;
-};
+/** The public ID of the workflow artifact with this code. */
+export const workflowArtifactId = (taskId: string, code: string): string =>
+  `workflow:${taskId}:${code}`;
 
 export const taskArtifactIdSchema = z.string().min(1).max(512);
 export const taskArtifactNameSchema = z.string().trim().min(1).max(255);
@@ -60,9 +54,9 @@ const artifactBaseFields = {
 export const workflowTaskArtifactSchema = z.strictObject({
   ...artifactBaseFields,
   classification: z.literal("workflow"),
-  workflowKind: workflowArtifactKindSchema,
+  code: workflowArtifactIdSchema,
   mediaType: z.literal("text/markdown"),
-  verdict: qaWorkflowVerdictSchema.optional(),
+  verdict: workflowIdSchema.optional(),
 });
 export type WorkflowTaskArtifact = z.infer<typeof workflowTaskArtifactSchema>;
 

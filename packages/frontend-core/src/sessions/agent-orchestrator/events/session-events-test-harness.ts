@@ -1,14 +1,14 @@
-import {
-  CLAUDE_RUNTIME_DESCRIPTOR,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  resolveCodexEffectivePolicy,
-} from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   type AgentSessionTodoItem,
-  buildReadOnlyPermissionRejectionMessage,
   type PolicyBoundSessionRef,
   workflowAgentSessionScope,
 } from "@openducktor/core";
+import {
+  builtinRoleId,
+  resolveCodexRolePolicy,
+  buildReadOnlyPermissionRejectionMessage,
+} from "@openducktor/workflows";
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -327,9 +327,9 @@ const runtimeRefForSession = ({
       runtimeKind: "codex",
       runtimePolicy: {
         kind: "codex",
-        policy: resolveCodexEffectivePolicy(
+        policy: resolveCodexRolePolicy(
           createSettingsSnapshotFixture().agentRuntimes.codex,
-          session.sessionAssociation.role,
+          builtinRoleId(session.sessionAssociation.role),
         ),
       },
     };

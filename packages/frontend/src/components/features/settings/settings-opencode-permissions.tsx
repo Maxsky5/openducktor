@@ -1,8 +1,5 @@
-import type {
-  OpenCodePermissionRule,
-  OpenCodeRuntimeConfig,
-  AgentRole,
-} from "@openducktor/contracts";
+import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
+import type { OpenCodePermissionRule, OpenCodeRuntimeConfig } from "@openducktor/contracts";
 import { useId, useState, type ReactElement } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +12,6 @@ import {
   RuntimePolicyRoleOverrides,
 } from "./settings-runtime-policy-layout";
 
-const ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 const EMPTY_RULES: OpenCodePermissionRule[] = [];
 
 type OpenCodePermissionsSettingsProps = {
@@ -32,7 +28,8 @@ export function OpenCodePermissionsSettings({
   const id = useId();
   const [showRoles, setShowRoles] = useState(false);
   const rolesVisible =
-    showRoles || ROLES.some((role) => (config.roleOverrides[role]?.rules.length ?? 0) > 0);
+    showRoles ||
+    BUILTIN_ROLE_IDS.some((role) => (config.roleOverrides[role]?.rules.length ?? 0) > 0);
   return (
     <RuntimePolicyCard title="OpenCode permissions">
       <PermissionInfoPanel disabled={disabled} />
@@ -57,7 +54,7 @@ export function OpenCodePermissionsSettings({
         }}
       >
         <div className="divide-y divide-border rounded-md border border-border">
-          {ROLES.map((role) => (
+          {BUILTIN_ROLE_IDS.map((role) => (
             <PermissionRole
               key={role}
               role={role}

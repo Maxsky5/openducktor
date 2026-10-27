@@ -5,10 +5,8 @@ import type {
   CodexAppServerSandboxPolicy,
   CodexEffectivePolicy,
 } from "@openducktor/contracts";
-import type { AgentRole, AgentSessionRuntimePolicy, RuntimeKind } from "@openducktor/core";
+import type { AgentSessionRuntimePolicy, RuntimeKind } from "@openducktor/core";
 import { assertAgentRuntimePolicyBinding } from "@openducktor/core";
-
-export const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
 const codexWorkspaceWriteSandboxPolicy = (
   workingDirectory: string,

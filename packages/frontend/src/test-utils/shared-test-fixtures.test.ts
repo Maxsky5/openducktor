@@ -40,12 +40,14 @@ describe("shared test fixtures", () => {
     const first = createTaskCardFixture();
     const second = createTaskCardFixture();
 
-    first.artifactSummary.qaReport.verdict = "rejected";
-    first.agentWorkflows.builder.completed = true;
+    const firstQaReport = first.artifactSummary.qaReport;
+    if (!firstQaReport) throw new Error("Missing QA report state");
+    firstQaReport.present = true;
+    first.agentWorkflows.build.completed = true;
     first.availableActions.push("build_start");
 
-    expect(second.artifactSummary.qaReport.verdict).toBe("not_reviewed");
-    expect(second.agentWorkflows.builder.completed).toBe(false);
+    expect(second.artifactSummary.qaReport).toEqual({ present: false });
+    expect(second.agentWorkflows.build.completed).toBe(false);
     expect(second.availableActions).toEqual([]);
   });
 

@@ -1,5 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
@@ -20,6 +18,10 @@ import {
   agentStudioSelectionSessionExternalId,
   createAgentStudioRouteSelectionState,
 } from "./shell/agent-studio-selection-state";
+import type {
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 
 export type AgentStudioNavigationViewSelection = {
   taskId: string;

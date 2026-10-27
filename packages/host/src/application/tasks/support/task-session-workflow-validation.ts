@@ -1,16 +1,14 @@
-import type { AgentRole, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { deriveAgentWorkflows } from "../../../domain/task";
+import type { TaskFacts, TaskWorkflow } from "@openducktor/workflows";
 import { HostValidationError } from "../../../effect/host-errors";
 
 export const validateTaskSessionWorkflowAvailable = (
-  task: TaskCard,
-  role: AgentRole,
+  workflow: TaskWorkflow,
+  task: TaskFacts,
+  role: string,
   repoPath: string,
 ) => {
-  const workflows = deriveAgentWorkflows(task);
-  const workflow = role === "build" ? workflows.builder : workflows[role];
-  if (workflow.available) {
+  if (workflow.project(task).agentWorkflows[role]?.available) {
     return Effect.void;
   }
 

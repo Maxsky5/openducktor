@@ -4,6 +4,7 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { builtinRoleId } from "@openducktor/workflows";
 import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import {
   findChatRecord,
@@ -64,7 +65,7 @@ const taskOwner = (
   if (!resolution) {
     resolution = {
       status: "ready",
-      owner: { kind: "task", taskId: association.taskId, role: association.role },
+      owner: { kind: "task", taskId: association.taskId, role: builtinRoleId(association.role) },
       sessionAssociation: association,
       sessionScope: { kind: "workflow", taskId: association.taskId, role: association.role },
     };

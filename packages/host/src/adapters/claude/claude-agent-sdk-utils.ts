@@ -119,7 +119,9 @@ export const readStringProp = (
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
 
-const claudeWorkflowScope = (input: ClaudeSessionInput): AgentSessionWorkflowScope | null => {
+export const claudeWorkflowScope = (
+  input: ClaudeSessionInput,
+): AgentSessionWorkflowScope | null => {
   const scope = claudeSessionScope(input);
   return scope?.kind === "workflow" ? scope : null;
 };
@@ -133,9 +135,6 @@ export const claudeSessionRef = (session: ClaudeSessionContext): SessionRef => (
   workingDirectory: session.input.workingDirectory,
   externalSessionId: session.externalSessionId,
 });
-
-export const isReadOnlyWorkflowRole = (role: AgentRole | null): boolean =>
-  role !== null && role !== "build";
 
 export const canonicalOdtToolName = (toolName: string): OdtToolName | null =>
   normalizeOdtToolName(toolName, toClaudeOdtToolAliases);

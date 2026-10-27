@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import { useMinuteClockLabel } from "@openducktor/frontend-core/lib/relative-time";
 import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import {

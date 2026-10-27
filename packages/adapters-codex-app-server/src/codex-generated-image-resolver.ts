@@ -18,7 +18,11 @@ import {
 } from "./codex-image-generation";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
+import type {
+  CodexAppServerAdapterOptions,
+  CodexAppServerClient,
+  CodexThreadHistoryReadResponse,
+} from "./types";
 
 const MAX_RUNTIME_IMAGE_BATCHES = 2;
 // Reserve 96 MiB per batch, including active reads, using two bytes per string character.
@@ -68,6 +72,7 @@ export class CodexGeneratedImageResolver {
   constructor(
     private readonly clients: CodexRuntimeClientResolver,
     private readonly history: CodexThreadInventoryReader,
+    private readonly directoriesMatch: CodexAppServerAdapterOptions["directoriesMatch"],
     private readonly prepareImages?: CodexImageGenerationPreparer,
   ) {}
 
@@ -313,7 +318,7 @@ export class CodexGeneratedImageResolver {
     if (
       !response ||
       response.thread.id !== threadId ||
-      response.thread.cwd !== ref.workingDirectory
+      !(await this.directoriesMatch(response.thread.cwd, ref.workingDirectory))
     )
       throw new Error(
         "Image public history does not match the requested session and working directory.",

@@ -1,8 +1,4 @@
-import {
-  resolveClaudePolicy,
-  type AgentRole,
-  type ClaudePolicyFields,
-} from "@openducktor/contracts";
+import { resolveClaudePolicy, type ClaudePolicyFields } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostValidationError,
@@ -13,7 +9,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 
 export type ClaudeLaunchPolicyPort = {
   resolve(input: {
-    role: AgentRole | null;
+    role: string | null;
   }): Effect.Effect<ClaudePolicyFields, HostOperationErrorAggregate>;
 };
 

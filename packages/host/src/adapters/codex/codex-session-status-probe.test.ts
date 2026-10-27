@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { createCodexDirectoryMatcher } from "./codex-directory-identity";
 import { probeCodexSessionStatus } from "./codex-session-status-probe";
 
 const codexThread = (status: CodexAppServerThreadStatus, cwd = "/repo/worktree") =>
@@ -41,9 +42,28 @@ const codexThread = (status: CodexAppServerThreadStatus, cwd = "/repo/worktree")
     turns: [],
   }) satisfies CodexAppServerThread;
 
-const probeThreadStatus = (input: { status: CodexAppServerThreadStatus; cwd?: string }) =>
+const directoriesMatch = createCodexDirectoryMatcher({
+  canonicalize: (path) => Effect.succeed(path),
+});
+
+const deletedDirectoryMatch = createCodexDirectoryMatcher({
+  canonicalize: (path) =>
+    Effect.fail(
+      new HostOperationError({
+        operation: "filesystem.canonicalize",
+        message: `ENOENT: no such file or directory, realpath '${path}'`,
+      }),
+    ),
+});
+
+const probeThreadStatus = (input: {
+  status: CodexAppServerThreadStatus;
+  cwd?: string;
+  directoriesMatch?: typeof directoriesMatch;
+}) =>
   Effect.runPromise(
     probeCodexSessionStatus({
+      directoriesMatch: input.directoriesMatch ?? directoriesMatch,
       codexAppServer: {
         request() {
           return Effect.succeed(
@@ -60,21 +80,21 @@ const probeThreadStatus = (input: { status: CodexAppServerThreadStatus; cwd?: st
   );
 
 describe("probeCodexSessionStatus", () => {
-  test("reports active and systemError Codex threads as live", async () => {
+  test("reports active Codex threads as live", async () => {
     await expect(
       probeThreadStatus({ status: { type: "active", activeFlags: [] } }),
     ).resolves.toEqual({
       supported: true,
       hasLiveSession: true,
     });
-
-    await expect(probeThreadStatus({ status: { type: "systemError" } })).resolves.toEqual({
-      supported: true,
-      hasLiveSession: true,
-    });
   });
 
-  test("reports idle, notLoaded, and other-worktree Codex threads as inactive", async () => {
+  test("reports idle, notLoaded, systemError, and other-worktree Codex threads as inactive", async () => {
+    await expect(probeThreadStatus({ status: { type: "systemError" } })).resolves.toEqual({
+      supported: true,
+      hasLiveSession: false,
+    });
+
     await expect(probeThreadStatus({ status: { type: "idle" } })).resolves.toEqual({
       supported: true,
       hasLiveSession: false,
@@ -93,10 +113,33 @@ describe("probeCodexSessionStatus", () => {
     });
   });
 
+  test("does not resolve the directories of a thread that is not live", async () => {
+    for (const status of [{ type: "notLoaded" }, { type: "systemError" }] as const) {
+      await expect(
+        probeThreadStatus({
+          status,
+          cwd: "/private/repo/worktree",
+          directoriesMatch: deletedDirectoryMatch,
+        }),
+      ).resolves.toEqual({ supported: true, hasLiveSession: false });
+    }
+  });
+
+  test("reports a directory failure for a live thread", async () => {
+    await expect(
+      probeThreadStatus({
+        status: { type: "active", activeFlags: [] },
+        cwd: "/private/repo/worktree",
+        directoriesMatch: deletedDirectoryMatch,
+      }),
+    ).rejects.toThrow("ENOENT");
+  });
+
   test("reports missing Codex threads as inactive", async () => {
     await expect(
       Effect.runPromise(
         probeCodexSessionStatus({
+          directoriesMatch,
           codexAppServer: {
             request() {
               return Effect.fail(

@@ -2,9 +2,11 @@ import type {
   AgentSessionRecord,
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
-  TaskCard,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type {
+  BuiltinRoleId as AgentRole,
+  BuiltinTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,

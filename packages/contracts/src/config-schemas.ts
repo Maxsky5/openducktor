@@ -6,7 +6,7 @@ import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { DEFAULT_REMOTE_ACCESS_SETTINGS, remoteAccessSettingsSchema } from "./remote-host-schemas";
-import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
+import { agentRoleSchema } from "./agent-workflow-schemas";
 import {
   gitProviderConfigSchema,
   gitTargetBranchSchema,
@@ -29,6 +29,7 @@ import {
 } from "./workspace-identity-schemas";
 import { customAgentRoleSchema } from "./workspace-session-schemas";
 import { workspaceRemovalRecordSchema } from "./workspace-lifecycle-schemas";
+import { workflowIdSchema } from "./workflow-condition-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
 export const CHAT_DIFF_STYLE_VALUES = ["split", "unified"] as const;
@@ -99,22 +100,6 @@ const createDefaultCodexRuntimePolicy = (): CodexPolicyFields => ({
   ...DEFAULT_CODEX_RUNTIME_POLICY,
 });
 
-export const AUTOPILOT_EVENT_IDS = [
-  "taskProgressedToSpecReady",
-  "taskProgressedToReadyForDev",
-  "taskProgressedToAiReview",
-  "taskRejectedByQa",
-  "taskProgressedToHumanReview",
-] as const;
-
-export const AUTOPILOT_ACTION_IDS = [
-  "startPlanner",
-  "startBuilder",
-  "startQa",
-  "startReviewQaFeedbacks",
-  "startGeneratePullRequest",
-] as const;
-
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
@@ -162,6 +147,7 @@ const codexRoleOverrideSchema = z
   })
   .strict();
 export type CodexRoleOverride = z.infer<typeof codexRoleOverrideSchema>;
+/** Keyed by role ID. The host checks the IDs and the write access of each role against the workflow. */
 const codexRoleOverridesSchema = z.partialRecord(agentRoleSchema, codexRoleOverrideSchema);
 
 const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2Schema
@@ -171,30 +157,12 @@ const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2
   })
   .strict();
 
-const withCodexRuntimeValidation = <
-  T extends z.ZodType<{ roleOverrides: z.output<typeof codexRoleOverridesSchema> }>,
->(
-  schema: T,
-) =>
-  schema.superRefine((config, context) => {
-    if (config.roleOverrides.build?.sandboxMode === "read-only") {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Codex build role sandboxMode cannot be read-only; use workspace-write or danger-full-access.",
-        path: ["roleOverrides", "build", "sandboxMode"],
-      });
-    }
-  });
-
-export const codexRuntimeConfigSchema = withCodexRuntimeValidation(
-  agentRuntimeEnabledConfigSchema
-    .extend({
-      defaults: codexPolicyFieldsSchema.default(() => createDefaultCodexRuntimePolicy()),
-      roleOverrides: codexRoleOverridesSchema.default({}),
-    })
-    .strict(),
-);
+export const codexRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
+  .extend({
+    defaults: codexPolicyFieldsSchema.default(() => createDefaultCodexRuntimePolicy()),
+    roleOverrides: codexRoleOverridesSchema.default({}),
+  })
+  .strict();
 export type CodexRuntimeConfig = z.infer<typeof codexRuntimeConfigSchema>;
 
 export const claudeRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
@@ -283,9 +251,11 @@ export const codexEffectivePolicySchema = z
   })
   .strict();
 
+/** A role that writes to its workspace keeps workspace-write when it inherits a read-only sandbox. */
 export const resolveCodexEffectivePolicy = (
   config: CodexRuntimeConfig,
-  role?: AgentRole | null,
+  role: string | null,
+  roleWritesWorkspace: boolean,
 ): CodexEffectivePolicy => {
   const override = role ? (config.roleOverrides[role] ?? {}) : {};
   const inheritedSandboxMode = override.sandboxMode === undefined;
@@ -297,8 +267,11 @@ export const resolveCodexEffectivePolicy = (
   };
 
   const adjustmentReason =
-    role === "build" && inheritedSandboxMode && policy.sandboxMode === "read-only"
-      ? "Build role requires workspace-write when sandboxMode is inherited from read-only."
+    role !== null &&
+    roleWritesWorkspace &&
+    inheritedSandboxMode &&
+    policy.sandboxMode === "read-only"
+      ? `${role.charAt(0).toUpperCase()}${role.slice(1)} role requires workspace-write when sandboxMode is inherited from read-only.`
       : undefined;
   const sandboxMode = adjustmentReason ? "workspace-write" : policy.sandboxMode;
 
@@ -495,23 +468,24 @@ export const agentModelDefaultSchema = z.object({
 });
 export type AgentModelDefault = z.infer<typeof agentModelDefaultSchema>;
 
-export const repoAgentDefaultsSchema = z.object({
-  spec: nullableToOptional(agentModelDefaultSchema),
-  planner: nullableToOptional(agentModelDefaultSchema),
-  build: nullableToOptional(agentModelDefaultSchema),
-  qa: nullableToOptional(agentModelDefaultSchema),
-});
+/** A null value clears the default of a role. */
+const roleRecordSchema = <T extends z.ZodTypeAny>(value: T) =>
+  z
+    .partialRecord(agentRoleSchema, value.nullable())
+    .transform((record): Partial<Record<string, z.output<T>>> =>
+      Object.fromEntries(
+        Object.entries(record).flatMap(([role, entry]) =>
+          entry === null || entry === undefined ? [] : [[role, entry] as const],
+        ),
+      ),
+    );
+
+/** Keyed by role ID. The host checks the IDs against the workflow. */
+export const repoAgentDefaultsSchema = roleRecordSchema(agentModelDefaultSchema);
 export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 
 const persistedAgentModelDefaultSchema = agentModelDefaultSchema.strict();
-const persistedRepoAgentDefaultsSchema = repoAgentDefaultsSchema
-  .safeExtend({
-    spec: nullableToOptional(persistedAgentModelDefaultSchema),
-    planner: nullableToOptional(persistedAgentModelDefaultSchema),
-    build: nullableToOptional(persistedAgentModelDefaultSchema),
-    qa: nullableToOptional(persistedAgentModelDefaultSchema),
-  })
-  .strict();
+const persistedRepoAgentDefaultsSchema = roleRecordSchema(persistedAgentModelDefaultSchema);
 
 const persistedPromptOverridesSchema = z
   .record(z.string(), agentPromptOverrideSchema.strict())
@@ -546,12 +520,7 @@ export const repoConfigSchema = z.object({
   actions: repoActionsSchema.default(createEmptyRepoActions),
   worktreeCopyPaths: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
-  agentDefaults: repoAgentDefaultsSchema.default({
-    spec: undefined,
-    planner: undefined,
-    build: undefined,
-    qa: undefined,
-  }),
+  agentDefaults: repoAgentDefaultsSchema.default({}),
   agentStudioState: workspaceAgentStudioStateSchema,
   closed: z.boolean().optional(),
   removal: workspaceRemovalRecordSchema.optional(),
@@ -566,12 +535,7 @@ const persistedRepoConfigSchema = repoConfigSchema
     hooks: repoHooksSchema.strict().default({ postComplete: [] }),
     actions: persistedRepoActionsSchema.default(createEmptyRepoActions),
     promptOverrides: persistedPromptOverridesSchema.default({}),
-    agentDefaults: persistedRepoAgentDefaultsSchema.default({
-      spec: undefined,
-      planner: undefined,
-      build: undefined,
-      qa: undefined,
-    }),
+    agentDefaults: persistedRepoAgentDefaultsSchema.default({}),
     agentStudioState: workspaceAgentStudioStateSchema
       .removeDefault()
       .safeExtend({ activeTask: workspaceAgentStudioActiveTaskSchema.strict().optional() })
@@ -691,11 +655,11 @@ export type KanbanEmptyColumnDisplay = z.infer<typeof kanbanEmptyColumnDisplaySc
 export type KanbanTaskCardView = z.infer<typeof kanbanTaskCardViewSchema>;
 export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;
 
-export const autopilotEventIdSchema = z.enum(AUTOPILOT_EVENT_IDS);
-export type AutopilotEventId = z.infer<typeof autopilotEventIdSchema>;
+/** A signal of the workflow. The host checks it against the workflow. */
+export const autopilotEventIdSchema = workflowIdSchema;
 
-export const autopilotActionIdSchema = z.enum(AUTOPILOT_ACTION_IDS);
-export type AutopilotActionId = z.infer<typeof autopilotActionIdSchema>;
+/** An automation of the workflow. The host checks it against the workflow. */
+export const autopilotActionIdSchema = workflowIdSchema;
 
 export const autopilotRuleSchema = z.object({
   eventId: autopilotEventIdSchema,
@@ -703,11 +667,12 @@ export const autopilotRuleSchema = z.object({
 });
 export type AutopilotRule = z.infer<typeof autopilotRuleSchema>;
 
+/** Merges the rules of one event. The host orders and completes the rules from the workflow. */
 const normalizeAutopilotSettings = (value: {
   alwaysStartQaReviewsFresh: boolean;
   rules: AutopilotRule[];
 }) => {
-  const rulesByEvent = new Map<AutopilotEventId, AutopilotRule>();
+  const rulesByEvent = new Map<string, AutopilotRule>();
   for (const rule of value.rules) {
     const existing = rulesByEvent.get(rule.eventId);
     rulesByEvent.set(rule.eventId, {
@@ -718,13 +683,7 @@ const normalizeAutopilotSettings = (value: {
 
   return {
     alwaysStartQaReviewsFresh: value.alwaysStartQaReviewsFresh,
-    rules: AUTOPILOT_EVENT_IDS.map(
-      (eventId): AutopilotRule =>
-        rulesByEvent.get(eventId) ?? {
-          eventId,
-          actionIds: [],
-        },
-    ),
+    rules: [...rulesByEvent.values()],
   };
 };
 
@@ -756,7 +715,7 @@ export type Theme = z.infer<typeof themeValueSchema>;
 const persistedAgentRuntimesV2Schema = z
   .object({
     opencode: persistedAgentRuntimeEnabledConfigV2Schema.optional(),
-    codex: withCodexRuntimeValidation(persistedCodexRuntimeConfigV2Schema).optional(),
+    codex: persistedCodexRuntimeConfigV2Schema.optional(),
     claude: persistedAgentRuntimeEnabledConfigV2Schema.optional(),
   })
   .catchall(persistedAgentRuntimeEnabledConfigV2Schema)

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import type { TaskCard, TaskStatus } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { collectTaskStatusChanges, recordCommittedTaskStatusChange } from "./task-status-changes";
 
-const record = (id: string, status: TaskStatus, previousStatus: TaskStatus) =>
+const record = (id: string, status: string, previousStatus: string) =>
   // SAFETY: The recorder reads only id, title, and status.
   recordCommittedTaskStatusChange({ task: { id, title: id, status } as TaskCard, previousStatus });
 

@@ -1,3 +1,7 @@
+import {
+  getSessionLaunchAction,
+  type BuiltinLaunchActionId as SessionLaunchActionId,
+} from "@openducktor/workflows";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
@@ -13,10 +17,6 @@ import {
 } from "../../lib/agent-runtime";
 import { matchesAgentSessionIdentity } from "../../lib/agent-session-identity";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
-import {
-  getSessionLaunchAction,
-  type SessionLaunchActionId,
-} from "../../lib/session-launch-actions";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveLaunchStartMode } from "./session-start-mode";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
@@ -94,7 +94,7 @@ const resolveInitialStartState = ({
   initialStartMode: AgentSessionStartMode | undefined;
   launchActionId: SessionLaunchActionId;
 }) => {
-  const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
+  const allowedStartModes = getSessionLaunchAction(launchActionId).startModes;
   const hasExistingSession = existingSessionOptions.length > 0;
   let selectedStartMode: AgentSessionStartMode;
 
@@ -199,8 +199,7 @@ export function useSessionStartModalReuseState({
   const [selectedSourceSessionValue, setSelectedSourceSessionValue] = useState("");
 
   const availableStartModes = useMemo<AgentSessionStartMode[]>(
-    () =>
-      intent ? [...getSessionLaunchAction(intent.launchActionId).allowedStartModes] : ["fresh"],
+    () => (intent ? [...getSessionLaunchAction(intent.launchActionId).startModes] : ["fresh"]),
     [intent],
   );
 

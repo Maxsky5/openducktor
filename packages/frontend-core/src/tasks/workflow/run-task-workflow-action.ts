@@ -1,5 +1,9 @@
-import type { AgentRole } from "@openducktor/core";
-import type { TaskWorkflowAction } from "../board/kanban-task-workflow";
+import {
+  sessionRoleForViewAction,
+  type SessionRoleViewAction,
+  type TaskWorkflowAction,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { TaskWorkflowActions } from "./task-workflow-actions-context";
 
@@ -70,47 +74,20 @@ export const runTaskWorkflowAction = (
   }
 };
 
-type OpenSessionWorkflowAction = Extract<
-  TaskWorkflowAction,
-  "open_spec" | "open_planner" | "open_qa" | "open_builder"
->;
-
-type RoleSessionActionConfig = {
-  role: AgentRole;
-  fallback?: (callbacks: TaskWorkflowCallbacks, taskId: string) => void;
-};
-
-const roleSessionActions = {
-  open_spec: { role: "spec" },
-  open_planner: { role: "planner" },
-  open_qa: {
-    role: "qa",
-    fallback: (callbacks, taskId) => callbacks.onQaOpen?.(taskId),
-  },
-  open_builder: {
-    role: "build",
-    fallback: (callbacks, taskId) => callbacks.onBuild?.(taskId),
-  },
-} satisfies Record<OpenSessionWorkflowAction, RoleSessionActionConfig>;
-
 const openRoleSession = (
-  action: OpenSessionWorkflowAction,
+  action: SessionRoleViewAction,
   taskId: string,
   callbacks: TaskWorkflowCallbacks,
   context: TaskWorkflowActionContext | undefined,
 ): void => {
-  const actionConfig = roleSessionActions[action];
+  const role = sessionRoleForViewAction(action);
+  if (role === undefined) return;
 
   if (callbacks.onOpenSession) {
-    callbacks.onOpenSession(
-      taskId,
-      actionConfig.role,
-      context?.resolveSessionOptions?.(actionConfig.role),
-    );
+    callbacks.onOpenSession(taskId, role, context?.resolveSessionOptions?.(role));
     return;
   }
 
-  if ("fallback" in actionConfig) {
-    actionConfig.fallback(callbacks, taskId);
-  }
+  if (action === "open_qa") callbacks.onQaOpen?.(taskId);
+  if (action === "open_builder") callbacks.onBuild?.(taskId);
 };

@@ -1,4 +1,5 @@
-import { planSubtaskIssueTypeSchema, type SourceIssue } from "@openducktor/contracts";
+import { type SourceIssue } from "@openducktor/contracts";
+import { builtinIssueTypeId } from "@openducktor/workflows";
 import { ChevronDown, CircleAlert, CircleCheck, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
@@ -13,7 +14,6 @@ import { IssueMarkdownRenderer } from "@/components/features/issue-source/issue-
 import { TagSelector } from "@/components/ui/tag-selector";
 import { cn } from "@/lib/utils";
 import {
-  ISSUE_IMPORT_ISSUE_TYPES,
   ISSUE_IMPORT_LABELS,
   issueImportItemTitle,
   issueImportReviewStatus,
@@ -24,10 +24,7 @@ import {
   type IssueReview,
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 
-const ISSUE_IMPORT_ISSUE_TYPE_SET = new Set<string>(ISSUE_IMPORT_ISSUE_TYPES);
-const ISSUE_TYPE_COMBOBOX_OPTIONS: ComboboxOption[] = ISSUE_TYPE_OPTIONS.filter((option) =>
-  ISSUE_IMPORT_ISSUE_TYPE_SET.has(option.value),
-).map((option) => {
+const ISSUE_TYPE_COMBOBOX_OPTIONS: ComboboxOption[] = ISSUE_TYPE_OPTIONS.map((option) => {
   const Icon = option.icon;
   return {
     value: option.value,
@@ -169,9 +166,7 @@ function IssueReviewCard({
             options={ISSUE_TYPE_COMBOBOX_OPTIONS}
             searchable={false}
             triggerAriaLabelledBy={`issue-type-label-${item.sourceId}`}
-            onValueChange={(value) =>
-              onChange({ issueType: planSubtaskIssueTypeSchema.parse(value) })
-            }
+            onValueChange={(value) => onChange({ issueType: builtinIssueTypeId(value) })}
           />
         </div>
         <div className="grid gap-2">

@@ -1,6 +1,5 @@
 import {
   type ExternalTaskSyncEvent,
-  type TaskCard,
   type TaskArtifactChange,
   workflowArtifactId,
   type TaskEventCursor,
@@ -15,7 +14,6 @@ import {
   recordDocumentVersion,
   recordDocumentCommit,
   type TaskDocumentReader,
-  type TaskDocumentSection,
 } from "./documents";
 import {
   artifactQueryKeys,
@@ -30,6 +28,7 @@ import {
   type TaskQueryChange,
   type TaskQueryChanges,
 } from "./task-query-changes";
+import { builtinTaskCardSchema, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 const queryKeyStringSchema = z.string();
 
@@ -61,7 +60,7 @@ export type TaskSnapshotResult = {
 
 type CachedDocument = {
   queryKey: readonly unknown[];
-  section: TaskDocumentSection;
+  code: string;
   taskId: string;
 };
 
@@ -91,9 +90,8 @@ export const createTaskViewSync = ({
     workspaceEpochOf(repoPath) !== workspaceEpoch;
 
   const recordCardVersion = (entry: CachedDocument, card: TaskCard): void => {
-    const summary =
-      entry.section === "qa" ? card.artifactSummary.qaReport : card.artifactSummary[entry.section];
-    const committedAt = summary.has ? summary.updatedAt : card.updatedAt;
+    const summary = card.artifactSummary[entry.code];
+    const committedAt = summary?.present ? summary.updatedAt : card.updatedAt;
     if (committedAt) recordDocumentVersion(queryClient, entry.queryKey, committedAt);
   };
 
@@ -180,7 +178,7 @@ export const createTaskViewSync = ({
           queryClient,
           repoPath,
           entry.taskId,
-          entry.section,
+          entry.code,
           ports.loadFreshDocument,
         ),
       ),
@@ -201,30 +199,21 @@ export const createTaskViewSync = ({
         const card = cardById.get(entry.taskId);
         if (!card || removed.has(entry.taskId)) return;
         const query = queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true });
-        const summary =
-          entry.section === "qa"
-            ? card.artifactSummary.qaReport
-            : card.artifactSummary[entry.section];
+        const summary = card.artifactSummary[entry.code];
+        // The workflow declares no artifact with this code.
+        if (summary === undefined) return;
         const previousCard = previousCards.find((card) => card.id === entry.taskId);
-        const previousSummary =
-          entry.section === "qa"
-            ? previousCard?.artifactSummary.qaReport
-            : previousCard?.artifactSummary[entry.section];
+        const previousSummary = previousCard?.artifactSummary[entry.code];
         const written =
           commit?.artifactChanges.some(
             (change) =>
               change.taskId === entry.taskId &&
-              change.artifactIds.includes(
-                workflowArtifactId(
-                  entry.taskId,
-                  entry.section === "qa" ? "qaReport" : entry.section,
-                ),
-              ),
+              change.artifactIds.includes(workflowArtifactId(entry.taskId, entry.code)),
           ) === true;
         const changed =
           written ||
           (previousSummary !== undefined &&
-            (previousSummary.has !== summary.has ||
+            (previousSummary.present !== summary.present ||
               previousSummary.updatedAt !== summary.updatedAt));
         if (commit && !recordDocumentCommit(queryClient, entry.queryKey, commit.cursor, changed))
           return;
@@ -233,7 +222,7 @@ export const createTaskViewSync = ({
         );
         if (current?.updatedAt && Date.parse(current.updatedAt) > eventTime) return;
         recordCardVersion(entry, card);
-        if (!summary.has) {
+        if (!summary.present) {
           if (current === undefined || current.markdown !== "" || current.updatedAt !== null) {
             queryClient.setQueryData(entry.queryKey, { markdown: "", updatedAt: null });
           }
@@ -242,7 +231,7 @@ export const createTaskViewSync = ({
         if (current === undefined) {
           if (
             !written &&
-            previousSummary?.has === summary.has &&
+            previousSummary?.present === summary.present &&
             previousSummary.updatedAt === summary.updatedAt
           ) {
             return;
@@ -495,7 +484,8 @@ export const createTaskViewSync = ({
     reconcileExternalEvent: async (event, cursor) => {
       if (!event.boardChanges) return;
       await runForRepo(event.repoPath, async () => {
-        const { cards, doneVisibleDays } = event.boardChanges!;
+        const { doneVisibleDays } = event.boardChanges!;
+        const cards = event.boardChanges!.cards.map((card) => builtinTaskCardSchema.parse(card));
         const previousCards =
           queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(event.repoPath))?.tasks ??
           [];
@@ -613,8 +603,8 @@ export const getProductionTaskViewSync = (queryClient: QueryClient): TaskViewSyn
     queryClient,
     ports: {
       listTasks: (repoPath) => host.tasksList(repoPath),
-      loadFreshDocument: (repoPath, taskId, section) =>
-        host.taskWorkflowArtifactGet(repoPath, taskId, section),
+      loadFreshDocument: (repoPath, taskId, code) =>
+        host.workflowArtifactGet(repoPath, taskId, code),
     },
   });
   productionTaskViewSyncs.set(queryClient, taskViewSync);
@@ -637,20 +627,16 @@ const cachedDocuments = (queryClient: QueryClient, repoPath: string): CachedDocu
     .getQueryCache()
     .findAll({ queryKey: documentQueryKeys.all, exact: false })
     .flatMap<CachedDocument>((query) => {
-      const [scope, section, cachedRepoPath, taskId] = query.queryKey;
+      const [scope, code, cachedRepoPath, taskId] = query.queryKey;
+      const codeResult = queryKeyStringSchema.safeParse(code);
       const taskIdResult = queryKeyStringSchema.safeParse(taskId);
       if (
         scope !== documentQueryKeys.all[0] ||
         cachedRepoPath !== repoPath ||
+        !codeResult.success ||
         !taskIdResult.success
       ) {
         return [];
       }
-      if (section === "spec" || section === "plan") {
-        return [{ queryKey: query.queryKey, section, taskId: taskIdResult.data }];
-      }
-      if (section === "qa-report") {
-        return [{ queryKey: query.queryKey, section: "qa" as const, taskId: taskIdResult.data }];
-      }
-      return [];
+      return [{ queryKey: query.queryKey, code: codeResult.data, taskId: taskIdResult.data }];
     });

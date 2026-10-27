@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { taskEventCursorSchema } from "./external-task-sync-schemas";
 
-export const REMOTE_PROTOCOL_VERSION = 2;
+export const REMOTE_PROTOCOL_VERSION = 3;
 export const REMOTE_BASELINE_CAPABILITIES = [
   "host.work.v1",
   "host.events.v1",

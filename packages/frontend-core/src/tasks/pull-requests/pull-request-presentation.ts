@@ -1,8 +1,8 @@
+import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   GitPullRequestState,
   PullRequest,
   RepositoryGitProviderContext,
-  TaskCard,
 } from "@openducktor/contracts";
 import { pullRequestHealthError } from "../../review/git-provider-health";
 import { canUnlinkTaskPullRequest } from "../presentation/task-display";
@@ -41,14 +41,14 @@ export type TaskPullRequestActions = {
  * pull request data.
  */
 export const resolveTaskPullRequestActions = (
-  task: Pick<TaskCard, "pullRequest" | "status">,
+  task: TaskCard,
   gitProviderContext: RepositoryGitProviderContext | undefined,
   gitProviderReadError: string | null,
 ): TaskPullRequestActions => {
   const supportsPullRequests =
     gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
   const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError !== null;
-  const statusAllows = canUnlinkTaskPullRequest(task.status);
+  const statusAllows = canUnlinkTaskPullRequest(task);
   return {
     showDetect:
       (supportsPullRequests || readFailedWithoutContext) &&

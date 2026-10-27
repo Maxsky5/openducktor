@@ -1,35 +1,96 @@
 import type {
   AgentSessionRecord,
   GlobalGitConfig,
-  QaReportVerdict,
   RepoConfig,
   TaskCard,
 } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
+import type { TaskWorkflow } from "@openducktor/workflows";
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
-import {
-  canUseQaWorkflowFromStatus,
-  deriveAgentWorkflows,
-  deriveAvailableActions,
-  TaskPolicyError,
-} from "../../../domain/task";
+import { TaskPolicyError } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
-import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
+import type {
+  TaskRecord,
+  TaskStoreError,
+  TaskStorePort,
+} from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { taskWorktreeIdError } from "../worktrees/task-worktree-id";
-import { validateTaskTransitionEffect } from "./task-validation-effects";
-export const enrichTasks = (tasks: TaskCard[]): TaskCard[] =>
-  tasks.map((task) => ({
-    ...task,
-    availableActions: deriveAvailableActions(task, tasks),
-    agentWorkflows: deriveAgentWorkflows(task),
-  }));
-export const enrichTask = (task: TaskCard, allTasks: TaskCard[]): TaskCard => ({
+import {
+  requireEffect,
+  requireTaskEvent,
+  startWorktreeSessionHint,
+  type HostEffect,
+} from "./task-workflow-events";
+
+/** Decides a named event for a task and commits its transition. A repeat returns the task. */
+export const applyTaskEvent = (
+  taskStore: Pick<TaskStorePort, "getTask" | "transitionTask">,
+  taskWorkflows: TaskWorkflowResolver,
+  input: { repoPath: string; taskId: string },
+  eventId: string,
+): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
+  Effect.gen(function* () {
+    const current = yield* taskStore.getTask(input);
+    return yield* commitTaskEvent(
+      taskStore,
+      taskWorkflows.forTask(current),
+      input,
+      current,
+      eventId,
+    );
+  });
+
+/** Decides a named event for a loaded task and commits its transition. */
+export const commitTaskEvent = (
+  taskStore: Pick<TaskStorePort, "transitionTask">,
+  workflow: TaskWorkflow,
+  input: { repoPath: string; taskId: string },
+  current: TaskRecord,
+  eventId: string,
+): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
+  Effect.gen(function* () {
+    const decision = yield* requireTaskEvent(workflow, eventId, current);
+    if (decision.kind === "unchanged") return enrichTask(workflow, current);
+    const updated = yield* taskStore.transitionTask({
+      ...input,
+      status: decision.to,
+      cause: decision.cause,
+    });
+    return enrichTask(workflow, updated);
+  });
+
+/** Decides the event of a host effect for a task and commits its transition. */
+export const applyEffect = (
+  taskStore: Pick<TaskStorePort, "getTask" | "transitionTask">,
+  taskWorkflows: TaskWorkflowResolver,
+  input: { repoPath: string; taskId: string },
+  effect: HostEffect,
+): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
+  Effect.gen(function* () {
+    const current = yield* taskStore.getTask(input);
+    const workflow = taskWorkflows.forTask(current);
+    const decision = yield* requireEffect(workflow, effect, current);
+    if (decision.kind === "unchanged") return enrichTask(workflow, current);
+    const updated = yield* taskStore.transitionTask({
+      ...input,
+      status: decision.to,
+      cause: decision.cause,
+    });
+    return enrichTask(workflow, updated);
+  });
+
+/** Adds the workflow projection to stored tasks. */
+export const enrichTasks = (
+  taskWorkflows: TaskWorkflowResolver,
+  tasks: readonly TaskRecord[],
+): TaskCard[] => tasks.map((task) => enrichTask(taskWorkflows.forTask(task), task));
+export const enrichTask = (workflow: TaskWorkflow, task: TaskRecord): TaskCard => ({
   ...task,
-  availableActions: deriveAvailableActions(task, allTasks),
-  agentWorkflows: deriveAgentWorkflows(task),
+  ...workflow.project(task),
 });
 const tryCanonicalizePath = (
   settingsConfig: SettingsConfigPort,
@@ -122,66 +183,9 @@ export const loadDefaultMergeMethod = (
     const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
     return config.git.defaultMergeMethod;
   });
-export const taskListWithCurrent = (
-  taskStore: TaskStorePort,
-  repoPath: string,
-  taskId: string,
-): Effect.Effect<
-  {
-    current: TaskCard;
-    currentTasks: TaskCard[];
-  },
-  TaskStoreError | HostValidationError
-> =>
-  Effect.gen(function* () {
-    const currentTasks = yield* taskStore.listTasks({ repoPath });
-    const current = currentTasks.find((task) => task.id === taskId);
-    if (!current) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Task not found: ${taskId}`,
-          details: { repoPath, taskId },
-        }),
-      );
-    }
-    return { current, currentTasks };
-  });
-export const recordQaOutcome = (
-  taskStore: TaskStorePort,
-  input: {
-    repoPath: string;
-    taskId: string;
-    markdown: string;
-    verdict: QaReportVerdict;
-    targetStatus: "human_review" | "in_progress";
-  },
-) =>
-  Effect.gen(function* () {
-    const { repoPath, taskId, markdown, verdict, targetStatus } = input;
-    const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
-    if (!canUseQaWorkflowFromStatus(current.status)) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `QA outcomes are only allowed from blocked, ai_review, or human_review (current: ${current.status}).`,
-          details: { repoPath, taskId, status: current.status },
-        }),
-      );
-    }
-    yield* validateTaskTransitionEffect(current, currentTasks, current.status, targetStatus);
-    const { task: updated, artifact } = yield* taskStore.recordQaOutcome({
-      repoPath,
-      taskId,
-      status: targetStatus,
-      markdown,
-      verdict,
-    });
-    const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-    return { task: enrichTask(updated, nextTasks), artifact };
-  });
 export const buildCompletionWorktreePath = (
   settingsConfig: SettingsConfigPort,
+  workflow: TaskWorkflow,
   repoConfig: RepoConfig,
   taskId: string,
 ) =>
@@ -197,7 +201,7 @@ export const buildCompletionWorktreePath = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. Start Builder first.`,
+          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
           details: { taskId, worktreePath },
         }),
       );
@@ -208,7 +212,7 @@ export const buildCompletionWorktreePath = (
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. Start Builder first.`,
+          message: `The worktree path of task ${taskId} is the repository root. Change the worktree base path in the repository settings.`,
           details: { taskId, worktreePath },
         }),
       );
@@ -217,14 +221,20 @@ export const buildCompletionWorktreePath = (
   });
 export const blockBuildCompletionTask = (
   taskStore: Pick<TaskStorePort, "transitionTask">,
+  workflow: TaskWorkflow,
   repoPath: string,
   taskId: string,
-  current: TaskCard,
-  currentTasks: TaskCard[],
+  current: TaskRecord,
 ) =>
   Effect.gen(function* () {
-    yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
-    yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
+    const decision = yield* requireEffect(workflow, "build.blocked", current);
+    if (decision.kind === "unchanged") return;
+    yield* taskStore.transitionTask({
+      repoPath,
+      taskId,
+      status: decision.to,
+      cause: decision.cause,
+    });
   }).pipe(
     Effect.mapError((error) => {
       if (error instanceof TaskPolicyError) {

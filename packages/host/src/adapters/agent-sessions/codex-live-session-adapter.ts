@@ -59,10 +59,12 @@ const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSe
   new CodexAppServerAdapter(options);
 
 export const createCodexLiveSessionAdapterPreparer = ({
+  directoriesMatch,
   liveSessionLifecycle,
   codexAppServer,
   onBackgroundFailure,
   resolveRuntimePolicy,
+  resolveWorkflowRolePolicy,
   resolveMcpServerConfig,
   prepareImageGenerations,
   createController = defaultCreateController,
@@ -81,8 +83,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
       const controller = yield* Effect.try({
         try: () =>
           createController({
+            directoriesMatch: (left, right) => Effect.runPromise(directoriesMatch(left, right)),
             questionHistory,
             prepareImageGenerations,
+            resolveWorkflowRolePolicy,
             runtime,
             // Effect.runPromise rejects with the typed failure.
             resolveManagedMcpServer: (repoPath) =>
@@ -251,7 +255,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
                       }),
                     );
                   }
-                  const policy = yield* resolveRuntimePolicy(sessionScope);
+                  const policy = yield* resolveRuntimePolicy({ ...input, sessionScope });
                   return yield* Effect.tryPromise({
                     try: () =>
                       controller.loadSessionContextUsage({
@@ -456,7 +460,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         updateSessionModel: (input) =>
           Effect.tryPromise({
             try: async () => {
-              const policy = await Effect.runPromise(resolveRuntimePolicy(input.sessionScope));
+              const policy = await Effect.runPromise(resolveRuntimePolicy(input));
               return controller.updateSessionModel(input, {
                 repoPath: input.repoPath,
                 runtimeKind: "codex",
@@ -476,6 +480,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         stopSession: (input) =>
           stopCodexSession({
             codexAppServer,
+            directoriesMatch,
             runtimeId: runtime.runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,

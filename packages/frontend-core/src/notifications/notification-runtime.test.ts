@@ -1,22 +1,27 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type NotificationOsDeliveryRequest,
-} from "@openducktor/contracts";
+import { type NotificationOsDeliveryRequest } from "@openducktor/contracts";
 import {
   createBridge,
   createDeliveryAdapters,
   createNotificationRuntime,
   workflowClosedOccurrence,
 } from "./notification-runtime.test-support";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+
+/** The built-in notification settings always hold the Closed kind. */
+const closedKind = (settings: ReturnType<typeof createBuiltinNotificationSettings>) => {
+  const kind = settings.kinds["workflow.closed"];
+  if (!kind) throw new Error("The built-in notification settings have no Closed kind.");
+  return kind;
+};
 
 describe("notification delivery and previews", () => {
   test.each(["denied", "failed", "unsupported"] as const)(
     "preserves the %s OS result while local notifications and sound continue",
     async (status) => {
       const delivery = createDeliveryAdapters();
-      const settings = createDefaultNotificationSettings();
-      settings.kinds["workflow.closed"].target = "both";
+      const settings = createBuiltinNotificationSettings();
+      closedKind(settings).target = "both";
       const onFailure = mock(() => {});
       const onOsShown = mock(() => {});
       const requestPermission = mock(createBridge().requestPermission);
@@ -66,7 +71,7 @@ describe("notification delivery and previews", () => {
     const inApp = { dismiss: () => {}, deliver: mock(async () => {}) };
     const runtime = createNotificationRuntime({
       bridge: createBridge(),
-      selectSettings: async () => createDefaultNotificationSettings(),
+      selectSettings: async () => createBuiltinNotificationSettings(),
       navigate: async () => {},
       onFailure,
       onSoundPlayed,
@@ -91,13 +96,13 @@ describe("notification delivery and previews", () => {
     const showOsNotification = mock(async () => ({ status: "shown" as const }));
     const runtime = createNotificationRuntime({
       bridge: createBridge({ showOsNotification }),
-      selectSettings: async () => createDefaultNotificationSettings(),
+      selectSettings: async () => createBuiltinNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
       inApp,
     });
-    await runtime.testInApp(createDefaultNotificationSettings());
-    await runtime.testOs(createDefaultNotificationSettings());
+    await runtime.testInApp(createBuiltinNotificationSettings());
+    await runtime.testOs(createBuiltinNotificationSettings());
     expect(inApp.deliver).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ navigationTarget: { type: "notification_settings" } }),
@@ -113,7 +118,7 @@ describe("notification delivery and previews", () => {
   test.each(["disabled", "os", "failed"] as const)(
     "does not claim local error feedback for %s delivery",
     async (mode) => {
-      const settings = createDefaultNotificationSettings();
+      const settings = createBuiltinNotificationSettings();
       settings.kinds["agent.session_error"].enabled = mode !== "disabled";
       settings.kinds["agent.session_error"].target = mode === "os" ? "os" : "in_app";
       const inApp = {
@@ -140,8 +145,8 @@ describe("notification delivery and previews", () => {
   );
 
   test("reports no in-app feedback when the notification kind is disabled", async () => {
-    const settings = createDefaultNotificationSettings();
-    settings.kinds["workflow.closed"].enabled = false;
+    const settings = createBuiltinNotificationSettings();
+    closedKind(settings).enabled = false;
     const delivery = createDeliveryAdapters();
     const runtime = createNotificationRuntime({
       bridge: createBridge(),
@@ -161,7 +166,7 @@ describe("notification delivery and previews", () => {
   });
 
   test("reports confirmed in-app feedback after delivery", async () => {
-    const settings = createDefaultNotificationSettings();
+    const settings = createBuiltinNotificationSettings();
     settings.kinds["workflow.closed"] = {
       enabled: true,
       target: "in_app",
@@ -182,7 +187,7 @@ describe("notification delivery and previews", () => {
   });
 
   test("reports no in-app feedback when delivery fails", async () => {
-    const settings = createDefaultNotificationSettings();
+    const settings = createBuiltinNotificationSettings();
     settings.kinds["workflow.closed"] = {
       enabled: true,
       target: "in_app",
@@ -220,11 +225,11 @@ describe("notification delivery and previews", () => {
     }));
     const runtime = createNotificationRuntime({
       bridge: createBridge({ requestPermission, showOsNotification }),
-      selectSettings: async () => createDefaultNotificationSettings(),
+      selectSettings: async () => createBuiltinNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
     });
-    const settings = createDefaultNotificationSettings();
+    const settings = createBuiltinNotificationSettings();
     settings.volumePercent = 0;
 
     await runtime.getCapability();
@@ -255,12 +260,12 @@ describe("notification delivery and previews", () => {
         }),
         showOsNotification,
       }),
-      selectSettings: async () => createDefaultNotificationSettings(),
+      selectSettings: async () => createBuiltinNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
     });
 
-    const result = await runtime.testOs(createDefaultNotificationSettings());
+    const result = await runtime.testOs(createBuiltinNotificationSettings());
     expect(result.status).toBe("denied");
     expect(showOsNotification).not.toHaveBeenCalled();
   });
@@ -268,9 +273,9 @@ describe("notification delivery and previews", () => {
   test("keeps local delivery when the browser focus state cannot be read", async () => {
     const delivery = createDeliveryAdapters();
     const selectSettings = mock(async () => {
-      const settings = createDefaultNotificationSettings();
+      const settings = createBuiltinNotificationSettings();
       settings.volumePercent = 0;
-      settings.kinds["workflow.closed"].target = "both";
+      closedKind(settings).target = "both";
       return settings;
     });
     const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
@@ -322,8 +327,8 @@ describe("notification delivery and previews", () => {
     const runtime = createNotificationRuntime({
       bridge: createBridge({ withExternalDeliveryOwnership, isAppFocused }),
       selectSettings: async () => {
-        const settings = createDefaultNotificationSettings();
-        settings.kinds["workflow.closed"].enabled = false;
+        const settings = createBuiltinNotificationSettings();
+        closedKind(settings).enabled = false;
         return settings;
       },
       navigate: async () => {},
@@ -354,7 +359,7 @@ describe("notification delivery and previews", () => {
       const runtime = createNotificationRuntime({
         bridge: createBridge({ withExternalDeliveryOwnership, isAppFocused }),
         selectSettings: async () => {
-          const settings = createDefaultNotificationSettings();
+          const settings = createBuiltinNotificationSettings();
           settings.kinds["workflow.closed"] = {
             enabled: true,
             target: "in_app",
@@ -390,10 +395,10 @@ describe("notification delivery and previews", () => {
     const runtime = createNotificationRuntime({
       bridge: createBridge({ isAppFocused, showOsNotification }),
       selectSettings: async () => {
-        const settings = createDefaultNotificationSettings();
+        const settings = createBuiltinNotificationSettings();
         settings.osFocus = "always_send";
-        settings.kinds["workflow.closed"].target = "both";
-        settings.kinds["workflow.closed"].sound = "none";
+        closedKind(settings).target = "both";
+        closedKind(settings).sound = "none";
         return settings;
       },
       navigate: async () => {},
@@ -418,9 +423,9 @@ describe("notification delivery and previews", () => {
     const runtime = createNotificationRuntime({
       bridge: createBridge({ isAppFocused }),
       selectSettings: async () => {
-        const settings = createDefaultNotificationSettings();
+        const settings = createBuiltinNotificationSettings();
         settings.soundFocus = "always_play";
-        settings.kinds["workflow.closed"].target = "in_app";
+        closedKind(settings).target = "in_app";
         return settings;
       },
       navigate: async () => {},
@@ -450,10 +455,10 @@ describe("notification delivery and previews", () => {
         showOsNotification,
       }),
       selectSettings: async () => {
-        const settings = createDefaultNotificationSettings();
+        const settings = createBuiltinNotificationSettings();
         settings.osFocus = "always_send";
         settings.soundFocus = "mute_while_focused";
-        settings.kinds["workflow.closed"].target = "both";
+        closedKind(settings).target = "both";
         return settings;
       },
       navigate: async () => {},

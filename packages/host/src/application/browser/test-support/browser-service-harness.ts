@@ -3,8 +3,8 @@ import {
   type BrowserTabOwner,
   type BrowserTabSummary,
   repoConfigSchema,
-  taskCardSchema,
 } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { HostOperationError, HostResourceError } from "../../../effect/host-errors";
 import type { BrowserAutomationPort } from "../../../ports/browser-automation-port";
@@ -22,6 +22,7 @@ import type {
 import { createBrowserEngineTestDouble } from "../../../test-support/browser-engine-test-double";
 import { workspaceSessionRecord } from "../../terminals/test-support/terminal-service-harness";
 import { createBrowserService } from "../browser-service";
+import { taskCardFixture } from "../../../test-support/task-card-fixture";
 
 export const taskOwner: Extract<BrowserTabOwner, { kind: "task" }> = {
   kind: "task",
@@ -127,7 +128,8 @@ export const createBrowserServiceHarness = (
             Effect.andThen(() =>
               knownTasks.has(taskId)
                 ? Effect.succeed(
-                    taskCardSchema.parse({
+                    taskCardFixture({
+                      artifactSummary: emptyArtifactSummary(),
                       id: taskId,
                       title: "Task",
                       status: "in_progress",

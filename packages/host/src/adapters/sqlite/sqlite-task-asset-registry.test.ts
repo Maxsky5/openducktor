@@ -29,10 +29,10 @@ describe("SQLite task asset registry", () => {
     const exit = await Effect.runPromiseExit(
       registry.createTaskWithDescriptionAssets({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Atomic asset create",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: `![diagram](odt-asset:${assetId})`,
         },
@@ -72,7 +72,8 @@ describe("SQLite task asset registry", () => {
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
-        task: { title: "Assets", issueType: "task", aiReviewEnabled: true, priority: 2 },
+        status: "open",
+        task: { title: "Assets", issueType: "task", priority: 2 },
       }),
     );
     const firstId = "550e8400-e29b-41d4-a716-446655440000";
@@ -148,10 +149,10 @@ describe("SQLite task asset registry", () => {
     const task = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Concurrent assets",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "Original",
         },
@@ -212,10 +213,10 @@ describe("SQLite task asset registry", () => {
     const expectedTask = await Effect.runPromise(
       harness.store.createTask({
         repoPath: harness.repoPath,
+        status: "open",
         task: {
           title: "Original title",
           issueType: "task",
-          aiReviewEnabled: true,
           priority: 2,
           description: "Original description",
         },

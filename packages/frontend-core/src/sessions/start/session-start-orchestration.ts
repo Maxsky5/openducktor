@@ -1,9 +1,9 @@
-import type { RuntimeKind, TaskCard } from "@openducktor/contracts";
+import { getSessionLaunchAction, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
-import { getSessionLaunchAction } from "../../lib/session-launch-actions";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
@@ -263,7 +263,7 @@ export const buildSessionStartModalRequest = ({
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
 ): boolean => {
-  return getSessionLaunchAction(launchActionId).allowedStartModes.some(
+  return getSessionLaunchAction(launchActionId).startModes.some(
     (mode) => mode === "reuse" || mode === "fork",
   );
 };

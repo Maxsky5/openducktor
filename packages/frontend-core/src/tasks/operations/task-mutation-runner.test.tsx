@@ -22,7 +22,7 @@ describe("task mutation runner", () => {
       await harness.mount();
       const { queryClient } = harness.getLatest();
       const taskKey = taskQueryKeys.repoData("/repo");
-      const docKey = documentQueryKeys.spec("/repo", "task-1");
+      const docKey = documentQueryKeys.document("/repo", "task-1", "spec");
       queryClient.setQueryData(taskKey, { tasks: [] });
       queryClient.setQueryData(docKey, { markdown: "# Old", updatedAt: null });
       await harness.run(({ runner }) =>

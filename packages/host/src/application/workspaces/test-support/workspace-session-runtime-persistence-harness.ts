@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { commandPreparationFixture } from "../../agent-sessions/test-support/command-preparation-fixture";
 import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
 import { resolveSessionMessageParts } from "../../attachments/resolve-session-message-parts";
@@ -405,6 +406,7 @@ export const createPersistenceHarness = async (
   );
   events.length = 0;
   const commands = createAgentSessionCommandService({
+    taskWorkflows: builtinTaskWorkflows,
     turnPreparation: commandPreparationFixture,
     readSessionRootRefs: () =>
       Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
@@ -418,7 +420,7 @@ export const createPersistenceHarness = async (
       agentSessionsList: () => Effect.die(new Error("unexpected task session read")),
       agentSessionUpsert: () => Effect.die(new Error("unexpected task session write")),
       agentSessionUpdateModel: () => Effect.die(new Error("unexpected task model write")),
-      transitionTask: () => Effect.die(new Error("unexpected task transition")),
+      applyStartEvent: () => Effect.die(new Error("unexpected task transition")),
     },
     taskLifecycle: { acquireLifecycle: () => Effect.die(new Error("unexpected task lifecycle")) },
     taskSessionStart: {

@@ -15,6 +15,6 @@ describe("qaVerdictPresentation", () => {
   test("names each verdict in text", () => {
     expect(qaVerdictPresentation("approved")).toEqual({ label: "QA approved", tone: "success" });
     expect(qaVerdictPresentation("rejected").label).toBe("QA rejected");
-    expect(qaVerdictPresentation("not_reviewed").label).toBe("Not reviewed");
+    expect(qaVerdictPresentation(undefined).label).toBe("Not reviewed");
   });
 });

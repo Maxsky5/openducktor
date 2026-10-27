@@ -1,5 +1,5 @@
+import { type BuiltinStateId as TaskStatus } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
-import type { TaskStatus } from "@openducktor/contracts";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import type { KanbanTaskSession } from "./kanban-task-activity";
 import { buildKanbanBoardColumns } from "./use-kanban-board-columns";

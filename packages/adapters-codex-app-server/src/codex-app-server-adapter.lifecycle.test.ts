@@ -1,9 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  codexAppServerRequestParamsSchemas,
-  resolveCodexEffectivePolicy,
-} from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, AgentRuntimeQueryError, type AgentRole } from "@openducktor/core";
+import { codexAppServerRequestParamsSchemas } from "@openducktor/contracts";
+import { AgentRuntimeQueryError, type AgentRole } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY, resolveCodexRolePolicy } from "@openducktor/workflows";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -20,6 +18,7 @@ import {
   RecordingTransport,
   expectedThreadConfig,
   testManagedMcpServer,
+  testWorkflowRolePolicy,
 } from "./codex-app-server-adapter.test-harness";
 import { codexSandboxPolicy } from "./codex-session-policy";
 import { toCodexTurnInputList } from "./codex-user-inputs";
@@ -43,7 +42,7 @@ const codexPolicy = (
   role: "build" | "spec",
 ) => ({
   kind: "codex" as const,
-  policy: resolveCodexEffectivePolicy(config, role),
+  policy: resolveCodexRolePolicy(config, role),
 });
 
 class FailingSkillsTransport extends RecordingTransport {
@@ -151,7 +150,9 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("supports read-only construction without renderer-owned live event plumbing", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
@@ -267,7 +268,9 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("keeps the model surface when the skills surface fails", async () => {
     const transport = new FailingSkillsTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
@@ -288,7 +291,9 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("fails the combined catalog when the runtime transport is unreachable", async () => {
     const transport = new UnreachableRuntimeTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
@@ -979,7 +984,9 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("starts a session in the requested build worktree through the repo runtime", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = new CodexAppServerAdapter({
+      resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
       onRuntimeEventQueueFailure: () => {

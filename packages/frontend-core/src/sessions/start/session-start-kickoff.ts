@@ -1,8 +1,7 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { getSessionLaunchAction, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
 import { loadRepoConfigFromQuery } from "../../queries/workspace";
-import { getSessionLaunchAction } from "../../lib/session-launch-actions";
 import { resolveSessionStartKickoffPromptContext } from "./session-start-prompt-context";
 import { kickoffPromptForTemplate } from "./session-start-prompts";
 import type { SessionStartFlowRequest, ResolvedSessionStartDecision } from "./session-start-types";
@@ -25,8 +24,8 @@ export const resolveSessionStartKickoff = async ({
   workspaceId: string | null;
 }): Promise<string> => {
   const launchAction = getSessionLaunchAction(intent.launchActionId);
-  const kickoffTemplateId = launchAction.kickoffTemplateId;
-  if (!kickoffTemplateId) {
+  const { template } = launchAction;
+  if (template.kind !== "kickoff") {
     throw new Error(`Launch action "${intent.launchActionId}" does not define a kickoff prompt.`);
   }
   if (intent.kickoffPrompt !== undefined && !intent.kickoffPrompt.trim()) {
@@ -34,7 +33,7 @@ export const resolveSessionStartKickoff = async ({
   }
   const taskTargetBranch = intent.targetBranch ?? task?.targetBranch;
   const promptContextInput: Parameters<typeof resolveSessionStartKickoffPromptContext>[0] = {
-    templateId: kickoffTemplateId,
+    templateId: template.id,
     loadRepoDefaultTargetBranch: async () => {
       if (!workspaceId) {
         return null;
@@ -58,7 +57,7 @@ export const resolveSessionStartKickoff = async ({
     ? await loadEffectivePromptOverrides(workspaceId, queryClient)
     : undefined;
 
-  return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
+  return kickoffPromptForTemplate(intent.role, template.id, intent.taskId, {
     overrides: promptOverrides ?? {},
     ...promptContext,
     task:
@@ -68,7 +67,6 @@ export const resolveSessionStartKickoff = async ({
             title: task.title,
             issueType: task.issueType,
             status: task.status,
-            qaRequired: task.aiReviewEnabled,
             description: task.description,
           },
   });

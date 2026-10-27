@@ -28,9 +28,9 @@ The sidebar excludes sessions for `closed` tasks. If the visible task closes, th
 
 ## Issue types
 
-The UI supports `epic`, `feature`, `task`, and `bug`. It does not support `chore` or `decision`.
+The built-in workflow has the issue types `feature`, `task`, and `bug`.
 
-`feature` and `epic` use this path:
+`feature` uses this path:
 
 ```text
 open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed
@@ -44,22 +44,13 @@ They cannot plan from `open`. A later spec or plan edit does not change a task t
 open -> in_progress
 ```
 
-## QA defaults
+## QA review
 
-`qaRequired` defaults to `true` for all four issue types.
-
-When `qaRequired` is `true`, build completion moves to `ai_review` until the latest QA result is `approved`. When it is `false`, or the latest stored QA result is already `approved`, build completion moves to `human_review`.
-
-## Epic rules
-
-- Only an `epic` can have direct children.
-- The hierarchy has one child level.
-- A child cannot have children.
-- An epic cannot close while a direct child is not `closed`.
+QA review is part of the workflow for every task. Build completion moves to `ai_review` until the latest QA result is `approved`. When the latest stored QA result is already `approved`, build completion moves to `human_review`.
 
 ## Task artifacts
 
-Store saved outputs as task artifacts. Workflow artifacts contain the Specification, Implementation Plan, and QA Report. Free artifacts contain other files and do not affect workflow readiness or task status. Description images remain separate. See [task artifacts](task-artifacts.md) for collection, preview, and download rules.
+Store saved outputs as task artifacts. The task workflow definition declares its workflow artifacts. The built-in workflow declares the Specification (`spec`), Implementation Plan (`plan`), and QA Report (`qaReport`). Free artifacts contain other files and do not affect workflow readiness or task status. Description images remain separate. See [task artifacts](task-artifacts.md) for collection, preview, and download rules.
 
 ### Role handoffs
 
@@ -80,18 +71,10 @@ The `tasks_artifacts` table stores workflow history and the current version of e
 
 | Classification | Identity | Content | Revisions |
 |---|---|---|---|
-| Workflow | Task ID and fixed workflow kind. | Markdown text with `plain_text` format. | Append a row for each revision. |
+| Workflow | Task ID and artifact code. | Markdown text with `plain_text` format. | Append a row for each revision. |
 | Free | Generated artifact ID. | Exact file bytes, filename, media type, and byte size. | Keep one row and increment revision on change. |
 
-Workflow rows keep their source tool, updater, update time, and optional QA result. The stored workflow kinds are `spec`, `implementation_plan`, and `qa_report`. Stored `sourceTool` values retain the existing domain operation names for provenance; they are not public MCP writer names.
-
-```json
-[
-  { "kind": "spec", "sourceTool": "odt_set_spec" },
-  { "kind": "implementation_plan", "sourceTool": "odt_set_plan" },
-  { "kind": "qa_report", "sourceTool": "odt_qa_approved" }
-]
-```
+Workflow rows store the public artifact code, such as `spec`, `plan`, or `qaReport`, and the ID `workflow:<taskId>:<code>`. Each row keeps its source command, writer, update time, and optional review verdict. A new row records `odt_set_task_artifact` or `workflow_artifact_save` as `sourceTool`, and the writer role or `user` as `updatedBy`. Rows from before migration 0009 keep their earlier `sourceTool` values.
 
 A free artifact can contain up to 10 MiB. Its display name never selects a workflow role. Replacement keeps its identity and display name. Closed tasks retain all artifacts but reject free-artifact changes.
 

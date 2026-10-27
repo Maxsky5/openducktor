@@ -1,3 +1,5 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
 import {
   createPrepareOpencodeSessionRuntime,
@@ -10,10 +12,10 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
   repoConfigSchema,
-  taskCardSchema,
   settingsSnapshotSchema,
   type AgentModelCatalog,
 } from "@openducktor/contracts";
+import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -32,6 +34,7 @@ import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-s
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
 import { createSessionCreationPreparation } from "../agent-sessions/session-creation-preparation";
 import { createSessionTurnPreparation } from "../agent-sessions/session-turn-preparation";
+import { taskCardFixture } from "../../test-support/task-card-fixture";
 
 const repoPath = "/remote/repo";
 const workingDirectory = "/worktrees/workspace/task";
@@ -148,8 +151,7 @@ const harness = async (
     taskReader: {
       getTaskMetadata: () =>
         Effect.succeed({
-          spec: { markdown: "" },
-          plan: { markdown: "" },
+          artifacts: {},
           agentSessions: [
             {
               externalSessionId: "root",
@@ -204,6 +206,7 @@ test("a fresh workflow session reads its catalog before native session ownership
     },
   });
   const turnPreparation = createSessionTurnPreparation({
+    taskWorkflows: builtinTaskWorkflows,
     queries: h.service,
     settings: {
       getRepoConfigByRepoPath: () =>
@@ -219,14 +222,14 @@ test("a fresh workflow session reads its catalog before native session ownership
     taskReader: {
       getTask: () =>
         Effect.succeed(
-          taskCardSchema.parse({
+          taskCardFixture({
+            artifactSummary: emptyArtifactSummary(),
             id: "task-1",
             title: "Fresh task",
             description: "Current host task context",
             status: "open",
             priority: 2,
             issueType: "task",
-            aiReviewEnabled: false,
             createdAt: "2026-10-15T00:00:00Z",
             updatedAt: "2026-10-15T00:00:00Z",
           }),
@@ -544,6 +547,7 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
       connection,
       {
         resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       },
       {
         readDirectory: (directory, read) =>

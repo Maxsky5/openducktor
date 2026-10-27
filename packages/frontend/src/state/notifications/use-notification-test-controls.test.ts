@@ -1,8 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  createDefaultNotificationSettings,
-  type NotificationOsCapability,
-} from "@openducktor/contracts";
+import { type NotificationOsCapability } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -13,6 +10,7 @@ import {
   describeNotificationOsCapability,
   useNotificationTestControls,
 } from "./use-notification-test-controls";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows";
 
 const capability = (
   overrides: Partial<NotificationOsCapability> = {},
@@ -51,7 +49,7 @@ test.each([
       subscribeClicks: () => () => {},
       dispose: () => {},
     };
-    const settings = { ...createDefaultNotificationSettings(), volumePercent: 50 };
+    const settings = { ...createBuiltinNotificationSettings(), volumePercent: 50 };
     const runtime = createNotificationRuntime({
       bridge,
       publishAction: async (occurrence) => ({

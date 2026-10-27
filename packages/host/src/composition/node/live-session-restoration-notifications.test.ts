@@ -1,3 +1,5 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { createPrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
@@ -20,6 +22,7 @@ import { createAgentSessionRecord } from "../../ports/task-store-port-contract.t
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
+import { enrichTasks } from "../../application/tasks/support/task-workflow-helpers";
 
 test.each([
   { status: "closed", failure: "missing directory" },
@@ -36,7 +39,8 @@ test.each([
     const task = await Effect.runPromise(
       db.store.createTask({
         repoPath,
-        task: { title: "Saved build", issueType: "bug", priority: 2, aiReviewEnabled: true },
+        status: "open",
+        task: { title: "Saved build", issueType: "bug", priority: 2 },
       }),
     );
     const saved = createAgentSessionRecord({
@@ -142,9 +146,13 @@ test.each([
         notifications.acceptLive(envelope, provenance),
     });
     const notifications = createNotificationService({
+      taskWorkflows: builtinTaskWorkflows,
       settingsConfig,
       tasks: {
-        listTasks: db.store.listTasks,
+        listTasks: (input) =>
+          db.store
+            .listTasks(input)
+            .pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
         agentSessionsListForTasks: db.store.listAgentSessionsForTasks,
       },
       live,
@@ -154,8 +162,10 @@ test.each([
     try {
       const prepared = await Effect.runPromise(
         createTestOpenCodeLiveSessionAdapterPreparer({
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           liveSessionLifecycle: live,
           prepareRuntime: createPrepareOpencodeSessionRuntime({
+            resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
             resolveCreationSettings: async () => ({ defaults: [], role: [] }),
             resolveMcpServerConfig: async () => {
               throw new Error("Restoration must not install MCP");

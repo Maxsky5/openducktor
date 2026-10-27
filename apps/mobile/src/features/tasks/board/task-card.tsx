@@ -1,11 +1,14 @@
-import type { AgentSessionRecord, TaskCard as TaskCardData } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import {
+  type TaskWorkflowAction,
+  type BuiltinTaskCard as TaskCardData,
+  type BuiltinRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { memo, type ReactElement, use, useCallback, useMemo, useRef } from "react";
 import { type DimensionValue, View } from "react-native";

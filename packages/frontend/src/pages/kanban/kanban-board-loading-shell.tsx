@@ -1,22 +1,11 @@
-import type { KanbanColumnId } from "@openducktor/core";
+import { BUILTIN_STATE_IDS } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { KANBAN_LANE_WIDTH_CLASS } from "@/components/features/kanban/kanban-layout";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-const LOADING_LANE_PREVIEW_IDS: KanbanColumnId[] = [
-  "open",
-  "spec_ready",
-  "ready_for_dev",
-  "in_progress",
-  "blocked",
-  "ai_review",
-  "human_review",
-  "closed",
-];
-
-const LOADING_LANE_PREVIEWS = LOADING_LANE_PREVIEW_IDS.map((id) => {
+const LOADING_LANE_PREVIEWS = BUILTIN_STATE_IDS.map((id) => {
   const theme = laneTheme(id);
   return {
     id,

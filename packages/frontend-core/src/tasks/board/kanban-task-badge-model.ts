@@ -1,9 +1,8 @@
-import type { IssueType } from "@openducktor/contracts";
+import type { BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
 
 export const ISSUE_TYPE_LABELS = {
   bug: "Bug",
   feature: "Feature",
-  epic: "Epic",
   task: "Task",
 } satisfies Record<IssueType, string>;
 

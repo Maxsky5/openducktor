@@ -1,3 +1,4 @@
+import { taskHasSessionPage } from "@openducktor/workflows";
 import { AlertTriangle, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
@@ -54,7 +55,7 @@ export function SessionsPage(): ReactElement {
   }
   if (kind === "task" && workspaceMatch.kind === "ready") {
     const taskId = searchParams.get(TASK_SESSION_QUERY_KEYS.task);
-    if (tasks.some((task) => task.id === taskId && task.status === "closed")) {
+    if (tasks.some((task) => task.id === taskId && !taskHasSessionPage(task))) {
       return <Navigate to="/kanban" replace />;
     }
   }

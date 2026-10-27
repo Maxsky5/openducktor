@@ -1,9 +1,8 @@
 import {
-  NOTIFICATION_KIND_VALUES,
+  AGENT_NOTIFICATION_KIND_VALUES,
   notificationCueSchema,
   notificationSoundSchema,
   type NotificationCue,
-  type NotificationKind,
   type NotificationSettings,
   type NotificationTarget,
 } from "@openducktor/contracts";
@@ -14,9 +13,11 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { BUILTIN_NOTIFICATION_KINDS } from "@openducktor/workflows";
 import {
   NOTIFICATION_KIND_DESCRIPTIONS,
   NOTIFICATION_KIND_LABELS,
+  type SettingsNotificationKind,
 } from "@openducktor/frontend-core/notifications/catalogue";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
@@ -56,9 +57,6 @@ const deliveryFailureLabels = {
   settings: "Last notification settings error",
   coordination: "Last browser notification coordination error",
 };
-
-const AGENT_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("agent."));
-const WORKFLOW_KINDS = NOTIFICATION_KIND_VALUES.filter((kind) => kind.startsWith("workflow."));
 
 type SettingsRadioGroupProps<Value extends string> = {
   label: string;
@@ -109,7 +107,7 @@ function SettingsRadioGroup<Value extends string>({
 }
 
 type NotificationKindRowProps = {
-  kind: NotificationKind;
+  kind: SettingsNotificationKind;
   settings: NotificationSettings;
   disabled: boolean;
   onUpdate: (updater: (current: NotificationSettings) => NotificationSettings) => void;
@@ -124,6 +122,9 @@ function NotificationKindRow({
   onPreview,
 }: NotificationKindRowProps): ReactElement {
   const kindSettings = settings.kinds[kind];
+  if (!kindSettings) {
+    throw new Error(`Notification settings have no ${kind} setting. Report this settings error.`);
+  }
   const selectedSound =
     kindSettings.sound === "inherit" || kindSettings.sound === "none"
       ? kindSettings.sound
@@ -181,7 +182,7 @@ function NotificationKindRow({
 
 type NotificationKindGroupProps = {
   title: string;
-  kinds: readonly NotificationKind[];
+  kinds: readonly SettingsNotificationKind[];
   settings: NotificationSettings;
   disabled: boolean;
   onUpdate: (updater: (current: NotificationSettings) => NotificationSettings) => void;
@@ -434,7 +435,7 @@ export function SettingsNotificationsSection({
 
       <NotificationKindGroup
         title="Agent activity"
-        kinds={AGENT_KINDS}
+        kinds={AGENT_NOTIFICATION_KIND_VALUES}
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}
@@ -442,7 +443,7 @@ export function SettingsNotificationsSection({
       />
       <NotificationKindGroup
         title="Workflow changes"
-        kinds={WORKFLOW_KINDS}
+        kinds={BUILTIN_NOTIFICATION_KINDS}
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}

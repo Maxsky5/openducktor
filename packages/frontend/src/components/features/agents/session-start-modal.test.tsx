@@ -1,6 +1,6 @@
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+
 import {
   fireEvent,
   render as renderWithoutConnection,
@@ -15,6 +15,7 @@ import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/provide
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { SessionStartModal } from "./session-start-modal";
+import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 
 enableReactActEnvironment();
 
@@ -308,6 +309,72 @@ describe("SessionStartModal", () => {
 
     unmount();
   });
+
+  test.each([
+    { startMode: "fresh", profiles: "empty", supportsProfiles: true, blocked: true },
+    { startMode: "fork", profiles: "empty", supportsProfiles: true, blocked: true },
+    { startMode: "reuse", profiles: "empty", supportsProfiles: true, blocked: false },
+    { startMode: "fresh", profiles: "unknown", supportsProfiles: true, blocked: false },
+    { startMode: "fresh", profiles: "empty", supportsProfiles: false, blocked: false },
+    { startMode: "fresh", profiles: "unselectable", supportsProfiles: true, blocked: false },
+  ] as const)(
+    "checks $startMode confirmation with $profiles profiles and profile support $supportsProfiles",
+    ({ startMode, profiles, supportsProfiles, blocked }) => {
+      const onConfirm = mock(() => {});
+      const source = existingSessionOption("session-1");
+      const runtime = createModel().modelPickerRuntimes[0];
+      if (runtime?.resource.status !== "ready") throw new Error("Expected a ready runtime fixture");
+      const catalog = { ...runtime.resource.catalog };
+      if (profiles === "empty") catalog.profiles = [];
+      if (profiles === "unselectable") {
+        catalog.profiles = [
+          { name: "hidden", mode: "primary", hidden: true },
+          { name: "helper", mode: "subagent", hidden: false },
+        ];
+      }
+      const view = render(
+        <SessionStartModal
+          model={createModel({
+            availableStartModes: ["fresh", "reuse", "fork"],
+            selectedStartMode: startMode,
+            existingSessionOptions: [source],
+            selectedSourceSessionValue: source.value,
+            selectedModelSelection: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5.4",
+            },
+            modelPickerRuntimes: [{ ...runtime, resource: { status: "ready", catalog } }],
+            runtimeProfileOptions: [],
+            supportsProfiles,
+            onConfirm,
+          })}
+        />,
+      );
+
+      try {
+        if (supportsProfiles && startMode !== "reuse") {
+          expect(screen.getByText("No profiles are available for this runtime.")).toBeTruthy();
+        }
+        const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+          name: "Start session",
+        });
+        const backgroundButton = screen.getByRole<HTMLButtonElement>("button", {
+          name: "Run in background",
+        });
+        expect(confirmButton.disabled).toBe(blocked);
+        expect(backgroundButton.disabled).toBe(blocked);
+        fireEvent.click(confirmButton);
+        fireEvent.click(backgroundButton);
+        const form = confirmButton.closest("form");
+        if (!form) throw new Error("Expected the session start form");
+        fireEvent.submit(form);
+        expect(onConfirm).toHaveBeenCalledTimes(blocked ? 0 : 3);
+      } finally {
+        view.unmount();
+      }
+    },
+  );
 
   test("disables fresh-session selection and confirm while the catalog loads", () => {
     const onConfirm = mock(() => {});

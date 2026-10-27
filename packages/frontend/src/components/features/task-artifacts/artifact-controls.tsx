@@ -1,9 +1,6 @@
-import type {
-  FreeTaskArtifact,
-  WorkflowTaskArtifact,
-  TaskAssetRenderContext,
-} from "@openducktor/contracts";
+import type { FreeTaskArtifact, TaskAssetRenderContext } from "@openducktor/contracts";
 import type { TaskArtifactContent } from "@openducktor/frontend-core/queries/artifacts";
+import { isEditableWorkflowDocument } from "@openducktor/workflows";
 import { Download, Ellipsis, Expand, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { type ComponentProps, type ReactElement, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -130,13 +127,13 @@ export function FreeArtifactControls({
 
 export function WorkflowArtifactControls({
   taskId,
-  workflowKind,
+  workflowCode,
   name,
   markdown,
   taskAssetContext,
 }: {
   taskId: string;
-  workflowKind: WorkflowTaskArtifact["workflowKind"];
+  workflowCode: string;
   name: string;
   markdown: string | undefined;
   taskAssetContext: Omit<TaskAssetRenderContext, "assetId"> | undefined;
@@ -148,7 +145,7 @@ export function WorkflowArtifactControls({
     null,
   );
   const modalPresence = useDialogPresence(expanded);
-  const editSection = workflowKind === "qaReport" ? null : workflowKind;
+  const editSection = isEditableWorkflowDocument(workflowCode) ? workflowCode : null;
   return (
     <>
       {editSection && workflowActions ? (

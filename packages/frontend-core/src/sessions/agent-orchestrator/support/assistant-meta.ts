@@ -1,4 +1,3 @@
-import type { AgentRole } from "@openducktor/core";
 import type { AgentSessionForkPoint } from "@openducktor/contracts";
 import type {
   AgentChatMessage,
@@ -8,7 +7,7 @@ import type {
 import { mergeModelSelection } from "./models";
 
 type AssistantMessageMetaInput = {
-  role: AgentRole | null;
+  role: string | null;
   model?: AgentSessionState["selectedModel"] | undefined;
   isFinal: boolean;
   forkPoint?: AgentSessionForkPoint | undefined;

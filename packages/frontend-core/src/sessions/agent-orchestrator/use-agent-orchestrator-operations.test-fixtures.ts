@@ -2,8 +2,8 @@ import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
-  type TaskCard,
 } from "@openducktor/contracts";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export const taskFixture: TaskCard = {
   id: "task-1",
@@ -12,19 +12,17 @@ export const taskFixture: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
-  aiReviewEnabled: true,
   availableActions: [],
   labels: [],
-  subtaskIds: [],
   artifactSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
+    spec: { present: false },
+    plan: { present: false },
+    qaReport: { present: false },
   },
   agentWorkflows: {
     spec: { required: false, canSkip: true, available: true, completed: false },
     planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
+    build: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-02-22T08:00:00.000Z",
@@ -43,7 +41,7 @@ export const createUnavailableBuildTaskFixture = (overrides: Partial<TaskCard> =
   agentWorkflows: {
     spec: { required: true, canSkip: false, available: true, completed: false },
     planner: { required: true, canSkip: false, available: false, completed: false },
-    builder: { required: true, canSkip: false, available: false, completed: false },
+    build: { required: true, canSkip: false, available: false, completed: false },
     qa: { required: true, canSkip: false, available: false, completed: false },
   },
   ...overrides,

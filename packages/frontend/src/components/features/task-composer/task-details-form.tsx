@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { TagSelector } from "@/components/ui/tag-selector";
 import { cn } from "@/lib/utils";
 import type {
@@ -111,20 +110,6 @@ export function TaskDetailsForm({
               }
             }}
           />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="task-ai-review">AI Review</Label>
-          <div className="flex items-center gap-3 pt-2">
-            <Switch
-              id="task-ai-review"
-              checked={state.aiReviewEnabled}
-              onCheckedChange={(checked) => onStateChange({ aiReviewEnabled: checked })}
-              className="h-6 w-11 [&>span]:size-5 [&>span[data-state=checked]]:translate-x-5"
-            />
-            <Label htmlFor="task-ai-review" className="font-semibold text-foreground">
-              Run QA agent before human review
-            </Label>
-          </div>
         </div>
       </div>
 

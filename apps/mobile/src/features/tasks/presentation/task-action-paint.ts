@@ -1,5 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
-import type { TaskWorkflowAction } from "@openducktor/frontend-core/tasks/board/kanban-task-workflow";
+import { type TaskWorkflowAction, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { IconName } from "@/ui/icon";
 
 /**

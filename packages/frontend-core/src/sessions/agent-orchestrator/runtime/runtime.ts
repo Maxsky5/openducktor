@@ -4,32 +4,12 @@ import type {
   RuntimeKind,
   SettingsSnapshot,
 } from "@openducktor/contracts";
-import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
+import { type AgentModelSelection } from "@openducktor/core";
+import { mergePromptOverrides, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "../../../queries/workspace";
-import type { HostClient } from "@openducktor/host-client";
-
-export type TaskDocuments = {
-  specMarkdown: string;
-  planMarkdown: string;
-  qaMarkdown: string;
-};
 
 export type RepoConfigLoader = (workspaceId: string) => Promise<RepoConfig>;
-
-export const loadTaskDocuments = async (
-  repoPath: string,
-  taskId: string,
-  taskMetadataGet: HostClient["taskMetadataGet"],
-): Promise<TaskDocuments> => {
-  const metadata = await taskMetadataGet(repoPath, taskId);
-
-  return {
-    specMarkdown: metadata.spec.markdown,
-    planMarkdown: metadata.plan.markdown,
-    qaMarkdown: metadata.qaReport?.markdown ?? "",
-  };
-};
 
 export const loadRepoDefaultModel = async (
   workspaceId: string,

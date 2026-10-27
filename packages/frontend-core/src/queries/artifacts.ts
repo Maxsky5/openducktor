@@ -6,15 +6,14 @@ import type {
   TaskArtifactChange,
   TaskArtifactCollection,
   TaskEventCursor,
-  WorkflowTaskArtifact,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import {
   CancelledError,
   type QueryClient,
   queryOptions,
   replaceEqualDeep,
 } from "@tanstack/react-query";
+import { roleFocusArtifact, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import { connectionHost } from "../connection/client-connection";
 import { taskDocumentQueryOptions } from "./documents";
 
@@ -59,19 +58,11 @@ export const prefetchTaskArtifacts = async (
   const refresh = queryClient.prefetchQuery(
     taskArtifactsQueryOptions(queryClient, repoPath, taskId),
   );
-  const kind = role ? workflowKindForRole(role) : null;
-  const read = kind
-    ? queryClient.prefetchQuery(
-        taskDocumentQueryOptions(queryClient, repoPath, taskId, kind === "qaReport" ? "qa" : kind),
-      )
+  const code = role ? roleFocusArtifact(role) : undefined;
+  const read = code
+    ? queryClient.prefetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, code))
     : undefined;
   await Promise.all([refresh, read]);
-};
-
-export const workflowKindForRole = (role: AgentRole): WorkflowTaskArtifact["workflowKind"] => {
-  if (role === "spec") return "spec";
-  if (role === "qa") return "qaReport";
-  return "plan";
 };
 
 /**

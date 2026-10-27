@@ -2,7 +2,11 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   type CodexAppServerThreadResumeParams,
 } from "@openducktor/contracts";
-import type { PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
+import type {
+  PolicyBoundSessionRef,
+  SessionRef,
+  WorkflowRolePolicyResolver,
+} from "@openducktor/core";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import type { CodexLocalSessionState } from "./codex-local-session-state";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
@@ -41,6 +45,7 @@ type CodexContextUsageLoaderDeps = {
     sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools">,
   ): Promise<CodexThreadConfig>;
   clearThreadInventory(runtimeId: string): void;
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
 };
 
 export class CodexContextUsageLoader {
@@ -64,9 +69,9 @@ export class CodexContextUsageLoader {
       await this.wait(guard, this.deps.prepareRuntime(runtime.runtimeId));
       this.assertActive(guard);
       const sessionPolicy = resolveCodexSessionScopePolicy(
-        input.sessionScope,
-        input.runtimePolicy,
+        input,
         "load Codex session context usage",
+        this.deps.resolveWorkflowRolePolicy,
       );
       const policy = sessionPolicy.runtimePolicy;
       return await this.wait(
@@ -125,9 +130,9 @@ export class CodexContextUsageLoader {
       return retained;
     }
     const sessionPolicy = resolveCodexSessionScopePolicy(
-      sessionScope,
-      session.runtimePolicy,
+      { sessionScope, runtimePolicy: session.runtimePolicy },
       "load Codex session context usage",
+      this.deps.resolveWorkflowRolePolicy,
     );
     const targetRef = {
       ...codexSessionRef(session),

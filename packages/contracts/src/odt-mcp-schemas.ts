@@ -27,16 +27,12 @@ import {
   taskAssetIdSchema,
   taskAssetMediaTypeSchema,
 } from "./task-asset-schemas";
-import {
-  issueTypeSchema,
-  qaWorkflowVerdictSchema,
-  taskPrioritySchema,
-  taskStatusSchema,
-} from "./task-schemas";
+import { issueTypeSchema, taskPrioritySchema, taskStatusSchema } from "./task-schemas";
+import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
 const odtToolErrorDetailsSchema = z.record(z.string(), z.json());
 
-export const ODT_MCP_BRIDGE_VERSION = 2;
+export const ODT_MCP_BRIDGE_VERSION = 3;
 
 export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -93,7 +89,6 @@ export const publicTaskSchema = z
     status: taskStatusSchema,
     priority: taskPrioritySchema.describe(TASK_PRIORITY_DESCRIPTION),
     issueType: issueTypeSchema,
-    aiReviewEnabled: z.boolean().describe("True when QA review runs before human review."),
     labels: z.array(z.string()),
     targetBranch: gitTargetBranchSchema.optional().describe("Target branch override."),
     createdAt: z.string(),
@@ -102,20 +97,15 @@ export const publicTaskSchema = z
   .strict();
 export type PublicTask = z.infer<typeof publicTaskSchema>;
 
-export const taskArtifactPresenceSchema = z
-  .object({
-    hasSpec: z.boolean(),
-    hasPlan: z.boolean(),
-    hasQaReport: z.boolean(),
-  })
-  .strict();
-export type PublicTaskArtifactPresence = z.infer<typeof taskArtifactPresenceSchema>;
+/** Workflow artifact states keyed by artifact code. Absent artifacts are listed as not present. */
+export const publicWorkflowArtifactStatesSchema = z.record(
+  workflowArtifactIdSchema,
+  z.strictObject({ present: z.boolean(), verdict: workflowIdSchema.optional() }),
+);
+export type PublicWorkflowArtifactStates = z.infer<typeof publicWorkflowArtifactStatesSchema>;
 
 export const publicTaskSummaryTaskSchema = publicTaskSchema
-  .extend({
-    qaVerdict: qaWorkflowVerdictSchema,
-    artifacts: taskArtifactPresenceSchema,
-  })
+  .extend({ workflowArtifacts: publicWorkflowArtifactStatesSchema })
   .strict();
 export type PublicTaskSummaryTask = z.infer<typeof publicTaskSummaryTaskSchema>;
 
@@ -128,7 +118,7 @@ export type TaskSummary = z.infer<typeof taskSummarySchema>;
 
 export const readTaskResultSchema = z.strictObject({
   task: publicTaskSchema.extend({
-    qaVerdict: qaWorkflowVerdictSchema,
+    workflowArtifacts: publicWorkflowArtifactStatesSchema,
     artifacts: z.array(mcpTaskArtifactSchema),
   }),
 });
@@ -155,23 +145,6 @@ export const ReadTaskAssetsInputSchema = z
   .strict();
 export type ReadTaskAssetsInput = z.infer<typeof ReadTaskAssetsInputSchema>;
 
-const publicEpicRejectionReason = "Epic creation is not supported by the public MCP create tool.";
-const publicEpicUpdateRejectionReason =
-  "Epic updates are not supported by the public MCP update tool.";
-
-const publicIssueTypeSchema = (rejectionReason: string) =>
-  z.enum(["task", "feature", "bug"], {
-    error: `issueType must be task, feature, or bug. ${rejectionReason}`,
-  });
-const activeTaskStatusSchema = z.enum([
-  "open",
-  "spec_ready",
-  "ready_for_dev",
-  "in_progress",
-  "blocked",
-  "ai_review",
-  "human_review",
-]);
 const labelStringSchema = z.string().trim().min(1);
 
 export const BuildBlockedInputSchema = z
@@ -213,11 +186,10 @@ export const CreateTaskInputSchema = z
   .object({
     workspaceId: odtToolWorkspaceIdSchema,
     title: z.string().trim().min(1),
-    issueType: publicIssueTypeSchema(publicEpicRejectionReason),
+    issueType: issueTypeSchema,
     priority: taskPrioritySchema.describe(TASK_PRIORITY_DESCRIPTION),
     description: z.string().trim().min(1).optional(),
     labels: z.array(labelStringSchema).optional(),
-    aiReviewEnabled: z.boolean().optional().describe("Overrides whether QA review is required."),
   })
   .strict();
 export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
@@ -227,7 +199,7 @@ export const SearchTasksInputSchema = z
     workspaceId: odtToolWorkspaceIdSchema,
     priority: taskPrioritySchema.optional(),
     issueType: issueTypeSchema.optional(),
-    status: activeTaskStatusSchema.optional(),
+    status: taskStatusSchema.optional().describe("A state that is not terminal."),
     title: z.string().trim().min(1).optional().describe("Case-insensitive substring."),
     tags: z.array(labelStringSchema).min(1).optional(),
     limit: z.number().int().positive().max(100).default(50),
@@ -243,8 +215,7 @@ export const UpdateTaskInputSchema = z
     description: z.string().trim().optional(),
     priority: taskPrioritySchema.optional().describe(TASK_PRIORITY_DESCRIPTION),
     labels: z.array(labelStringSchema).optional(),
-    issueType: publicIssueTypeSchema(publicEpicUpdateRejectionReason).optional(),
-    aiReviewEnabled: z.boolean().optional().describe("False turns QA review off."),
+    issueType: issueTypeSchema.optional(),
   })
   .strict();
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInputSchema>;

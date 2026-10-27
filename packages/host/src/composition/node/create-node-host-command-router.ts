@@ -1,3 +1,4 @@
+import { builtinTaskWorkflowResolver, workflowRolePolicies } from "./task-workflow-composition";
 import { createNodeWorkflowCommandHandlers } from "./node-workflow-command-handlers";
 import {
   createWorkflowWorkspaceObservation,
@@ -19,17 +20,14 @@ import { withConfigCommit } from "../../adapters/config/config-commit";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeLocalToolCommandHandlers } from "./node-local-tool-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
+import { createNodeMcpHostBridge } from "./node-mcp-host-bridge";
+import { withTaskWorkflowSettings } from "../../application/workspaces/task-workflow-settings";
 import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
 import { Effect } from "effect";
-import {
-  createMcpHostBridgeServer,
-  resolveMcpBridgeDiscoveryPath,
-} from "../../adapters/mcp/mcp-host-bridge-server";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
 import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
-import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
 import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
@@ -78,7 +76,6 @@ import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
-import { createMcpBridgeStatusPublisher } from "./runtime-lifecycle-publisher";
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
@@ -96,6 +93,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeStarter: configuredRuntimeStarter,
     taskStore: configuredTaskStore,
     taskEventPublicationReporter,
+    taskWorkflows = builtinTaskWorkflowResolver,
   } = input;
   const {
     filesystem,
@@ -115,7 +113,7 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   let autopilot: AutopilotService | undefined; // Autopilot needs services that this function creates later, so the hooks bind it late.
   const notificationComposition = createNodeNotificationServices(
-    withConfigCommit(baseSettingsConfig, (config) =>
+    withConfigCommit(withTaskWorkflowSettings(baseSettingsConfig, taskWorkflows), (config) =>
       autopilot ? autopilot.configCommitted(config) : Effect.void,
     ),
     eventBus,
@@ -135,6 +133,7 @@ export const assembleNodeEffectHostCommandRouter = (
     isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
     processEnv: startupEnv,
+    taskWorkflows,
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
@@ -201,6 +200,7 @@ export const assembleNodeEffectHostCommandRouter = (
     liveState: agentSessionLiveStateService,
     onBackgroundFailure,
     resolveBridge: () => resolvedMcpHostBridge,
+    resolveWorkflowRolePolicy: workflowRolePolicies(taskWorkflows),
     runtimeAdmissionGate,
     runtimeDefinitionsService,
     settingsConfig,
@@ -272,6 +272,7 @@ export const assembleNodeEffectHostCommandRouter = (
       gitPort: git,
       gitProviderResolver,
       taskStore,
+      taskWorkflows,
       settingsConfig,
       systemCommands,
       toolDiscovery,
@@ -313,12 +314,14 @@ export const assembleNodeEffectHostCommandRouter = (
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     taskSessions;
   const notificationService = notificationComposition.attach({
+    taskWorkflows,
     tasks: taskService,
     live: agentSessionLiveStateService,
     workspaceSessions: assets.workspaceSessionStore,
   });
   const autopilotService = createAutopilotService({
     settingsConfig,
+    taskWorkflows,
     tasks: taskService,
     mutations: taskSyncService,
     workflowLaunch: taskSessions.workflowLaunchService,
@@ -327,23 +330,22 @@ export const assembleNodeEffectHostCommandRouter = (
     onBackgroundFailure,
   });
   autopilot = autopilotService;
-  const odtMcpBridgeService = createOdtMcpBridgeService({
-    browserAgentTools: browserService,
-    ...callers,
-    taskAssetReadService,
-    taskService,
-    workspaceSettingsService,
-  });
   const pullRequestReviewService = createPullRequestReviewService({
     resolver: gitProviderResolver,
     taskReader: taskStore,
     workspaceSettingsService,
   });
-  resolvedMcpHostBridge ??= createMcpHostBridgeServer({
-    bridgeService: odtMcpBridgeService,
-    discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, startupEnv),
+  resolvedMcpHostBridge ??= createNodeMcpHostBridge({
+    taskWorkflows,
+    browserAgentTools: browserService,
+    ...callers,
+    taskAssetReadService,
+    taskService,
     workspaceSettingsService,
-    onStatusChanged: eventBus ? createMcpBridgeStatusPublisher(eventBus, hostInstanceId) : () => {},
+    discoveryMode: input.mcpBridgeDiscoveryMode,
+    eventBus,
+    hostInstanceId,
+    startupEnv,
   });
   const taskSessionStopService = createTaskSessionStopService({
     gitPort: git,
@@ -432,6 +434,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createNodeGitProviderCommandHandlers({
       resolver: gitProviderResolver,
       issueImportStore: assets.issueImportStore,
+      taskWorkflows,
       taskSyncService,
       workspaceSettingsService,
       azureDevOpsConnection,

@@ -1,6 +1,4 @@
 import {
-  type AgentPromptTemplateId,
-  agentPromptTemplateIdValues,
   type SettingsRepoConfig,
   type RepoPromptOverrides,
   type RuntimeDescriptor,
@@ -19,6 +17,11 @@ import type {
   ModelDefaultDraft,
 } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
+import {
+  BUILTIN_PROMPT_TEMPLATE_IDS,
+  type BuiltinPromptTemplateId as AgentPromptTemplateId,
+  builtinPromptTemplate,
+} from "@openducktor/workflows";
 
 export {
   ensureDraftAgentDefault,
@@ -181,14 +184,17 @@ const formatPlaceholders = (placeholders: string[]): string => {
 export const buildPromptOverrideValidationErrors = (overrides: RepoPromptOverrides) => {
   const errors: PromptOverrideValidationErrors = {};
 
-  for (const templateId of agentPromptTemplateIdValues) {
+  for (const templateId of BUILTIN_PROMPT_TEMPLATE_IDS) {
     const override = overrides[templateId];
     if (!override || override.enabled === false) {
       continue;
     }
 
     const { unsupportedPlaceholders, missingRequiredPlaceholders } =
-      validatePromptTemplatePlaceholders(override.template, templateId);
+      validatePromptTemplatePlaceholders(
+        override.template,
+        builtinPromptTemplate(templateId).requiredPlaceholders,
+      );
     if (unsupportedPlaceholders.length === 0 && missingRequiredPlaceholders.length === 0) {
       continue;
     }

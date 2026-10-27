@@ -8,8 +8,7 @@ describe("TaskEditSectionSwitcher", () => {
     const html = renderToStaticMarkup(
       createElement(TaskEditSectionSwitcher, {
         section: "details",
-        hasUnsavedSpec: true,
-        hasUnsavedPlan: false,
+        dirtyDocuments: { spec: true, plan: false },
         onSectionChange: () => {},
       }),
     );

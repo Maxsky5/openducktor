@@ -7,7 +7,11 @@ import {
   codexLoadedThreadIds,
   codexThreadList,
 } from "./codex-app-server-threads";
-import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
+import type {
+  CodexAppServerAdapterOptions,
+  CodexAppServerClient,
+  CodexThreadHistoryReadResponse,
+} from "./types";
 
 type CodexThreadReadOptions = {
   expectedThreadCwd?: string | undefined;
@@ -31,6 +35,10 @@ export class CodexThreadInventoryReader {
     string,
     Map<string, CodexThreadStatusSnapshot>
   >();
+
+  constructor(
+    private readonly directoriesMatch: CodexAppServerAdapterOptions["directoriesMatch"],
+  ) {}
 
   clearInventory(runtimeId: string): void {
     this.inventoryByRuntimeId.delete(runtimeId);
@@ -132,7 +140,8 @@ export class CodexThreadInventoryReader {
     const { expectedThreadCwd } = options;
     if (
       expectedThreadCwd !== undefined &&
-      (response.thread.id !== threadId || response.thread.cwd !== expectedThreadCwd)
+      (response.thread.id !== threadId ||
+        !(await this.directoriesMatch(response.thread.cwd, expectedThreadCwd)))
     ) {
       throw new AgentRuntimeQueryError(
         "scope_mismatch",

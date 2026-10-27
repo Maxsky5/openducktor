@@ -1,28 +1,17 @@
-import type { AutopilotEventId, AutopilotSettings } from "@openducktor/contracts";
-import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
+import type { AutopilotSettings } from "@openducktor/contracts";
+import { BUILTIN_SIGNAL_IDS } from "@openducktor/workflows";
 
+/** Saves one rule for each signal of the built-in workflow, in signal order. */
 export const prepareAutopilotSettingsForSave = (
   autopilot: AutopilotSettings,
 ): AutopilotSettings => {
-  const defaultSettings = createDefaultAutopilotSettings();
-  const rulesByEvent = new Map<AutopilotEventId, AutopilotSettings["rules"][number]>(
-    autopilot.rules.map((rule) => [rule.eventId, rule]),
-  );
+  const rulesByEvent = new Map(autopilot.rules.map((rule) => [rule.eventId, rule]));
 
   return {
     alwaysStartQaReviewsFresh: autopilot.alwaysStartQaReviewsFresh,
-    rules: AUTOPILOT_EVENT_IDS.map((eventId) => {
-      const explicitRule = rulesByEvent.get(eventId);
-      const actionIds = (explicitRule?.actionIds ?? []).filter(
-        (actionId, index, list) => list.indexOf(actionId) === index,
-      );
-
-      return {
-        eventId,
-        actionIds: explicitRule
-          ? actionIds
-          : (defaultSettings.rules.find((rule) => rule.eventId === eventId)?.actionIds ?? []),
-      };
-    }),
+    rules: BUILTIN_SIGNAL_IDS.map((eventId) => ({
+      eventId,
+      actionIds: [...new Set(rulesByEvent.get(eventId)?.actionIds ?? [])],
+    })),
   };
 };

@@ -55,7 +55,11 @@ export const createTaskAssetAwareCreate =
         });
       }
       if (referencedAssetIds.size === 0) {
-        return yield* inner.createTask({ repoPath: input.repoPath, task: input.task });
+        return yield* inner.createTask({
+          repoPath: input.repoPath,
+          task: input.task,
+          status: input.status,
+        });
       }
       if (!persistence) {
         return yield* new TaskAssetError({
@@ -92,6 +96,7 @@ export const createTaskAssetAwareCreate =
       const created = yield* assetPersistence.createTaskWithDescriptionAssets({
         repoPath: input.repoPath,
         task: input.task,
+        status: input.status,
         assets: toNewTaskAssetRecords(stagedAssets),
         prepareFiles: (taskId) =>
           Effect.gen(function* () {

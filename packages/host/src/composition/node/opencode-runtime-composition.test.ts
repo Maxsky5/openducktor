@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, spyOn, test } from "bun:test";
 import {
   OpenCodeOperationError,
@@ -35,6 +36,7 @@ const createReadDirectory = (): ReadOpencodeDirectory => {
   );
   try {
     createOpenCodeRuntimeComposition({
+      resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       launchDirectory: "/repo",
       liveSessionLifecycle: {
         registerRuntimeAdapter: () => Effect.die("No runtime should register during composition."),
@@ -113,7 +115,10 @@ describe("OpenCode runtime composition directory guard", () => {
           endpoint: server.url.origin,
           authentication: { type: "basic", username: "opencode", password: "test-password" },
         },
-        { resolveCreationSettings: async () => ({ defaults: [], role: [] }) },
+        {
+          resolveCreationSettings: async () => ({ defaults: [], role: [] }),
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        },
         {
           readDirectory: createReadDirectory(),
           ensureMcp: async () => {},

@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -35,6 +34,7 @@ import {
 import { useClientConnection } from "../../connection/client-connection-react";
 import { createAgentOrchestratorDependencies } from "./support/orchestrator-dependencies";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;

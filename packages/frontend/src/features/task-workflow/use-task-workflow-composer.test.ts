@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { createElement, type PropsWithChildren } from "react";
@@ -12,6 +11,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useTaskWorkflowComposer } from "./use-task-workflow-composer";
+import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type Props = { activeWorkspace: ActiveWorkspace | null; tasks: TaskCard[] };
 

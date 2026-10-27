@@ -25,7 +25,7 @@ export const createNodeNotificationServices = (
     attach(
       dependencies: Pick<
         Parameters<typeof createNotificationService>[0],
-        "tasks" | "live" | "workspaceSessions"
+        "tasks" | "live" | "workspaceSessions" | "taskWorkflows"
       >,
     ) {
       const notifications = createNotificationService({

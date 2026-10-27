@@ -1,3 +1,4 @@
+import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -97,6 +98,7 @@ const createComposition = (options: {
   calls: { registered: number; released: number; adapters: AgentSessionLiveAdapterPort[] };
 }) => {
   const input: Parameters<typeof createClaudeRuntimeComposition>[0] = {
+    resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
     liveSessionLifecycle: createLiveSessionLifecycle(options.calls),
     onBackgroundFailure: () => Effect.void,
     readEnv: () => process.env,
