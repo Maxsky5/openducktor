@@ -4,6 +4,7 @@ import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/t
 import { BUILTIN_ROLE_LABELS, builtinRoleId } from "@openducktor/workflows";
 import { basenameForPath } from "@openducktor/path-support";
 import { terminalCommandResultNotice } from "@/features/terminals/terminal-command-result";
+import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 
 export function startupIssue(attempt: StartupAttempt): string | undefined {
   const failed = attempt.operations
@@ -23,7 +24,11 @@ export function startupIssue(attempt: StartupAttempt): string | undefined {
 }
 
 export function startupActivity(attempt: StartupAttempt): string | undefined {
-  const current = startupCurrentStep(attempt);
+  const current = startupTraceRows(attempt)
+    .map(({ step }) => step)
+    .findLast(
+      (step) => step.state === "running" || step.state === "waiting" || startupStepFailed(step),
+    );
   if (current) return current.label;
   switch (attempt.status.phase) {
     case "submitting":
@@ -31,7 +36,7 @@ export function startupActivity(attempt: StartupAttempt): string | undefined {
     case "waiting":
       return "Waiting for another operation";
     case "running":
-      return "Preparing session";
+      return "Starting session";
     case "settling":
       return "Finishing cleanup";
     default:
@@ -76,7 +81,7 @@ export function startupCurrentStep(attempt: StartupAttempt): StartupStep | undef
 }
 
 export function startupProgress(attempt: StartupAttempt) {
-  const steps = attempt.operations.flatMap((operation) => operation.steps);
+  const steps = startupTraceRows(attempt).map(({ step }) => step);
   return {
     completed: steps.filter((step) => step.state === "completed" && !startupStepFailed(step))
       .length,

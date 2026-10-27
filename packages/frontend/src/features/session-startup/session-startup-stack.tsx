@@ -3,6 +3,7 @@ import { type CSSProperties, type ReactElement, useEffect, useId, useRef, useSta
 import { toast } from "sonner";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { startupFailureRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import {
   canOpenStartupSession,
@@ -113,14 +114,22 @@ function StartupNotice({
     const activity = startupActivity(attempt);
     const issue = startupIssue(attempt);
     const progress = startupProgress(attempt);
+    const hasTrace = progress.total > 0;
+    const canInspect =
+      hasTrace || attempt.ownership.state === "saved" || startupFailureRows(attempt).length > 0;
     let progressLabel = "View progress";
-    if (expanded) progressLabel = "Hide progress";
-    else if (attempt.status.phase === "ready") progressLabel = "Details";
-    let icon = <OctagonAlert aria-hidden="true" className="size-4" />;
+    if (!hasTrace || attempt.status.phase === "ready") progressLabel = "Details";
+    if (expanded) progressLabel = hasTrace ? "Hide progress" : "Hide details";
+    let icon = <OctagonAlert aria-hidden="true" className="size-4 text-destructive" />;
     if (pending)
-      icon = <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />;
-    else if (attempt.status.phase === "ready")
-      icon = <Check aria-hidden="true" className="size-4" />;
+      icon = (
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-4 text-info-surface-foreground motion-safe:animate-spin"
+        />
+      );
+    else if (attempt.status.phase === "ready" && !issue)
+      icon = <Check aria-hidden="true" className="size-4 text-success-icon" />;
     toast(startupTitle(attempt), {
       id: toastId,
       toasterId,
@@ -154,13 +163,15 @@ function StartupNotice({
               {issue}
             </p>
           ) : null}
-          {expanded ? (
-            <div className="h-52 min-h-0 overflow-hidden">
+          {expanded && canInspect ? (
+            <div
+              className={hasTrace ? "max-h-52 min-h-0 overflow-hidden" : "max-h-52 overflow-y-auto"}
+            >
               <StartupTrace
                 attempt={attempt}
                 onOpen={openSession}
                 showHeader={false}
-                className="h-full"
+                className={hasTrace ? "max-h-52" : ""}
               />
             </div>
           ) : null}
@@ -175,21 +186,23 @@ function StartupNotice({
                 Open session
               </Button>
             ) : null}
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              aria-expanded={expanded}
-              onClick={() =>
-                setExpanded((currentExpanded) => {
-                  const next = !currentExpanded;
-                  startupPresentation(connection, attempt.id).detailsOpen = next;
-                  return next;
-                })
-              }
-            >
-              {progressLabel}
-            </Button>
+            {canInspect ? (
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                aria-expanded={expanded}
+                onClick={() =>
+                  setExpanded((currentExpanded) => {
+                    const next = !currentExpanded;
+                    startupPresentation(connection, attempt.id).detailsOpen = next;
+                    return next;
+                  })
+                }
+              >
+                {progressLabel}
+              </Button>
+            ) : null}
           </div>
           {!expanded ? <StartupRecoveryActions attempt={attempt} /> : null}
           {openError ? (

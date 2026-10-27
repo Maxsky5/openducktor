@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { AgentSessionRecord, AgentWorkflowSessionForkInput } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import {
@@ -238,8 +238,10 @@ test("a reply fork shows inline progress and opens the exact child once before r
     fireEvent.click(harness.view.getByRole("button", { name: "Fork reply" }));
     await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
     expect(
-      harness.view.getByRole("button", { name: /View progress$/, expanded: false }),
-    ).toBeDefined();
+      within(harness.view.getByRole("region", { name: "Session startup details" })).getByRole(
+        "status",
+      ).textContent,
+    ).not.toBe("");
     expect(harness.view.getByLabelText("Current location").textContent).toBe(SOURCE_HREF);
     await harness.finish();
     await waitFor(
@@ -256,7 +258,7 @@ test("a reply fork shows inline progress and opens the exact child once before r
         workingDirectory: "/repo/worktrees/task",
       }),
     ).toBe(true);
-    expect(harness.view.queryByRole("button", { name: /View progress$/ })).toBeNull();
+    expect(harness.view.queryByRole("region", { name: "Session startup details" })).toBeNull();
   } finally {
     await harness.dispose();
   }
@@ -270,8 +272,10 @@ test.each(["Leave page", "Switch source session", "Hide view"])(
       fireEvent.click(harness.view.getByRole("button", { name: "Fork reply" }));
       await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
       expect(
-        harness.view.getByRole("button", { name: /View progress$/, expanded: false }),
-      ).toBeDefined();
+        within(harness.view.getByRole("region", { name: "Session startup details" })).getByRole(
+          "status",
+        ).textContent,
+      ).not.toBe("");
       const id = harness.connection.startupAttempts.getSnapshot()[0]?.id;
       if (!id) throw new Error("Fork attempt is missing.");
       fireEvent.click(harness.view.getByRole("button", { name: action }));
@@ -308,7 +312,6 @@ test("repair opens the retained fork once without another fork request", async (
     fireEvent.click(harness.view.getByRole("button", { name: "Fork reply" }));
     await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
     await harness.finish();
-    fireEvent.click(harness.view.getByRole("button", { name: /View progress$/, expanded: false }));
     fireEvent.click(
       await harness.view.findByRole(
         "button",
@@ -341,9 +344,6 @@ test.each(["fork", "repair"] as const)(
       await waitFor(() => expect(harness.forkCalls).toHaveLength(1), { timeout: 800 });
       if (operation === "repair") {
         await harness.finish();
-        fireEvent.click(
-          harness.view.getByRole("button", { name: /View progress$/, expanded: false }),
-        );
         fireEvent.click(
           await harness.view.findByRole(
             "button",

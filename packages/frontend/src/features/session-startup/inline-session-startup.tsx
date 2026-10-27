@@ -15,7 +15,13 @@ import {
   TraceTitle,
 } from "@/components/ui/trace";
 import { startupPresentation } from "./startup-presentation";
-import { startupActivity, startupCurrentStep, startupIssue, startupTitle } from "./startup-summary";
+import {
+  startupActivity,
+  startupCurrentStep,
+  startupIssue,
+  startupTitle,
+  startupProgress,
+} from "./startup-summary";
 import { useOpenStartupSession } from "./use-open-startup-session";
 import { StartupTrace } from "./session-startup-trace";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
@@ -100,6 +106,35 @@ function InlineStartupOwner({
 
 function InlineProgress({ attempt }: { attempt: StartupAttempt }): ReactElement {
   const connection = useClientConnection();
+  if (startupProgress(attempt).total > 0) return <InlineTrace attempt={attempt} />;
+  const pending = startupIsPending(attempt);
+  return (
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        {pending ? (
+          <StartupTrace attempt={attempt} showHeader={false} />
+        ) : (
+          <InlineDetails attempt={attempt} />
+        )}
+      </div>
+      {!pending ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="Dismiss session startup"
+          onClick={() => connection.startupAttempts.dismiss(attempt.id)}
+        >
+          <X />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function InlineTrace({ attempt }: { attempt: StartupAttempt }): ReactElement {
+  const connection = useClientConnection();
   const presentation = startupPresentation(connection, attempt.id);
   const [expanded, setExpanded] = useState(
     () => presentation.detailsOpen || presentation.expandedSteps.size > 0,
@@ -166,7 +201,7 @@ function InlineDetails({ attempt }: { attempt: StartupAttempt }): ReactElement {
         attempt={attempt}
         onOpen={openSession}
         showHeader={false}
-        className="h-56 py-2"
+        className={startupProgress(attempt).total > 0 ? "h-56 py-2" : "max-h-56 py-2"}
       />
       {openError ? (
         <p role="alert" className="text-xs text-destructive">

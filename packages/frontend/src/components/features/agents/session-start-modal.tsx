@@ -40,6 +40,8 @@ import {
   useSessionStartKickoffDraft,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
+import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +54,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   });
   const speed = useSessionStartSpeed(model);
   const showingProgress = model.phase.kind === "progress";
+  const attempt = useStartupAttempt(
+    model.phase.kind === "progress" ? model.phase.startupAttemptId : null,
+  );
+  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
 
   return (
     <Dialog
@@ -66,8 +72,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
       <DialogContent
         className={cn(
           "sm:max-w-2xl",
-          showingProgress &&
-            "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))] max-w-lg overflow-hidden p-0 sm:max-w-lg",
+          showingProgress && "max-w-lg overflow-hidden p-0 sm:max-w-lg",
+          hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
         )}
         closeButton={isStarting ? null : undefined}
         onEscapeKeyDown={(event) => {

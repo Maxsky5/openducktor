@@ -92,10 +92,21 @@ async function setup({
 }
 
 test("removes inline startup only after the native session and completed launch confirm handoff", async () => {
-  const h = await setup({ holdPreparedPublication: true });
+  const h = await setup({
+    holdPreparedPublication: true,
+    steps: [
+      { id: "session", label: "Prepare native session", state: "completed", details: [] },
+      { id: "handoff", label: "Prepare session handoff", state: "completed", details: [] },
+    ],
+  });
   const view = h.render();
   try {
-    expect(view.getByRole("button", { name: /View progress$/, expanded: false })).toBeDefined();
+    expect(view.getByRole("status").textContent).not.toBe("");
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByRole("button", { name: /View progress$/ })).toBeNull();
+    expect(view.queryByText(/\d+(?: of |\/)\d+ steps/)).toBeNull();
+    expect(view.queryByText("Prepare native session")).toBeNull();
+    expect(view.queryByText("Prepare session handoff")).toBeNull();
     expect(h.connection.startupAttempts.isReadyForHandoff(h.id)).toBe(false);
     await act(async () => {
       h.live.publishPrepared();
@@ -134,6 +145,7 @@ test("retains a compact inspectable trace when a prepared session has an asynchr
           },
         },
       },
+      { id: "copies", label: "Copy configured files", state: "completed", details: [] },
     ],
   });
   await h.connection.startupAttempts.complete(h.id);

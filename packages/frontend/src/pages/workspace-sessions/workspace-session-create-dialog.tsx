@@ -35,6 +35,7 @@ import { StartupDialogProgress } from "@/features/session-startup/session-startu
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { cn } from "@/lib/utils";
 
 type WorkspaceSessionCreateDialogProps = {
@@ -71,6 +72,7 @@ export function WorkspaceSessionCreateDialog({
   });
   const { create, startupAttemptId, editChoices, dismissStartup } = form;
   const attempt = useStartupAttempt(startupAttemptId);
+  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
   const starting = create.isPending || startupIsPending(attempt);
   const close = () => {
     if (
@@ -90,8 +92,8 @@ export function WorkspaceSessionCreateDialog({
       <DialogContent
         className={cn(
           "my-0 gap-0 p-0 sm:max-w-2xl",
-          startupAttemptId &&
-            "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))] max-w-lg overflow-hidden sm:max-w-lg",
+          startupAttemptId && "max-w-lg overflow-hidden sm:max-w-lg",
+          hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
         )}
         closeButton={starting ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}

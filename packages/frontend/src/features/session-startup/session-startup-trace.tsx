@@ -31,6 +31,10 @@ import {
   TraceTitle,
 } from "@/components/ui/trace";
 import { startupOrigin, startupProgress, startupStepFailed } from "./startup-summary";
+import {
+  startupFailureRows,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 
 const StartupActionOutput = lazy(() =>
   import("./startup-action-output").then((module) => ({ default: module.StartupActionOutput })),
@@ -69,11 +73,10 @@ export function StartupTrace({
   const connection = useClientConnection();
   const presentation = startupPresentation(connection, attempt.id);
   const scroll = useRef<HTMLElement>(null);
-  const rows = attempt.operations.flatMap((operation) =>
-    operation.steps.map((step) => ({ step, id: `${operation.context.operationId}:${step.id}` })),
-  );
+  const rows = startupTraceRows(attempt);
+  const failures = rows.length === 0 ? startupFailureRows(attempt) : [];
   const progress = startupProgress(attempt);
-  const repeatedError = rows.some(
+  const repeatedError = [...rows, ...failures].some(
     ({ step }) =>
       step.failure &&
       (attempt.error === step.failure.message ||
@@ -92,12 +95,19 @@ export function StartupTrace({
           <p title={attempt.origin.repoPath} className="min-w-0 truncate">
             {startupOrigin(attempt)}
           </p>
-          <p role="status" aria-live="polite" aria-atomic="true" className="shrink-0 tabular-nums">
-            <span className="sr-only">{phaseLabels[attempt.status.phase]}. </span>
-            {progress.total
-              ? `${progress.completed} of ${progress.total} steps`
-              : phaseLabels[attempt.status.phase]}
-          </p>
+          {rows.length > 0 ? (
+            <p
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="shrink-0 tabular-nums"
+            >
+              <span className="sr-only">{phaseLabels[attempt.status.phase]}. </span>
+              {progress.total
+                ? `${progress.completed} of ${progress.total} steps`
+                : phaseLabels[attempt.status.phase]}
+            </p>
+          ) : null}
         </div>
       ) : null}
       <section
@@ -117,32 +127,37 @@ export function StartupTrace({
             Startup is not confirmed. Inspect the saved session before starting or sending again.
           </p>
         ) : null}
-        <Trace>
-          <ul aria-label="Session startup steps" className="flex min-w-0 flex-col gap-1">
-            {rows.length ? (
-              rows.map(({ step, id }) => (
+        {rows.length > 0 ? (
+          <Trace>
+            <ul aria-label="Session startup steps" className="flex min-w-0 flex-col gap-1">
+              {rows.map(({ step, id }) => (
                 <StartupStepRow key={id} step={step} rowId={id} presentation={presentation} />
-              ))
-            ) : (
-              <li className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
-                {attempt.status.phase === "submitting" ? (
-                  <LoaderCircle
-                    aria-hidden="true"
-                    className="size-4 shrink-0 motion-safe:animate-spin"
-                  />
-                ) : null}
-                {attempt.status.phase === "submitting"
-                  ? "Submitting request"
-                  : "No startup steps were reported."}
-              </li>
-            )}
-          </ul>
-        </Trace>
+              ))}
+            </ul>
+          </Trace>
+        ) : (
+          <StartupStatus attempt={attempt} />
+        )}
+        {rows.length > 0 &&
+        startupIsPending(attempt) &&
+        !rows.some(({ step }) => step.state === "running" || step.state === "waiting") ? (
+          <StartupStatus attempt={attempt} />
+        ) : null}
         {attempt.error && !repeatedError ? (
           <p role="alert" className="mt-2 break-words text-xs text-destructive">
             {attempt.error}
           </p>
         ) : null}
+        {failures.map(({ id, step }) => (
+          <div
+            key={id}
+            role="alert"
+            className="flex min-w-0 flex-col gap-2 rounded-md border border-destructive/20 p-3 text-xs"
+          >
+            <p className="font-medium text-destructive">{step.label}</p>
+            <StartupStepDetails step={step} expanded presentation={presentation} />
+          </div>
+        ))}
         {attempt.instruction?.state === "queued" ? (
           <p className="text-xs text-muted-foreground">The initial instruction is queued.</p>
         ) : null}
@@ -155,6 +170,36 @@ export function StartupTrace({
         <StartupRecoveryActions attempt={attempt} />
       </section>
     </div>
+  );
+}
+
+function StartupStatus({ attempt }: { attempt: StartupAttempt }): ReactElement {
+  const pending = startupIsPending(attempt);
+  const ready = !pending && attempt.status.phase === "ready";
+  let Icon = OctagonAlert;
+  if (pending) Icon = LoaderCircle;
+  else if (ready) Icon = Check;
+  else if (attempt.status.phase === "canceled") Icon = Minus;
+  return (
+    <p
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="flex items-center gap-2 py-2 text-sm"
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "size-4 shrink-0",
+          pending && "text-info-surface-foreground motion-safe:animate-spin",
+          ready && "text-success-icon",
+          !pending && !ready && "text-destructive",
+        )}
+      />
+      {pending && attempt.status.phase === "ready"
+        ? "Waiting for session confirmation"
+        : phaseLabels[attempt.status.phase]}
+    </p>
   );
 }
 
@@ -178,18 +223,14 @@ function StartupStepRow({
     return () => cancelAnimationFrame(frame);
   }, [expanded]);
   const hasDetails = hasStepDetails(step);
-  const { status, stateLabel, traceStatus } = stepPresentation(step);
+  const { status, stateLabel, traceStatus, iconClass, lineClass } = stepPresentation(step);
   const Icon = status.icon;
-  const failed = startupStepFailed(step);
   const line = (
     <TraceLine
       {...(traceStatus ? { status: traceStatus } : {})}
-      className={cn(
-        "min-h-7 w-full",
-        step.state === "completed" && !failed && "text-foreground/80",
-      )}
+      className={cn("min-h-9 w-full px-2 py-1.5", lineClass)}
     >
-      <TraceIcon>
+      <TraceIcon className={cn("size-5 rounded-full", iconClass)}>
         <Icon className={cn("size-3.5", step.state === "running" && "motion-safe:animate-spin")} />
       </TraceIcon>
       <TraceTitle className="flex-1 text-[13px]">{step.label}</TraceTitle>
@@ -212,35 +253,13 @@ function StartupStepRow({
             else presentation.expandedSteps.delete(rowId);
           }}
         >
-          <TraceCollapsibleTrigger className="w-full">{line}</TraceCollapsibleTrigger>
+          <TraceCollapsibleTrigger
+            className={cn("w-full", step.state === "running" && "bg-info-surface")}
+          >
+            {line}
+          </TraceCollapsibleTrigger>
           <TraceCollapsibleContent className="flex flex-col gap-2 text-xs">
-            {step.details.map((detail, index) => (
-              <p key={`${index}-${detail}`} className="break-words whitespace-pre-wrap">
-                {detail}
-              </p>
-            ))}
-            {step.action ? (
-              <StartupActionDetails
-                action={step.action}
-                expanded={expanded}
-                presentation={presentation}
-              />
-            ) : null}
-            {step.resources?.map((resource) => (
-              <p key={`${resource.kind}-${resource.value}`} className="break-words">
-                <span className="capitalize">{resource.kind}</span> {resource.state}:{" "}
-                <span className="font-mono">{resource.value}</span>
-                {resource.nextAction ? ` ${resource.nextAction}` : ""}
-              </p>
-            ))}
-            {step.failure ? (
-              <>
-                <p className="max-h-32 overflow-y-auto break-words whitespace-pre-wrap">
-                  {step.failure.message}
-                </p>
-                <p>{step.failure.nextAction}</p>
-              </>
-            ) : null}
+            <StartupStepDetails step={step} expanded={expanded} presentation={presentation} />
           </TraceCollapsibleContent>
         </TraceCollapsible>
       ) : (
@@ -254,6 +273,48 @@ function StartupStepRow({
         </p>
       ) : null}
     </li>
+  );
+}
+
+function StartupStepDetails({
+  step,
+  expanded,
+  presentation,
+}: {
+  step: StartupStep;
+  expanded: boolean;
+  presentation: StartupPresentation;
+}): ReactElement {
+  return (
+    <>
+      {step.details.map((detail, index) => (
+        <p key={`${index}-${detail}`} className="break-words whitespace-pre-wrap">
+          {detail}
+        </p>
+      ))}
+      {step.action ? (
+        <StartupActionDetails
+          action={step.action}
+          expanded={expanded}
+          presentation={presentation}
+        />
+      ) : null}
+      {step.resources?.map((resource) => (
+        <p key={`${resource.kind}-${resource.value}`} className="break-words">
+          <span className="capitalize">{resource.kind}</span> {resource.state}:{" "}
+          <span className="font-mono">{resource.value}</span>
+          {resource.nextAction ? ` ${resource.nextAction}` : ""}
+        </p>
+      ))}
+      {step.failure ? (
+        <>
+          <p className="max-h-32 overflow-y-auto break-words whitespace-pre-wrap">
+            {step.failure.message}
+          </p>
+          <p>{step.failure.nextAction}</p>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -279,7 +340,17 @@ function stepPresentation(step: StartupStep) {
   if (failed) traceStatus = "error";
   else if (step.state === "running") traceStatus = "running";
   else if (step.state === "pending" || step.state === "not_run") traceStatus = "pending";
-  return { status, stateLabel, traceStatus };
+  let iconClass = "";
+  let lineClass = "";
+  if (failed) iconClass = "bg-destructive/10 text-destructive";
+  else if (step.state === "completed") {
+    iconClass = "bg-success-surface text-success-icon";
+    lineClass = "text-foreground";
+  } else if (step.state === "running") {
+    iconClass = "bg-info-surface text-info-surface-foreground";
+    lineClass = "font-medium text-info-surface-foreground";
+  }
+  return { status, stateLabel, traceStatus, iconClass, lineClass };
 }
 
 function StartupActionDetails({

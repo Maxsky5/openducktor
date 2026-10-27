@@ -179,7 +179,7 @@ function renderFork(
   };
 }
 
-test("opening a saved failed fork closes its real dialog and retains the same feedback", async () => {
+test("opening a saved failed same-folder fork retains feedback and session inspection", async () => {
   const child = { ...source, id: "saved-child", externalSessionId: "native-child" };
   const fork = mock(
     async (_input: WorkspaceSessionForkInput, startup: StartupOperationContext | undefined) => {
@@ -223,9 +223,14 @@ test("opening a saved failed fork closes its real dialog and retains the same fe
     expect(
       await view.findByRole("region", { name: "Session startup notifications" }),
     ).toBeDefined();
-    fireEvent.click(await view.findByRole("button", { name: "View progress" }));
-    await view.findByRole("list", { name: "Session startup steps" });
-    expect(view.getByText("Save forked session")).toBeDefined();
+    expect(view.queryByRole("button", { name: "View progress" })).toBeNull();
+    expect(view.queryByText(/\d+\/\d+ steps/)).toBeNull();
+    fireEvent.click(await view.findByRole("button", { name: "Details" }));
+    const inspect = await view.findByRole("button", { name: "Inspect saved session" });
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText("Save forked session")).toBeNull();
+    fireEvent.click(inspect);
+    expect(view.getByText("saved-child")).toBeDefined();
     expect(fork).toHaveBeenCalledTimes(1);
     expect(completed).toEqual([]);
   } finally {
@@ -395,7 +400,9 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
         destination: { kind: "same_folder" },
       },
     ]);
-    expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+    expect(view.getByText("Submitting request")).toBeDefined();
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
     expect(view.queryByRole("button", { name: "Fork chat" })).toBeNull();
     expect(view.queryByLabelText("Worktree name")).toBeNull();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });

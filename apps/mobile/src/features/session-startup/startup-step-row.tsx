@@ -3,7 +3,9 @@ import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/t
 import type { ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import type { ThemeColorName } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
+import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { terminalCommandResultLabel } from "../terminals/terminal-command-result-label";
@@ -25,6 +27,14 @@ const STEP_ICONS = {
   failed: "circle-alert",
   not_run: "x",
 } satisfies Record<StartupStep["state"], IconName>;
+const STEP_COLORS = {
+  pending: "tertiaryLabel",
+  waiting: "tint",
+  running: "tint",
+  completed: "green",
+  failed: "red",
+  not_run: "tertiaryLabel",
+} satisfies Record<StartupStep["state"], ThemeColorName>;
 export function StartupStepRow({
   attemptId,
   step,
@@ -55,16 +65,13 @@ export function StartupStepRow({
         accessibilityLabel={`${step.label}. ${STEP_LABELS[displayState]}`}
         style={styles.stepHeading}
       >
-        <Icon
-          name={STEP_ICONS[displayState]}
-          size={16}
-          color={displayState === "failed" ? "red" : "secondaryLabel"}
-        />
+        {displayState === "running" ? (
+          <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
+        ) : (
+          <Icon name={STEP_ICONS[displayState]} size={16} color={STEP_COLORS[displayState]} />
+        )}
         <Text variant="subhead" weight="medium" style={styles.stepName}>
           {step.label}
-        </Text>
-        <Text variant="caption1" tone="secondary">
-          {STEP_LABELS[displayState]}
         </Text>
         {hasDetails ? (
           <Icon name={expanded ? "chevron-up" : "chevron-down"} size={16} color="secondaryLabel" />
@@ -83,7 +90,7 @@ export function StartupStepRow({
   );
 }
 
-function StartupStepDetails({
+export function StartupStepDetails({
   attemptId,
   step,
 }: {
@@ -131,6 +138,7 @@ function StartupStepDetails({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  activeIcon: { color: theme.colors.tint },
   step: { minWidth: 0 },
   line: {
     position: "absolute",

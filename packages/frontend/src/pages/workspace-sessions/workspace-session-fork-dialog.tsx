@@ -37,6 +37,7 @@ import { StartupDialogProgress } from "@/features/session-startup/session-startu
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
+import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { useWorkspaceForkHandoff } from "./use-workspace-fork-handoff";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +75,7 @@ export function WorkspaceSessionForkDialog({
   const [failure, setFailure] = useState<Error | null>(null);
   const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
   const attempt = useStartupAttempt(startupAttemptId);
+  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
   const observeHandoff = useWorkspaceForkHandoff({
     workspace,
     sourceSessionId: record.id,
@@ -132,8 +134,8 @@ export function WorkspaceSessionForkDialog({
       <DialogContent
         className={cn(
           "my-0 gap-0 p-0 sm:max-w-2xl",
-          startupAttemptId &&
-            "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))] max-w-lg overflow-hidden sm:max-w-lg",
+          startupAttemptId && "max-w-lg overflow-hidden sm:max-w-lg",
+          hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
         )}
         closeButton={starting ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}

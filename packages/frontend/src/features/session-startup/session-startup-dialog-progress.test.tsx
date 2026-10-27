@@ -32,7 +32,7 @@ test.each([
   ["task", "canceled"],
   ["task", "ready"],
 ] as const)(
-  "Open %s session closes its %s dialog and retains only unsuccessful feedback",
+  "Open %s worktree session closes its %s dialog and retains only unsuccessful feedback",
   async (kind, phase) => {
     const mutation = mock(async () => {
       throw new Error("Opening a saved session must not start work.");
@@ -53,7 +53,12 @@ test.each([
       id: "saved-session",
       runtimeKind: "codex",
       externalSessionId: "native-session",
-      executionTarget: { kind: "local_repo_root", workingDirectory: "/origin" },
+      executionTarget: {
+        kind: "local_worktree",
+        workingDirectory: "/origin/worktree",
+        branchName: "odt/saved",
+        worktreeState: "present",
+      },
       roleSnapshot: null,
       selectedModel: null,
       generatedTitle: null,
@@ -66,7 +71,7 @@ test.each([
     const ref = {
       repoPath: workspace.repoPath,
       runtimeKind: session.runtimeKind,
-      workingDirectory: "/origin",
+      workingDirectory: "/origin/worktree",
       externalSessionId: "native-session",
     };
     const scope: StartupScope =
@@ -131,6 +136,12 @@ test.each([
             label: "Create worktree",
             state: "completed" as const,
             details: ["Created /origin/worktree on branch odt/saved."],
+          },
+          {
+            id: "copies",
+            label: "Copy configured files",
+            state: "completed" as const,
+            details: [],
           },
         ],
       },

@@ -29,7 +29,14 @@ const progress = (): StartupOperationSnapshot => ({
       details: [],
       action: { actionId: "install", command: "bun install", waitBeforeAgentStart: true },
     },
-    { id: "session", label: "Prepare session", state: "pending", details: [] },
+    {
+      id: "verify",
+      label: "Verify workspace",
+      state: "pending",
+      details: [],
+      action: { actionId: "verify", command: "bun run typecheck", waitBeforeAgentStart: true },
+    },
+    { id: "copies", label: "Copy configured files", state: "completed", details: [] },
   ],
 });
 
@@ -96,7 +103,7 @@ test("keeps the same rows and expanded details as startup fails and dependent wo
     expect(details.getAttribute("aria-expanded")).toBe("true");
     expect(view.getByText("Created /worktrees/task on branch odt/task.")).toBeDefined();
     expect(view.getByText("Install dependencies exited with code 1.")).toBeDefined();
-    expect(view.getByText("Did not run")).toBeDefined();
+    expect(view.getByRole("button", { name: /Verify workspace.*Did not run/ })).toBeDefined();
   } finally {
     view.unmount();
   }
@@ -154,6 +161,7 @@ test("shows an asynchronous action as failed when a signal accompanies exit code
         result: { type: "exited", exitCode: 0, signal: "SIGTERM", outputTail: [] },
       },
     },
+    { id: "copies", label: "Copy configured files", state: "completed", details: [] },
   ];
   const view = render(
     <QueryProvider connection={connection}>
@@ -170,12 +178,40 @@ test("shows an asynchronous action as failed when a signal accompanies exit code
   }
 });
 
-test("shows the exact saved draft without an Open session action or a replacement start", () => {
+test("keeps cleanup guidance and exact saved draft inspection without a worktree trace or replacement start", () => {
   const connection = createTestClientConnection();
   const current = attempt();
   const saved: StartupAttempt = {
     ...current,
     status: { phase: "failed", confirmation: "current" },
+    operations: [
+      {
+        ...progress(),
+        phase: "failed",
+        steps: [
+          {
+            id: "cleanup",
+            label: "Stop unused native fork",
+            state: "failed",
+            details: ["Keep this checkout until Stop succeeds."],
+            failure: {
+              stage: "cleanup",
+              code: "stop_failed",
+              message: "Stop unused native fork failed.",
+              nextAction: "Stop the native session before removing this checkout.",
+            },
+            resources: [
+              {
+                kind: "worktree",
+                state: "retained",
+                value: "/repo/saved-directory",
+                nextAction: "Stop the native session before removing this checkout.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
     ownership: {
       state: "saved",
       target: {
@@ -203,9 +239,15 @@ test("shows the exact saved draft without an Open session action or a replacemen
     </QueryProvider>,
   );
   try {
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.getByText("Keep this checkout until Stop succeeds.")).toBeDefined();
+    expect(view.getByText("Stop unused native fork failed.")).toBeDefined();
+    expect(
+      view.getAllByText("Stop the native session before removing this checkout.").length,
+    ).toBeGreaterThan(0);
+    expect(view.getByText("/repo/saved-directory")).toBeDefined();
     fireEvent.click(view.getByRole("button", { name: "Inspect saved session" }));
     expect(view.getByText("saved-draft")).toBeDefined();
-    expect(view.getByText("/repo/saved-directory")).toBeDefined();
     expect(view.queryByRole("button", { name: "Open session" })).toBeNull();
     expect(view.queryByRole("button", { name: /retry|start again/i })).toBeNull();
   } finally {

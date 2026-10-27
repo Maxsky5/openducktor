@@ -1,5 +1,9 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
+  startupFailureRows,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
   useStartupAttempt,
   type StartupPresentation,
   type StartupAttempt,
@@ -8,10 +12,12 @@ import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/t
 import { type ReactElement, useState } from "react";
 import { ScrollView, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import type { ThemeColorName } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
+import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { useAnnounce } from "@/ui/use-announce";
-import { StartupStepRow } from "./startup-step-row";
+import { StartupStepDetails, StartupStepRow } from "./startup-step-row";
 import { useStartupPresentation } from "./startup-presentation-context";
 import { StartupSavedSession } from "./startup-saved-session";
 import { StartupAttemptActions } from "./startup-attempt-actions";
@@ -36,6 +42,17 @@ const PHASE_ICONS = {
   failed: "circle-alert",
   canceled: "x",
 } satisfies Record<StartupAttempt["status"]["phase"], IconName>;
+const PHASE_COLORS = {
+  submitting: "tint",
+  waiting: "tint",
+  running: "tint",
+  settling: "tint",
+  ready: "green",
+  failed: "red",
+  canceled: "tertiaryLabel",
+} satisfies Record<StartupAttempt["status"]["phase"], ThemeColorName>;
+
+type StartupTraceRow = ReturnType<typeof startupTraceRows>[number];
 
 export function StartupTrace({
   attemptId,
@@ -54,7 +71,10 @@ export function StartupTrace({
   const { startupAttempts } = useClientConnection();
   const traceState = useStartupPresentation();
   const compact = expectedPresentation !== "dialog";
-  const progressOpen = !compact || traceState.expanded[attemptId]?.has("progress") === true;
+  const rows = attempt ? startupTraceRows(attempt) : [];
+  const traceAvailable = rows.length > 0;
+  const progressOpen =
+    traceAvailable && (!compact || traceState.expanded[attemptId]?.has("progress") === true);
   const [progressViewed, setProgressViewed] = useState(progressOpen);
   useAnnounce(startupAnnouncement(attempt, expectedPresentation));
   if (!attempt || attempt.presentation !== expectedPresentation) return null;
@@ -67,13 +87,23 @@ export function StartupTrace({
   return (
     <View style={[styles.root, compact ? styles.compact : styles.full]}>
       <StartupTraceHeader attempt={attempt} compact={compact} />
-      <StartupTraceSummary attempt={attempt} compact={compact} progressOpen={progressOpen} />
-      <StartupTraceDetails
+      <StartupTraceSummary
         attempt={attempt}
+        rows={rows}
         compact={compact}
-        mounted={progressOpen || progressViewed}
-        visible={progressOpen}
+        progressOpen={progressOpen}
       />
+      {traceAvailable ? (
+        <StartupTraceDetails
+          attempt={attempt}
+          rows={rows}
+          compact={compact}
+          mounted={progressOpen || progressViewed}
+          visible={progressOpen}
+        />
+      ) : (
+        <StartupStatusDetails attempt={attempt} compact={compact} />
+      )}
       <StartupInstructionNotice instruction={attempt.instruction} />
       <StartupAttemptActions
         attempt={attempt}
@@ -82,7 +112,7 @@ export function StartupTrace({
         onRepairSavedSession={onRepairSavedSession}
         progressExpanded={progressOpen}
         onToggleProgress={
-          compact
+          compact && traceAvailable
             ? () => {
                 setProgressViewed(true);
                 traceState.toggle(attemptId, "progress");
@@ -127,24 +157,19 @@ function StartupTraceHeader({
   return (
     <View style={styles.header}>
       <View style={styles.heading}>
-        <Icon
-          name={PHASE_ICONS[phase]}
-          size={16}
-          color={phase === "failed" ? "red" : "secondaryLabel"}
-        />
+        {phase === "submitting" || phase === "running" || phase === "settling" ? (
+          <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
+        ) : (
+          <Icon name={PHASE_ICONS[phase]} size={16} color={PHASE_COLORS[phase]} />
+        )}
         <Text
           variant="headline"
           accessibilityRole={compact ? "header" : "text"}
           numberOfLines={2}
           style={styles.title}
         >
-          {compact ? attempt.label : PHASE_LABELS[phase]}
+          {PHASE_LABELS[phase]}
         </Text>
-        {compact ? (
-          <Text variant="caption1" tone={phase === "failed" ? "red" : "secondary"}>
-            {PHASE_LABELS[phase]}
-          </Text>
-        ) : null}
       </View>
       <Text
         variant="caption1"
@@ -166,28 +191,31 @@ function StartupTraceHeader({
 
 function StartupTraceSummary({
   attempt,
+  rows,
   compact,
   progressOpen,
 }: {
   attempt: StartupAttempt;
+  rows: readonly StartupTraceRow[];
   compact: boolean;
   progressOpen: boolean;
 }): ReactElement | null {
-  if (!compact) return null;
-  const steps = attempt.operations.flatMap((operation) => operation.steps);
-  const failedAction = steps.findLast(
-    (step) => step.action?.result && !terminalCommandSucceeded(step.action.result),
+  if (!compact || rows.length === 0) return null;
+  const steps = rows.map(({ step }) => step);
+  const failedStep = steps.findLast(
+    (step) =>
+      step.state === "failed" ||
+      step.failure ||
+      (step.action?.result && !terminalCommandSucceeded(step.action.result)),
   );
   const activeStep =
-    steps.find((step) => step.state === "running" || step.state === "waiting") ??
-    failedAction ??
-    steps.at(-1);
+    steps.findLast((step) => step.state === "running" || step.state === "waiting") ?? failedStep;
   return (
     <>
       {activeStep ? (
         <Text
           variant="footnote"
-          tone={activeStep === failedAction ? "red" : "secondary"}
+          tone={activeStep === failedStep ? "red" : "secondary"}
           numberOfLines={2}
         >
           {activeStep.label}
@@ -204,11 +232,13 @@ function StartupTraceSummary({
 
 function StartupTraceDetails({
   attempt,
+  rows,
   compact,
   mounted,
   visible,
 }: {
   attempt: StartupAttempt;
+  rows: readonly StartupTraceRow[];
   compact: boolean;
   mounted: boolean;
   visible: boolean;
@@ -217,9 +247,6 @@ function StartupTraceDetails({
   const { height } = useWindowDimensions();
   if (!mounted) return null;
   const attemptId = attempt.id;
-  const rows = attempt.operations.flatMap((operation) =>
-    operation.steps.map((step) => ({ key: `${operation.context.operationId}:${step.id}`, step })),
-  );
   return (
     <View
       style={visible ? styles.progress : styles.hiddenProgress}
@@ -235,22 +262,18 @@ function StartupTraceDetails({
         onScroll={(event) => traceState.scroll.set(attemptId, event.nativeEvent.contentOffset.y)}
         scrollEventThrottle={100}
       >
-        {rows.length === 0 ? (
-          <Text variant="footnote" tone="secondary">
-            Submitting the request to the host.
-          </Text>
-        ) : (
-          rows.map(({ key, step }, index) => (
-            <StartupStepRow
-              key={key}
-              attemptId={attemptId}
-              step={step}
-              last={index === rows.length - 1}
-              expanded={traceState.expanded[attemptId]?.has(key) === true}
-              toggle={() => traceState.toggle(attemptId, key)}
-            />
-          ))
-        )}
+        {/* Keep expanded read-only terminal pages attached while startup rows change height. */}
+        {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
+        {rows.map(({ id, step }, index) => (
+          <StartupStepRow
+            key={id}
+            attemptId={attemptId}
+            step={step}
+            last={index === rows.length - 1}
+            expanded={traceState.expanded[attemptId]?.has(id) === true}
+            toggle={() => traceState.toggle(attemptId, id)}
+          />
+        ))}
         {attempt.error ? (
           <Text variant="footnote" tone="red" selectable>
             {attempt.error}
@@ -262,22 +285,72 @@ function StartupTraceDetails({
   );
 }
 
+function StartupStatusDetails({
+  attempt,
+  compact,
+}: {
+  attempt: StartupAttempt;
+  compact: boolean;
+}): ReactElement | null {
+  const { height } = useWindowDimensions();
+  const failures = startupFailureRows(attempt);
+  if (!attempt.error && failures.length === 0 && attempt.ownership.state !== "saved") return null;
+  return (
+    <ScrollView
+      style={[styles.scroll, { maxHeight: compact ? 240 : Math.min(360, height * 0.5) }]}
+      contentContainerStyle={styles.statusDetails}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
+      {attempt.error ? (
+        <Text variant="footnote" tone="red" selectable>
+          {attempt.error}
+        </Text>
+      ) : null}
+      {/* Failure output keeps its terminal page and selection while saved-session details change. */}
+      {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
+      {failures.map(({ id, step }) => (
+        <View key={id} style={styles.failure}>
+          {step.failure ? (
+            <Text variant="footnote" tone="red" selectable>
+              {step.failure.message}
+              {step.failure.nextAction ? ` ${step.failure.nextAction}` : ""}
+            </Text>
+          ) : null}
+          <StartupStepDetails attemptId={attempt.id} step={step} />
+        </View>
+      ))}
+      <StartupSavedSession attempt={attempt} />
+    </ScrollView>
+  );
+}
+
 function startupAnnouncement(
   attempt: StartupAttempt | null,
   expectedPresentation: StartupPresentation,
 ): string | null {
   if (!attempt || attempt.presentation !== expectedPresentation) return null;
   const current = attempt.status.confirmation === "current";
-  const steps = attempt.operations.flatMap((operation) => operation.steps);
+  const steps = startupTraceRows(attempt).map(({ step }) => step);
   const activeStep =
-    steps.find((step) => step.state === "running" || step.state === "waiting") ?? steps.at(-1);
-  const stepAnnouncement = activeStep
-    ? ` ${activeStep.label}. ${activeStep.state.replace("_", " ")}.`
-    : "";
-  return `${attempt.label}. ${PHASE_LABELS[attempt.status.phase]}.${current ? stepAnnouncement : " Waiting for the host to confirm the outcome."}`;
+    steps.findLast((step) => step.state === "running" || step.state === "waiting") ??
+    steps.findLast(
+      (step) =>
+        step.state === "failed" ||
+        step.failure ||
+        (step.action?.result && !terminalCommandSucceeded(step.action.result)),
+    );
+  const state =
+    activeStep?.action?.result && !terminalCommandSucceeded(activeStep.action.result)
+      ? "failed"
+      : activeStep?.state.replace("_", " ");
+  const stepAnnouncement = activeStep ? ` ${activeStep.label}. ${state}.` : "";
+  const failure = attempt.error ? ` ${attempt.error}` : "";
+  return `${attempt.label}. ${PHASE_LABELS[attempt.status.phase]}.${current ? stepAnnouncement : " Waiting for the host to confirm the outcome."}${failure}`;
 }
 
 const styles = StyleSheet.create((theme) => ({
+  activeIcon: { color: theme.colors.tint },
   root: { gap: theme.space.sm, flexShrink: 1 },
   full: { maxHeight: "100%", padding: theme.layout.screenPadding },
   compact: { padding: theme.space.md },
@@ -288,4 +361,6 @@ const styles = StyleSheet.create((theme) => ({
   hiddenProgress: { display: "none" },
   scroll: { flexGrow: 0, flexShrink: 1 },
   steps: { paddingBottom: theme.space.xs },
+  statusDetails: { gap: theme.space.sm },
+  failure: { gap: theme.space.xs },
 }));

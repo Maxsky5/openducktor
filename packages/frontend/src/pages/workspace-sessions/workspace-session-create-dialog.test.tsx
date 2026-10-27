@@ -8,6 +8,8 @@ import {
   type AgentSessionLiveEnvelope,
   type WorkspaceSessionStartInput,
   type WorkspaceSessionStartResult,
+  type StartupOperationContext,
+  type StartupOperationSnapshot,
   repoConfigSchema,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
@@ -16,7 +18,10 @@ import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { act, type ComponentProps, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
@@ -36,7 +41,10 @@ import { StartupNotifications } from "@/features/session-startup/session-startup
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 
 function renderCreation(
-  create: (input: WorkspaceSessionCreateInput) => Promise<WorkspaceSessionCreateResult>,
+  create: (
+    input: WorkspaceSessionCreateInput,
+    startup: StartupOperationContext | undefined,
+  ) => Promise<WorkspaceSessionCreateResult>,
   onClose = () => {},
   onCreated: (session: WorkspaceSession) => void = () => {
     throw new Error("Unexpected successful creation");
@@ -127,7 +135,15 @@ function renderCreation(
     loadRepoRuntimeCatalog: async () => createRuntimeCatalogFixture({ models: catalog }),
     loadRepoRuntimeFileSearch: async () => [],
   };
-  const connection = createTestClientConnection({
+  let publishProgress: (snapshot: StartupOperationSnapshot) => void = () => {
+    throw new Error("Startup progress is not subscribed.");
+  };
+  const host = createTestHostConnection({
+    subscribeStartupProgress: async (listener) => {
+      publishProgress = (snapshot) =>
+        listener({ channel: "openducktor://session-startup-progress", payload: snapshot });
+      return () => {};
+    },
     client: {
       workspaceGetSettingsSnapshot: async () => snapshot,
       workspaceGetRepoConfig: async () =>
@@ -154,7 +170,7 @@ function renderCreation(
       ],
       workspaceSessionCreate: async ({ startup, ...input }) => {
         try {
-          const result = await create(input);
+          const result = await create(input, startup);
           savedRecord = result.session;
           return result;
         } catch (cause) {
@@ -211,6 +227,7 @@ function renderCreation(
       ...clientOverrides,
     },
   });
+  const connection = createTestClientConnection({ host });
   const queryClient = connection.queryClient;
   const live = createStartupLiveSourceFake(queryClient);
   function Creation() {
@@ -268,6 +285,7 @@ function renderCreation(
     ...view,
     connection,
     queryClient,
+    publishProgress: (snapshot: StartupOperationSnapshot) => publishProgress(snapshot),
     publishLive: (envelope: AgentSessionLiveEnvelope) => live.publish("/repo", envelope),
     unmount: () => {
       view.unmount();
@@ -276,7 +294,7 @@ function renderCreation(
   };
 }
 
-test("opening a saved failed creation closes its real dialog without dismissing the trace", async () => {
+test("opening a saved failed current-checkout creation retains feedback and session inspection", async () => {
   const session: WorkspaceSession = {
     id: "retained-created",
     runtimeKind: "opencode",
@@ -363,9 +381,14 @@ test("opening a saved failed creation closes its real dialog without dismissing 
     expect(
       await view.findByRole("region", { name: "Session startup notifications" }),
     ).toBeDefined();
-    fireEvent.click(await view.findByRole("button", { name: "View progress" }));
-    await view.findByRole("list", { name: "Session startup steps" });
-    expect(view.getByText("Reuse checkout")).toBeDefined();
+    expect(view.queryByRole("button", { name: "View progress" })).toBeNull();
+    expect(view.queryByText(/\d+\/\d+ steps/)).toBeNull();
+    fireEvent.click(await view.findByRole("button", { name: "Details" }));
+    const inspect = await view.findByRole("button", { name: "Inspect saved session" });
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText("Reuse checkout")).toBeNull();
+    fireEvent.click(inspect);
+    expect(view.getByText("retained-created")).toBeDefined();
     expect(create).toHaveBeenCalledTimes(1);
     expect(starts).toBe(1);
   } finally {
@@ -549,7 +572,7 @@ test("uses the task modal label-to-control gap for every form field", async () =
   }
 });
 
-test("an ordinary creation failure keeps its trace until Edit choices restores the form", async () => {
+test("a current-checkout creation keeps simple status and failure feedback until Edit choices", async () => {
   let rejectCreation!: (cause: Error) => void;
   let created = 0;
   let closed = 0;
@@ -572,11 +595,15 @@ test("an ordinary creation failure keeps its trace until Edit choices restores t
     await act(async () => {
       fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     });
+    expect(view.getByText("Submitting request")).toBeDefined();
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
     await act(async () => {
       rejectCreation(new Error("Runtime startup failed: executable missing"));
     });
     await view.findByRole("alert", {}, { timeout: 800 });
     expect(view.getByRole("alert").textContent).toBe("Runtime startup failed: executable missing");
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     expect(view.queryByRole("button", { name: "Create chat" })).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
     expect(view.getByDisplayValue("Retained session") !== null).toBe(true);
@@ -722,11 +749,14 @@ test("retries preparation of the saved draft and waits for native live evidence 
 });
 
 test("creation keeps Role, Runtime Profile, Effort and location separate and blocks duplicate pending input", async () => {
-  const requests: WorkspaceSessionCreateInput[] = [];
+  const requests: {
+    input: WorkspaceSessionCreateInput;
+    startup: StartupOperationContext | undefined;
+  }[] = [];
   let closed = 0;
   const view = renderCreation(
-    async (input) => {
-      requests.push(input);
+    async (input, startup) => {
+      requests.push({ input, startup });
       return new Promise<never>(() => {});
     },
     () => {
@@ -753,7 +783,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     });
     await waitFor(() => expect(requests.length).toBe(1), { timeout: 800 });
-    expect(requests[0]).toEqual({
+    expect(requests[0]?.input).toEqual({
       workspaceId: "A",
       runtimeKind: "opencode",
       selectedModel: {
@@ -771,7 +801,30 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     });
     expect(view.queryByLabelText("Name optional")).toBeNull();
     expect(view.queryByRole("button", { name: "Create chat" })).toBeNull();
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    const startup = requests[0]?.startup;
+    if (!startup) throw new Error("Creation startup context is missing.");
+    await act(async () => {
+      view.publishProgress({
+        context: startup,
+        hostInstanceId: "host",
+        revision: 1,
+        workspaceId: "A",
+        repoPath: "/repo",
+        scope: { kind: "workspace" },
+        phase: "running",
+        ownership: { state: "not_saved" },
+        steps: [
+          { id: "checkout", label: "Create worktree", state: "pending", details: [] },
+          { id: "copies", label: "Copy configured files", state: "pending", details: [] },
+          { id: "save", label: "Save session", state: "pending", details: [] },
+        ],
+      });
+    });
     expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+    expect(view.getByText("Create worktree")).toBeDefined();
+    expect(view.queryByText("Copy configured files")).toBeNull();
+    expect(view.queryByText("Save session")).toBeNull();
     expect(view.queryByRole("button", { name: "Close" })).toBeNull();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(requests.length).toBe(1);
