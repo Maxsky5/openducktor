@@ -62,8 +62,9 @@ test("keeps background starts visible, worktree progress inspectable, and only s
             {
               id: "checkout",
               label: "Create worktree",
-              state: "running",
-              details: ["Create the task branch in a new checkout."],
+              state: "completed",
+              details: ["Created the task branch in a new checkout."],
+              resources: [{ kind: "worktree", value: "/repo/worktree", state: "created" }],
             },
             { id: "copies", label: "Copy configured files", state: "pending", details: [] },
           ],
@@ -78,7 +79,7 @@ test("keeps background starts visible, worktree progress inspectable, and only s
       await first.findByRole("list", { name: "Session startup steps" }, { timeout: 500 }),
     ).toBeDefined();
     expect(first.getByRole("button", { name: "Hide progress" })).toBeDefined();
-    expect(first.queryByText("Create the task branch in a new checkout.")).toBeNull();
+    expect(first.queryByText("Created the task branch in a new checkout.")).toBeNull();
     expect(notifications.getAllByRole("list", { name: "Session startup steps" })).toHaveLength(1);
     expect(first.queryByRole("button", { name: "Close toast" })).toBeNull();
     expect(await notifications.findByText("Ordinary notification")).toBeDefined();

@@ -11,6 +11,11 @@ const step = (id: string, extra: Partial<StartupStep> = {}): StartupStep => ({
   ...extra,
 });
 
+const createdWorktree = (): StartupStep =>
+  step("checkout", {
+    resources: [{ kind: "worktree", value: "/worktree", state: "created" }],
+  });
+
 const operation = (operationId: string, steps: StartupStep[]): StartupOperationSnapshot => ({
   context: { startupAttemptId: "attempt", operationId },
   hostInstanceId: "host",
@@ -38,7 +43,7 @@ test("projects only worktree setup in execution order", () => {
   const startup = attempt([
     operation("create", [
       step("readiness"),
-      step("checkout"),
+      createdWorktree(),
       step("upstream"),
       step("copies", { details: [".env"] }),
       step("install", {
@@ -62,14 +67,31 @@ test("projects only worktree setup in execution order", () => {
 });
 
 test.each(["pending", "completed", "failed"] as const)(
-  "an empty %s copy list marks creation without adding a routine row",
+  "an empty %s copy list adds no routine row after worktree creation",
   (state) => {
     const rows = startupTraceRows(
-      attempt([operation("create", [step("checkout"), step("copies", { state })])]),
+      attempt([operation("create", [createdWorktree(), step("copies", { state })])]),
     );
 
     expect(rows.map((row) => row.id)).toEqual(
       state === "failed" ? ["create:checkout", "create:copies"] : ["create:checkout"],
+    );
+  },
+);
+
+test.each(["pending", "not_run", "failed"] as const)(
+  "a %s worktree without confirmed creation has no step trace",
+  (state) => {
+    const startup = attempt([
+      operation("create", [
+        step("checkout", { state }),
+        step("copies", { state: state === "pending" ? "pending" : "not_run", details: [".env"] }),
+      ]),
+    ]);
+
+    expect(startupTraceRows(startup)).toEqual([]);
+    expect(startupFailureRows(startup).map((row) => row.id)).toEqual(
+      state === "failed" ? ["create:checkout"] : [],
     );
   },
 );
@@ -79,7 +101,7 @@ test.each(["completed", "failed"] as const)(
   (state) => {
     const rows = startupTraceRows(
       attempt([
-        operation("create", [step("checkout"), step("copies")]),
+        operation("create", [createdWorktree(), step("copies")]),
         operation("start", [
           step("checkout", {
             state,
@@ -127,8 +149,7 @@ test.each([
 test("keeps late action results and failure facts after creation is ready", () => {
   const startup = attempt([
     operation("create", [
-      step("checkout"),
-      step("copies"),
+      createdWorktree(),
       step("setup", {
         action: { actionId: "setup", command: "bun install", waitBeforeAgentStart: false },
       }),
@@ -144,7 +165,7 @@ test("keeps late action results and failure facts after creation is ready", () =
       }),
     ]),
   ]);
-  const action = startup.operations[0]!.steps[2]!.action!;
+  const action = startup.operations[0]!.steps.find((entry) => entry.id === "setup")!.action!;
   action.result = { type: "exited", exitCode: 1, signal: null, outputTail: ["Setup failed"] };
 
   const rows = startupTraceRows(startup);

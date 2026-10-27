@@ -814,7 +814,13 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
         phase: "running",
         ownership: { state: "not_saved" },
         steps: [
-          { id: "checkout", label: "Create worktree", state: "pending", details: [] },
+          {
+            id: "checkout",
+            label: "Create worktree",
+            state: "completed",
+            details: [],
+            resources: [{ kind: "worktree", value: "/repo/my-feature", state: "created" }],
+          },
           { id: "copies", label: "Copy configured files", state: "pending", details: [] },
           { id: "save", label: "Save session", state: "pending", details: [] },
         ],

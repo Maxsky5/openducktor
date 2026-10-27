@@ -136,6 +136,9 @@ test.each([
             label: "Create worktree",
             state: "completed" as const,
             details: ["Created /origin/worktree on branch odt/saved."],
+            resources: [
+              { kind: "worktree" as const, value: "/origin/worktree", state: "created" as const },
+            ],
           },
           {
             id: "copies",

@@ -129,6 +129,13 @@ test("retains a compact inspectable trace when a prepared session has an asynchr
   const h = await setup({
     steps: [
       {
+        id: "checkout",
+        label: "Create worktree",
+        state: "completed",
+        details: [],
+        resources: [{ kind: "worktree", value: "/repo/worktree", state: "created" }],
+      },
+      {
         id: "setup",
         label: "Run setup",
         state: "completed",

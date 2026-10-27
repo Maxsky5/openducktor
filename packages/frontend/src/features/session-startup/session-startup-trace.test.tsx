@@ -21,6 +21,7 @@ const progress = (): StartupOperationSnapshot => ({
       label: "Create worktree",
       state: "completed",
       details: ["Created /worktrees/task on branch odt/task."],
+      resources: [{ kind: "worktree", value: "/worktrees/task", state: "created" }],
     },
     {
       id: "install",
@@ -149,6 +150,7 @@ test("shows an asynchronous action as failed when a signal accompanies exit code
   const current = attempt();
   const operation = current.operations[0]!;
   operation.steps = [
+    operation.steps[0]!,
     {
       id: "install",
       label: "Install dependencies",
@@ -171,7 +173,7 @@ test("shows an asynchronous action as failed when a signal accompanies exit code
   try {
     const details = view.getByRole("button", { name: /Install dependencies.*Failed/ });
     fireEvent.click(details);
-    expect(view.queryByText("Completed")).toBeNull();
+    expect(within(details).queryByText("Completed")).toBeNull();
     expect(view.getByText("Command ended with signal SIGTERM.")).toBeDefined();
   } finally {
     view.unmount();

@@ -1,14 +1,12 @@
-import type { StartupStep } from "@openducktor/contracts";
+import type { StartupOperationSnapshot, StartupStep } from "@openducktor/contracts";
 import { terminalCommandSucceeded } from "../../terminals/terminal-command-result";
 import type { StartupAttempt } from "./startup-attempt-store";
 
 export function startupTraceRows(attempt: StartupAttempt): { id: string; step: StartupStep }[] {
-  // Only new worktree creation declares copies, including an empty configured file list.
-  if (!attempt.operations.some((operation) => operation.steps.some((step) => step.id === "copies")))
-    return [];
+  if (!attempt.operations.some(createdWorktree)) return [];
 
   return attempt.operations.flatMap((operation) => {
-    const createsWorktree = operation.steps.some((step) => step.id === "copies");
+    const createsWorktree = createdWorktree(operation);
     return operation.steps
       .filter(
         (step) =>
@@ -38,6 +36,17 @@ export function startupFailureRows(attempt: StartupAttempt): { id: string; step:
           ),
       )
       .map((step) => ({ id: `${operation.context.operationId}:${step.id}`, step })),
+  );
+}
+
+function createdWorktree(operation: StartupOperationSnapshot): boolean {
+  // Planned setup steps do not prove that Git created a worktree.
+  return operation.steps.some(
+    (step) =>
+      step.id === "checkout" &&
+      step.resources?.some(
+        (resource) => resource.kind === "worktree" && resource.state === "created",
+      ),
   );
 }
 
