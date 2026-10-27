@@ -277,15 +277,23 @@ describe("merge detection with real Git", () => {
     run(repo, "reset", "--hard", "HEAD~1");
     run(repo, "checkout", "main");
     run(repo, "push", "origin", "odt/t-rebase");
+    // A reset to the target tip after the merge keeps the rebased task commit.
+    run(repo, "checkout", "-b", "odt/t-forward", "origin/main");
+    await commitFile(repo, "t-forward.txt", "forward\n");
+    run(repo, "rebase", "rebase-base");
+    run(repo, "checkout", "main");
+    run(repo, "push", "origin", "odt/t-forward");
     run(other, "fetch", "origin");
     run(other, "merge", "--ff-only", "origin/odt/t-reset");
     run(other, "merge", "--no-ff", "-m", "Merge t-partial", "origin/odt/t-partial");
     run(other, "merge", "--no-ff", "-m", "Merge t-pick", "origin/odt/t-pick");
     run(other, "merge", "--no-ff", "-m", "Merge t-restore", "origin/odt/t-restore");
     run(other, "merge", "--no-ff", "-m", "Merge t-rebase", "origin/odt/t-rebase");
+    run(other, "merge", "--no-ff", "-m", "Merge t-forward", "origin/odt/t-forward");
     run(other, "push", "origin", "main");
     run(repo, "fetch", "origin");
     run(repo, "merge", "--ff-only", "origin/main");
+    run(repo, "branch", "--force", "odt/t-forward", "origin/main");
     // A release branch gets the change of main by cherry-pick. A task branch that starts at main
     // and gets no commit leaves the release tree unchanged, but it is not merged.
     await commitFile(repo, "shared.txt", "shared\n");
@@ -302,6 +310,7 @@ describe("merge detection with real Git", () => {
       taskCard("t-pick"),
       taskCard("t-restore"),
       taskCard("t-rebase"),
+      taskCard("t-forward"),
       { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
     ]);
     const snapshot = await Effect.runPromise(service.runPass("/workspace"));
@@ -313,6 +322,7 @@ describe("merge detection with real Git", () => {
       "t-pick": "merged",
       "t-restore": "merged",
       "t-rebase": "merged",
+      "t-forward": "merged",
       "t-cherry": "not_merged:0",
     });
   }, 30_000);

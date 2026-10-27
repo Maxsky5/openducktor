@@ -62,7 +62,7 @@ export const branchMergeResult = (
  * Whether the branch still has a commit that it got after its creation. A reset sets the branch to
  * its tip, so a commit before the newest reset stays only when that tip holds it. A rebase before
  * that reset replaced the earlier commits, so the rebase counts when the tip holds a commit that
- * the rebase made on its base.
+ * the rebase made on its base: a tip inside the rebased history, or a tip that holds the rebase.
  */
 const hasOwnCommit = (gitPort: GitPort, gitRepoPath: string, entries: readonly GitReflogEntry[]) =>
   Effect.gen(function* () {
@@ -77,11 +77,14 @@ const hasOwnCommit = (gitPort: GitPort, gitRepoPath: string, entries: readonly G
         if (yield* gitPort.isAncestor(gitRepoPath, entry.oid, resetTip)) return true;
       } else if (kind === "rebase" && resetTip !== undefined) {
         const base = rebaseBaseOid(entry.subject);
-        if (
-          base !== undefined &&
-          (yield* gitPort.isAncestor(gitRepoPath, resetTip, entry.oid)) &&
-          !(yield* gitPort.isAncestor(gitRepoPath, resetTip, base))
-        ) {
+        if (base === undefined) continue;
+        // The older of the two tips is a rebased commit when the base does not hold it.
+        const older = (yield* gitPort.isAncestor(gitRepoPath, resetTip, entry.oid))
+          ? resetTip
+          : (yield* gitPort.isAncestor(gitRepoPath, entry.oid, resetTip))
+            ? entry.oid
+            : undefined;
+        if (older !== undefined && !(yield* gitPort.isAncestor(gitRepoPath, older, base))) {
           return true;
         }
       }

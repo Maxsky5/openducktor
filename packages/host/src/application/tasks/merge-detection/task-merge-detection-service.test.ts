@@ -329,13 +329,14 @@ describe("task merge detection service", () => {
 
   test("a branch is merged only when its reflog shows a commit of its own", async () => {
     // The branch history is base -> work -> later. A rebase onto main-2 rewrites it as
-    // main-2 -> work-2 -> later-2. The target holds the branch tip.
+    // main-2 -> work-2 -> later-2, and target-2 follows it. The target holds the branch tip.
     const parents = new Map([
       ["work", "base"],
       ["later", "work"],
       ["main-2", "base"],
       ["work-2", "main-2"],
       ["later-2", "work-2"],
+      ["target-2", "later-2"],
     ]);
     const isAncestorOf = (ancestor: string, descendant: string): boolean => {
       let current: string | undefined = descendant;
@@ -429,6 +430,16 @@ describe("task merge detection service", () => {
       (
         await reflogResult([
           { oid: "work-2", subject: "reset: moving to HEAD~1" },
+          rebased,
+          ...beforeRebase,
+        ])
+      ).status?.result,
+    ).toMatchObject({ kind: "merged" });
+    // A reset to a target tip that holds the rebased commits keeps them.
+    expect(
+      (
+        await reflogResult([
+          { oid: "target-2", subject: "reset: moving to origin/main" },
           rebased,
           ...beforeRebase,
         ])
