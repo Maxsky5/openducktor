@@ -57,6 +57,7 @@ const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskW
   onResetImplementation: () => {},
   onResetTask: async () => {},
   onCloseTask: async () => {},
+  onRemoveTaskWorktree: async () => {},
   onDelete,
   onConfirmTaskAction: () => {},
   onDetectPullRequest: () => {},

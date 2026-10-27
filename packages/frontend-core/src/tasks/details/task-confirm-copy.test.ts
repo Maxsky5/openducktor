@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildTaskCloseConfirmCopy,
   buildTaskDeleteConfirmCopy,
   buildTaskResetConfirmCopy,
   buildTaskResetImplementationConfirmCopy,
@@ -40,44 +39,6 @@ describe("taskStopImpactLine", () => {
     );
     expect(taskStopImpactLine(0, null, "delete")).toBeNull();
     expect(taskStopImpactLine(null, null, "delete")).toBeNull();
-  });
-});
-
-describe("buildTaskCloseConfirmCopy", () => {
-  test("states what Close Task keeps and removes, in display order", () => {
-    const copy = buildTaskCloseConfirmCopy(
-      { id: "ODT-1", title: "Ship the release" },
-      impact({ terminalCount: 1, activeSessionCount: 1, isLoadingStopImpact: true }),
-    );
-    expect(copy.title).toBe("Close Task");
-    expect(copy.description).toBe("Close “Ship the release” (ODT-1) manually and move it to Done?");
-    expect(copy.descriptionSegments).toEqual([
-      { text: "Close “", emphasis: false },
-      { text: "Ship the release", emphasis: true },
-      { text: "” (ODT-1) manually and move it to Done?", emphasis: false },
-    ]);
-    expect(copy.tone).toBe("warning");
-    expect(copy.lines[0]?.emphasis).toBe(true);
-    expect(texts(copy)).toEqual([
-      "This manual override moves the task to Done and bypasses unfinished workflow steps.",
-      "No code is merged and no pull request is created, updated, or merged.",
-      "1 task terminal, including action terminals, will be stopped before the task closes.",
-      "1 active agent session will be stopped before closing.",
-      "Checking active agent sessions before closing.",
-      "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost.",
-      "The task record, all artifacts, and linked history are retained. Free artifacts become read-only.",
-    ]);
-    expect(copy.confirmLabel).toEqual({
-      idle: "Close task",
-      pending: "Closing...",
-      checking: "Checking...",
-    });
-  });
-
-  test("says that no terminal stops when the task has none", () => {
-    expect(texts(buildTaskCloseConfirmCopy({ id: "ODT-1", title: "Ship" }, impact()))[2]).toBe(
-      "No running task terminals will be stopped.",
-    );
   });
 });
 

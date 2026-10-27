@@ -20,6 +20,7 @@ const mergeInput = {
   repoPath: "/repo",
   taskId: "task-1",
   input: {
+    removeWorktree: true,
     mergeMethod: "merge_commit" as const,
     expected: {
       taskStatus: "ai_review" as const,

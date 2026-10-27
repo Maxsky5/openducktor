@@ -39,7 +39,7 @@ import type {
   AgentQuestionRequest,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
-import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import type { AgentStudioSessionQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
 import { deriveAgentStudioSessionActionState } from "./session-actions/agent-studio-session-action-state";
@@ -120,7 +120,7 @@ export type UseAgentStudioSessionActionsResult = {
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
-  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
+  handleQuickAction: (option: AgentStudioSessionQuickActionOption) => void;
 };
 
 export function useAgentStudioSessionActions({

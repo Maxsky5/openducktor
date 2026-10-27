@@ -3,7 +3,7 @@ import {
   BUILTIN_ROLE_LABELS,
   type BuiltinRoleId as AgentRole,
 } from "@openducktor/workflows";
-import { MessageCirclePlus, Zap } from "lucide-react";
+import { GitMerge, MessageCirclePlus, Zap } from "lucide-react";
 import type { ReactElement } from "react";
 import {
   Command,
@@ -13,12 +13,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SessionActionButton, SessionActionMenuTrigger } from "./session-action-button";
 import type {
   AgentSessionCreateOption,
   AgentStudioQuickActionOption,
+  AgentStudioTaskQuickActionOption,
 } from "./agent-studio-header.types";
 import {
   canRunPrimaryQuickAction,
@@ -50,15 +52,28 @@ type QuickActionMenuEntry =
   | { kind: "quick_action"; option: AgentStudioQuickActionOption }
   | { kind: "message_first"; option: AgentSessionCreateOption };
 
+/** Task actions have their own group. Session actions group by role. */
+type QuickActionGroupKey = AgentRole | "task";
+
 type QuickActionMenuGroup = {
-  role: AgentRole;
+  key: QuickActionGroupKey;
   entries: QuickActionMenuEntry[];
 };
+
+const QUICK_ACTION_GROUP_ORDER: readonly QuickActionGroupKey[] = ["task", ...BUILTIN_ROLE_IDS];
+
+const QUICK_ACTION_GROUP_LABELS = {
+  task: "Task",
+  ...BUILTIN_ROLE_LABELS,
+} satisfies Record<QuickActionGroupKey, string>;
 
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
 
-const quickActionEntryRole = (entry: QuickActionMenuEntry): AgentRole => entry.option.role;
+const quickActionEntryGroup = (entry: QuickActionMenuEntry): QuickActionGroupKey => {
+  if (entry.kind === "message_first") return entry.option.role;
+  return entry.option.kind === "task_action" ? "task" : entry.option.role;
+};
 
 const getEntryDisabledReason = (
   entry: QuickActionMenuEntry,
@@ -99,22 +114,23 @@ const buildQuickActionMenuEntries = (
 ];
 
 const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActionMenuGroup[] => {
-  const entriesByRole = {
+  const entriesByGroup = {
+    task: new Array<QuickActionMenuEntry>(),
     spec: new Array<QuickActionMenuEntry>(),
     planner: new Array<QuickActionMenuEntry>(),
     build: new Array<QuickActionMenuEntry>(),
     qa: new Array<QuickActionMenuEntry>(),
-  } satisfies Record<AgentRole, QuickActionMenuEntry[]>;
+  } satisfies Record<QuickActionGroupKey, QuickActionMenuEntry[]>;
   const groups: QuickActionMenuGroup[] = [];
 
   for (const entry of entries) {
-    entriesByRole[quickActionEntryRole(entry)].push(entry);
+    entriesByGroup[quickActionEntryGroup(entry)].push(entry);
   }
 
-  for (const role of BUILTIN_ROLE_IDS) {
-    const roleEntries = entriesByRole[role];
-    if (roleEntries.length > 0) {
-      groups.push({ role, entries: roleEntries });
+  for (const key of QUICK_ACTION_GROUP_ORDER) {
+    const groupEntries = entriesByGroup[key];
+    if (groupEntries.length > 0) {
+      groups.push({ key, entries: groupEntries });
     }
   }
 
@@ -210,8 +226,24 @@ export function QuickActionsMenu({
     onOpenChange(false);
   };
 
+  // The merged Close Task proposal stays in the options also when another action leads.
+  const mergedTarget = options.find(
+    (option): option is AgentStudioTaskQuickActionOption =>
+      option.kind === "task_action" && option.mergedTarget !== undefined,
+  )?.mergedTarget;
+
   return (
     <div className="flex items-center gap-0">
+      {mergedTarget ? (
+        <Badge
+          variant="success"
+          className="mr-2 h-6 gap-1 rounded-full px-2 text-[11px] @max-[640px]/session-header:hidden"
+          data-testid="agent-studio-merged-marker"
+        >
+          <GitMerge className="size-3" aria-hidden="true" />
+          Merged into {mergedTarget}
+        </Badge>
+      ) : null}
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="inline-flex">
@@ -261,7 +293,7 @@ export function QuickActionsMenu({
             <CommandList className="max-h-[32rem]">
               <CommandEmpty>No quick actions available.</CommandEmpty>
               {groupedMenuEntries.map((group) => (
-                <CommandGroup key={group.role} heading={BUILTIN_ROLE_LABELS[group.role]}>
+                <CommandGroup key={group.key} heading={QUICK_ACTION_GROUP_LABELS[group.key]}>
                   {group.entries.map((entry) => (
                     <QuickActionCommandItem
                       key={quickActionEntryId(entry)}

@@ -130,6 +130,10 @@ export const createEventPublishingTaskService = ({
     listKanbanTasks: (input) => taskService.listKanbanTasks(input),
     listTaskIds: (input) => taskService.listTaskIds(input),
     getTaskStopImpact: (input) => taskService.getTaskStopImpact(input),
+    getTaskWorktreeCleanupImpact: (input) => taskService.getTaskWorktreeCleanupImpact(input),
+    // The task record does not change, so no task event follows.
+    removeTaskWorktree: (input) =>
+      taskSyncService.runMutation(input.repoPath, taskService.removeTaskWorktree(input)),
     getTaskMetadata: (input) => taskService.getTaskMetadata(input),
     agentSessionsList: (input) => taskService.agentSessionsList(input),
     agentSessionsListForTasks: (input) => taskService.agentSessionsListForTasks(input),
@@ -381,13 +385,6 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.humanRequestChanges(input),
-      ),
-    humanApprove: (input) =>
-      publishAfterMutation(
-        "human-approve",
-        input.repoPath,
-        changeForTask(input.taskId),
-        taskService.humanApprove(input),
       ),
     repoPullRequestSync: (input) =>
       taskSyncService

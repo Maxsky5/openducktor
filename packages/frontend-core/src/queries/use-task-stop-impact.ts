@@ -10,6 +10,8 @@ export type TaskStopImpactState = {
   removedWorktreeCount: number | null;
   isLoading: boolean;
   error: string | null;
+  /** Reads the session count again, for example after a failed read. */
+  retry: () => void;
 };
 
 type UseTaskStopImpactArgs = {
@@ -30,20 +32,27 @@ export function useTaskStopImpact({
     ...taskStopImpactQueryOptions({ repoPath: repoPath ?? "", taskIds, operation }),
     enabled: shouldRead,
   });
+  const retry = () => {
+    void query.refetch();
+  };
   if (!shouldRead) {
+    // A closing confirmation keeps its last count, so its exit shows no change.
     return {
-      stoppableSessionCount: null,
-      removedWorktreeCount: null,
+      stoppableSessionCount: query.data?.stoppableSessionCount ?? null,
+      removedWorktreeCount: query.data?.removedWorktreeCount ?? null,
       isLoading: false,
       error: null,
+      retry,
     };
   }
   if (query.isError) {
     return {
       stoppableSessionCount: null,
       removedWorktreeCount: null,
-      isLoading: false,
+      // A retry of a failed read runs while the error stays.
+      isLoading: query.isFetching,
       error: errorMessage(query.error),
+      retry,
     };
   }
   return {
@@ -52,5 +61,6 @@ export function useTaskStopImpact({
     // Cached data can stay on screen during a new read. Block Confirm until it ends.
     isLoading: query.isPending || query.isFetching,
     error: null,
+    retry,
   };
 }

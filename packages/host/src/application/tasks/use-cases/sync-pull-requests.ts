@@ -99,6 +99,7 @@ export const createTaskPullRequestSyncUseCases = ({
                   settingsConfig,
                   taskWorktreeService,
                   terminalService,
+                  workspaceSettingsService,
                   worktreeFiles,
                 },
                 "repo_pull_request_sync",
@@ -114,11 +115,8 @@ export const createTaskPullRequestSyncUseCases = ({
               repoPath: effectiveRepoPath,
               taskId: task.id,
             });
-            const decision = yield* requireEffect(
-              taskWorkflows.forTask(current),
-              "pull_request.merged",
-              current,
-            );
+            const workflow = taskWorkflows.forTask(current);
+            const decision = yield* requireEffect(workflow, "pull_request.merged", current);
             if (decision.kind === "unchanged") {
               continue;
             }
@@ -128,13 +126,14 @@ export const createTaskPullRequestSyncUseCases = ({
                   ...cleanupDependencies,
                   taskActivityGuard,
                   taskSessionLifecycleCoordinator,
-                  workflow: taskWorkflows.forTask(current),
+                  workflow,
                 },
                 taskStore,
                 effectiveRepoPath,
                 task.id,
                 updated.sourceBranch,
                 updated.targetBranch,
+                current.removeWorktreeOnClose,
               ),
               gitPort: cleanupDependencies.gitPort,
               operation: "sync merged pull request",

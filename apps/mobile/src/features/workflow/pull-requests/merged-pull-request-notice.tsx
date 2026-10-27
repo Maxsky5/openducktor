@@ -7,23 +7,28 @@ import {
   MERGED_PULL_REQUEST_CONFIRM_COPY as COPY,
 } from "@openducktor/frontend-core/tasks/pull-requests/merged-pull-request-confirm-copy";
 import { pullRequestLabel } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Button } from "@/ui/button";
-import { useConfirm } from "@/ui/confirm-dialog";
 import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
+import {
+  MergedPullRequestConfirm,
+  type MergedPullRequestLink,
+} from "./merged-pull-request-confirm";
+import { titleCase } from "../start-session/start-form-model";
 import { PullRequestLinkButton } from "./pull-request-link-button";
 
 /** The confirm label of the desktop copy, in the title case of mobile buttons. */
-const LINK_LABEL = "Link and Mark Done";
+const LINK_LABEL = titleCase(COPY.confirmLabel);
 
 /**
  * The merged pull request that Detect PR found in the selected workspace, as a compact notice. It
  * names the task that it closes. Link and Mark Done asks for confirmation first, because it also
- * removes the builder worktree and branch. The board and the task details show it.
+ * stops the task sessions, and the confirmation has the cleanup choice of the close. The board and
+ * the task details show it.
  */
 export function MergedPullRequestNotice({ taskId }: { taskId?: string }): ReactElement | null {
   const {
@@ -33,62 +38,77 @@ export function MergedPullRequestNotice({ taskId }: { taskId?: string }): ReactE
     cancelLinkMergedPullRequest,
   } = useRequiredContext(TasksStateContext, "MergedPullRequestNotice");
   const theme = useAppTheme();
-  const confirm = useConfirm();
-  if (!pendingMergedPullRequest) return null;
-  if (taskId !== undefined && pendingMergedPullRequest.taskId !== taskId) return null;
-  const { pullRequest, taskTitle } = pendingMergedPullRequest;
-  const linking = pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId;
-  const task = taskTitle
-    ? `${pendingMergedPullRequest.taskId} · ${taskTitle}`
-    : pendingMergedPullRequest.taskId;
-  const link = () => {
-    void confirm({
-      title: COPY.title,
-      message: `${COPY.description}\n\n${COPY.nextSteps}`,
-      confirmLabel: LINK_LABEL,
-    }).then((confirmed) => {
-      if (confirmed) void linkMergedPullRequest();
-    });
-  };
+  // The confirmation keeps the link that it shows while it closes, also after the link ends.
+  const [confirmation, setConfirmation] = useState<{
+    id: number;
+    link: MergedPullRequestLink;
+    open: boolean;
+  } | null>(null);
+  const shown =
+    pendingMergedPullRequest && (taskId === undefined || pendingMergedPullRequest.taskId === taskId)
+      ? pendingMergedPullRequest
+      : null;
+  const linking = shown !== null && shown.taskId === linkingMergedPullRequestTaskId;
+  const confirm = confirmation ? (
+    <MergedPullRequestConfirm
+      key={confirmation.id}
+      visible={confirmation.open && shown?.taskId === confirmation.link.taskId}
+      link={confirmation.link}
+      linking={linking}
+      onCancel={() => setConfirmation({ ...confirmation, open: false })}
+      onConfirm={(options) => {
+        void linkMergedPullRequest(options);
+      }}
+    />
+  ) : null;
+  if (!shown) return confirm;
+  const { pullRequest, taskTitle } = shown;
+  const task = taskTitle ? `${shown.taskId} · ${taskTitle}` : shown.taskId;
   return (
-    <View style={styles.notice} accessibilityLiveRegion="polite">
-      <Icon name="git-merge" size={18} colorValue={theme.desktop.pendingMuted} />
-      <View style={styles.body}>
-        <Text variant="subhead" weight="semibold" accessibilityRole="header" style={styles.title}>
-          {COPY.title}
-        </Text>
-        <Text variant="footnote" tone="secondary" numberOfLines={2} selectable>
-          {task}
-        </Text>
-        <View style={styles.pullRequest}>
-          <PullRequestLinkButton pullRequest={pullRequest} />
-          {pullRequest.mergedAt ? (
-            <Text variant="footnote" tone="secondary" numberOfLines={1}>
-              {formatMergedAt(pullRequest.mergedAt)}
-            </Text>
-          ) : null}
-        </View>
-        <View style={styles.actions}>
-          <Button
-            label={linking ? COPY.confirmPendingLabel : LINK_LABEL}
-            size="sm"
-            variant="tinted"
-            icon="check"
-            loading={linking}
-            command
-            accessibilityLabel={`${COPY.confirmLabel}: ${pullRequestLabel(pullRequest)} for ${pendingMergedPullRequest.taskId}`}
-            onPress={link}
-          />
-          <Button
-            label={COPY.cancelLabel}
-            size="sm"
-            variant="plain"
-            disabled={linking}
-            onPress={cancelLinkMergedPullRequest}
-          />
+    <>
+      <View style={styles.notice} accessibilityLiveRegion="polite">
+        <Icon name="git-merge" size={18} colorValue={theme.desktop.pendingMuted} />
+        <View style={styles.body}>
+          <Text variant="subhead" weight="semibold" accessibilityRole="header" style={styles.title}>
+            {COPY.title}
+          </Text>
+          <Text variant="footnote" tone="secondary" numberOfLines={2} selectable>
+            {task}
+          </Text>
+          <View style={styles.pullRequest}>
+            <PullRequestLinkButton pullRequest={pullRequest} />
+            {pullRequest.mergedAt ? (
+              <Text variant="footnote" tone="secondary" numberOfLines={1}>
+                {formatMergedAt(pullRequest.mergedAt)}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.actions}>
+            <Button
+              label={linking ? COPY.confirmPendingLabel : LINK_LABEL}
+              size="sm"
+              variant="tinted"
+              icon="check"
+              loading={linking}
+              disabled={linking}
+              command
+              accessibilityLabel={`${COPY.confirmLabel}: ${pullRequestLabel(pullRequest)} for ${shown.taskId}`}
+              onPress={() =>
+                setConfirmation({ id: (confirmation?.id ?? 0) + 1, link: shown, open: true })
+              }
+            />
+            <Button
+              label={COPY.cancelLabel}
+              size="sm"
+              variant="plain"
+              disabled={linking}
+              onPress={cancelLinkMergedPullRequest}
+            />
+          </View>
         </View>
       </View>
-    </View>
+      {confirm}
+    </>
   );
 }
 

@@ -7,6 +7,7 @@ import { agentSessionListQueryOptions } from "../../queries/agent-sessions";
 import { taskWorktreeQueryOptions } from "../../queries/build-runtime";
 import { terminalListByFilterQueryOptions } from "../../queries/terminals";
 import { useAgentSessionLists } from "../../queries/use-agent-session-lists";
+import { runningTerminalCount } from "./task-cleanup-impact-model";
 
 export type TaskCleanupImpact = {
   hasCanonicalWorktree: boolean;
@@ -219,9 +220,7 @@ export function useTaskCleanupImpact(taskIds: string[], enabled: boolean): TaskC
     return {
       ...sessionImpact,
       terminalCount: terminalQueries.reduce(
-        (count, query) =>
-          count +
-          (query.data?.terminals.filter((terminal) => terminal.lifecycle !== "exited").length ?? 0),
+        (count, query) => count + runningTerminalCount(query.data),
         0,
       ),
     };

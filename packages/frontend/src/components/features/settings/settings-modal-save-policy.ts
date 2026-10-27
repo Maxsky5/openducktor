@@ -31,10 +31,14 @@ export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
 export const hasSameSaveReadyGlobalGitConfig = (
   loadedSnapshot: SettingsSnapshot | null,
   saveReadyGit: SettingsSnapshot["git"],
-): boolean =>
-  loadedSnapshot !== null &&
-  prepareGlobalGitSettingsForSave(loadedSnapshot.git).defaultMergeMethod ===
-    saveReadyGit.defaultMergeMethod;
+): boolean => {
+  if (loadedSnapshot === null) return false;
+  const loadedGit = prepareGlobalGitSettingsForSave(loadedSnapshot.git);
+  return (
+    loadedGit.defaultMergeMethod === saveReadyGit.defaultMergeMethod &&
+    loadedGit.removeWorktreeOnClose === saveReadyGit.removeWorktreeOnClose
+  );
+};
 
 export const buildPromptValidationSaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";

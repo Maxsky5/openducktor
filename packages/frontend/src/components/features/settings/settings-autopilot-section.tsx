@@ -3,7 +3,6 @@ import type { AutopilotSettings } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   AUTOPILOT_DISABLED_VALUE,
   type AutopilotSelectValue,
@@ -11,6 +10,8 @@ import {
   getAutopilotSelectedValue,
   setAutopilotRuleAction,
 } from "@/features/autopilot/autopilot-catalog";
+import { SettingsSwitchRow } from "./settings-switch-row";
+
 type SettingsAutopilotSectionProps = {
   autopilot: AutopilotSettings;
   disabled: boolean;
@@ -41,29 +42,16 @@ export function SettingsAutopilotSection({
         </p>
       ) : null}
 
-      <div className="rounded-md border border-border bg-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">
-              Always start QA reviews in a fresh session
-            </p>
-            <p className="text-xs text-muted-foreground">
-              This applies only to QA reviews started by Autopilot. Each review gets a new session.
-            </p>
-          </div>
-          <Switch
-            checked={autopilot.alwaysStartQaReviewsFresh}
-            onCheckedChange={(checked) =>
-              onUpdateAutopilot((current) => ({
-                ...current,
-                alwaysStartQaReviewsFresh: checked,
-              }))
-            }
-            disabled={disabled}
-            aria-label="Always start QA reviews in a fresh session"
-          />
-        </div>
-      </div>
+      <SettingsSwitchRow
+        title="Always start QA reviews in a fresh session"
+        description="This applies only to QA reviews started by Autopilot. Each review gets a new session."
+        checked={autopilot.alwaysStartQaReviewsFresh}
+        disabled={disabled}
+        ariaLabel="Always start QA reviews in a fresh session"
+        onCheckedChange={(checked) =>
+          onUpdateAutopilot((current) => ({ ...current, alwaysStartQaReviewsFresh: checked }))
+        }
+      />
 
       <div className="grid gap-3 rounded-md border border-border bg-card p-4">
         {AUTOPILOT_EVENTS.map((eventDefinition) => {

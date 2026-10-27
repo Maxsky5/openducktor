@@ -6,13 +6,14 @@ import {
   buildAgentStudioQuickActions,
   buildRoleEnabledMapForTask,
 } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import { useMergedTaskTarget } from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 /**
  * The desktop Agent Studio quick actions of a task. Only a task in human review offers the pull
  * request action, so only that task reads the Git provider. While the session on the screen
- * works, each action waits for it, as on desktop.
+ * works, each action waits for it, as on desktop. A merged task branch puts Close Task first.
  */
 export function useTaskQuickActions({
   repoPath,
@@ -31,6 +32,7 @@ export function useTaskQuickActions({
   });
   const providerError = gitProviderReadError(provider.error);
   const providerContext = provider.data;
+  const mergedTarget = useMergedTaskTarget(repoPath, task);
   return useMemo(
     () =>
       buildAgentStudioQuickActions({
@@ -40,7 +42,8 @@ export function useTaskQuickActions({
         createSessionDisabled: sessionWorking,
         gitProviderContext: providerContext,
         gitProviderReadError: providerError,
+        mergedTarget,
       }),
-    [providerContext, providerError, sessionWorking, summaries, task],
+    [mergedTarget, providerContext, providerError, sessionWorking, summaries, task],
   );
 }

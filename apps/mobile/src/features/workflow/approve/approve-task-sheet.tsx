@@ -10,6 +10,7 @@ import { buildTaskResetImplementationConfirmCopy } from "@openducktor/frontend-c
 import { pullRequestLabel } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
 import { useTaskGitConflictResolver } from "@openducktor/frontend-core/tasks/workflow/use-task-git-conflict-resolver";
 import { getTaskApprovalModalHeader } from "@openducktor/frontend-core/tasks/approval/task-approval-modal-header";
+import { useTaskApprovalReads } from "@openducktor/frontend-core/tasks/approval/use-task-approval-reads";
 import { useTaskResetFlow } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { Button } from "@/ui/button";
@@ -27,7 +28,7 @@ import { ApprovalStep, CompletionStep, ConflictStep, MissingWorktreeStep } from 
 
 const TITLE = "Approve Task";
 
-/** Approve Task: Direct Merge or Pull Request, with the conflict and publish steps. */
+/** Approve Task: Direct Merge, Pull Request, or Close Task, with the conflict and publish steps. */
 export function ApproveTaskRoute(): ReactElement {
   const { workspaceId, taskId } = useWorkflowSheetParams();
   return (
@@ -47,7 +48,7 @@ function ApproveTaskContent({
   const { feedback } = useClientConnection();
   const { flow, navigation, tasks, sessions, settings, branchesFailure, gitProvider } =
     useTaskStartFlow(workspace, taskId);
-  const { refreshTasks, humanApproveTask, resetTaskImplementation } = useRequiredContext(
+  const { refreshTasks, closeTask, resetTaskImplementation } = useRequiredContext(
     TasksStateContext,
     "ApproveTaskContent",
   );
@@ -97,7 +98,7 @@ function ApproveTaskContent({
     tasks,
     requestPullRequestGeneration: flow.onPullRequestGenerate,
     refreshTasks,
-    humanApproveTask,
+    closeTask,
     openResetImplementation: (id) => openResetImplementation(id, { closeDetailsAfterReset: true }),
     onResolveGitConflict: resolveConflict,
     showPullRequestCreated,
@@ -235,13 +236,29 @@ function ApprovalStage({
   modal: NonNullable<ApprovalFlow["taskApprovalModal"]>;
   providerNotice: ReactElement | null;
 }): ReactElement {
+  const { impact, isPreparing, mergeCheck } = useTaskApprovalReads(modal);
   switch (modal.stage) {
     case "approval":
-      return <ApprovalStep model={modal} notice={providerNotice} />;
+      return (
+        <ApprovalStep
+          model={modal}
+          notice={providerNotice}
+          impact={impact}
+          isPreparing={isPreparing}
+          mergeCheck={mergeCheck}
+        />
+      );
     case "missing_builder_worktree":
-      return <MissingWorktreeStep model={modal} />;
+      return (
+        <MissingWorktreeStep
+          model={modal}
+          impact={impact.close}
+          isPreparing={isPreparing}
+          mergeCheck={mergeCheck}
+        />
+      );
     case "complete_direct_merge":
-      return <CompletionStep model={modal} />;
+      return <CompletionStep model={modal} impact={impact.worktree} isPreparing={isPreparing} />;
   }
 }
 

@@ -6,7 +6,7 @@ import {
   gitCommitAllResultSchema,
   gitConflictAbortResultSchema,
   gitCurrentBranchSchema,
-  gitFetchRemoteResultSchema,
+  type GitFetchRemoteResult,
   gitPullBranchResultSchema,
   gitPushBranchResultSchema,
   gitRebaseAbortResultSchema,
@@ -22,6 +22,7 @@ import {
   cleanupFailedCreatedWorktree,
   findRepoConfigByPath,
   normalizeCreateGitServiceInput,
+  requireRemoteFetch,
   requireSettingsConfig,
   requireWorktreeFiles,
   resolveGitWorkingDirectory,
@@ -40,7 +41,8 @@ export type { CreateGitServiceInput } from "./git-service-inputs";
 export type { GitService, GitServiceError } from "./git-service-types";
 
 export const createGitService = (input: GitPort | CreateGitServiceInput): GitService => {
-  const { gitPort, settingsConfig, worktreeFiles } = normalizeCreateGitServiceInput(input);
+  const { gitPort, settingsConfig, worktreeFiles, remoteFetch } =
+    normalizeCreateGitServiceInput(input);
   return {
     ...createGitLocalChangeMethods(gitPort),
     canonicalizePath(input) {
@@ -299,17 +301,35 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
     },
     fetchRemote(input) {
       return Effect.gen(function* () {
-        const { repoPath, targetBranch, workingDir } = input;
+        const { repoPath, targetBranch, workingDir, force } = input;
+        const fetch = yield* requireRemoteFetch(remoteFetch);
         const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-        const result = yield* gitPort.fetchRemote(workingDirectory, targetBranch);
-        return yield* Effect.try({
-          try: () => gitFetchRemoteResultSchema.parse(result),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
+        const remotes = yield* gitPort.resolveFetchRemotes(workingDirectory, targetBranch);
+        if (remotes.length === 0) {
+          return {
+            outcome: "skipped_no_remote",
+            output:
+              "Skipped git fetch because no applicable remote is configured for this repo or branch.",
+          } satisfies GitFetchRemoteResult;
+        }
+        // The worktrees of a repository share its remote branches, so the repository is the key.
+        const fetchRepoPath = yield* gitPort.canonicalizePath(repoPath);
+        // Each remote has its own shared fetch, so the remotes fetch together.
+        const results = yield* Effect.forEach(
+          remotes,
+          (remote) => fetch.fetch({ repoPath: fetchRepoPath, remote, force }),
+          { concurrency: "unbounded" },
+        );
+        const outputs = results.flatMap((result) =>
+          result.outcome === "fetched" ? [result.output] : [],
+        );
+        if (outputs.length === 0) {
+          return {
+            outcome: "skipped_recent",
+            output: "Skipped git fetch because a fetch of the last 5 minutes updated each remote.",
+          } satisfies GitFetchRemoteResult;
+        }
+        return { outcome: "fetched", output: outputs.join("\n") } satisfies GitFetchRemoteResult;
       });
     },
     pullBranch(input) {

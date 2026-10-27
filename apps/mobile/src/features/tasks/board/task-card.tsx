@@ -58,6 +58,8 @@ export type TaskCardProps = TaskCardHandlers & {
   historicalSessions: AgentSessionRecord[];
   activeSessionRole: AgentRole | undefined;
   taskActivityState: KanbanTaskActivityState;
+  /** The target that the task branch is merged into. The card then proposes Close Task. */
+  mergedTarget: string | undefined;
   /** True when the card shows in the detail area next to the board. */
   selected: boolean;
 };
@@ -113,6 +115,7 @@ export const TaskCard = memo(function TaskCard({
   historicalSessions,
   activeSessionRole,
   taskActivityState,
+  mergedTarget,
   selected,
   onOpenDetails,
   onAction,
@@ -126,8 +129,9 @@ export const TaskCard = memo(function TaskCard({
         historicalSessions,
         activeSessionRole,
         taskActivityState,
+        mergedTarget,
       }),
-    [activeSessionRole, historicalSessions, task, taskActivityState, taskSessions],
+    [activeSessionRole, historicalSessions, mergedTarget, task, taskActivityState, taskSessions],
   );
   const items = useMemo(() => menuItems(model), [model]);
   const menuRef = useRef<ActionMenuHandle>(null);
@@ -183,7 +187,12 @@ export const TaskCard = memo(function TaskCard({
             {model.title}
           </Text>
         </View>
-        <TaskStatusChips task={task} qaRejected={model.qaRejected} size="sm" />
+        <TaskStatusChips
+          task={task}
+          qaRejected={model.qaRejected}
+          mergedTarget={mergedTarget}
+          size="sm"
+        />
         {model.visibleLabels.length > 0 ? (
           // The desktop label row: the first labels, then a "+N" count of the others. The card
           // label names every label for screen readers.

@@ -38,6 +38,7 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
   if (!task) {
     return {
       issueType: "task",
+      removeWorktreeOnClose: null,
       title: "",
       priority: 2,
       description: "",
@@ -47,6 +48,7 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
 
   return {
     issueType: task.issueType,
+    removeWorktreeOnClose: task.removeWorktreeOnClose,
     title: task.title,
     priority: task.priority,
     description: task.description,
@@ -78,3 +80,50 @@ export const toPrioritySelectOptions = (): SelectOption[] =>
     label: `${option.label} · ${option.hint}`,
     searchKeywords: [option.hint.toLowerCase(), `priority-${option.value}`],
   }));
+
+export const REMOVE_WORKTREE_ON_CLOSE_LABEL = "Remove worktree on close";
+
+/** One choice of the task value. `key` names the choice in a select control. */
+export type RemoveWorktreeOnCloseChoice = {
+  key: "default" | "yes" | "no";
+  value: boolean | null;
+  label: string;
+  description: string;
+};
+
+/** The choices of the task value. The default choice names the global setting once it loads. */
+export const removeWorktreeOnCloseChoices = (
+  globalRemoveWorktreeOnClose: boolean | undefined,
+): RemoveWorktreeOnCloseChoice[] => {
+  let globalAnswer = "";
+  if (globalRemoveWorktreeOnClose !== undefined) {
+    globalAnswer = globalRemoveWorktreeOnClose ? " (Yes)" : " (No)";
+  }
+  return [
+    {
+      key: "default",
+      value: null,
+      label: `Default${globalAnswer}`,
+      description: "Follows the global Git setting.",
+    },
+    {
+      key: "yes",
+      value: true,
+      label: "Yes",
+      description: "Removes the worktree and the local task branch.",
+    },
+    {
+      key: "no",
+      value: false,
+      label: "No",
+      description: "Keeps the worktree and the local task branch.",
+    },
+  ];
+};
+
+export const removeWorktreeOnCloseChoiceKey = (
+  value: boolean | null,
+): RemoveWorktreeOnCloseChoice["key"] => {
+  if (value === null) return "default";
+  return value ? "yes" : "no";
+};

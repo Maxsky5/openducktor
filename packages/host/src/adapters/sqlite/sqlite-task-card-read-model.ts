@@ -137,6 +137,7 @@ const rowToTaskRecord = (
       targetBranch,
       title: row.title,
       updatedAt: row.updatedAt.toISOString(),
+      removeWorktreeOnClose: row.removeWorktreeOnClose,
     };
     return yield* validateWithSchema(taskRecordSchema, taskCard, "task card read model", {
       taskId: row.id,

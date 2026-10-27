@@ -2,6 +2,7 @@ import {
   gitChangeSelectionRequestSchema,
   gitCommitStagedRequestSchema,
   gitCurrentBranchSchema,
+  gitFetchRemoteRequestSchema,
   gitHistoryPageRequestSchema,
   gitLocalChangesRequestSchema,
   gitReadContextSchema,
@@ -167,6 +168,9 @@ export const parseGitCommitStagedInput = (input: HostCommandArgs) =>
 
 export const parseGitHistoryPageInput = (input: HostCommandArgs) =>
   parseCommandInput(gitHistoryPageRequestSchema, input, "git_get_history_page");
+
+export const parseGitFetchRemoteInput = (input: HostCommandArgs) =>
+  parseCommandInput(gitFetchRemoteRequestSchema, input, "git_fetch_remote");
 
 export const parseGitPushBranchInput = (input: HostCommandArgs): GitPushBranchInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "Git push input");

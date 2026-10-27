@@ -1,6 +1,7 @@
 import { gitMergeMethodSchema, type GlobalGitConfig } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SettingsSwitchRow } from "./settings-switch-row";
 
 type SettingsGitSectionProps = {
   git: GlobalGitConfig;
@@ -18,7 +19,7 @@ export function SettingsGitSection({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Git Defaults</h3>
         <p className="text-xs text-muted-foreground">
-          Set the default direct-merge behavior used by the human approval flow.
+          Set the default direct-merge behavior and the cleanup that runs when a task closes.
         </p>
       </div>
 
@@ -27,7 +28,8 @@ export function SettingsGitSection({
         <Tabs
           value={git.defaultMergeMethod}
           onValueChange={(value) =>
-            onUpdateGit(() => ({
+            onUpdateGit((current) => ({
+              ...current,
               defaultMergeMethod: gitMergeMethodSchema.parse(value),
             }))
           }
@@ -45,6 +47,17 @@ export function SettingsGitSection({
           </TabsList>
         </Tabs>
       </div>
+
+      <SettingsSwitchRow
+        title="Remove task worktree on close"
+        description="When a task closes, remove its worktree and local task branch."
+        checked={git.removeWorktreeOnClose}
+        disabled={disabled}
+        ariaLabel="Remove task worktree on close"
+        onCheckedChange={(removeWorktreeOnClose) =>
+          onUpdateGit((current) => ({ ...current, removeWorktreeOnClose }))
+        }
+      />
     </div>
   );
 }

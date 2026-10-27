@@ -1,6 +1,11 @@
+import type { TerminalListResponse } from "@openducktor/contracts";
 import type { TaskStopImpactState } from "../../queries/use-task-stop-impact";
 import type { TaskConfirmDialogState, TaskConfirmImpact } from "./task-confirm-dialog-types";
 import type { TaskCleanupImpact } from "./use-task-cleanup-impact";
+
+/** The task terminals that a cleanup stops. */
+export const runningTerminalCount = (response: TerminalListResponse | undefined): number =>
+  response?.terminals.filter((terminal) => terminal.lifecycle !== "exited").length ?? 0;
 
 export const formatManagedSessionCleanupMessage = (managedWorktreeCount: number): string => {
   if (managedWorktreeCount === 1) {

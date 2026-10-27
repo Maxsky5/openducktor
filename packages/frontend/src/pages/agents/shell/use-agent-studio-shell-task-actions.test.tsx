@@ -19,6 +19,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   pendingMergedPullRequest: {
     taskId: "task-1",
     taskTitle: "Original task",
+    taskRemoveWorktreeOnClose: null,
     pullRequest: {
       providerId: "github",
       number: 268,
@@ -63,7 +64,7 @@ describe("useAgentStudioShellTaskActions", () => {
 
       const state = harness.getLatest();
       state.onDetectPullRequest("task-1");
-      state.mergedPullRequestModal?.onConfirm();
+      state.mergedPullRequestModal?.onConfirm({ removeWorktree: true });
       state.mergedPullRequestModal?.onCancel();
 
       expect(syncPullRequests).toHaveBeenCalledWith("task-1");

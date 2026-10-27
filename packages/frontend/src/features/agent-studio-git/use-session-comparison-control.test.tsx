@@ -67,52 +67,56 @@ test("branch list failure does not invalidate a valid comparison and retry expos
   }
 });
 
-test("updates mounted branch choices after a fetch discovers a remote branch", async () => {
-  let fetched = false;
-  const connection = createTestClientConnection({
-    client: {
-      gitGetComparisonTarget: async () => ({
-        kind: "available",
-        reference: "refs/remotes/origin/main",
-      }),
-      gitGetBranches: async () =>
-        fetched ? [{ name: "origin/release", isCurrent: false, isRemote: true }] : [],
-      gitFetchRemote: async () => {
-        fetched = true;
-        return { outcome: "fetched", output: "Fetched." };
+// A recent host fetch, such as one of merge detection, can be newer than the branch list.
+test.each(["fetched", "skipped_recent"] as const)(
+  "updates mounted branch choices after a %s fetch outcome",
+  async (outcome) => {
+    let fetched = false;
+    const connection = createTestClientConnection({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/main",
+        }),
+        gitGetBranches: async () =>
+          fetched ? [{ name: "origin/release", isCurrent: false, isRemote: true }] : [],
+        gitFetchRemote: async () => {
+          fetched = true;
+          return { outcome, output: "Fetched." };
+        },
       },
-    },
-  });
-  const client = connection.queryClient;
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
-  );
-  const hook = renderHook(
-    () => ({
-      comparison: useSessionComparison(initial),
-      control: useSessionComparisonControl({
-        repoPath: initial.repoPath,
-        target: initial.target,
-        editable: true,
-        applyTarget: async () => {},
-      }),
-    }),
-    { wrapper },
-  );
-  try {
-    await waitFor(() => expect(hook.result.current.control.targetBranchesPending).toBe(false));
-    await act(async () => {
-      await hook.result.current.comparison.refreshStep?.fetch();
     });
-    await waitFor(() =>
-      expect(
-        hook.result.current.control.targetBranchOptions.some(
-          (option) => option.value === "refs/remotes/origin/release",
-        ),
-      ).toBe(true),
+    const client = connection.queryClient;
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
     );
-  } finally {
-    hook.unmount();
-    client.clear();
-  }
-});
+    const hook = renderHook(
+      () => ({
+        comparison: useSessionComparison(initial),
+        control: useSessionComparisonControl({
+          repoPath: initial.repoPath,
+          target: initial.target,
+          editable: true,
+          applyTarget: async () => {},
+        }),
+      }),
+      { wrapper },
+    );
+    try {
+      await waitFor(() => expect(hook.result.current.control.targetBranchesPending).toBe(false));
+      await act(async () => {
+        await hook.result.current.comparison.refreshStep?.fetch(false);
+      });
+      await waitFor(() =>
+        expect(
+          hook.result.current.control.targetBranchOptions.some(
+            (option) => option.value === "refs/remotes/origin/release",
+          ),
+        ).toBe(true),
+      );
+    } finally {
+      hook.unmount();
+      client.clear();
+    }
+  },
+);

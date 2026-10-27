@@ -25,10 +25,11 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
-const input = { repoPath: "/repo", taskId: "task-1" };
+const input = { repoPath: "/repo", taskId: "task-1", removeWorktree: true };
 const mergeInput = {
   ...input,
   input: {
+    removeWorktree: true,
     mergeMethod: "merge_commit" as const,
     expected: {
       taskStatus: "human_review" as const,

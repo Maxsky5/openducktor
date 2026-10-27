@@ -81,6 +81,7 @@ const createBaseArgs = (): BuildArgs => {
     handlePrepareMessageFirstSession: () => {},
     handleQuickAction: () => {},
     openTaskDetails: () => {},
+    runTaskQuickAction: () => {},
     isStarting: false,
     isSessionWorking: false,
     isWaitingInput: false,
@@ -313,6 +314,7 @@ const createControllerArgs = (
       scheduleQueryUpdate: () => {},
       selectAgentStudioSelection: () => {},
       openTaskDetails: () => {},
+      runTaskQuickAction: () => {},
       assertCanPrepareSession: () => {},
       runSessionStartWorkflow: async () => {
         throw new Error("Unexpected session start");

@@ -1,11 +1,13 @@
 import {
   getTaskApprovalSubmitState,
+  TASK_APPROVAL_COPY as COPY,
   TASK_APPROVAL_MERGE_METHOD_OPTIONS,
   TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS,
   taskApprovalModeOptions,
   taskApprovalPullRequestUnavailableMessage,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
 import type { TaskApprovalApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
+import type { TaskApprovalImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 
 /** The choices of the approval step, with the reasons that block them. */
 export type ApprovalChoices = {
@@ -29,9 +31,13 @@ export type ApprovalChoices = {
 const blockedReason = (
   model: TaskApprovalApprovalModalModel,
   submit: ReturnType<typeof getTaskApprovalSubmitState>,
+  isPreparing: boolean,
 ): string | null => {
-  if (!submit.confirmDisabled || model.isLoading || model.isSubmitting) return null;
-  if (model.hasUncommittedChanges) return "Commit or discard the uncommitted changes to approve.";
+  if (!submit.confirmDisabled || isPreparing || model.isSubmitting) return null;
+  // A close needs only its reads, and a failed read shows with Retry.
+  if (model.mode === "close_task") return null;
+  if (model.approvalContextError) return COPY.approvalContextErrorNote;
+  if (model.hasUncommittedChanges) return "Commit or discard the uncommitted changes to merge.";
   if (model.mode === "pull_request" && !model.pullRequestAvailable) {
     return "Pull Request is not available now. Use Direct Merge, or try again later.";
   }
@@ -43,20 +49,26 @@ const blockedReason = (
 };
 
 /**
- * The Direct Merge (merge commit, squash, rebase) and Pull Request (write manually or generate
- * with AI) choices of the approval step, with the desktop rules.
+ * The Direct Merge (merge commit, squash, rebase), Pull Request (write manually or generate with
+ * AI), and Close Task choices of the approval step, with the desktop rules. `isPreparing` is true
+ * while a read of the approval still runs.
  */
-export const approvalChoices = (model: TaskApprovalApprovalModalModel): ApprovalChoices => {
-  const submit = getTaskApprovalSubmitState(model);
+export const approvalChoices = (
+  model: TaskApprovalApprovalModalModel,
+  impact: TaskApprovalImpact,
+  isPreparing: boolean,
+): ApprovalChoices => {
+  const submit = getTaskApprovalSubmitState(model, impact, isPreparing);
   const pullRequest = model.mode === "pull_request";
+  const directMerge = model.mode === "direct_merge";
   return {
     modes: taskApprovalModeOptions(model),
-    mergeMethods: pullRequest ? null : TASK_APPROVAL_MERGE_METHOD_OPTIONS,
+    mergeMethods: directMerge ? TASK_APPROVAL_MERGE_METHOD_OPTIONS : null,
     draftModes:
       pullRequest && model.pullRequestAvailable ? TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS : null,
     showPullRequestFields:
       pullRequest && model.pullRequestAvailable && model.pullRequestDraftMode === "manual",
-    showSquashMessage: !pullRequest && model.mergeMethod === "squash",
+    showSquashMessage: directMerge && model.mergeMethod === "squash",
     pullRequestUnavailable:
       model.pullRequestSupported &&
       !model.pullRequestAvailable &&
@@ -65,7 +77,7 @@ export const approvalChoices = (model: TaskApprovalApprovalModalModel): Approval
         : null,
     confirmLabel: submit.confirmLabel,
     confirmDisabled: submit.confirmDisabled,
-    confirmBlockedReason: blockedReason(model, submit),
+    confirmBlockedReason: blockedReason(model, submit, isPreparing),
     squashMessageError: submit.showSquashCommitMessageValidationError,
   };
 };

@@ -17,7 +17,7 @@ import {
   taskActionIsDestructive,
   taskActionTone,
 } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
-import { TASK_DETAILS_WORKFLOW_ACTIONS } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
+import { taskDetailsWorkflowActions } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import {
   canonicalTargetBranch,
   INVALID_TASK_TARGET_BRANCH_LABEL,
@@ -87,14 +87,17 @@ export const resolveTaskDetailsActions = ({
   taskSessions,
   historicalSessions,
   activeSessionRole,
+  canRemoveWorktree,
 }: {
   task: TaskCard;
   taskSessions: readonly KanbanTaskSession[];
   historicalSessions: readonly AgentSessionRecord[];
   activeSessionRole: AgentRole | undefined;
+  /** A closed task still has its worktree or task branch. */
+  canRemoveWorktree: boolean;
 }): TaskDetailsActions => {
   const options: Parameters<typeof resolveTaskCardActions>[1] = {
-    include: TASK_DETAILS_WORKFLOW_ACTIONS,
+    include: taskDetailsWorkflowActions(canRemoveWorktree),
     hasActiveSession: activeSessionRole !== undefined,
     historicalSessionRoles: resolveHistoricalSessionRoles(historicalSessions),
   };

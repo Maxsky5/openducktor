@@ -1,4 +1,4 @@
-import { asc, desc, eq, type SQL, sql } from "drizzle-orm";
+import { asc, desc, eq, isNotNull, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
@@ -25,6 +25,17 @@ export const listTaskIdsInDatabase = (
           .from(tasks)
           .orderBy(...taskLaneOrderBy),
       "sqliteTaskStore.listTaskIds.selectTasks",
+    )
+    .pipe(Effect.map((rows) => rows.map((row) => row.id)));
+
+export const listDirectMergeTaskIdsInDatabase = (
+  session: TaskStoreSession,
+): Effect.Effect<string[], SqliteTaskStoreReadError> =>
+  session
+    .execute(
+      (database) =>
+        database.select({ id: tasks.id }).from(tasks).where(isNotNull(tasks.directMergeJson)),
+      "sqliteTaskStore.listDirectMergeTaskIds.selectTasks",
     )
     .pipe(Effect.map((rows) => rows.map((row) => row.id)));
 

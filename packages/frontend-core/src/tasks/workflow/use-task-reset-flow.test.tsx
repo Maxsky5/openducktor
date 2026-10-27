@@ -60,6 +60,7 @@ describe("useTaskResetFlow", () => {
         removedWorktreeCount: null,
         isLoading: false,
         error: null,
+        retry: () => {},
       })),
     );
   });

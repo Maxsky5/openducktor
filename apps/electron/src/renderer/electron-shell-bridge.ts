@@ -25,6 +25,7 @@ const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
+const TASK_MERGE_STATUS_EVENT_CHANNEL = "openducktor://task-merge-status-updated";
 
 export function withElectronNativeTheme(
   client: HostClient,
@@ -132,6 +133,12 @@ export const createElectronShellBridge = (): ShellBridge => {
       electronApi.subscribe(
         RUNTIME_CHANGED_EVENT_CHANNEL,
         (payload: HostEventPayload<typeof RUNTIME_CHANGED_EVENT_CHANNEL>) =>
+          logListenerFailure(listener(payload)),
+      ),
+    subscribeTaskMergeStatusUpdates: async (listener) =>
+      electronApi.subscribe(
+        TASK_MERGE_STATUS_EVENT_CHANNEL,
+        (payload: HostEventPayload<typeof TASK_MERGE_STATUS_EVENT_CHANNEL>) =>
           logListenerFailure(listener(payload)),
       ),
     capabilities: {

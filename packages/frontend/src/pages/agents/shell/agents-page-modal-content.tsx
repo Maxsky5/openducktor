@@ -41,7 +41,10 @@ export function AgentsPageModalContent({ model }: AgentsPageModalContentProps): 
   return (
     <>
       {mergedPullRequestModal ? (
-        <MergedPullRequestConfirmDialog {...mergedPullRequestModal} />
+        <MergedPullRequestConfirmDialog
+          key={mergedPullRequestModal.taskId}
+          {...mergedPullRequestModal}
+        />
       ) : null}
       <HumanReviewFeedbackModal model={humanReviewFeedbackModal} />
       {sessionStartModal ? <SessionStartModal model={sessionStartModal} /> : null}

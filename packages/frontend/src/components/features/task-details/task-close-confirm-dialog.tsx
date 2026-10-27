@@ -10,39 +10,61 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { confirmButtonState } from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
-import { buildTaskCloseConfirmCopy } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
-import { TaskConfirmCopyLines } from "./task-confirm-copy-lines";
-import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
+import {
+  TASK_CLOSE_COPY,
+  taskCloseConfirmLabel,
+} from "@openducktor/frontend-core/tasks/details/task-close-copy";
+import { TaskCloseConfirmContent } from "./task-close-confirm-content";
+import { focusDialogContent, TaskIdentity } from "./task-identity";
+import { TaskReadsLoading } from "./task-reads-loading";
+import type { TaskCloseConfirmDialogModel } from "@openducktor/frontend-core/tasks/details/use-task-close-confirm-dialog";
 
+type TaskCloseConfirmDialogProps = TaskCloseConfirmDialogModel & {
+  /** Runs after the dialog closed and its exit animation ended. */
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
+};
+
+/** The shared close confirmation of the details sheet, Kanban cards, and the session header. */
 export function TaskCloseConfirmDialog({
   open,
   onOpenChange,
   onCancel,
   onConfirm,
-  task,
-  impact,
   operation,
+  impact,
+  isPreparing,
+  removeWorktree,
+  onRemoveWorktreeChange,
+  confirmDisabled,
   onCloseAutoFocus,
-}: TaskConfirmDialogProps): ReactElement {
-  const copy = buildTaskCloseConfirmCopy(task, impact);
-  const confirmButton = confirmButtonState(impact, operation, copy.confirmLabel);
-
+}: TaskCloseConfirmDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
+      <DialogContent
+        className="max-w-lg"
+        onOpenAutoFocus={focusDialogContent}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader>
-          <DialogTitle>{copy.title}</DialogTitle>
-          <DialogDescription>{copy.description}</DialogDescription>
+          <DialogTitle>{TASK_CLOSE_COPY.title}</DialogTitle>
+          <DialogDescription asChild>
+            <TaskIdentity title={impact.taskTitle} taskId={impact.taskId} />
+          </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="py-4">
-          <div className="flex flex-col gap-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-foreground">
-            <TaskConfirmCopyLines lines={copy.lines} />
-          </div>
-          {impact.error ? <p className="mt-2 text-destructive-muted">{impact.error}</p> : null}
+        <DialogBody className="grid gap-4 py-4">
+          {isPreparing ? (
+            <TaskReadsLoading />
+          ) : (
+            <TaskCloseConfirmContent
+              impact={impact}
+              removeWorktree={removeWorktree}
+              onRemoveWorktreeChange={onRemoveWorktreeChange}
+              disabled={operation.isPending}
+            />
+          )}
           {operation.error ? (
-            <p className="mt-2 text-destructive-muted">{operation.error}</p>
+            <p className="text-sm text-destructive-muted">{operation.error}</p>
           ) : null}
         </DialogBody>
 
@@ -53,16 +75,16 @@ export function TaskCloseConfirmDialog({
           <Button
             type="button"
             variant="warning"
-            disabled={confirmButton.disabled}
-            aria-busy={confirmButton.isBusy}
+            disabled={confirmDisabled}
+            aria-busy={operation.isPending}
             onClick={onConfirm}
           >
-            {confirmButton.isBusy ? (
+            {operation.isPending ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
               <CircleCheckBig data-icon="inline-start" />
             )}
-            {confirmButton.label}
+            {taskCloseConfirmLabel(operation.isPending)}
           </Button>
         </DialogFooter>
       </DialogContent>

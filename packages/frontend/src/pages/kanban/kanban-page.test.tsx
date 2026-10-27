@@ -106,7 +106,6 @@ const sendAgentMessageMock = mock(async () => {
   return null;
 });
 const updateAgentSessionModelMock = mock(async () => {});
-const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async () => {});
@@ -411,10 +410,10 @@ const createTasksStateValue = (
   pendingMergedPullRequest: renderState.pendingMergedPullRequest,
   deleteTask: deleteTaskMock,
   closeTask: async () => {},
+  removeTaskWorktree: async () => {},
   resetTaskImplementation: resetTaskImplementationMock,
   resetTask: resetTaskMock,
   transitionTask: async () => {},
-  humanApproveTask: humanApproveTaskMock,
   humanRequestChangesTask: humanRequestChangesTaskMock,
 });
 
@@ -493,6 +492,7 @@ const publishKanbanPageModels = (
         column: firstColumn,
         taskSessionsByTaskId: models.content.taskSessionsByTaskId,
         historicalSessionsByTaskId: models.content.historicalSessionsByTaskId,
+        mergedTargetByTaskId: models.content.mergedTargetByTaskId,
         activeTaskSessionContextByTaskId: models.content.activeTaskSessionContextByTaskId,
         taskActivityStateByTaskId: models.content.taskActivityStateByTaskId,
         onOpenDetails: models.content.onOpenDetails,
@@ -892,7 +892,6 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    humanApproveTaskMock.mockClear();
     humanRequestChangesTaskMock.mockClear();
     deleteTaskMock.mockClear();
     resetTaskImplementationMock.mockClear();
@@ -1998,6 +1997,7 @@ describe("KanbanPage session start modal flow", () => {
     currentPendingMergedPullRequest = {
       taskId: "TASK-123",
       taskTitle: "Keep workspace results",
+      taskRemoveWorktreeOnClose: null,
       pullRequest: {
         providerId: "github",
         number: 268,
@@ -2031,6 +2031,7 @@ describe("KanbanPage session start modal flow", () => {
     currentPendingMergedPullRequest = {
       taskId: "TASK-123",
       taskTitle: "Keep workspace results",
+      taskRemoveWorktreeOnClose: null,
       pullRequest: {
         providerId: "github",
         number: 268,

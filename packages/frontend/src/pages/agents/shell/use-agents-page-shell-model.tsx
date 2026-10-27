@@ -136,6 +136,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       isForegroundLoadingTasks,
       routeSession,
       openTaskDetails: taskActions.openTaskDetails,
+      runTaskQuickAction: taskActions.runTaskQuickAction,
       runSessionStartWorkflow,
       agentOperations: {
         sendAgentMessage,

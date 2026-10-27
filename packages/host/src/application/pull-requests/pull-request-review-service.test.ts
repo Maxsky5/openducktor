@@ -44,6 +44,7 @@ const makeTask = (pullRequest: PullRequest | undefined): TaskCard => {
     status: "in_progress",
     priority: 2,
     issueType: "task",
+    removeWorktreeOnClose: null,
     availableActions: [],
     labels: [],
     artifactSummary: {

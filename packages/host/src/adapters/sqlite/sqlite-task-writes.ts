@@ -158,6 +158,9 @@ export const applyTaskPatch = (
     if (input.patch.issueType !== undefined) {
       updates.issueType = input.patch.issueType;
     }
+    if (input.patch.removeWorktreeOnClose !== undefined) {
+      updates.removeWorktreeOnClose = input.patch.removeWorktreeOnClose;
+    }
     if (input.patch.labels !== undefined) {
       updates.labelsJson = encodeJson(normalizeLabels(input.patch.labels));
     }

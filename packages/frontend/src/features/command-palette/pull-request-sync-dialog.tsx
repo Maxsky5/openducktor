@@ -1,6 +1,6 @@
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useQueries } from "@tanstack/react-query";
-import { ArrowRight, FolderGit2, Folders, RefreshCcw, TriangleAlert } from "lucide-react";
+import { FolderGit2, Folders, RefreshCcw } from "lucide-react";
 import { type ReactElement, type ReactNode, useId } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +19,8 @@ import {
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
-import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
+import type { WorkspaceScopeTarget } from "@/types/workspace-scope";
+import { ScopeChoiceButton, ScopeWarning } from "./workspace-scope-choice";
 
 export function PullRequestSyncDialog({
   open,
@@ -56,7 +57,7 @@ export function PullRequestSyncDialog({
           {workspaceHint}
         </p>
       ) : (
-        <Warning id={workspaceHintId}>{workspaceHint}</Warning>
+        <ScopeWarning id={workspaceHintId}>{workspaceHint}</ScopeWarning>
       );
   }
   return (
@@ -78,15 +79,16 @@ export function PullRequestSyncDialog({
           <DialogDescription>Choose which workspaces to sync.</DialogDescription>
         </DialogHeader>
         <DialogBody className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto px-6 py-4">
-          <Button
-            variant="outline"
-            className="h-auto w-full justify-start gap-3 p-3 text-left"
-            aria-labelledby={workspaceLabelId}
-            aria-describedby={
-              workspaceHint ? `${workspacePathId} ${workspaceHintId}` : workspacePathId
-            }
+          <ScopeChoiceButton
+            icon={FolderGit2}
+            label={workspace ? `Sync workspace ${workspace.workspaceName}` : "Sync workspace"}
+            detail={workspace?.repoPath ?? "No workspace selected"}
+            detailTitle={workspace?.repoPath}
+            labelId={workspaceLabelId}
+            detailId={workspacePathId}
+            describedBy={workspaceHint ? `${workspacePathId} ${workspaceHintId}` : workspacePathId}
             disabled={workspaceHint !== null || pendingScope !== null}
-            onClick={() => {
+            onChoose={() => {
               if (!workspace || workspaceHint || pendingScope) return;
               void sync({
                 kind: "workspace",
@@ -95,53 +97,26 @@ export function PullRequestSyncDialog({
               });
               onClose();
             }}
-          >
-            <FolderGit2 className="size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span
-                id={workspaceLabelId}
-                className="block whitespace-normal break-words font-medium"
-              >
-                {workspace ? `Sync workspace ${workspace.workspaceName}` : "Sync workspace"}
-              </span>
-              <span
-                id={workspacePathId}
-                className="block truncate text-xs font-normal text-muted-foreground"
-                title={workspace?.repoPath}
-              >
-                {workspace?.repoPath ?? "No workspace selected"}
-              </span>
-            </span>
-            <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          />
           {workspaceNote}
-          <Button
-            variant="outline"
-            className="h-auto w-full justify-start gap-3 p-3 text-left"
-            aria-labelledby={allLabelId}
-            aria-describedby={allCountId}
+          <ScopeChoiceButton
+            icon={Folders}
+            label="Sync all open workspaces"
+            detail={batch.description}
+            labelId={allLabelId}
+            detailId={allCountId}
+            describedBy={allCountId}
             disabled={!canSyncAll}
-            onClick={() => {
+            onChoose={() => {
               if (!canSyncAll) return;
               void sync({ kind: "all", label: "all open workspaces", targets: batch.targets });
               onClose();
             }}
-          >
-            <Folders className="size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span id={allLabelId} className="block whitespace-normal font-medium">
-                Sync all open workspaces
-              </span>
-              <span id={allCountId} className="block text-xs font-normal text-muted-foreground">
-                {batch.description}
-              </span>
-            </span>
-            <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          />
           {failures.map((entry) => (
-            <Warning key={entry.workspace.workspaceId}>
+            <ScopeWarning key={entry.workspace.workspaceId}>
               {entry.workspace.workspaceName}: {entry.hint}
-            </Warning>
+            </ScopeWarning>
           ))}
           {noWorkspaces ? (
             <p className="text-sm text-muted-foreground">Open a workspace to sync pull requests.</p>
@@ -167,20 +142,7 @@ export function PullRequestSyncDialog({
   );
 }
 
-function Warning({ id, children }: { id?: string; children: ReactNode }): ReactElement {
-  return (
-    <div
-      id={id}
-      role="status"
-      className="flex items-start gap-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-xs leading-relaxed text-warning-surface-foreground"
-    >
-      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-muted" aria-hidden="true" />
-      <span className="min-w-0 break-words">{children}</span>
-    </div>
-  );
-}
-
-function useSyncChecks(open: boolean, workspaces: readonly PullRequestSyncTarget[]) {
+function useSyncChecks(open: boolean, workspaces: readonly WorkspaceScopeTarget[]) {
   const queries = useQueries({
     queries: workspaces.map((workspace) => ({
       ...repositoryGitProviderContextQueryOptions(workspace.repoPath),
@@ -228,7 +190,7 @@ function providerHint(
 
 type PullRequestSyncDialogProps = {
   open: boolean;
-  workspace: PullRequestSyncTarget | null;
+  workspace: WorkspaceScopeTarget | null;
   onClose: () => void;
   onCloseAutoFocus: (event: Event) => void;
 };

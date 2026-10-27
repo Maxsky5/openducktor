@@ -12,14 +12,13 @@ import {
   recordStoppedAgentSessionCount,
 } from "../support/task-cleanup-progress";
 import {
-  collectRelatedTaskBranches,
   managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,
   workflowRoleIds,
 } from "../support/task-cleanup-support";
-import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
+import { collectTaskCleanupTargets } from "../support/task-close-cleanup";
 import { completeTaskClosure } from "../support/task-closure";
 import { requireEffect } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
@@ -39,7 +38,7 @@ export const createTaskCloseUseCase = ({
 }: TaskServiceUseCaseInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
+      const { repoPath, taskId, removeWorktree } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
       const workflow = taskWorkflows.forTask(current);
       const decision = yield* requireEffect(workflow, "task.close", current);
@@ -77,34 +76,36 @@ export const createTaskCloseUseCase = ({
             }),
           );
         }
-        const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
-        const taskWorktreePathExists =
-          yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
-        let taskWorktreeDependency = taskWorktreeService;
-        if (!taskWorktreeDependency && taskWorktreePathExists) {
-          taskWorktreeDependency = yield* requireDependencies(() =>
-            requireTaskCloseWorktreeService(taskWorktreeService),
+        const collectCleanupTargets = Effect.gen(function* () {
+          const taskWorktreePath = dependencies.settingsConfig.join(
+            managedWorktreeBasePath,
+            taskId,
           );
-        }
-        const closeWorktreeDependencies = taskWorktreeDependency
-          ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
-          : dependencies;
-        const worktreePaths = yield* collectCloseWorktreePaths(
-          closeWorktreeDependencies,
-          effectiveRepoPath,
-          workflow,
-          current,
-          currentSessions,
-        );
-        yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
-        const branchNames = yield* collectRelatedTaskBranches(
-          dependencies.gitPort,
-          effectiveRepoPath,
-          branchPrefix,
-          [taskId],
-          worktreePaths,
-          "close",
-        );
+          const taskWorktreePathExists =
+            yield* dependencies.settingsConfig.pathExists(taskWorktreePath);
+          let taskWorktreeDependency = taskWorktreeService;
+          if (!taskWorktreeDependency && taskWorktreePathExists) {
+            taskWorktreeDependency = yield* requireDependencies(() =>
+              requireTaskCloseWorktreeService(taskWorktreeService),
+            );
+          }
+          return yield* collectTaskCleanupTargets({
+            dependencies: taskWorktreeDependency
+              ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
+              : dependencies,
+            lifecycle: taskSessionLifecycleCoordinator,
+            repoPath: effectiveRepoPath,
+            branchPrefix,
+            workflow,
+            task: current,
+            sessions: currentSessions,
+            operationLabel: "close",
+          });
+        });
+        // A kept worktree keeps its branch, because the worktree has that branch checked out.
+        const { worktreePaths, branchNames } = removeWorktree
+          ? yield* collectCleanupTargets
+          : { worktreePaths: [], branchNames: [] };
         if (hasWorkflowSessions && taskActivityGuard) {
           const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
             repoPath: effectiveRepoPath,

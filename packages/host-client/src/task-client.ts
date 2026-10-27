@@ -37,6 +37,11 @@ import {
   taskAssetDiscardStagedInputSchema,
   taskAssetStageInputSchema,
   taskAssetStageResultSchema,
+  taskCloseInputSchema,
+  type TaskMergeStatusSnapshot,
+  taskMergeStatusSnapshotSchema,
+  type TaskWorktreeCleanupImpact,
+  taskWorktreeCleanupImpactSchema,
   type IssueItemsImportInput,
   type IssueItemsImportResult,
   type IssueItemsListInput,
@@ -283,8 +288,37 @@ export class HostTaskClient {
     return this.invokeFn("task_delete", { repoPath, taskId }, okResultSchema("task_delete"));
   }
 
-  async taskClose(repoPath: string, taskId: string): Promise<TaskCard> {
-    return this.invokeFn("task_close", { repoPath, taskId }, builtinTaskCardSchema);
+  async taskClose(repoPath: string, taskId: string, removeWorktree: boolean): Promise<TaskCard> {
+    return this.invokeFn(
+      "task_close",
+      taskCloseInputSchema.parse({ repoPath, taskId, removeWorktree }),
+      builtinTaskCardSchema,
+    );
+  }
+
+  async taskWorktreeCleanupImpactGet(
+    repoPath: string,
+    taskId: string,
+  ): Promise<TaskWorktreeCleanupImpact> {
+    return this.invokeFn(
+      "task_worktree_cleanup_impact_get",
+      { repoPath, taskId },
+      taskWorktreeCleanupImpactSchema,
+    );
+  }
+
+  /** Removes the worktree and local branches of a closed task. */
+  async taskWorktreeRemove(repoPath: string, taskId: string): Promise<void> {
+    await this.invokeFn("task_worktree_remove", { repoPath, taskId }, voidResultSchema);
+  }
+
+  async taskMergeStatusGet(repoPath: string): Promise<TaskMergeStatusSnapshot> {
+    return this.invokeFn("task_merge_status_get", { repoPath }, taskMergeStatusSnapshotSchema);
+  }
+
+  /** Fetches and runs a merge detection pass for the workspace, then returns its snapshot. */
+  async taskMergeStatusCheck(repoPath: string): Promise<TaskMergeStatusSnapshot> {
+    return this.invokeFn("task_merge_status_check", { repoPath }, taskMergeStatusSnapshotSchema);
   }
 
   async taskResetImplementation(repoPath: string, taskId: string): Promise<TaskCard> {

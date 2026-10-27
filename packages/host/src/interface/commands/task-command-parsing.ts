@@ -74,6 +74,17 @@ export const parseTransitionStatus = (result: z.ZodSafeParseResult<string>): str
   );
 };
 
+export const parseRequiredBoolean = (
+  result: z.ZodSafeParseResult<boolean>,
+  label: string,
+): boolean => {
+  if (!result.success) {
+    throw invalidInput(`${label} must be a boolean.`, label);
+  }
+
+  return result.data;
+};
+
 export const parseRequiredMarkdown = (
   result: z.ZodSafeParseResult<string>,
   label: string,

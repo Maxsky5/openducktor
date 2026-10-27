@@ -10,6 +10,8 @@ export type DocumentEditorView = "write" | "split" | "preview";
 
 export type ComposerState = {
   issueType: IssueType;
+  /** Null follows the global setting. */
+  removeWorktreeOnClose: boolean | null;
   title: string;
   priority: number;
   description: string;

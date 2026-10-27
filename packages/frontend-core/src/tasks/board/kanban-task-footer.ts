@@ -39,6 +39,7 @@ export const getTaskFooter = ({
   activeSessionRole,
   taskActivityState,
   pendingState,
+  mergedTarget,
 }: FooterInputs): Footer => {
   const workflowOptions: Parameters<typeof resolveTaskCardActions>[1] = {
     include: TASK_CARD_WORKFLOW_ACTIONS,
@@ -46,6 +47,8 @@ export const getTaskFooter = ({
     historicalSessionRoles: resolveHistoricalSessionRoles(historicalSessions),
   };
   if (activeSessionRole) workflowOptions.activeSessionRole = activeSessionRole;
+  // A merged task proposes Close Task.
+  if (mergedTarget !== undefined) workflowOptions.leadingAction = "close_task";
   // Session shortcuts must not change which action the workflow picks first.
   const workflowActions = resolveTaskCardActions(task, workflowOptions);
   const sessions = SESSION_ACTIONS.map((descriptor) => ({
@@ -122,6 +125,7 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
     inputs.hasActiveSession,
     inputs.activeSessionRole,
     inputs.taskActivityState,
+    inputs.mergedTarget,
     inputs.taskSessions.map((session) => [
       agentSessionIdentityKey(session),
       session.role,
@@ -186,4 +190,6 @@ type FooterInputs = {
   activeSessionRole?: AgentRole | undefined;
   taskActivityState: KanbanTaskActivityState;
   pendingState?: WorkflowPendingState | undefined;
+  /** The target that the task branch is merged into. */
+  mergedTarget?: string | undefined;
 };

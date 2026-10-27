@@ -9,6 +9,8 @@ import { useAgentSessionReadModelStateContext } from "@openducktor/frontend-core
 import { deriveSessionlessTaskTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import { resolvePullRequestReviewAvailability } from "@openducktor/frontend-core/review/pull-request-review-availability";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
+import type { AgentStudioTaskQuickAction } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import { useMergedTaskTarget } from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
 import type {
   TaskExecutionSelectedFile,
   TaskExecutionSelectedFilePreviewModel,
@@ -42,6 +44,7 @@ type AgentStudioOrchestrationActionsContext = {
   scheduleQueryUpdate: (updates: QueryUpdate) => void;
   selectAgentStudioSelection: SelectAgentStudioSelection;
   openTaskDetails: () => void;
+  runTaskQuickAction: (action: AgentStudioTaskQuickAction) => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   assertCanPrepareSession: Parameters<
@@ -329,6 +332,7 @@ export function useAgentStudioOrchestrationController({
   });
 
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
+  const mergedTarget = useMergedTaskTarget(workspaceRepoPath, view.selectedTask);
   const selectedSessionContext = useMemo(
     () =>
       buildAgentStudioSelectedSessionContext({
@@ -348,11 +352,13 @@ export function useAgentStudioOrchestrationController({
         roleLabelByRole,
         gitProviderContext,
         gitProviderReadError,
+        mergedTarget,
       }),
     [
       approvalReplyErrorByRequestId,
       gitProviderContext,
       gitProviderReadError,
+      mergedTarget,
       isSessionWorking,
       isSubmittingApprovalByRequestId,
       isSubmittingQuestionByRequestId,
@@ -368,6 +374,7 @@ export function useAgentStudioOrchestrationController({
     selectedSession: selectedSessionContext,
     sessionActions: {
       openTaskDetails: actions.openTaskDetails,
+      runTaskQuickAction: actions.runTaskQuickAction,
       isStarting,
       isSessionWorking,
       isWaitingInput,

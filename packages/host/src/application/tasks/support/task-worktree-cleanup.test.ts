@@ -43,6 +43,7 @@ const taskStoreWithTasks = (
     deleteArtifact: () => Effect.die(new Error("unexpected deleteArtifact")),
     clearWorkflowArtifacts: () => Effect.die(new Error("unexpected clearWorkflowArtifacts")),
     saveWorkflowArtifact: () => Effect.die(new Error("unexpected saveWorkflowArtifact")),
+    listDirectMergeTaskIds: () => Effect.die(new Error("unexpected listDirectMergeTaskIds")),
     recordAgentSessionActivity: () =>
       Effect.die(new Error("unexpected recordAgentSessionActivity")),
     clearAgentSessionsByRoles: () => Effect.die(new Error("unexpected clearAgentSessionsByRoles")),
@@ -392,6 +393,7 @@ describe("task worktree cleanup", () => {
           "task-1",
           "odt/task-1",
           "main",
+          true,
         ),
       ),
     );
@@ -478,6 +480,7 @@ describe("task worktree cleanup", () => {
           "task-1",
           "odt/task-1",
           "main",
+          true,
         ),
       ),
     );
@@ -528,6 +531,7 @@ describe("task worktree cleanup", () => {
             "task-1",
             "odt/task-1",
             "main",
+            true,
           ),
         ),
       ),
@@ -567,6 +571,7 @@ describe("task worktree cleanup", () => {
           "task-1",
           "odt/task-1",
           "main",
+          true,
         ),
       ),
     );
@@ -635,6 +640,7 @@ describe("task worktree cleanup", () => {
             "task-1",
             "odt/task-1",
             "main",
+            true,
           ),
         ),
       ),
@@ -692,6 +698,7 @@ describe("task worktree cleanup", () => {
             "task-1",
             "odt/task-1",
             "main",
+            true,
           ),
         ),
       );
@@ -739,6 +746,7 @@ describe("task worktree cleanup", () => {
             "task-1",
             "odt/task-1",
             "main",
+            true,
           ),
         ),
       ),

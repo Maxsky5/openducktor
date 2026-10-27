@@ -208,6 +208,11 @@ const useTaskSessionMenus = ({
     (id: string) => {
       const option = quickActions.find((entry) => entry.id === id);
       if (!option || option.disabled || !taskId) return;
+      // Approve Task and Close Task open the approval, which selects Close Task for a merged branch.
+      if (option.kind === "task_action") {
+        router.push(routes.approveTask(workspaceId, taskId), SINGLE_SHEET);
+        return;
+      }
       // Apply Human Changes first asks for the feedback, as the desktop quick action does.
       router.push(
         option.requiresHumanFeedback

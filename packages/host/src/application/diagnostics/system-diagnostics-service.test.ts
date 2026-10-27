@@ -35,7 +35,7 @@ const createSystemCommandPort = ({
       versionCalls.push({ command, args, options });
       const version = versionForCommand?.(command);
       return Effect.succeed(
-        missing.has(command) ? null : version === undefined ? `${command} version 1.0.0` : version,
+        missing.has(command) ? null : version === undefined ? `${command} version 2.41.0` : version,
       );
     },
     runCommandAllowFailure: () => Effect.succeed({ ok: true, stdout: "", stderr: "" }),
@@ -52,7 +52,7 @@ const createToolDiscoveryPort = ({
   createToolDiscoveryAdapter({
     systemCommands: createSystemCommandPort({
       missingCommands,
-      versionForCommand: (command) => versionForCommand?.(command) ?? `${command} version 1.0.0`,
+      versionForCommand: (command) => versionForCommand?.(command) ?? `${command} version 2.41.0`,
     }),
   });
 const healthyRepoStoreHealth: RepoStoreHealth = {
@@ -131,16 +131,39 @@ describe("createSystemDiagnosticsService", () => {
       options: Parameters<SystemCommandPort["versionCommand"]>[2];
     }> = [];
     const service = createSystemDiagnosticsServiceForTest({
-      systemCommands: createSystemCommandPort({ versionCalls: calls }),
+      systemCommands: createSystemCommandPort({
+        versionCalls: calls,
+        versionForCommand: () => "git version 2.41.0",
+      }),
       repoStoreDiagnostics: createTaskStore(),
     });
     expect(await Effect.runPromise(service.gitCheck())).toEqual({
       ok: true,
       executablePath: "git",
-      version: "git version 1.0.0",
+      version: "git version 2.41.0",
       error: null,
     });
     expect(calls).toEqual([{ command: "git", args: ["--version"], options: { timeoutMs: 2000 } }]);
+  });
+  test.each([
+    ["git version 2.41.0", null],
+    ["git version 2.50.1 (Apple Git-155)", null],
+    ["git version 3.0.0", null],
+    [
+      "git version 2.39.5 (Apple Git-154)",
+      "Git 2.41 or later is required, and Git 2.39 is installed. Update Git.",
+    ],
+  ])("Git reports whether %s meets the minimum version", async (version, error) => {
+    const service = createSystemDiagnosticsServiceForTest({
+      systemCommands: createSystemCommandPort({ versionForCommand: () => version }),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+    expect(await Effect.runPromise(service.gitCheck())).toEqual({
+      ok: error === null,
+      executablePath: "git",
+      version,
+      error,
+    });
   });
   test("Git reports discovery failure without running a version probe", async () => {
     const calls: Array<{

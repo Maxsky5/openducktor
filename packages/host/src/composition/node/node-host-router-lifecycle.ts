@@ -12,6 +12,7 @@ import type {
   TaskSyncService,
 } from "../../application/tasks/sync/task-sync-service";
 import type { TerminalService } from "../../application/terminals/terminal-service";
+import type { TaskMergeDetectionService } from "../../application/tasks/merge-detection/task-merge-detection-service";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
@@ -56,6 +57,7 @@ export const createNodeHostRouterLifecycle = ({
   startupSweep,
   taskAssetStagingService,
   taskSyncService,
+  mergeDetection,
   terminalService,
   browserService,
 }: {
@@ -81,26 +83,23 @@ export const createNodeHostRouterLifecycle = ({
   initializeRuntimes: () => Effect.Effect<void>;
   startupSweep: () => Effect.Effect<void, TaskStoreError>;
   taskAssetStagingService: Pick<TaskAssetStagingService, "shutdownCleanup">;
-  taskSyncService: Pick<TaskSyncService, "startPullRequestSyncLoop"> | null;
+  taskSyncService: Pick<TaskSyncService, "startTaskSyncLoop"> | null;
+  mergeDetection: Pick<TaskMergeDetectionService, "shutdown">;
   terminalService: TerminalService;
   browserService: BrowserService;
 }): NodeHostRouterLifecycle => {
-  let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
+  let taskSyncLoop: TaskSyncLoopHandle | null = null;
   let taskAssetStagingSwept = false;
   let runtimesInitialized = false;
-  const stopPullRequestSyncLoop = () =>
+  const stopTaskSyncLoop = () =>
     Effect.gen(function* () {
-      if (!pullRequestSyncLoop) {
-        yield* writeHostLifecycleLog(
-          lifecycleLogger,
-          "info",
-          "No pull request sync loop is running",
-        );
+      if (!taskSyncLoop) {
+        yield* writeHostLifecycleLog(lifecycleLogger, "info", "No task sync loop is running");
         return;
       }
-      yield* pullRequestSyncLoop.stop();
-      pullRequestSyncLoop = null;
-      yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
+      yield* taskSyncLoop.stop();
+      taskSyncLoop = null;
+      yield* writeHostLifecycleLog(lifecycleLogger, "info", "Task sync loop stopped");
     });
 
   return {
@@ -130,8 +129,8 @@ export const createNodeHostRouterLifecycle = ({
           yield* initializeRuntimes();
         }
         yield* notifications.initialize();
-        if (taskSyncService && pullRequestSyncLoop === null) {
-          pullRequestSyncLoop = yield* taskSyncService.startPullRequestSyncLoop();
+        if (taskSyncService && taskSyncLoop === null) {
+          taskSyncLoop = yield* taskSyncService.startTaskSyncLoop();
         }
       }),
     dispose: () =>
@@ -155,7 +154,9 @@ export const createNodeHostRouterLifecycle = ({
               { label: "queued message deliveries", run: shutdownMessageDeliveries },
               { label: "session launches", run: () => sessionLaunches.shutdown() },
               { label: "workspace session renames", run: shutdownWorkspaceSessionPersistence },
-              { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              { label: "task sync loop", run: stopTaskSyncLoop },
+              // Detection passes read the task store, so they stop before it closes.
+              { label: "merge detection", run: () => mergeDetection.shutdown() },
               ...(azureDevOpsConnection
                 ? [{ label: "Azure DevOps sign-in", run: () => azureDevOpsConnection.shutdown() }]
                 : []),

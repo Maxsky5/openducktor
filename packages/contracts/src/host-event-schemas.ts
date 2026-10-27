@@ -4,6 +4,7 @@ import { autopilotRunEventSchema } from "./autopilot-schemas";
 import { browserHostEventSchema } from "./browser-tab-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import { hostRuntimeEventSchema } from "./host-runtime-schemas";
+import { taskMergeStatusSnapshotSchema } from "./task-merge-status-schemas";
 import { workspaceSessionSchema } from "./workspace-session-schemas";
 
 export const HOST_EVENT_CHANNELS = [
@@ -14,6 +15,7 @@ export const HOST_EVENT_CHANNELS = [
   "openducktor://workspace-provider-setup-updated",
   "openducktor://runtime-changed",
   "openducktor://browser-event",
+  "openducktor://task-merge-status-updated",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
@@ -37,6 +39,10 @@ export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z.strictObject({
     channel: z.literal("openducktor://runtime-changed"),
     payload: hostRuntimeEventSchema,
+  }),
+  z.strictObject({
+    channel: z.literal("openducktor://task-merge-status-updated"),
+    payload: taskMergeStatusSnapshotSchema,
   }),
   z.strictObject({
     channel: z.literal("openducktor://azure-devops-connection-updated"),

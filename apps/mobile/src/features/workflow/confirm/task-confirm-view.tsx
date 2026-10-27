@@ -1,5 +1,5 @@
 import type { TaskConfirmCopy } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/ui/button";
@@ -11,47 +11,36 @@ import type { CommandFailure } from "@/host-session/command-outcome";
 import { InPlaceSheet } from "@/ui/in-place-sheet";
 import { titleCase } from "../start-session/start-form-model";
 
-export type TaskConfirmViewProps = {
+/** The sheet, the footer, and the failure that every task confirmation shares. */
+export function TaskConfirmFrame({
+  visible,
+  title,
+  tone,
+  confirm,
+  isPending,
+  failure,
+  icon,
+  onCancel,
+  onConfirm,
+  children,
+}: {
   visible: boolean;
-  copy: TaskConfirmCopy;
+  title: string;
+  tone: "warning" | "destructive";
   /** The Confirm control: its label, and whether it waits for the action or the impact reads. */
   confirm: { label: string; isBusy: boolean; disabled: boolean };
   isPending: boolean;
-  /** A failed impact read. The confirmation still states what it does not know. */
-  impactError: string | null;
   failure: CommandFailure | null;
   /** The desktop icon of the confirm button, such as `trash` for Delete. */
   icon?: IconName | undefined;
   onCancel: () => void;
   onConfirm: () => void;
-};
-
-/**
- * A task confirmation. It states what the host keeps and removes, waits for the impact reads, and
- * shows a failure with the host reason where the user started the action.
- */
-export function TaskConfirmView({
-  visible,
-  copy,
-  confirm,
-  isPending,
-  impactError,
-  failure,
-  icon,
-  onCancel,
-  onConfirm,
-}: TaskConfirmViewProps): ReactElement {
-  styles.useVariants({ tone: copy.tone });
-  // A failed impact check shows as a line of the impact, so VoiceOver hears it.
-  const failedChecks = copy.lines
-    .filter((line) => line.error)
-    .map((line) => line.text)
-    .join(" ");
-  useAnnounce(visible ? failedChecks : null);
+  children: ReactNode;
+}): ReactElement {
   return (
     <InPlaceSheet
       visible={visible}
-      title={copy.title}
+      title={title}
       onClose={onCancel}
       dismissible={!isPending}
       closeControl={false}
@@ -69,7 +58,7 @@ export function TaskConfirmView({
             // The shared copy uses the sentence case of the desktop buttons.
             label={titleCase(confirm.label)}
             size="lg"
-            variant={copy.tone}
+            variant={tone}
             icon={icon}
             loading={confirm.isBusy}
             disabled={confirm.disabled}
@@ -80,6 +69,45 @@ export function TaskConfirmView({
         </>
       }
     >
+      {children}
+      {failure ? (
+        <Callout
+          tone={failure.kind === "unknown" ? "warning" : "destructive"}
+          title={failure.title}
+          message={failure.message}
+        />
+      ) : null}
+    </InPlaceSheet>
+  );
+}
+
+export type TaskConfirmViewProps = Omit<
+  Parameters<typeof TaskConfirmFrame>[0],
+  "title" | "tone" | "children"
+> & {
+  copy: TaskConfirmCopy;
+  /** A failed impact read. The confirmation still states what it does not know. */
+  impactError: string | null;
+};
+
+/**
+ * A task confirmation. It states what the host keeps and removes, waits for the impact reads, and
+ * shows a failure with the host reason where the user started the action.
+ */
+export function TaskConfirmView({
+  copy,
+  impactError,
+  ...frame
+}: TaskConfirmViewProps): ReactElement {
+  styles.useVariants({ tone: copy.tone });
+  // A failed impact check shows as a line of the impact, so VoiceOver hears it.
+  const failedChecks = copy.lines
+    .filter((line) => line.error)
+    .map((line) => line.text)
+    .join(" ");
+  useAnnounce(frame.visible ? failedChecks : null);
+  return (
+    <TaskConfirmFrame {...frame} title={copy.title} tone={copy.tone}>
       <Text variant="body" style={styles.description}>
         {copy.descriptionSegments.map((segment, index) => (
           <Text
@@ -109,14 +137,7 @@ export function TaskConfirmView({
       {impactError ? (
         <Callout tone="warning" title="Cleanup impact unknown" message={impactError} />
       ) : null}
-      {failure ? (
-        <Callout
-          tone={failure.kind === "unknown" ? "warning" : "destructive"}
-          title={failure.title}
-          message={failure.message}
-        />
-      ) : null}
-    </InPlaceSheet>
+    </TaskConfirmFrame>
   );
 }
 

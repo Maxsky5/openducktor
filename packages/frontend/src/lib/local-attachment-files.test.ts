@@ -17,6 +17,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
   client: createHostClientFixture({}),
   subscribeWorkspaceSessionUpdates: async () => () => {},
   subscribeRuntimeChanges: async () => () => {},
+  subscribeTaskMergeStatusUpdates: async () => () => {},
   subscribeBrowserTabEvents: async () => () => {},
   subscribeRunEvents: async () => () => {},
   subscribeWorkspaceProviderSetupUpdates: async () => () => {},

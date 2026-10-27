@@ -10,6 +10,7 @@ import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/ag
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentStudioQuickActionOption,
+  type AgentStudioSessionQuickActionOption,
   buildAgentStudioQuickActions,
   buildGitConflictQuickAction,
   buildRoleEnabledMapForTask,
@@ -39,6 +40,8 @@ type BuildWorkflowModelContextArgs = {
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
+  /** The target that the task branch is merged into. */
+  mergedTarget?: string | null;
 };
 
 export type WorkflowModelContext = {
@@ -51,7 +54,7 @@ export type WorkflowModelContext = {
   quickActions: AgentStudioQuickActionOption[];
   primaryQuickAction: AgentStudioQuickActionOption | null;
   /** Shown first while the git actions report an active conflict. */
-  gitConflictQuickAction: AgentStudioQuickActionOption | null;
+  gitConflictQuickAction: AgentStudioSessionQuickActionOption | null;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
   createSessionDisabled: boolean;
@@ -66,6 +69,7 @@ export const buildWorkflowModelContext = ({
   roleLabelByRole,
   gitProviderContext,
   gitProviderReadError = null,
+  mergedTarget = null,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
@@ -107,6 +111,7 @@ export const buildWorkflowModelContext = ({
     createSessionDisabled,
     gitProviderContext,
     gitProviderReadError,
+    mergedTarget,
   });
 
   return {

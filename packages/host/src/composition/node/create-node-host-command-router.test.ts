@@ -492,16 +492,16 @@ describe("createNodeEffectHostCommandRouter", () => {
     expect(infos.at(-1)).toBe("OpenDucktor host services stopped");
   });
 
-  test("stops the pull request sync loop during host disposal", async () => {
+  test("stops the task sync loop during host disposal", async () => {
     const { infos, logger } = createLogger();
     const router = await createRouter({ eventBus: createEventBus(), logger });
 
     await Effect.runPromise(router.initialize());
     await Effect.runPromise(router.dispose());
 
-    expect(infos).toContain("Stopping pull request sync loop...");
-    expect(infos).toContain("Pull request sync loop stopped");
-    expect(infos).toContain("Stopped pull request sync loop");
+    expect(infos).toContain("Stopping task sync loop...");
+    expect(infos).toContain("Task sync loop stopped");
+    expect(infos).toContain("Stopped task sync loop");
   });
 
   test("starts enabled runtimes when the MCP host bridge fails to start", async () => {

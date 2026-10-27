@@ -8,14 +8,11 @@ import {
   type TaskEventTaskSnapshot,
   type TaskEventStatusChange,
 } from "@openducktor/contracts";
-import { type Cause, Deferred, Effect, Exit, Ref, type Result } from "effect";
+import { Effect, type Result } from "effect";
 import { createSerialGate } from "../../../effect/serial-gate";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
-import type {
-  WorkspaceSettingsError,
-  WorkspaceSettingsService,
-} from "../../workspaces/workspace-settings-service";
+import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { collectTaskStatusChanges } from "../../../ports/task-status-changes";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
@@ -25,19 +22,14 @@ import type {
 } from "../task-mutation-operation";
 import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
 import { workspaceSyncSkip } from "./pull-request-sync-target";
+import {
+  type CreateTaskSyncLoopInput,
+  createTaskSyncLoop,
+  type TaskSyncLoop,
+} from "./task-sync-loop";
 
-const DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
-export type TaskSyncLifecycleLogger = {
-  error(message: string): Effect.Effect<void, unknown>;
-};
-export type TaskSyncLoopHandle = {
-  /**
-   * Stop scheduling work without waiting for an active pull-request sync, while draining any
-   * lifecycle log append admitted before shutdown.
-   */
-  stop(): Effect.Effect<void, HostOperationError>;
-};
-export type TaskSyncService = {
+export type { TaskSyncError, TaskSyncLifecycleLogger, TaskSyncLoopHandle } from "./task-sync-loop";
+export type TaskSyncService = TaskSyncLoop & {
   runMutation<A, E, R>(repoPath: string, mutation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
   /**
    * Runs a task mutation in the repository mutation gate. It reports each status change when it
@@ -70,13 +62,7 @@ export type TaskSyncService = {
     repoPath: string,
     expectedWorkspaceId?: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
-  /**
-   * A workspace failure must not block other workspaces. A failed log write stops the run.
-   */
-  syncOpenWorkspacePullRequests(): Effect.Effect<void, TaskSyncError>;
-  startPullRequestSyncLoop(): Effect.Effect<TaskSyncLoopHandle, never>;
 };
-export type TaskSyncError = HostOperationError | TaskServiceError | WorkspaceSettingsError;
 type TaskEventPublicationFailureBase = {
   operation: string;
   repoPath: string;
@@ -92,13 +78,13 @@ export type TaskEventPublicationFailure =
 export type TaskEventPublicationReporter = {
   report(failure: TaskEventPublicationFailure): Effect.Effect<void, never>;
 };
-export type CreateTaskSyncServiceInput = {
+export type CreateTaskSyncServiceInput = Omit<
+  CreateTaskSyncLoopInput,
+  "syncRepoPullRequests" | "workspaceSettingsService"
+> & {
   eventIdFactory?: () => string;
   acceptNotificationInput?: ((event: ExternalTaskSyncEvent) => void) | undefined;
   observeStatusChanges?: CommittedTaskStatusChangeObserver | undefined;
-  intervalMs?: number;
-  logger?: TaskSyncLifecycleLogger;
-  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   publicationReporter: TaskEventPublicationReporter;
   taskEventStream: TaskEventStreamPort;
   taskService: Pick<TaskService, "listTasks" | "repoPullRequestSyncDetailed">;
@@ -106,14 +92,6 @@ export type CreateTaskSyncServiceInput = {
     WorkspaceSettingsService,
     "listWorkspaces" | "getSettingsSnapshot" | "getWorkspaceCatalog"
   >;
-};
-const defaultTaskSyncLifecycleLogger: TaskSyncLifecycleLogger = {
-  error: (message) => Effect.sync(() => console.error(message)),
-};
-type TaskSyncLoopState = {
-  activeLog: Deferred.Deferred<void, HostOperationError> | null;
-  stopped: boolean;
-  terminalLogCause: Cause.Cause<HostOperationError> | null;
 };
 const nowIso = (): string => new Date().toISOString();
 const buildExternalTaskCreatedEvent = (
@@ -159,8 +137,9 @@ export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
   acceptNotificationInput,
   observeStatusChanges,
-  intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
-  logger = defaultTaskSyncLifecycleLogger,
+  intervalMs,
+  logger,
+  mergeDetection,
   onBackgroundFailure,
   publicationReporter,
   taskEventStream,
@@ -351,115 +330,19 @@ export const createTaskSyncService = ({
           return yield* Effect.fail(syncResult.failure);
         }),
     );
-  const syncOpenWorkspacePullRequests = (
-    onFailure = logSyncFailure,
-  ): Effect.Effect<void, TaskSyncError> =>
-    Effect.gen(function* () {
-      const workspaces = yield* Effect.result(workspaceSettingsService.listWorkspaces());
-      if (workspaces._tag === "Failure") {
-        return yield* onFailure(workspaces.failure);
-      }
-      for (const workspace of workspaces.success) {
-        yield* syncRepoPullRequests(workspace.repoPath).pipe(
-          Effect.catch((error) => onFailure(error, workspace.repoPath)),
-        );
-      }
-    });
-  const runSyncLoop = (state: Ref.Ref<TaskSyncLoopState>) =>
-    Effect.forever(
-      syncOpenWorkspacePullRequests((error, repoPath) =>
-        logLoopFailure(state, error, repoPath),
-      ).pipe(Effect.andThen(Effect.sleep(`${intervalMs} millis`))),
-    );
-  // Finish logs that start before shutdown so stop() can report a write failure.
-  const logLoopFailure = (
-    state: Ref.Ref<TaskSyncLoopState>,
-    error: TaskSyncError,
-    repoPath?: string,
-  ): Effect.Effect<void, HostOperationError> =>
-    Effect.uninterruptible(
-      Effect.gen(function* () {
-        const completion = yield* Deferred.make<void, HostOperationError>();
-        const canLog = yield* Ref.modify(state, (current) => {
-          if (current.stopped) {
-            return [false, current];
-          }
-          return [true, { ...current, activeLog: completion }];
-        });
-        if (!canLog) {
-          return;
-        }
-
-        const exit = yield* Effect.exit(logSyncFailure(error, repoPath));
-        yield* Ref.update(state, (current) => ({
-          ...current,
-          activeLog: null,
-          terminalLogCause: Exit.isFailure(exit) ? exit.cause : null,
-        }));
-        yield* Deferred.done(completion, exit);
-        if (Exit.isFailure(exit)) {
-          return yield* Effect.failCause(exit.cause);
-        }
-      }),
-    );
-  const logSyncFailure = (
-    error: TaskSyncError,
-    repoPath?: string,
-  ): Effect.Effect<void, HostOperationError> => {
-    const message = error instanceof Error ? error.message : String(error);
-    const detail = repoPath ? `${repoPath}: ${message}` : message;
-    return logger
-      .error(
-        `Pull request sync iteration failed; the scheduler will retry on the next interval: ${detail}`,
-      )
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostOperationError({
-              operation: "task-sync.log-iteration-failure",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        ),
-        Effect.tapError(onBackgroundFailure),
-      );
-  };
   return {
     runMutation,
     runStatusMutation,
     publishExternalTaskCreated,
     publishTasksUpdated,
     syncRepoPullRequests,
-    syncOpenWorkspacePullRequests,
-    startPullRequestSyncLoop() {
-      return Effect.gen(function* () {
-        const state = yield* Ref.make<TaskSyncLoopState>({
-          activeLog: null,
-          stopped: false,
-          terminalLogCause: null,
-        });
-        const fiber = yield* Effect.forkDetach(runSyncLoop(state));
-        return {
-          stop: () =>
-            Effect.gen(function* () {
-              const shutdown = yield* Ref.modify(state, (current) => [
-                {
-                  activeLog: current.activeLog,
-                  terminalLogCause: current.terminalLogCause,
-                },
-                { ...current, stopped: true },
-              ]);
-              // Do not wait for an in-flight sync iteration. Only its failure log must finish.
-              yield* Effect.sync(() => fiber.interruptUnsafe());
-              if (shutdown.activeLog) {
-                return yield* Deferred.await(shutdown.activeLog);
-              }
-              if (shutdown.terminalLogCause) {
-                return yield* Effect.failCause(shutdown.terminalLogCause);
-              }
-            }),
-        };
-      });
-    },
+    ...createTaskSyncLoop({
+      intervalMs,
+      logger,
+      mergeDetection,
+      onBackgroundFailure,
+      syncRepoPullRequests: (repoPath) => syncRepoPullRequests(repoPath),
+      workspaceSettingsService,
+    }),
   };
 };

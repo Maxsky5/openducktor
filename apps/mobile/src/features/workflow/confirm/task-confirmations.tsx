@@ -1,22 +1,25 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-close";
 import {
   TasksStateContext,
   useRequiredContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { confirmButtonState } from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
 import {
-  buildTaskCloseConfirmCopy,
   buildTaskDeleteConfirmCopy,
   buildTaskResetConfirmCopy,
   buildTaskResetImplementationConfirmCopy,
   taskResetImplementationConfirmState,
 } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
+import { useTaskCloseConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-close-confirm-dialog";
 import { useTaskConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-confirm-dialog";
+import { useLastKnownTask } from "@openducktor/frontend-core/tasks/details/use-last-known-task";
 import type { TaskConfirmAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
 import type { TaskResetImplementationModalModel } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import type { IconName } from "@/ui/icon";
 import { toFlowFailure } from "@/host-session/command-outcome";
+import { TaskCloseConfirm } from "../close/task-close-confirm";
 import type { TaskConfirmationAction } from "../task-action-routing";
 import { TaskConfirmView } from "./task-confirm-view";
 
@@ -41,24 +44,52 @@ type TaskConfirmationsProps = {
   onSucceeded: (request: TaskConfirmationRequest) => void;
 };
 
-const CONFIRM_ACTIONS = {
-  reset_task: "reset_task",
-  close_task: "close",
-  delete: "delete",
-} as const satisfies Record<TaskConfirmationRequest["action"], TaskConfirmAction>;
-
 /** The desktop icon of each confirm button. */
 const CONFIRM_ICONS = {
   reset_task: "rotate-ccw",
-  close: "circle-check-big",
   delete: "trash",
 } as const satisfies Record<TaskConfirmAction, IconName>;
 
 const FAILURE_TITLES = {
   reset_task: "Reset failed",
-  close: "Close failed",
   delete: "Delete failed",
 } as const satisfies Record<TaskConfirmAction, string>;
+
+/** The Close Task confirmation, with the cleanup choice of the close. */
+function RequestedCloseConfirm({
+  request,
+  tasks,
+  onClosed,
+  onStarted,
+  onSucceeded,
+}: Omit<TaskConfirmationsProps, "request"> & {
+  request: TaskConfirmationRequest;
+}): ReactElement {
+  const { closeTask } = useRequiredContext(TasksStateContext, "RequestedCloseConfirm");
+  const task = useLastKnownTask(tasks, request.taskId) ?? {
+    id: request.taskId,
+    title: "",
+    removeWorktreeOnClose: null,
+  };
+  const run = useMemo(
+    () => (taskId: string, options: CloseTaskOptions) => {
+      onStarted(request);
+      return closeTask(taskId, options);
+    },
+    [closeTask, onStarted, request],
+  );
+  const { dialog } = useTaskCloseConfirmDialog({
+    task,
+    enabled: true,
+    initiallyOpen: true,
+    run,
+    onSucceeded: () => onSucceeded(request),
+  });
+  useEffect(() => {
+    if (!dialog.open) onClosed(request.id);
+  }, [dialog.open, onClosed, request.id]);
+  return <TaskCloseConfirm dialog={dialog} />;
+}
 
 function RequestedTaskConfirm({
   request,
@@ -71,31 +102,16 @@ function RequestedTaskConfirm({
   request: TaskConfirmationRequest;
   action: TaskConfirmAction;
 }): ReactElement {
-  const { resetTask, closeTask, deleteTask } = useRequiredContext(
-    TasksStateContext,
-    "RequestedTaskConfirm",
-  );
-  // A deleted task leaves the task list while its confirmation closes, so keep the last task.
-  const currentTask = tasks.find((entry) => entry.id === request.taskId) ?? null;
-  const [lastTask, setLastTask] = useState(currentTask);
-  if (currentTask && currentTask !== lastTask) setLastTask(currentTask);
+  const { resetTask, deleteTask } = useRequiredContext(TasksStateContext, "RequestedTaskConfirm");
+  const task = useLastKnownTask(tasks, request.taskId);
   const run = useMemo(() => {
-    const runAction = (taskId: string): Promise<void> => {
-      switch (action) {
-        case "delete":
-          return deleteTask(taskId);
-        case "close":
-          return closeTask(taskId);
-        case "reset_task":
-          return resetTask(taskId);
-      }
-    };
+    const runAction = (taskId: string): Promise<void> =>
+      action === "delete" ? deleteTask(taskId) : resetTask(taskId);
     return (taskId: string) => {
       onStarted(request);
       return runAction(taskId);
     };
-  }, [action, closeTask, deleteTask, onStarted, request, resetTask]);
-  const task = currentTask ?? lastTask;
+  }, [action, deleteTask, onStarted, request, resetTask]);
   const { dialog } = useTaskConfirmDialog({
     action,
     task,
@@ -117,9 +133,7 @@ function RequestedTaskConfirm({
   const copy =
     action === "delete"
       ? buildTaskDeleteConfirmCopy(subject, impact)
-      : action === "close"
-        ? buildTaskCloseConfirmCopy(subject, impact)
-        : buildTaskResetConfirmCopy(subject, impact);
+      : buildTaskResetConfirmCopy(subject, impact);
   const confirm = confirmButtonState(impact, dialog.operation, copy.confirmLabel);
   return (
     <TaskConfirmView
@@ -173,12 +187,10 @@ export function ResetImplementationConfirmation({
 export function TaskConfirmations(props: TaskConfirmationsProps): ReactElement | null {
   const { request } = props;
   if (!request) return null;
+  if (request.action === "close_task") {
+    return <RequestedCloseConfirm key={request.id} {...props} request={request} />;
+  }
   return (
-    <RequestedTaskConfirm
-      key={request.id}
-      {...props}
-      request={request}
-      action={CONFIRM_ACTIONS[request.action]}
-    />
+    <RequestedTaskConfirm key={request.id} {...props} request={request} action={request.action} />
   );
 }

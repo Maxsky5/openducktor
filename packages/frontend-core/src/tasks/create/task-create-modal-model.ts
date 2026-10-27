@@ -8,6 +8,7 @@ export const isDocumentSection = (section: EditTaskSection): section is BuiltinD
 export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
   title: state.title.trim(),
   issueType: state.issueType,
+  removeWorktreeOnClose: state.removeWorktreeOnClose,
   priority: state.priority,
   description: state.description.trim() || undefined,
   labels: state.labels,
@@ -15,6 +16,7 @@ export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
 
 export const toTaskUpdatePatch = (state: ComposerState): TaskUpdatePatch => ({
   title: state.title.trim(),
+  removeWorktreeOnClose: state.removeWorktreeOnClose,
   priority: state.priority,
   description: state.description.trim(),
   labels: state.labels,

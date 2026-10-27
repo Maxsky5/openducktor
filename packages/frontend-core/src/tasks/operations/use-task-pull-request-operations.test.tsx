@@ -247,7 +247,7 @@ describe("useTaskPullRequestOperations", () => {
         const run = () =>
           kind === "unlink"
             ? state.getLatest().unlinkPullRequest("task-1")
-            : state.getLatest().linkMergedPullRequest();
+            : state.getLatest().linkMergedPullRequest({ removeWorktree: true });
         if (kind !== "unlink")
           await state.harness.run(() => state.getLatest().syncPullRequests("task-1"));
         let pending: Promise<void> | undefined;
@@ -396,9 +396,11 @@ describe("useTaskPullRequestOperations", () => {
 
     try {
       await testHarness.harness.run(() => testHarness.getLatest().syncPullRequests("task-1"));
-      await testHarness.harness.run(() => testHarness.getLatest().linkMergedPullRequest());
+      await testHarness.harness.run(() =>
+        testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true }),
+      );
 
-      expect(linkMergedPullRequest).toHaveBeenCalledWith("/repo", "task-1", pullRequest);
+      expect(linkMergedPullRequest).toHaveBeenCalledWith("/repo", "task-1", pullRequest, true);
       expect(operationEvents).toEqual([
         "injected cleanup started",
         "host link",
@@ -548,6 +550,7 @@ describe("useTaskPullRequestOperations", () => {
       expect(testHarness.getLatest().pendingMergedPullRequest).toEqual({
         taskId: "task-1",
         taskTitle: "Original task",
+        taskRemoveWorktreeOnClose: null,
         pullRequest,
       });
     } finally {
@@ -575,6 +578,7 @@ describe("useTaskPullRequestOperations", () => {
       expect(testHarness.getLatest().pendingMergedPullRequest).toEqual({
         taskId: "task-1",
         taskTitle: "Original task",
+        taskRemoveWorktreeOnClose: null,
         pullRequest,
       });
     } finally {
@@ -655,7 +659,7 @@ describe("useTaskPullRequestOperations", () => {
       });
       expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-2");
       await testHarness.harness.run(() => {
-        linkPromise = testHarness.getLatest().linkMergedPullRequest();
+        linkPromise = testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true });
       });
       await testHarness.harness.run(async () => {
         firstDetection.resolve({ outcome: "merged", pullRequest });
@@ -688,7 +692,9 @@ describe("useTaskPullRequestOperations", () => {
 
     try {
       await testHarness.harness.run(() => testHarness.getLatest().syncPullRequests("task-1"));
-      await testHarness.harness.run(() => testHarness.getLatest().linkMergedPullRequest());
+      await testHarness.harness.run(() =>
+        testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true }),
+      );
 
       expect(testHarness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
       expect(testHarness.notification.events).toContainEqual({
@@ -756,7 +762,7 @@ describe("useTaskPullRequestOperations", () => {
 
       let linkPromise: Promise<void> | null = null;
       await testHarness.harness.run(() => {
-        linkPromise = testHarness.getLatest().linkMergedPullRequest();
+        linkPromise = testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true });
         testHarness.getLatest().cancelLinkMergedPullRequest();
       });
 
@@ -767,13 +773,13 @@ describe("useTaskPullRequestOperations", () => {
       await testHarness.harness.run(() => testHarness.getLatest().syncPullRequests("task-1"));
       let otherLinkPromise: Promise<void> | undefined;
       await testHarness.harness.run(() => {
-        otherLinkPromise = testHarness.getLatest().linkMergedPullRequest();
+        otherLinkPromise = testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true });
       });
       await testHarness.harness.update({ activeRepoPath: "/repo" });
       expect(testHarness.getLatest().linkingMergedPullRequestTaskId).toBe("task-1");
       await testHarness.harness.run(() => {
         testHarness.getLatest().cancelLinkMergedPullRequest();
-        void testHarness.getLatest().linkMergedPullRequest();
+        void testHarness.getLatest().linkMergedPullRequest({ removeWorktree: true });
       });
       expect(testHarness.getLatest().pendingMergedPullRequest?.taskId).toBe("task-1");
       expect(linkMergedPullRequest).toHaveBeenCalledTimes(2);

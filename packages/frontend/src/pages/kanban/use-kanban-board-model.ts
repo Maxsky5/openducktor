@@ -28,6 +28,8 @@ type UseKanbanBoardModelArgs = {
   hasLoadedTasks: boolean;
   filter: KanbanPageContentModel["filter"];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
+  /** The target of each task whose branch is merged. */
+  mergedTargetByTaskId: ReadonlyMap<string, string>;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
   onOpenDetails: (taskId: string) => void;
@@ -38,6 +40,7 @@ type UseKanbanBoardModelArgs = {
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string) => void;
+  onCloseTask: (taskId: string) => void;
 };
 
 export function useKanbanBoardModel({
@@ -51,6 +54,7 @@ export function useKanbanBoardModel({
   hasLoadedTasks,
   filter,
   historicalSessionsByTaskId,
+  mergedTargetByTaskId,
   taskSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   onOpenDetails,
@@ -61,6 +65,7 @@ export function useKanbanBoardModel({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  onCloseTask,
 }: UseKanbanBoardModelArgs): KanbanPageContentModel {
   const { columns, taskActivityStateByTaskId } = useKanbanBoardColumns(tasks, taskSessionsByTaskId);
 
@@ -76,6 +81,7 @@ export function useKanbanBoardModel({
     filter,
     taskSessionsByTaskId,
     historicalSessionsByTaskId,
+    mergedTargetByTaskId,
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,
@@ -86,5 +92,6 @@ export function useKanbanBoardModel({
     onHumanApprove,
     onHumanRequestChanges,
     onResetImplementation,
+    onCloseTask,
   };
 }

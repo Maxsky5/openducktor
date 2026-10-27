@@ -11,11 +11,14 @@ import { HostDependencyError, HostValidationError } from "../../effect/host-erro
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
+import type { RemoteFetchService } from "./remote-fetch-service";
 import { readWorkspaceCheckout } from "./workspace-checkout";
 export type CreateGitServiceInput = {
   gitPort: GitPort;
   settingsConfig?: SettingsConfigPort;
   worktreeFiles?: WorktreeFilePort;
+  /** The fetch that merge detection shares. */
+  remoteFetch?: RemoteFetchService;
 };
 export type GitScopeInput = {
   readContext?: GitReadContext;
@@ -184,6 +187,18 @@ export const requireSettingsConfig = (
   }
   return Effect.succeed(settingsConfig);
 };
+export const requireRemoteFetch = (
+  remoteFetch: RemoteFetchService | undefined,
+): Effect.Effect<RemoteFetchService, HostDependencyError> =>
+  remoteFetch
+    ? Effect.succeed(remoteFetch)
+    : Effect.fail(
+        new HostDependencyError({
+          dependency: "remoteFetch",
+          operation: "git.fetch",
+          message: "The remote fetch service is required for git_fetch_remote.",
+        }),
+      );
 export const requireWorktreeFiles = (
   worktreeFiles: WorktreeFilePort | undefined,
 ): Effect.Effect<WorktreeFilePort, HostDependencyError> => {

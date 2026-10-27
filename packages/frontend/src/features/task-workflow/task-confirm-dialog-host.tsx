@@ -1,9 +1,15 @@
 import { type ReactElement, useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import { TaskCloseConfirmDialog } from "@/components/features/task-details/task-close-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
-import type { TaskConfirmRequestAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
+import type {
+  TaskConfirmAction,
+  TaskConfirmRequestAction,
+} from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
+import { useTaskCloseConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-close-confirm-dialog";
 import { useTaskConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-confirm-dialog";
+import { useLastKnownTask } from "@openducktor/frontend-core/tasks/details/use-last-known-task";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
@@ -26,6 +32,7 @@ type TaskConfirmWorkspace = {
   tasks: TaskCard[];
   onResetTask: TaskWorkflowActions["onResetTask"];
   onDelete: TaskWorkflowActions["onDelete"];
+  onCloseTask: TaskWorkflowActions["onCloseTask"];
   /** Called after the confirmed action succeeds. */
   onSucceeded: (taskId: string) => void;
 };
@@ -89,13 +96,64 @@ export function useTaskConfirmDialogHost({
   };
 }
 
-/** The Reset Task or Delete confirmation of a task, outside a details sheet. */
+/** The Reset Task, Close Task, or Delete confirmation of a task, outside a details sheet. */
 export function TaskConfirmDialogHost({
   model,
 }: {
   model: TaskConfirmDialogHostModel | null;
 }): ReactElement | null {
-  return model ? <RequestedTaskConfirmDialog key={model.request.id} {...model} /> : null;
+  if (!model) return null;
+  const { request } = model;
+  if (request.action === "close") {
+    return <RequestedTaskCloseDialog key={request.id} {...model} />;
+  }
+  return (
+    <RequestedTaskConfirmDialog
+      key={request.id}
+      {...model}
+      request={{ ...request, action: request.action }}
+    />
+  );
+}
+
+function RequestedTaskCloseDialog({
+  request,
+  tasks,
+  onCloseTask,
+  onSucceeded,
+  onClosed,
+}: TaskConfirmDialogHostModel): ReactElement | null {
+  const task = useLastKnownTask(tasks, request.taskId);
+  if (!task) return null;
+  return (
+    <TaskCloseDialogForTask
+      task={task}
+      onCloseTask={onCloseTask}
+      onSucceeded={() => onSucceeded(request.taskId)}
+      onCloseAutoFocus={restoreFocusOnClose(request, onClosed)}
+    />
+  );
+}
+
+function TaskCloseDialogForTask({
+  task,
+  onCloseTask,
+  onSucceeded,
+  onCloseAutoFocus,
+}: {
+  task: TaskCard;
+  onCloseTask: TaskWorkflowActions["onCloseTask"];
+  onSucceeded: () => void;
+  onCloseAutoFocus: (event: Event) => void;
+}): ReactElement {
+  const { dialog } = useTaskCloseConfirmDialog({
+    task,
+    enabled: true,
+    initiallyOpen: true,
+    run: onCloseTask,
+    onSucceeded,
+  });
+  return <TaskCloseConfirmDialog {...dialog} onCloseAutoFocus={onCloseAutoFocus} />;
 }
 
 function RequestedTaskConfirmDialog({
@@ -105,12 +163,10 @@ function RequestedTaskConfirmDialog({
   onDelete,
   onSucceeded,
   onClosed,
-}: TaskConfirmDialogHostModel): ReactElement {
-  // A deleted task leaves the task list while its dialog closes, so keep the last task.
-  const currentTask = tasks.find((entry) => entry.id === request.taskId) ?? null;
-  const [lastTask, setLastTask] = useState(currentTask);
-  if (currentTask && currentTask !== lastTask) setLastTask(currentTask);
-  const task = currentTask ?? lastTask;
+}: TaskConfirmDialogHostModel & {
+  request: TaskConfirmRequest & { action: TaskConfirmAction };
+}): ReactElement {
+  const task = useLastKnownTask(tasks, request.taskId);
   const { dialog } = useTaskConfirmDialog({
     action: request.action,
     task,
@@ -122,11 +178,7 @@ function RequestedTaskConfirmDialog({
   const dialogProps = {
     ...dialog,
     task: { id: request.taskId, title: task?.title ?? null },
-    onCloseAutoFocus: (event: Event) => {
-      event.preventDefault();
-      if (request.returnFocus?.isConnected) request.returnFocus.focus({ preventScroll: true });
-      onClosed(request.id);
-    },
+    onCloseAutoFocus: restoreFocusOnClose(request, onClosed),
   };
 
   return request.action === "delete" ? (
@@ -135,3 +187,11 @@ function RequestedTaskConfirmDialog({
     <TaskResetConfirmDialog {...dialogProps} />
   );
 }
+
+const restoreFocusOnClose =
+  (request: TaskConfirmRequest, onClosed: (requestId: number) => void) =>
+  (event: Event): void => {
+    event.preventDefault();
+    if (request.returnFocus?.isConnected) request.returnFocus.focus({ preventScroll: true });
+    onClosed(request.id);
+  };

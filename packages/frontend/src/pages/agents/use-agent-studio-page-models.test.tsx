@@ -212,6 +212,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     handlePrepareMessageFirstSession: () => {},
     handleQuickAction: () => {},
     openTaskDetails: () => {},
+    runTaskQuickAction: () => {},
     isStarting: false,
     isSessionWorking: true,
     isWaitingInput: false,

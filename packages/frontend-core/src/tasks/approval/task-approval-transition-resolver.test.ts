@@ -40,6 +40,7 @@ const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "op
     errorMessage: null,
     errorOutcomeUnknown: false,
     approvalContext: approvalContext(),
+    approvalContextError: null,
     workspaceIdentity: { workspaceId: "workspace-repo", repoPath: "/repo" },
     ...overrides,
   }) satisfies TaskApprovalFlowState;
@@ -156,13 +157,26 @@ describe("resolveTaskApprovalSubmissionRoute", () => {
     });
     const route = resolveTaskApprovalSubmissionRoute(state, null);
 
-    expect(route.kind).toBe("complete_missing_builder_worktree");
-    if (route.kind !== "complete_missing_builder_worktree") {
+    expect(route.kind).toBe("close_missing_builder_worktree");
+    if (route.kind !== "close_missing_builder_worktree") {
       throw new Error(`Expected missing-builder route, received ${route.kind}`);
     }
 
     expect(route.approval.stage).toBe("missing_builder_worktree");
     expect(route.approval.taskId).toBe(state.taskId);
+  });
+
+  test("routes Close Task when the approval context read failed", () => {
+    const failed = openState({
+      mode: "close_task",
+      approvalContext: null,
+      approvalContextError: "The task worktree has a detached HEAD.",
+    });
+
+    expect(resolveTaskApprovalSubmissionRoute(failed, "/repo").kind).toBe("close_task");
+    expect(
+      resolveTaskApprovalSubmissionRoute({ ...failed, mode: "direct_merge" }, "/repo").kind,
+    ).toBe("ignore");
   });
 
   test("routes direct merge submissions with the repo path", () => {

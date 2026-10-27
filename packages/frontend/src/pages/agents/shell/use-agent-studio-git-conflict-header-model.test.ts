@@ -20,6 +20,7 @@ const conflict: GitConflict = {
 };
 
 const gitConflictQuickAction: AgentStudioQuickActionOption = {
+  kind: "session_start",
   id: "quick:build_rebase_conflict_resolution",
   role: "build",
   launchActionId: "build_rebase_conflict_resolution",
@@ -30,6 +31,7 @@ const gitConflictQuickAction: AgentStudioQuickActionOption = {
 };
 
 const workflowQuickAction: AgentStudioQuickActionOption = {
+  kind: "session_start",
   id: "quick:qa_review",
   role: "qa",
   launchActionId: "qa_review",

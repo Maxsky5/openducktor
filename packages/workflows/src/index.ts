@@ -29,6 +29,7 @@ export { AUTOPILOT_EVENTS, getAutopilotAction, isAutopilotActionId } from "./bui
 export { decideTaskEvent, isTaskEventAvailable } from "./builtin/task-events";
 export { emptyArtifactSummary } from "./builtin/facts";
 export { deriveTaskProjection, isQaRejectedTask } from "./builtin/task-projection";
+export { isMergeDetectionCandidateStatus } from "./builtin/merge-detection";
 export {
   type BuiltinDocumentCode,
   type BuiltinTaskEventId,

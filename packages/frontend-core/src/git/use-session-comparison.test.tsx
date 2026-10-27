@@ -129,10 +129,13 @@ test("the fetch step fetches the selected remote, and the check finds the moved 
     remoteAhead = 1;
     let changed: boolean | undefined;
     await act(async () => {
-      await step?.fetch();
+      await step?.fetch(true);
       changed = await step?.check();
     });
-    expect(fetch).toHaveBeenCalledWith("/repo", "refs/remotes/origin/main", "/repo");
+    expect(fetch).toHaveBeenCalledWith("/repo", "refs/remotes/origin/main", {
+      force: true,
+      workingDir: "/repo",
+    });
     expect(changed).toBe(true);
     await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("revision-1"));
   } finally {

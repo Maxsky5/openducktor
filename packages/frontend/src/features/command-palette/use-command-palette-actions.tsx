@@ -11,6 +11,7 @@ import {
   Download,
   FolderOpen,
   FolderPlus,
+  GitMerge,
   Import,
   Laptop,
   MessageCirclePlus,
@@ -43,13 +44,14 @@ import { taskCreationBlockedReason } from "@openducktor/frontend-core/tasks/boar
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
+import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-provider";
 import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
 import {
   classifyDiagnosticsQueryError,
   taskStoreCheckQueryOptionsOrSkip,
 } from "@openducktor/frontend-core/queries/checks";
 import { repositoryGitProviderContextQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/git-provider-context";
-import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
+import type { WorkspaceScopeAction, WorkspaceScopeTarget } from "@/types/workspace-scope";
 import type {
   CommandPalettePageCommand,
   CommandPaletteShell,
@@ -76,7 +78,7 @@ type ActionArgs = {
   /** The selected workspace of the scope. Without it, workspace actions use the active one. */
   scopeWorkspace: WorkspaceRecord | null;
   query: string;
-  openPullRequestSync: (workspace: PullRequestSyncTarget | null) => void;
+  openScopeChoice: (action: WorkspaceScopeAction, workspace: WorkspaceScopeTarget | null) => void;
   shell: CommandPaletteShell;
   pageCommands: readonly CommandPalettePageCommand[];
   runIntent: (intent: WorkspaceIntent) => void;
@@ -92,10 +94,27 @@ export type CommandPaletteActions = {
 
 const icon = (Icon: typeof Plus): ReactNode => <Icon />;
 
+const MERGE_CHECK_KEYWORDS = [
+  "merge detection",
+  "merged branches",
+  "detect merges",
+  "check merges",
+  "close merged tasks",
+  "refresh merge status",
+];
+
+/** Why the merge check cannot start: no open workspace, or a check that still runs. */
+function useMergeCheckDisabledReason(openWorkspaceCount: number): string | null {
+  const { pendingScope } = useManualMergeCheckState();
+  if (openWorkspaceCount === 0) return "Open a workspace to check merged tasks.";
+  if (pendingScope) return `Merge check is running for ${pendingScope.label}.`;
+  return null;
+}
+
 /** Every app action of the palette. Workspace actions run in the target workspace. */
 export function useCommandPaletteActions({
   scopeWorkspace,
-  openPullRequestSync,
+  openScopeChoice,
   query,
   shell,
   pageCommands,
@@ -117,6 +136,7 @@ export function useCommandPaletteActions({
   const repoPath = target?.repoPath ?? null;
   const taskStoreCheck = useQuery(taskStoreCheckQueryOptionsOrSkip(repoPath));
   const gitProvider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(repoPath));
+  const mergeCheckDisabledReason = useMergeCheckDisabledReason(workspaces.length);
 
   const appAction = (
     key: string,
@@ -304,8 +324,16 @@ export function useCommandPaletteActions({
       "Sync pull requests",
       icon(RefreshCcw),
       ["sync pull requests", "refresh pull requests", "sync PRs"],
-      () => openPullRequestSync(syncTarget),
+      () => openScopeChoice("pull_request_sync", syncTarget),
       { disabledReason: syncDisabledReason },
+    ),
+    appAction(
+      "check-merged-tasks",
+      "Check merged tasks",
+      icon(GitMerge),
+      MERGE_CHECK_KEYWORDS,
+      () => openScopeChoice("merge_check", syncTarget),
+      { disabledReason: mergeCheckDisabledReason },
     ),
     appAction(
       "settings",

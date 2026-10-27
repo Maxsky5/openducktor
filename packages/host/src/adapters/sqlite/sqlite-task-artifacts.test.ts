@@ -154,11 +154,15 @@ describe("task artifact migration", () => {
           .values(),
       ).toEqual(markdownBytes.map(([kind, ...fields]) => [codeOf(String(kind)), ...fields]));
       expect(migrated.query(`SELECT ${KEPT_TASK_COLUMNS} FROM tasks`).all()).toEqual(before);
+      // A later migration adds the worktree override column with null for each task.
+      expect(migrated.query("SELECT remove_worktree_on_close FROM tasks").all()).toEqual([
+        { remove_worktree_on_close: null },
+      ]);
     } finally {
       migrated.close();
     }
     expect(readTableNames(databasePath)).not.toContain("task_documents");
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(10);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(11);
     expect(
       await Effect.runPromise(
         store.readArtifact({ repoPath, taskId: "legacy", artifactId: "workflow:legacy:spec" }),
@@ -295,6 +299,10 @@ describe("task artifact migration", () => {
       expect(migrated.query(`SELECT ${KEPT_TASK_COLUMNS} FROM tasks ORDER BY id`).all()).toEqual(
         beforeTasks,
       );
+      expect(migrated.query("SELECT remove_worktree_on_close FROM tasks").all()).toEqual([
+        { remove_worktree_on_close: null },
+        { remove_worktree_on_close: null },
+      ]);
       expect(
         migrated.query("SELECT artifact_id, code FROM tasks_artifacts ORDER BY rowid").all(),
       ).toEqual([
@@ -307,7 +315,7 @@ describe("task artifact migration", () => {
     } finally {
       migrated.close();
     }
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(10);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(11);
   });
 
   test("rolls back a failed copy and keeps the old table and migration ledger", async () => {

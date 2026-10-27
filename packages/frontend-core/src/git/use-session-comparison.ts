@@ -97,14 +97,14 @@ function comparisonRefreshStep(
   return {
     // Fetch also updates the current branch's upstream when the comparison target is fixed.
     fetchKey: JSON.stringify([repoPath, workingDirectory, targetBranch, branchKey]),
-    fetch: async () => {
-      const result = await connectionHost(queryClient).gitFetchRemote(
-        repoPath,
-        targetBranch,
-        workingDirectory,
-      );
+    fetch: async (force) => {
+      const result = await connectionHost(queryClient).gitFetchRemote(repoPath, targetBranch, {
+        force,
+        workingDir: workingDirectory,
+      });
       renewWorkspaceReadContext(queryClient, workingDirectory);
-      if (result.outcome !== "fetched") return;
+      // A recent host fetch can be newer than the branch list, so only no remote skips the read.
+      if (result.outcome === "skipped_no_remote") return;
       await invalidateRepoBranchesQuery(queryClient, repoPath);
       await queryClient.refetchQueries({
         queryKey: gitQueryKeys.branches(repoPath),

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { toast, type ToastT } from "sonner";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
-import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
+import type { WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { useManualPullRequestSync } from "./use-manual-pull-request-sync";
 
 describe("manual pull request sync", () => {
@@ -174,7 +174,7 @@ describe("manual pull request sync", () => {
   });
 });
 
-function target(name: string): PullRequestSyncTarget {
+function target(name: string): WorkspaceScopeTarget {
   return { workspaceId: name, workspaceName: name, repoPath: `/${name}` };
 }
 

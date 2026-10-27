@@ -8,6 +8,7 @@ import type {
   BuiltinStateId as TaskStatus,
   BuiltinTaskCard as TaskCard,
 } from "@openducktor/workflows";
+import type { CloseTaskOptions } from "./task-close";
 import type { TaskPullRequestOperations } from "./task-pull-request";
 
 export type TasksStateContextValue = TaskPullRequestOperations & {
@@ -25,11 +26,12 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  closeTask: (taskId: string) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  /** Removes the worktree and local branches of a closed task. */
+  removeTaskWorktree: (taskId: string) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
-  humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 

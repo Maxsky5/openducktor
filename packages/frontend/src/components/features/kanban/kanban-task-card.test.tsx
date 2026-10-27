@@ -440,3 +440,62 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).not.toContain("text-emerald-600");
   });
 });
+
+describe("KanbanTaskCard merged task branch", () => {
+  test("shows the merged badge and proposes Close Task", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Implement payment flow",
+      status: "human_review",
+      availableActions: ["human_approve", "close_task"],
+    });
+
+    const html = renderCardMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          mergedTarget: "origin/main",
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onOpenSession: noop,
+          onPlan: noop,
+          onHumanApprove: noop,
+          onCloseTask: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain('data-testid="kanban-task-merged-badge"');
+    expect(html).toMatch(/<button[^>]*>.*Close Task<\/button>/s);
+  });
+
+  test("shows no merged badge for a task branch that is not merged", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      status: "human_review",
+      availableActions: ["human_approve", "close_task"],
+    });
+
+    const html = renderCardMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onOpenSession: noop,
+          onPlan: noop,
+          onHumanApprove: noop,
+        }),
+      ),
+    );
+
+    expect(html).not.toContain("kanban-task-merged-badge");
+    expect(html).not.toContain("Close Task");
+  });
+});

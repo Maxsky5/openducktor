@@ -77,7 +77,17 @@ describe("built-in task projection", () => {
     );
     expect(deriveAvailableActions(task({ status: "open" }))).toContain("close_task");
     expect(deriveAvailableActions(task({ status: "open" }))).not.toContain("human_approve");
-    expect(deriveAvailableActions(task({ status: "closed" }))).toEqual(["view_details"]);
+    expect(deriveAvailableActions(task({ status: "closed" }))).toEqual([
+      "view_details",
+      "remove_worktree",
+    ]);
+  });
+
+  test("offers worktree removal only for closed tasks", () => {
+    expect(deriveAvailableActions(task({ status: "closed" }))).toContain("remove_worktree");
+    expect(deriveAvailableActions(task({ status: "human_review" }))).not.toContain(
+      "remove_worktree",
+    );
   });
 
   test("shares one frozen projection for tasks with equal inputs", () => {

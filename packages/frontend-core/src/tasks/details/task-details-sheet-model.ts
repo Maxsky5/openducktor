@@ -11,7 +11,7 @@ export const collectSingleTaskCleanupImpactTaskIds = (task: TaskCard | null): st
   return [task.id];
 };
 
-/** The workflow actions that task details offer. Close Task shows only here. */
+/** The workflow actions that task details offer. */
 export const TASK_DETAILS_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_spec",
   "set_plan",
@@ -27,6 +27,17 @@ export const TASK_DETAILS_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "reset_task",
   "close_task",
 ];
+
+const TASK_DETAILS_ACTIONS_WITH_WORKTREE_REMOVAL: readonly TaskWorkflowAction[] = [
+  ...TASK_DETAILS_WORKFLOW_ACTIONS,
+  "remove_worktree",
+];
+
+/** A closed task shows Remove Worktree only while its worktree or task branch remains. */
+export const taskDetailsWorkflowActions = (
+  canRemoveWorktree: boolean,
+): readonly TaskWorkflowAction[] =>
+  canRemoveWorktree ? TASK_DETAILS_ACTIONS_WITH_WORKTREE_REMOVAL : TASK_DETAILS_WORKFLOW_ACTIONS;
 
 /** The titles and empty texts of the task document sections. */
 export const TASK_DOCUMENT_SECTION_COPY = {

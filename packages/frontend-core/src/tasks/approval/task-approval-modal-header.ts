@@ -3,7 +3,8 @@ import type { TaskApprovalModalModel } from "./task-approval-types";
 
 type TaskApprovalModalHeader = {
   title: string;
-  description: string;
+  /** What the stage needs from the user. Null when its choices tell it. */
+  description: string | null;
 };
 
 export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): TaskApprovalModalHeader {
@@ -11,7 +12,7 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): TaskA
     return {
       title: "Builder Worktree Missing",
       description:
-        "The builder worktree for this task is no longer available. You can still complete the task or reset the implementation from here.",
+        "OpenDucktor cannot find the builder worktree, so Direct Merge and Pull Request are not available. Close the task without a merge, or reset the implementation to send the task back for more work.",
     };
   }
 
@@ -27,13 +28,10 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): TaskA
     return {
       title: "Complete Direct Merge",
       description:
-        "The local merge is already applied. Finish the direct merge workflow to move the task to Done and clean up the builder workspace.",
+        "The local merge is already applied. Finish the direct merge workflow to move the task to Done.",
     };
   }
 
-  return {
-    title: "Approve Task",
-    description:
-      "Choose how to finish this task: merge it locally now, or create and update a pull request.",
-  };
+  // The approval choices name what the user can do, so the stage needs no description.
+  return { title: "Approve Task", description: null };
 }

@@ -157,6 +157,7 @@ const initialTaskCreateModalState = (
 
 const areComposerStatesEqual = (left: ComposerState, right: ComposerState): boolean =>
   left.issueType === right.issueType &&
+  left.removeWorktreeOnClose === right.removeWorktreeOnClose &&
   left.title === right.title &&
   left.priority === right.priority &&
   left.description === right.description &&

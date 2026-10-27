@@ -52,6 +52,11 @@ export type PullRequestUpsertInput = TaskIdInput & {
 
 export type PullRequestLinkMergedInput = TaskIdInput & {
   pullRequest: PullRequest;
+  removeWorktree: boolean;
+};
+
+export type CloseTaskInput = TaskIdInput & {
+  removeWorktree: boolean;
 };
 
 export type DirectMergeInput = TaskIdInput & {

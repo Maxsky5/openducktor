@@ -32,6 +32,7 @@ const merge: DirectMergeRecord = {
 const consent: TaskDirectMergeCompleteIntent = {
   repoPath: "/repo",
   taskId: "task-1",
+  removeWorktree: true,
   publicationConsent: {
     expectedMerge: merge,
     expectedPublication: {
@@ -139,7 +140,11 @@ describe("task completion publication recovery", () => {
       );
       const state = createTaskCompletionState(undefined).ensure(repoPath, "task-1");
       state.appliedTargetOid = publication.sourceOid;
-      const input: TaskDirectMergeCompleteIntent = { repoPath, taskId: "task-1" };
+      const input: TaskDirectMergeCompleteIntent = {
+        repoPath,
+        taskId: "task-1",
+        removeWorktree: true,
+      };
       const first = await Effect.runPromise(
         Effect.result(
           completeTaskPublication(
@@ -197,7 +202,12 @@ describe("task completion publication recovery", () => {
       (
         await Effect.runPromise(
           Effect.result(
-            completeTaskPublication(h.git, { repoPath: "/repo", taskId: "task-1" }, merge, h.state),
+            completeTaskPublication(
+              h.git,
+              { repoPath: "/repo", taskId: "task-1", removeWorktree: true },
+              merge,
+              h.state,
+            ),
           ),
         )
       )._tag,
@@ -229,7 +239,12 @@ describe("task completion publication recovery", () => {
     expect(h.pushes).toEqual([]);
     h.observe([target.sourceOid, target.sourceOid]);
     await Effect.runPromise(
-      completeTaskPublication(h.git, { repoPath: "/repo", taskId: "task-1" }, merge, h.state),
+      completeTaskPublication(
+        h.git,
+        { repoPath: "/repo", taskId: "task-1", removeWorktree: true },
+        merge,
+        h.state,
+      ),
     );
     expect(h.pushes.flat()).toEqual([]);
     expect(h.state.progress.destinations.every((value) => value.outcome === "confirmed")).toBe(

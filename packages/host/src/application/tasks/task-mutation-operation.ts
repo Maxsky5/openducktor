@@ -20,7 +20,6 @@ export type TaskMutationOperation =
   | "delete-task"
   | "detect-pull-request"
   | "direct-merge"
-  | "human-approve"
   | "human-request-changes"
   | "link-merged-pull-request"
   | "link-pull-request"

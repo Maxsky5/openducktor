@@ -1,10 +1,5 @@
+import type { GitTargetBranch } from "@openducktor/contracts";
 import type { TaskWorkflow, TaskWorkflowRole } from "@openducktor/workflows";
-import type {
-  AgentSessionRecord,
-  DirectMergeRecord,
-  GitTargetBranch,
-} from "@openducktor/contracts";
-
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
@@ -29,6 +24,7 @@ import type {
 } from "../worktrees/task-worktree-service";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { startWorktreeSessionHint } from "./task-workflow-events";
+import { loadRemoveWorktreeOnClose } from "./task-workflow-helpers";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
 import { runTaskRuntimeCleanup, selectWorkflowCleanupSessionRecords } from "./task-cleanup-support";
 
@@ -120,19 +116,27 @@ type MergedTaskCleanupServices = {
  * reports a fault that blocks task cleanup. Close Task, Reset Task, and Delete release the task
  * sessions before they remove the worktree. A merged task does the same.
  */
-const releaseMergedTaskSessions = (
-  taskActivityGuard: TaskActivityGuardPort | undefined,
-  workflow: TaskWorkflow,
+export const releaseMergedTaskSessions = (
+  dependencies: {
+    gitPort: GitPort;
+    taskActivityGuard?: TaskActivityGuardPort | undefined;
+    /** The task workflow of the task. Its roles own the sessions to release. */
+    workflow: TaskWorkflow;
+  },
+  taskStore: Pick<TaskStorePort, "getTaskMetadata">,
   repoPath: string,
   taskId: string,
-  sessions: AgentSessionRecord[],
 ) =>
   Effect.gen(function* () {
-    const workflowSessions = selectWorkflowCleanupSessionRecords(workflow, sessions);
+    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+    const workflowSessions = selectWorkflowCleanupSessionRecords(
+      dependencies.workflow,
+      metadata.agentSessions,
+    );
     if (workflowSessions.length === 0) {
       return;
     }
-    if (!taskActivityGuard) {
+    if (!dependencies.taskActivityGuard) {
       return yield* new HostDependencyError({
         dependency: "taskActivityGuard",
         operation: "merged task cleanup",
@@ -141,11 +145,41 @@ const releaseMergedTaskSessions = (
         details: { repoPath, taskId },
       });
     }
-    yield* taskActivityGuard.cleanupTaskSessions({
-      repoPath,
+    yield* dependencies.taskActivityGuard.cleanupTaskSessions({
+      repoPath: yield* dependencies.gitPort.canonicalizePath(repoPath),
       taskSessions: [{ taskId, sessions: workflowSessions }],
     });
   });
+/**
+ * The cleanup of a merged-task close that keeps the worktree. The worktree keeps its branch,
+ * because it has that branch checked out. The close still stops the task terminals and releases
+ * the task sessions.
+ */
+export const cleanupKeptTaskWorktree = (
+  dependencies: Parameters<typeof releaseMergedTaskSessions>[0] & {
+    terminalService: TaskTerminalCleanupPort;
+  },
+  taskStore: Pick<TaskStorePort, "getTaskMetadata">,
+  repoPath: string,
+  taskId: string,
+  progress = createTaskCleanupProgressState(),
+) =>
+  Effect.gen(function* () {
+    yield* runTaskRuntimeCleanup({
+      progress,
+      repoPath,
+      taskIds: [taskId],
+      terminalService: dependencies.terminalService,
+    });
+    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId);
+  });
+
+/**
+ * The cleanup of a pull request sync that closes a merged task. No user confirms it, so it follows
+ * the task value, else the global setting. It removes only the task worktree that has the source
+ * branch checked out, and that branch. A dirty worktree fails the close. A confirmed merge close
+ * uses `cleanupConfirmedMergeClose` instead.
+ */
 export const cleanupMergedTaskState = (
   dependencies: MergedTaskCleanupServices,
   taskStore: TaskStorePort,
@@ -153,9 +187,15 @@ export const cleanupMergedTaskState = (
   taskId: string,
   sourceBranch: string,
   targetBranch: string,
-  onDeleting?: (branch: { name: string; oid: string }) => void,
+  removeWorktreeOnClose: boolean | null,
 ) =>
   Effect.gen(function* () {
+    // The task value wins, so the global setting is read only for a task without one.
+    const removeWorktree =
+      removeWorktreeOnClose ?? (yield* loadRemoveWorktreeOnClose(dependencies.settingsConfig));
+    if (!removeWorktree) {
+      return yield* cleanupKeptTaskWorktree(dependencies, taskStore, repoPath, taskId);
+    }
     yield* runTaskRuntimeCleanup({
       progress: createTaskCleanupProgressState(),
       repoPath,
@@ -173,18 +213,11 @@ export const cleanupMergedTaskState = (
     if (cleanupTarget) {
       yield* dependencies.taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([cleanupTarget]);
     }
-    const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
-    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-    yield* releaseMergedTaskSessions(
-      dependencies.taskActivityGuard,
-      dependencies.workflow,
-      canonicalRepoPath,
-      taskId,
-      metadata.agentSessions,
-    );
+    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId);
     if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
       const worktreeFiles = yield* requireWorktreeFiles(dependencies.worktreeFiles);
       const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
+      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
       if (!canonicalPathsEqual(canonicalCleanupTarget, canonicalRepoPath, canonicalPathPlatform)) {
         yield* removeWorktreeAndFilesystemPath(
           {
@@ -212,25 +245,8 @@ export const cleanupMergedTaskState = (
       sourceBranch,
       targetBranch,
     ));
-    yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete, onDeleting);
+    yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete);
   });
-export const cleanupDirectMergeTaskState = (
-  dependencies: MergedTaskCleanupServices,
-  taskStore: TaskStorePort,
-  repoPath: string,
-  taskId: string,
-  directMerge: DirectMergeRecord,
-  onDeleting?: (branch: { name: string; oid: string }) => void,
-) =>
-  cleanupMergedTaskState(
-    dependencies,
-    taskStore,
-    repoPath,
-    taskId,
-    directMerge.sourceBranch.trim(),
-    checkoutBranch(directMerge.targetBranch),
-    onDeleting,
-  );
 export const effectiveTargetBranchForTask = (
   workspaceSettingsService: WorkspaceSettingsService,
   task: TaskRecord,

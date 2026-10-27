@@ -29,7 +29,7 @@ When task Markdown contains `odt-asset:<assetId>` images needed for the work, co
 
 Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Free-artifact reads default to 16 KiB. Continued reads require one selected code and the version returned by the first read. Internal artifact IDs remain within the UI and store.
 
-Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. Native task actions are `reset_implementation(taskId)`, `reset_task(taskId)`, and `close_task(taskId)`.
+Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` opens the approval modal. Native task actions are `reset_implementation(taskId)`, `reset_task(taskId)`, `close_task(taskId, removeWorktree)`, and `remove_worktree(taskId)`.
 
 Free-artifact creation, rename, replacement, and deletion require a non-closed task. They preserve task status, QA verdict, and workflow readiness. The setter routes workflow codes through the existing workflow actions and enforces managed role access. Delete rejects workflow codes. Manual Specification and Implementation Plan saves keep status unchanged, including on closed tasks.
 
@@ -57,20 +57,20 @@ Free-artifact creation, rename, replacement, and deletion require a non-closed t
 | `odt_set_task_artifact`, code `qaReport`, verdict `approved` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | `note` is optional. | `in_progress` |
 | `human_request_changes` | `in_progress` | Idempotent. No write runs. The action is not offered. | Unchanged. |
-| `human_approve` | `ai_review`, `human_review` | Always. | `closed` |
-| `human_approve` | `closed` | No cleanup or write runs. | Unchanged. |
-| `close_task` | Any non-closed status. | Detail sheet only. No live role activity. Cleanup succeeds. | `closed` |
+| `human_approve` | `ai_review`, `human_review` | Opens the approval modal. | Unchanged. |
+| `close_task` | Any non-closed status. | No live role activity. Cleanup succeeds. | `closed` |
+| `remove_worktree` | `closed` | No live role activity. Cleanup succeeds. | Unchanged. |
 | Local direct merge | `ai_review`, `human_review` | Merge and cleanup succeed. | `closed` |
 | Direct merge with a publish target | `ai_review`, `human_review` | Merge succeeds. Publication remains pending. | `human_review` |
 | Complete direct merge | `ai_review`, `human_review` | Publication and cleanup succeed. | `closed` |
 | Link or sync a merged pull request | `ai_review`, `human_review` | Provider confirms the merge. Cleanup succeeds. | `closed` |
 
-`reset_task` clears all workflow and free artifacts, linked sessions, delivery data, and in-memory runs. `close_task` stops task terminals and removes task worktrees and related local branches.
+`reset_task` clears all workflow and free artifacts, linked sessions, delivery data, and in-memory runs. `close_task` stops task terminals. It removes task worktrees and related local branches when `removeWorktree` is `true`. `remove_worktree` stops task terminals, then removes task worktrees and related local branches.
 
 ## Invalid examples
 
 - `open -> closed` without `close_task`.
-- `ai_review -> closed` without `human_approve` or `close_task`.
+- `ai_review -> closed` without `close_task`, a direct merge, or a merged pull request.
 - `blocked -> closed` without `close_task`.
 
 UI labels are display text. Analytics and reports use stored status values. `Backlog` means `open`, `Done` means `closed`, and `Blocked needs input` means `blocked`.

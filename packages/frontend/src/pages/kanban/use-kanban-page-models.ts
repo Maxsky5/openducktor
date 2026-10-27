@@ -7,9 +7,11 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useTasksState, useWorkspaceState } from "@/state";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
 import { showsHorizontalScrollbars } from "@/lib/horizontal-scrollbars";
+import { useMergedTaskTargets } from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardData } from "@openducktor/frontend-core/tasks/board/use-kanban-board-data";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
+import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-close";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
@@ -84,6 +86,12 @@ export function useKanbanPageModels({
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
   }, [refreshTasks]);
+  const mergedTargetByTaskId = useMergedTaskTargets(workspaceRepoPath, board.kanbanTasks);
+  const { onConfirmTaskAction } = actions;
+  const onCloseTask = useCallback(
+    (taskId: string): void => onConfirmTaskAction(taskId, "close"),
+    [onConfirmTaskAction],
+  );
 
   const content = useKanbanBoardModel({
     isLoadingTasks: isLoadingKanbanTasks,
@@ -95,6 +103,7 @@ export function useKanbanPageModels({
     hasLoadedTasks: board.kanbanTasks.length > 0,
     filter,
     historicalSessionsByTaskId: board.historicalSessionsByTaskId,
+    mergedTargetByTaskId,
     pendingState: actions.kanbanPendingState,
     taskSessionsByTaskId: actions.taskSessionsByTaskId,
     activeTaskSessionContextByTaskId: actions.activeTaskSessionContextByTaskId,
@@ -106,6 +115,7 @@ export function useKanbanPageModels({
     onHumanApprove: actions.onHumanApprove,
     onHumanRequestChanges: actions.onHumanRequestChanges,
     onResetImplementation: actions.onResetImplementation,
+    onCloseTask,
   });
   return {
     header: {
@@ -124,8 +134,8 @@ export function useKanbanPageModels({
           ...pendingMergedPullRequest,
           isLinking: pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId,
           onCancel: cancelLinkMergedPullRequest,
-          onConfirm: () => {
-            void linkMergedPullRequest();
+          onConfirm: (options: CloseTaskOptions) => {
+            void linkMergedPullRequest(options);
           },
         }
       : null,

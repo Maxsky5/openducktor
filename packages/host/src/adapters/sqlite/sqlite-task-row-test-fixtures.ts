@@ -21,5 +21,6 @@ export const taskRowFixture = (overrides: Partial<TaskRow> = {}): TaskRow => ({
   targetBranchJson: null,
   title: "Task",
   updatedAt: now(),
+  removeWorktreeOnClose: null,
   ...overrides,
 });

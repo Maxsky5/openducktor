@@ -37,10 +37,10 @@ const tasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
   closeTask: async () => {},
+  removeTaskWorktree: async () => {},
   resetTaskImplementation: async () => {},
   resetTask: async () => {},
   transitionTask: async () => {},
-  humanApproveTask: async () => {},
   humanRequestChangesTask: async () => {},
 });
 

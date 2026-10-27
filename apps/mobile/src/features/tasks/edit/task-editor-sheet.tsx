@@ -6,9 +6,15 @@ import {
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { RESULT_UNKNOWN_TITLE } from "@openducktor/frontend-core/lib/command-outcome";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useGlobalRemoveWorktreeOnClose } from "@openducktor/frontend-core/queries/use-global-remove-worktree-on-close";
 import type { DeviceFileReference } from "@openducktor/frontend-core/platform/device-file";
 import { useTaskCreateModalController } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
-import { PRIORITY_OPTIONS } from "@openducktor/frontend-core/tasks/create/task-composer-options";
+import {
+  PRIORITY_OPTIONS,
+  REMOVE_WORKTREE_ON_CLOSE_LABEL,
+  removeWorktreeOnCloseChoiceKey,
+  removeWorktreeOnCloseChoices,
+} from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import { taskDescriptionImageError } from "@openducktor/frontend-core/tasks/operations/use-task-description-asset-operations";
 import { usePreventRemove, useRouter } from "expo-router";
 import {
@@ -492,6 +498,10 @@ function TaskFields({
     (priority: number) => updateState({ priority }),
     [updateState],
   );
+  const changeRemoveWorktreeOnClose = useCallback(
+    (removeWorktreeOnClose: boolean | null) => updateState({ removeWorktreeOnClose }),
+    [updateState],
+  );
   const changeDescription = useCallback(
     (description: string) => updateState({ description }),
     [updateState],
@@ -507,6 +517,11 @@ function TaskFields({
       />
       <TitleField value={state.title} editable={editable} onChange={changeTitle} />
       <PriorityField value={state.priority} editable={editable} onChange={changePriority} />
+      <RemoveWorktreeOnCloseField
+        value={state.removeWorktreeOnClose}
+        editable={editable}
+        onChange={changeRemoveWorktreeOnClose}
+      />
       <DescriptionField
         value={state.description}
         editable={editable}
@@ -594,6 +609,42 @@ const PriorityField = memo(function PriorityField({
         options={PRIORITY_CHOICES}
         value={String(value)}
         onChange={(next) => onChange(Number(next))}
+        disabled={!editable}
+      />
+    </FormField>
+  );
+});
+
+const RemoveWorktreeOnCloseField = memo(function RemoveWorktreeOnCloseField({
+  value,
+  editable,
+  onChange,
+}: {
+  value: boolean | null;
+  editable: boolean;
+  onChange: (removeWorktreeOnClose: boolean | null) => void;
+}): ReactElement {
+  const choices = removeWorktreeOnCloseChoices(useGlobalRemoveWorktreeOnClose().data);
+  // A segment is narrow on a phone, so the note names the global setting.
+  const segments = choices.map(({ key, label }) => ({
+    value: key,
+    label: key === "default" ? "Default" : label,
+  }));
+  const selected = choices.find((choice) => choice.value === value);
+  const note =
+    selected && value === null
+      ? `${selected.label}. ${selected.description}`
+      : selected?.description;
+  return (
+    <FormField label={REMOVE_WORKTREE_ON_CLOSE_LABEL} note={note}>
+      <SegmentedControl
+        label={REMOVE_WORKTREE_ON_CLOSE_LABEL}
+        options={segments}
+        value={removeWorktreeOnCloseChoiceKey(value)}
+        onChange={(key) => {
+          const choice = choices.find((entry) => entry.key === key);
+          if (choice) onChange(choice.value);
+        }}
         disabled={!editable}
       />
     </FormField>

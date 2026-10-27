@@ -2,7 +2,12 @@ import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ListTodo } from "lucide-react";
 import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
-import { issueTypeGuidance } from "@openducktor/frontend-core/tasks/create/task-composer-options";
+import {
+  issueTypeGuidance,
+  REMOVE_WORKTREE_ON_CLOSE_LABEL,
+  removeWorktreeOnCloseChoiceKey,
+  removeWorktreeOnCloseChoices,
+} from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import TaskDescriptionEditor from "@/components/features/task-description-editor/task-description-editor";
 import type { IssueImageContext } from "@/components/features/issue-source/github-issue-image";
 import type { TaskDescriptionAssetUpload } from "@openducktor/frontend-core/tasks/description/use-task-description-asset-draft";
@@ -12,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TagSelector } from "@/components/ui/tag-selector";
 import { cn } from "@/lib/utils";
+import { useGlobalRemoveWorktreeOnClose } from "@openducktor/frontend-core/queries/use-global-remove-worktree-on-close";
 import type {
   ComposerMode,
   ComposerState,
@@ -111,6 +117,10 @@ export function TaskDetailsForm({
             }}
           />
         </div>
+        <RemoveWorktreeOnCloseField
+          value={state.removeWorktreeOnClose}
+          onChange={(removeWorktreeOnClose) => onStateChange({ removeWorktreeOnClose })}
+        />
       </div>
 
       <div className="grid gap-2">
@@ -137,6 +147,33 @@ export function TaskDetailsForm({
           onChange={(nextLabels) => onStateChange({ labels: nextLabels })}
         />
       </div>
+    </div>
+  );
+}
+
+const REMOVE_WORKTREE_ON_CLOSE_LABEL_ID = "task-remove-worktree-on-close-label";
+
+function RemoveWorktreeOnCloseField({
+  value,
+  onChange,
+}: {
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}): ReactElement {
+  const choices = removeWorktreeOnCloseChoices(useGlobalRemoveWorktreeOnClose().data);
+  return (
+    <div className="grid gap-2">
+      <Label id={REMOVE_WORKTREE_ON_CLOSE_LABEL_ID}>{REMOVE_WORKTREE_ON_CLOSE_LABEL}</Label>
+      <Combobox
+        value={removeWorktreeOnCloseChoiceKey(value)}
+        options={choices.map(({ key, label, description }) => ({ value: key, label, description }))}
+        searchable={false}
+        triggerAriaLabelledBy={REMOVE_WORKTREE_ON_CLOSE_LABEL_ID}
+        onValueChange={(key) => {
+          const choice = choices.find((entry) => entry.key === key);
+          if (choice) onChange(choice.value);
+        }}
+      />
     </div>
   );
 }

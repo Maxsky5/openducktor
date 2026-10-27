@@ -202,6 +202,7 @@ const createGit = (): GitPort => ({
   canonicalizePath: (path) => Effect.succeed(path),
   isGitRepository: () => Effect.succeed(true),
   readCheckout: (directory) => Effect.succeed({ root: directory, commonDirectory: "/repo/.git" }),
+  isRegisteredWorktree: () => Effect.succeed(true),
   referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
   configureBranchUpstream: () =>
     Effect.succeed({
@@ -265,7 +266,8 @@ const createGit = (): GitPort => ({
       revision: "def456",
     }),
   commitsAheadBehind: () => Effect.succeed({ ahead: 3, behind: 2 }),
-  fetchRemote: () => Effect.succeed({ outcome: "fetched", output: "Fetched origin" }),
+  resolveFetchRemotes: () => Effect.succeed(["origin"]),
+  fetchRemote: () => Effect.succeed("Fetched origin"),
   pullBranch: () => Effect.succeed({ outcome: "pulled", output: "Fast-forward" }),
   commitAll: () =>
     Effect.succeed({
@@ -333,7 +335,9 @@ const createLocalAttachments = (): LocalAttachmentPort => ({
 
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath: (command) => Effect.succeed(command === "bd" ? null : command),
-  versionCommand: (command) => Effect.succeed(`${command} version 1.0.0`),
+  // Merge detection needs Git 2.41 or later.
+  versionCommand: (command) =>
+    Effect.succeed(command === "git" ? "git version 2.41.0" : `${command} version 1.0.0`),
   runCommandAllowFailure: (command) => {
     if (command === "gh") {
       return Effect.succeed({
@@ -370,6 +374,7 @@ const createTaskStore = (): TaskStorePort => ({
       status: "blocked",
       priority: 2,
       issueType: "task",
+      removeWorktreeOnClose: null,
       availableActions: [],
       labels: [],
       artifactSummary: {
@@ -430,6 +435,7 @@ const createTaskStore = (): TaskStorePort => ({
       status: "open",
       priority: 2,
       issueType: "task",
+      removeWorktreeOnClose: null,
       availableActions: [],
       labels: [],
       artifactSummary: {
@@ -476,6 +482,7 @@ const createTaskStore = (): TaskStorePort => ({
           status: "open",
           priority: 2,
           issueType: "task",
+          removeWorktreeOnClose: null,
           availableActions: [],
           labels: [],
           artifactSummary: {
@@ -530,6 +537,7 @@ const createTaskStore = (): TaskStorePort => ({
       status: "ready_for_dev",
       priority: 2,
       issueType: "task",
+      removeWorktreeOnClose: null,
       availableActions: [],
       labels: [],
       artifactSummary: {
@@ -575,6 +583,7 @@ const createTaskStore = (): TaskStorePort => ({
         status: input.status ?? "open",
         priority: 2,
         issueType: "task",
+        removeWorktreeOnClose: null,
         availableActions: [],
         labels: [],
         artifactSummary: {
@@ -611,6 +620,7 @@ const createTaskStore = (): TaskStorePort => ({
       status: input.status,
       priority: 2,
       issueType: "task",
+      removeWorktreeOnClose: null,
       availableActions: [],
       labels: [],
       artifactSummary: {
@@ -1123,6 +1133,7 @@ describe("createElectronHostCommandRouter", () => {
       await router.invoke("git_fetch_remote", {
         repoPath: "/repo",
         targetBranch: "origin/main",
+        force: true,
       }),
     ).toEqual({ outcome: "fetched", output: "Fetched origin" });
     expect(
@@ -1963,6 +1974,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "human_review",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               pullRequest: {
@@ -2041,6 +2053,7 @@ describe("createElectronHostCommandRouter", () => {
             status: "human_review",
             priority: 2,
             issueType: "task",
+            removeWorktreeOnClose: null,
             availableActions: [],
             labels: [],
             artifactSummary: {
@@ -2086,6 +2099,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "human_review",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               artifactSummary: {
@@ -2151,9 +2165,10 @@ describe("createElectronHostCommandRouter", () => {
       status: "in_progress",
     });
     expect(
-      await reviewRouter.invoke("human_approve", {
+      await reviewRouter.invoke("task_close", {
         repoPath: "/repo",
         taskId: "task-1",
+        removeWorktree: false,
       }),
     ).toMatchObject({
       id: "task-1",
@@ -2197,6 +2212,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "ai_review",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               artifactSummary: {
@@ -2242,6 +2258,7 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
         input: {
           mergeMethod: "merge_commit",
+          removeWorktree: true,
           expected: {
             taskStatus: "ai_review",
             sourceBranch: "odt/task-1",
@@ -2291,6 +2308,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "in_progress",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               artifactSummary: {
@@ -2365,6 +2383,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "human_review",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               artifactSummary: {
@@ -2419,6 +2438,7 @@ describe("createElectronHostCommandRouter", () => {
       await directMergeRouter.invoke("task_direct_merge_complete", {
         repoPath: "/repo",
         taskId: "task-1",
+        removeWorktree: true,
       }),
     ).toMatchObject({
       id: "task-1",
@@ -2480,6 +2500,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "human_review",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               artifactSummary: {
@@ -2532,6 +2553,7 @@ describe("createElectronHostCommandRouter", () => {
           updatedAt: "2026-05-10T11:00:00.000Z",
           mergedAt: "2026-05-10T11:00:00.000Z",
         },
+        removeWorktree: true,
       }),
     ).toMatchObject({
       id: "task-1",
@@ -2555,6 +2577,7 @@ describe("createElectronHostCommandRouter", () => {
               status: "in_progress",
               priority: 2,
               issueType: "task",
+              removeWorktreeOnClose: null,
               availableActions: [],
               labels: [],
               artifactSummary: {

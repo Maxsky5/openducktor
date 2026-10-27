@@ -1468,7 +1468,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const task = await client.taskClose("/repo", "task-1");
+    const task = await client.taskClose("/repo", "task-1", false);
 
     expect(task.status).toBe("closed");
     expect(calls).toEqual([
@@ -1477,6 +1477,7 @@ describe("HostClient", () => {
         args: {
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: false,
         },
       },
     ]);
@@ -1498,6 +1499,59 @@ describe("HostClient", () => {
         command: "task_apply_event",
         args: { repoPath: "/repo", taskId: "task-1", eventId: "hold" },
       },
+    ]);
+  });
+
+  test("task worktree commands use their IPC routes", async () => {
+    const impact = {
+      worktreePaths: ["/worktrees/task-1"],
+      branchNames: ["odt/task-1"],
+      uncommittedFileCount: 3,
+      mergeCandidate: true,
+      branchOid: "tip",
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "task_worktree_cleanup_impact_get") return impact;
+      if (command === "task_worktree_remove") return null;
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect(await client.taskWorktreeCleanupImpactGet("/repo", "task-1")).toEqual(impact);
+    await client.taskWorktreeRemove("/repo", "task-1");
+
+    expect(calls).toEqual([
+      {
+        command: "task_worktree_cleanup_impact_get",
+        args: { repoPath: "/repo", taskId: "task-1" },
+      },
+      { command: "task_worktree_remove", args: { repoPath: "/repo", taskId: "task-1" } },
+    ]);
+  });
+
+  test("merge status commands parse the workspace snapshot", async () => {
+    const snapshot = {
+      repoPath: "/repo",
+      tasks: [
+        {
+          taskId: "task-1",
+          branch: "odt/task-1",
+          targetBranch: { remote: "origin", branch: "main" },
+          result: { kind: "merged", checkedAt: "2026-10-01T00:00:00.000Z", branchOid: "tip" },
+        },
+      ],
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "task_merge_status_get" || command === "task_merge_status_check") {
+        return snapshot;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect(await client.taskMergeStatusGet("/repo")).toEqual(snapshot);
+    expect(await client.taskMergeStatusCheck("/repo")).toEqual(snapshot);
+    expect(calls.map((call) => call.command)).toEqual([
+      "task_merge_status_get",
+      "task_merge_status_check",
     ]);
   });
 
@@ -1624,7 +1678,10 @@ describe("HostClient", () => {
     const committed = await client.gitCommitAll("/repo", "Build all changes");
     const rebased = await client.gitRebaseBranch("/repo", "origin/main", "/tmp/wt/task-1");
     const aborted = await client.gitRebaseAbort("/repo", "/tmp/wt/task-1");
-    const fetched = await client.gitFetchRemote("/repo", "origin/main", "/tmp/wt/task-1");
+    const fetched = await client.gitFetchRemote("/repo", "origin/main", {
+      force: true,
+      workingDir: "/tmp/wt/task-1",
+    });
     const pulled = await client.gitPullBranch("/repo", "/tmp/wt/task-1");
     const pushed = await client.gitPushBranch("/repo", "feature/task-1", {
       remote: "origin",
@@ -1703,6 +1760,7 @@ describe("HostClient", () => {
       repoPath: "/repo",
       targetBranch: "origin/main",
       workingDir: "/tmp/wt/task-1",
+      force: true,
     });
     expect(calls[9].args).toEqual({
       repoPath: "/repo",
@@ -1755,7 +1813,7 @@ describe("HostClient", () => {
     });
 
     await expect(client.gitCommitAll("/repo", "Build all changes")).rejects.toThrow();
-    await expect(client.gitFetchRemote("/repo", "origin/main")).rejects.toThrow();
+    await expect(client.gitFetchRemote("/repo", "origin/main", { force: false })).rejects.toThrow();
     await expect(client.gitPullBranch("/repo")).rejects.toThrow();
     await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
   });
@@ -1901,21 +1959,13 @@ describe("HostClient", () => {
       if (command === "human_request_changes") {
         return { ...makeTaskCardPayload(), status: "in_progress" };
       }
-      if (command === "human_approve") {
-        return { ...makeTaskCardPayload(), status: "closed" };
-      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
     await client.buildBlocked("/repo", "task-1", "Needs clarification");
     await client.humanRequestChanges("/repo", "task-1", "Please rework API");
-    await client.humanApprove("/repo", "task-1");
 
-    expect(calls.map((entry) => entry.command)).toEqual([
-      "build_blocked",
-      "human_request_changes",
-      "human_approve",
-    ]);
+    expect(calls.map((entry) => entry.command)).toEqual(["build_blocked", "human_request_changes"]);
     expect(calls[0].args?.reason).toBe("Needs clarification");
     expect(calls[1].args?.note).toBe("Please rework API");
   });
@@ -2252,6 +2302,7 @@ describe("HostClient", () => {
       expected,
       mergeMethod: "squash",
       squashCommitMessage: "feat: add Microsoft login",
+      removeWorktree: true,
     });
 
     expect(calls).toEqual([
@@ -2264,6 +2315,7 @@ describe("HostClient", () => {
             expected,
             mergeMethod: "squash",
             squashCommitMessage: "feat: add Microsoft login",
+            removeWorktree: true,
           },
         },
       },

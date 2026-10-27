@@ -1,6 +1,7 @@
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createGitService } from "../../application/git/git-service";
+import type { RemoteFetchService } from "../../application/git/remote-fetch-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
@@ -22,6 +23,7 @@ export const createNodeLocalToolCommandHandlers = ({
   worktreeFiles,
   settingsConfig,
   repoStoreDiagnostics,
+  remoteFetch,
 }: Pick<
   NodeHostDefaultPorts,
   | "filesystem"
@@ -31,9 +33,16 @@ export const createNodeLocalToolCommandHandlers = ({
   | "toolDiscovery"
   | "userEnvironment"
   | "worktreeFiles"
-> & { settingsConfig: SettingsConfigPort; repoStoreDiagnostics: RepoStoreDiagnostics }) => ({
+> & {
+  settingsConfig: SettingsConfigPort;
+  repoStoreDiagnostics: RepoStoreDiagnostics;
+  /** The fetch that merge detection also uses. */
+  remoteFetch: RemoteFetchService;
+}) => ({
   ...createFilesystemCommandHandlers(createFilesystemService(filesystem)),
-  ...createGitCommandHandlers(createGitService({ gitPort: git, settingsConfig, worktreeFiles })),
+  ...createGitCommandHandlers(
+    createGitService({ gitPort: git, settingsConfig, worktreeFiles, remoteFetch }),
+  ),
   ...createOpenInToolsCommandHandlers(createOpenInToolsService(openInTools)),
   ...createSystemDiagnosticsCommandHandlers(
     createSystemDiagnosticsService({

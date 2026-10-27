@@ -31,6 +31,7 @@ const cleanupLabels = {
     label: "Reset implementation",
     retryVerb: "reset implementation",
   },
+  task_worktree_remove: { label: "Remove worktree", retryVerb: "remove worktree" },
 } as const;
 
 export type TaskCleanupOperation = keyof typeof cleanupLabels;

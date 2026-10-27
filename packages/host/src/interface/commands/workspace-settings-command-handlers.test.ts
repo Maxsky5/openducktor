@@ -25,7 +25,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
   test("validates sidebar grouping before dispatch and returns the saved snapshot", async () => {
     const snapshot = settingsSnapshotSchema.parse({
       theme: "light",
-      git: { defaultMergeMethod: "merge_commit" },
+      git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
       appearance: { sidebarSessionGrouping: "none" },
       workspaces: {},
       globalPromptOverrides: {},
@@ -298,7 +298,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             system: {},
             customAgentRoles: [],
             theme: "light",
-            git: { defaultMergeMethod: "merge_commit" },
+            git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
             general: { openAgentStudioTabOnBackgroundSessionStart: true },
             appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
             chat: {
@@ -330,7 +330,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             system: {},
             customAgentRoles: [],
             theme: "light",
-            git: { defaultMergeMethod: "merge_commit" },
+            git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
             general: { openAgentStudioTabOnBackgroundSessionStart: true },
             appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
             chat: {
@@ -363,7 +363,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           system: {},
           customAgentRoles: [],
           theme: "light",
-          git: { defaultMergeMethod: "merge_commit" },
+          git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
           chat: {
@@ -510,7 +510,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
           system: {},
-          git: { defaultMergeMethod: "merge_commit" },
+          git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
           chat: { showThinkingMessages: false, extra: true },
@@ -733,7 +733,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
           system: {},
-          git: { defaultMergeMethod: "merge_commit" },
+          git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "auto" },
           chat: {
@@ -794,7 +794,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
   test("previews runtime impact and validates the save confirmation", async () => {
     const snapshot = {
       system: {},
-      git: { defaultMergeMethod: "merge_commit" },
+      git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
       general: { openAgentStudioTabOnBackgroundSessionStart: true },
       appearance: { horizontalScrollbarVisibility: "system" },
       chat: { showThinkingMessages: false },

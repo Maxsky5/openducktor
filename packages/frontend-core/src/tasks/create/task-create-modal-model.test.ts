@@ -10,6 +10,7 @@ import {
 
 const baseState: ComposerState = {
   issueType: "feature",
+  removeWorktreeOnClose: null,
   title: "  Implement sync  ",
   priority: 2,
   description: "line one\n\nline two",
@@ -30,6 +31,7 @@ describe("task-create-modal-model", () => {
       priority: 2,
       description: "line one\n\nline two",
       labels: ["backend", "urgent"],
+      removeWorktreeOnClose: null,
     });
   });
 

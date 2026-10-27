@@ -3,6 +3,7 @@ import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-te
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
+  type AgentStudioSessionQuickActionOption,
   buildAgentStudioQuickActions,
   buildGitConflictQuickAction,
   buildRoleEnabledMapForTask,
@@ -24,6 +25,14 @@ const buildPullRequest = () => ({
   createdAt: "2026-02-20T10:00:00.000Z",
   updatedAt: "2026-02-20T10:05:00.000Z",
 });
+
+/** The session start actions only. The task actions have their own tests. */
+const buildSessionQuickActions = (
+  ...args: Parameters<typeof buildAgentStudioQuickActions>
+): AgentStudioSessionQuickActionOption[] =>
+  buildAgentStudioQuickActions(...args).filter(
+    (option): option is AgentStudioSessionQuickActionOption => option.kind !== "task_action",
+  );
 
 describe("agent-studio-quick-actions", () => {
   const buildPrActionArgs = (): Parameters<typeof buildAgentStudioQuickActions>[0] => {
@@ -50,7 +59,7 @@ describe("agent-studio-quick-actions", () => {
   };
 
   test("hides unsupported Pull Request generation", () => {
-    const actions = buildAgentStudioQuickActions({
+    const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderContext: null,
     });
@@ -60,7 +69,7 @@ describe("agent-studio-quick-actions", () => {
   });
 
   test("disables Pull Request generation when provider health blocks use", () => {
-    const actions = buildAgentStudioQuickActions({
+    const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderContext: createGitProviderContextFixture({ available: false }),
     });
@@ -73,7 +82,7 @@ describe("agent-studio-quick-actions", () => {
   });
 
   test("disables Pull Request generation when the provider refresh fails", () => {
-    const actions = buildAgentStudioQuickActions({
+    const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderContext: createGitProviderContextFixture(),
       gitProviderReadError: "Could not load the current Git provider: connection failed",
@@ -88,7 +97,7 @@ describe("agent-studio-quick-actions", () => {
   });
 
   test("keeps Pull Request generation visible when the initial provider read fails", () => {
-    const actions = buildAgentStudioQuickActions({
+    const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
@@ -102,7 +111,7 @@ describe("agent-studio-quick-actions", () => {
   });
 
   test("hides unsupported Pull Request generation when the provider refresh fails", () => {
-    const actions = buildAgentStudioQuickActions({
+    const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
       gitProviderReadError: "Could not load the current Git provider: connection failed",
@@ -137,7 +146,7 @@ describe("agent-studio-quick-actions", () => {
       }),
     ];
 
-    const options = buildAgentStudioQuickActions({
+    const options = buildSessionQuickActions({
       selectedTask: task,
       sessionsForTask,
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
@@ -158,7 +167,7 @@ describe("agent-studio-quick-actions", () => {
     expect(
       options.some((option) => option.launchActionId === "build_pull_request_generation"),
     ).toBe(false);
-    expect(selectPrimaryAgentStudioQuickAction(options)?.launchActionId).toBe("spec_initial");
+    expect(selectPrimaryAgentStudioQuickAction(options)?.id).toBe("quick:spec_initial");
     expect(selectPrimaryAgentStudioQuickAction(options)?.label).toBe("Start Spec");
   });
 
@@ -175,7 +184,7 @@ describe("agent-studio-quick-actions", () => {
     };
 
     const specReadyTask = buildTask({ ...baseTask, status: "spec_ready" });
-    const specReadyOptions = buildAgentStudioQuickActions({
+    const specReadyOptions = buildSessionQuickActions({
       selectedTask: specReadyTask,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(specReadyTask),
@@ -187,7 +196,7 @@ describe("agent-studio-quick-actions", () => {
     });
 
     const readyForDevTask = buildTask({ ...baseTask, status: "ready_for_dev" });
-    const readyForDevOptions = buildAgentStudioQuickActions({
+    const readyForDevOptions = buildSessionQuickActions({
       selectedTask: readyForDevTask,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(readyForDevTask),
@@ -214,7 +223,7 @@ describe("agent-studio-quick-actions", () => {
 
       externalSessionId: "builder-1",
     });
-    const humanReviewOptions = buildAgentStudioQuickActions({
+    const humanReviewOptions = buildSessionQuickActions({
       selectedTask: humanReviewTask,
       sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
@@ -249,7 +258,7 @@ describe("agent-studio-quick-actions", () => {
       ...humanReviewTask,
       pullRequest: buildPullRequest(),
     });
-    const humanReviewWithPullRequestOptions = buildAgentStudioQuickActions({
+    const humanReviewWithPullRequestOptions = buildSessionQuickActions({
       selectedTask: humanReviewTaskWithPullRequest,
       sessionsForTask: [
         buildSession({
@@ -290,7 +299,7 @@ describe("agent-studio-quick-actions", () => {
       },
     });
 
-    const options = buildAgentStudioQuickActions({
+    const options = buildSessionQuickActions({
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
@@ -308,6 +317,67 @@ describe("agent-studio-quick-actions", () => {
     });
   });
 
+  describe("task actions", () => {
+    const buildReviewArgs = (
+      overrides: Partial<Parameters<typeof buildAgentStudioQuickActions>[0]> = {},
+    ): Parameters<typeof buildAgentStudioQuickActions>[0] => ({
+      ...buildPrActionArgs(),
+      selectedTask: buildTask({
+        id: "task-1",
+        status: "human_review",
+        availableActions: ["human_request_changes", "human_approve"],
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: true },
+          build: { required: true, canSkip: false, available: true, completed: true },
+          qa: { required: true, canSkip: false, available: true, completed: true },
+        },
+      }),
+      gitProviderContext: createGitProviderContextFixture(),
+      ...overrides,
+    });
+
+    test("puts Approve Task after the session actions when a Git provider is enabled", () => {
+      const options = buildAgentStudioQuickActions(buildReviewArgs());
+
+      expect(options.at(-1)).toMatchObject({ id: "task:human_approve", label: "Approve Task" });
+      expect(selectPrimaryAgentStudioQuickAction(options)?.id).not.toBe("task:human_approve");
+    });
+
+    test("keeps Approve Task out of the primary slot while a session is working", () => {
+      const options = buildAgentStudioQuickActions(
+        buildReviewArgs({ createSessionDisabled: true }),
+      );
+
+      expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
+        launchActionId: "build_pull_request_generation",
+        disabled: true,
+      });
+    });
+
+    test("leads with Approve Task in human review without an enabled Git provider", () => {
+      const options = buildAgentStudioQuickActions(
+        buildReviewArgs({
+          gitProviderContext: createGitProviderContextFixture({ enabled: false }),
+        }),
+      );
+
+      expect(selectPrimaryAgentStudioQuickAction(options)?.id).toBe("task:human_approve");
+    });
+
+    test("leads with Close Task and its marker for a merged task branch", () => {
+      const options = buildAgentStudioQuickActions(
+        buildReviewArgs({ mergedTarget: "origin/main" }),
+      );
+
+      expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
+        id: "task:close_task",
+        label: "Close Task",
+        mergedTarget: "origin/main",
+      });
+    });
+  });
+
   test("keeps the best primary quick action label when a session disables starting", () => {
     const task = buildTask({
       id: "task-1",
@@ -321,7 +391,7 @@ describe("agent-studio-quick-actions", () => {
       },
     });
 
-    const options = buildAgentStudioQuickActions({
+    const options = buildSessionQuickActions({
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
@@ -349,7 +419,7 @@ describe("agent-studio-quick-actions", () => {
         qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
-    const aiReviewWithoutPullRequestOptions = buildAgentStudioQuickActions({
+    const aiReviewWithoutPullRequestOptions = buildSessionQuickActions({
       selectedTask: aiReviewTaskWithoutPullRequest,
       sessionsForTask: [
         buildSession({
@@ -373,7 +443,7 @@ describe("agent-studio-quick-actions", () => {
       ...aiReviewTaskWithoutPullRequest,
       pullRequest: buildPullRequest(),
     });
-    const aiReviewWithPullRequestOptions = buildAgentStudioQuickActions({
+    const aiReviewWithPullRequestOptions = buildSessionQuickActions({
       selectedTask: aiReviewTaskWithPullRequest,
       sessionsForTask: [
         buildSession({
@@ -416,7 +486,7 @@ describe("agent-studio-quick-actions", () => {
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
-    const qaRejectedOptions = buildAgentStudioQuickActions({
+    const qaRejectedOptions = buildSessionQuickActions({
       selectedTask: qaRejectedTask,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(qaRejectedTask),
@@ -441,7 +511,7 @@ describe("agent-studio-quick-actions", () => {
     });
 
     const roleEnabledByTask = buildRoleEnabledMapForTask(task);
-    const workflowOptions = buildAgentStudioQuickActions({
+    const workflowOptions = buildSessionQuickActions({
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask,
@@ -503,7 +573,7 @@ describe("agent-studio-quick-actions", () => {
       status: "ready_for_dev",
       availableActions: ["build_start"],
     });
-    const nonReviewOptions = buildAgentStudioQuickActions({
+    const nonReviewOptions = buildSessionQuickActions({
       selectedTask: nonReviewTask,
       sessionsForTask: [
         buildSession({
@@ -530,7 +600,7 @@ describe("agent-studio-quick-actions", () => {
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
-    const aiReviewOptions = buildAgentStudioQuickActions({
+    const aiReviewOptions = buildSessionQuickActions({
       selectedTask: aiReviewTask,
       sessionsForTask: [
         buildSession({
@@ -555,7 +625,7 @@ describe("agent-studio-quick-actions", () => {
 
       externalSessionId: "builder-1",
     });
-    const humanReviewOptions = buildAgentStudioQuickActions({
+    const humanReviewOptions = buildSessionQuickActions({
       selectedTask: humanReviewTask,
       sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
@@ -585,7 +655,7 @@ describe("agent-studio-quick-actions", () => {
         qa: { required: true, canSkip: false, available: true, completed: true },
       },
     });
-    const options = buildAgentStudioQuickActions({
+    const options = buildSessionQuickActions({
       selectedTask: task,
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
@@ -633,7 +703,7 @@ describe("agent-studio-quick-actions", () => {
       },
     });
 
-    const options = buildAgentStudioQuickActions({
+    const options = buildSessionQuickActions({
       selectedTask: task,
       sessionsForTask: [
         buildSession({

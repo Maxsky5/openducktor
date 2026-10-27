@@ -20,8 +20,8 @@ const createHostPort = (): TaskMutationCommandHostPort => ({
   taskUpdate: async () => createTaskCardFixture(),
   taskDelete: async () => undefined,
   taskClose: async () => undefined,
+  taskWorktreeRemove: async () => undefined,
   taskTransition: async () => undefined,
-  humanApprove: async () => undefined,
   humanRequestChanges: async () => undefined,
 });
 
@@ -38,6 +38,7 @@ const createCacheImpact = (): TaskMutationCommandCacheImpact => ({
   removeDeletedTaskCaches: async () => undefined,
   invalidateTaskStopImpact: async () => undefined,
   invalidateTaskWorktree: async () => undefined,
+  invalidateTaskWorktreeCleanupImpact: async () => undefined,
 });
 
 describe("createTaskMutationCommands", () => {
@@ -297,7 +298,12 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskDelete },
       queryClient: createQueryClient(),
-      cacheImpact: { removeDeletedTaskCaches, invalidateTaskStopImpact, invalidateTaskWorktree },
+      cacheImpact: {
+        ...createCacheImpact(),
+        removeDeletedTaskCaches,
+        invalidateTaskStopImpact,
+        invalidateTaskWorktree,
+      },
       taskChatDraftCleanup,
     });
 
@@ -333,19 +339,16 @@ describe("createTaskMutationCommands", () => {
     expect(queryClient.getQueryState(otherRepoIssueKey)?.isInvalidated).toBe(false);
   });
 
-  test("routes close, closed transition, and approval through cleanup after their host mutations", async () => {
+  test("routes close and closed transition through cleanup after their host mutations", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const calls: string[] = [];
     const hostPort: TaskMutationCommandHostPort = {
       ...createHostPort(),
-      taskClose: async () => {
-        calls.push("close");
+      taskClose: async (_repoPath, _taskId, removeWorktree) => {
+        calls.push(`close:${removeWorktree}`);
       },
       taskTransition: async (_repoPath, _taskId, status, reason) => {
         calls.push(`transition:${status}:${reason}`);
-      },
-      humanApprove: async () => {
-        calls.push("approve");
       },
     };
     const taskChatDraftCleanup: Pick<TaskChatDraftCleanup, "runMutation"> = {
@@ -366,21 +369,47 @@ describe("createTaskMutationCommands", () => {
       taskChatDraftCleanup,
     });
 
-    await commands.closeTask("task-1");
+    await commands.closeTask("task-1", { removeWorktree: false });
     await commands.transitionTask("task-2", "closed", "merged");
-    await commands.humanApproveTask("task-3");
 
     expect(calls).toEqual([
       "cleanup:task-1:before",
-      "close",
+      "close:false",
       "cleanup:task-1:after",
       "cleanup:task-2:before",
       "transition:closed:merged",
       "cleanup:task-2:after",
-      "cleanup:task-3:before",
-      "approve",
-      "cleanup:task-3:after",
     ]);
+    expect(received[0]?.successDescription).toBe(
+      "task-1. Its worktree and local branch were kept.",
+    );
+  });
+
+  test("removes the worktree of a closed task and reads its cleanup impact again", async () => {
+    const calls: string[] = [];
+    const commands = createTaskMutationCommands({
+      activeRepoPath: "/repo",
+      activeWorkspaceId: "workspace-1",
+      runTaskMutation: createRunTaskMutation([]),
+      hostPort: {
+        ...createHostPort(),
+        taskWorktreeRemove: async (repoPath, taskId) => {
+          calls.push(`remove:${repoPath}:${taskId}`);
+        },
+      },
+      queryClient: createQueryClient(),
+      cacheImpact: {
+        ...createCacheImpact(),
+        invalidateTaskWorktreeCleanupImpact: async (repoPath, taskId) => {
+          calls.push(`impact:${repoPath}:${taskId}`);
+        },
+      },
+      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
+    });
+
+    await commands.removeTaskWorktree("task-1");
+
+    expect(calls).toEqual(["remove:/repo:task-1", "impact:/repo:task-1"]);
   });
 
   test("invalidates stop impact after a failed close attempt", async () => {
@@ -400,7 +429,9 @@ describe("createTaskMutationCommands", () => {
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
-    await expect(commands.closeTask("task-1")).rejects.toThrow("close failed");
+    await expect(commands.closeTask("task-1", { removeWorktree: true })).rejects.toThrow(
+      "close failed",
+    );
     expect(invalidateTaskStopImpact).toHaveBeenCalledWith("/repo");
   });
 });

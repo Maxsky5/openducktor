@@ -17,6 +17,7 @@ import {
 } from "../../test-support/service-test-doubles";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
 import { createTaskSyncService } from "../tasks/sync/task-sync-service";
+import { noMergeDetection } from "../tasks/sync/task-sync-service.test-support";
 import type { WorkflowArtifactSaveInput } from "../tasks/task-inputs";
 import type { CommittedTaskStatusChange } from "../tasks/task-mutation-operation";
 import { createTaskServiceWithMutationProgress } from "../tasks/task-service";
@@ -482,6 +483,7 @@ const createWorkflowHarness = async ({
   const taskSyncService = createTaskSyncService({
     taskService,
     workspaceSettingsService,
+    mergeDetection: noMergeDetection,
     taskEventStream: {
       ...stream,
       publish: (event) => {

@@ -1,6 +1,7 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { workflowArtifactLabel } from "@openducktor/workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { noMergeDetection } from "../tasks/sync/task-sync-service.test-support";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService as createRealTaskService } from "../tasks/task-service";
@@ -46,6 +47,7 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "feature",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: ["mcp"],
   artifactSummary: {
@@ -521,6 +523,7 @@ describe("createOdtMcpBridgeService", () => {
     });
     const taskSyncService = createTaskSyncService({
       taskService: base,
+      mergeDetection: noMergeDetection,
       taskEventStream: {
         publish: () => {
           throw new Error("Unexpected event");

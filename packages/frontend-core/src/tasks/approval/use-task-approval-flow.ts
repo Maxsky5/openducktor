@@ -6,8 +6,11 @@ import type { GitConflict } from "../../git/contracts";
 import { errorMessage } from "../../lib/errors";
 import { useSingleFlight } from "../../lib/use-single-flight";
 import { loadTaskApprovalContextFromQuery } from "../../queries/task-approval";
+import { taskMergeStatusQueryOptions } from "../../queries/task-merge-status";
 import { isOutcomeUnknown } from "../../lib/command-outcome";
 import type { ActiveWorkspace } from "../../types/session-slices";
+import { useTaskCloseChoice } from "../details/use-task-close-impact";
+import { findTaskMergeStatus } from "../presentation/task-merge-status";
 import type {
   TaskApprovalModalModel,
   TaskApprovalOpenOptions,
@@ -35,6 +38,7 @@ import {
 import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
 import { useClientConnection, useHostClient } from "../../connection/client-connection-react";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { CloseTaskOptions } from "../../types/task-close";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -44,7 +48,7 @@ type UseTaskApprovalFlowArgs = {
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
-  humanApproveTask: (taskId: string) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
   openResetImplementation: (taskId: string) => boolean;
   onResolveGitConflict?: (
     conflict: GitConflict,
@@ -75,7 +79,7 @@ export function useTaskApprovalFlow({
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
-  humanApproveTask,
+  closeTask,
   openResetImplementation,
   onResolveGitConflict = async (): Promise<GitConflictAssistanceResult> => {
     throw new Error(
@@ -100,6 +104,14 @@ export function useTaskApprovalFlow({
   const [state, dispatch] = useReducer(taskApprovalFlowReducer, CLOSED_TASK_APPROVAL_STATE);
   // One approval command at a time, so a double tap approves or merges once.
   const submitFlight = useSingleFlight();
+  const openTask = isTaskApprovalOpen(state)
+    ? tasks.find((entry) => entry.id === state.taskId)
+    : undefined;
+  // The choice stays for the modal. Each opening starts from the task override or the global
+  // setting again.
+  const closeChoice = useTaskCloseChoice(openTask?.removeWorktreeOnClose ?? null);
+  const { resetChoice: resetCloseChoice } = closeChoice;
+  const removeWorktree = isTaskApprovalOpen(state) ? closeChoice.removeWorktree : null;
   const approvalRequestVersionRef = useRef(0);
   const workspaceIdentityRef = useRef<TaskApprovalWorkspaceIdentity | null>(workspaceIdentity);
 
@@ -148,6 +160,7 @@ export function useTaskApprovalFlow({
             })
           : "direct_merge");
 
+      resetCloseChoice();
       dispatch({
         type: "open_loading",
         taskId,
@@ -161,6 +174,16 @@ export function useTaskApprovalFlow({
 
       void (async () => {
         let effectiveMode = initialMode;
+        // The merge status read runs with the Git provider read.
+        const mergeStatusRead =
+          options?.mode === undefined
+            ? queryClient
+                .ensureQueryData(taskMergeStatusQueryOptions(requestWorkspace.repoPath))
+                .then(
+                  (snapshot) => ({ snapshot, error: null }),
+                  (error) => ({ snapshot: undefined, error: errorMessage(error) }),
+                )
+            : null;
         if (options?.mode !== "direct_merge") {
           try {
             const resolvedGitProviderContext = await loadGitProviderContext();
@@ -175,6 +198,16 @@ export function useTaskApprovalFlow({
               );
             }
             effectiveMode = "direct_merge";
+          }
+        }
+        if (mergeStatusRead) {
+          const { snapshot, error } = await mergeStatusRead;
+          // A merged task branch makes Close Task the first choice.
+          if (error === null) {
+            const mergeStatus = findTaskMergeStatus(snapshot, taskId);
+            if (mergeStatus?.result.kind === "merged") effectiveMode = "close_task";
+          } else if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
+            feedback.show("error", "Failed to load the merge status", { description: error });
           }
         }
         if (!isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
@@ -218,10 +251,18 @@ export function useTaskApprovalFlow({
             }
           }
         } catch (error) {
+          // Close Task needs no approval context, so the modal stays open with the read error.
           if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
-            reset();
-            feedback.show("error", "Failed to open approval flow", {
-              description: errorMessage(error),
+            dispatch({
+              type: "load_failed",
+              taskId,
+              mode: "close_task",
+              pullRequestDraftMode,
+              title,
+              body,
+              errorMessage: openErrorMessage,
+              approvalContextError: errorMessage(error),
+              workspaceIdentity: requestWorkspace,
             });
           }
         }
@@ -233,7 +274,7 @@ export function useTaskApprovalFlow({
       gitProviderContext,
       loadGitProviderContext,
       queryClient,
-      reset,
+      resetCloseChoice,
       showGitProviderContextLoadFailure,
       tasks,
       workspaceIdentity,
@@ -276,13 +317,17 @@ export function useTaskApprovalFlow({
       return;
     }
 
-    if (submissionRoute.kind === "complete_missing_builder_worktree") {
-      const approvalState = submissionRoute.approval;
+    if (
+      submissionRoute.kind === "close_missing_builder_worktree" ||
+      submissionRoute.kind === "close_task"
+    ) {
+      if (removeWorktree === null) return;
       void submitFlight.start(async () => {
         dispatch({ type: "clear_error" });
         dispatch({ type: "start_submitting" });
         try {
-          await humanApproveTask(approvalState.taskId);
+          // The close shows its own success and failure toasts.
+          await closeTask(submissionRoute.approval.taskId, { removeWorktree });
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
           }
@@ -291,32 +336,31 @@ export function useTaskApprovalFlow({
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
           }
-          const description = errorMessage(error);
           dispatch({
             type: "return_to_editable",
-            errorMessage: description,
+            errorMessage: errorMessage(error),
             errorOutcomeUnknown: isOutcomeUnknown(error),
-          });
-          feedback.show("error", "Approval failed", {
-            description,
           });
         }
       });
       return;
     }
 
+    // A direct merge closes the task, so it waits for the cleanup choice. A pull request does not.
+    if (submissionRoute.kind === "submit_direct_merge" && removeWorktree === null) return;
     const approvalState = submissionRoute.approval;
     const repoPath = submissionRoute.repoPath;
     void submitFlight.start(async () => {
       dispatch({ type: "start_submitting" });
       try {
-        if (submissionRoute.kind === "submit_direct_merge") {
+        if (submissionRoute.kind === "submit_direct_merge" && removeWorktree !== null) {
           const directMergeResult = await submitDirectMergeApproval({
             approval: approvalState,
             queryClient,
             repoPath,
             refreshTasks,
             workspaceId: submissionWorkspace.workspaceId,
+            removeWorktree,
           });
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
@@ -381,13 +425,14 @@ export function useTaskApprovalFlow({
   }, [
     feedback,
     host,
-    humanApproveTask,
+    closeTask,
     gitProviderContext,
     gitProviderContextError,
     isApprovalRequestCurrent,
     queryClient,
     openGitConflictDialog,
     refreshTasks,
+    removeWorktree,
     requestPullRequestGeneration,
     reset,
     showPullRequestCreated,
@@ -412,6 +457,7 @@ export function useTaskApprovalFlow({
   const completeDirectMerge = useCallback((): void => {
     if (
       !isTaskApprovalReady(state) ||
+      removeWorktree === null ||
       !hasSameWorkspaceIdentity(workspaceIdentityRef.current, state.workspaceIdentity)
     ) {
       return;
@@ -430,6 +476,7 @@ export function useTaskApprovalFlow({
           repoPath: submissionWorkspace.repoPath,
           refreshTasks,
           workspaceId: submissionWorkspace.workspaceId,
+          removeWorktree,
         });
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
@@ -453,7 +500,16 @@ export function useTaskApprovalFlow({
         });
       }
     });
-  }, [feedback, isApprovalRequestCurrent, queryClient, refreshTasks, reset, state, submitFlight]);
+  }, [
+    feedback,
+    isApprovalRequestCurrent,
+    queryClient,
+    refreshTasks,
+    removeWorktree,
+    reset,
+    state,
+    submitFlight,
+  ]);
 
   if (!isTaskApprovalOpen(state)) {
     return {
@@ -470,6 +526,12 @@ export function useTaskApprovalFlow({
     reset,
     resetMissingBuilderWorktree,
     state,
+    taskTitle: openTask?.title ?? "",
+    removeWorktree,
+    onRemoveWorktreeChange: (nextRemoveWorktree: boolean) => {
+      dispatch({ type: "clear_error" });
+      closeChoice.onRemoveWorktreeChange(nextRemoveWorktree);
+    },
     gitProviderContext,
     gitProviderContextError,
   });

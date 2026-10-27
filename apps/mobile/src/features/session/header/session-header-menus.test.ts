@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import type {
+  AgentStudioQuickActionOption,
+  AgentStudioSessionQuickActionOption,
+} from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { groupTaskSessions } from "@/features/tasks/details/task-sessions-model";
 import { quickActionItems, sessionHistoryItems } from "./session-header-menus";
 
@@ -45,10 +48,11 @@ describe("quickActionItems", () => {
   test("keeps the order, shows the pull request icon, and tells why an action waits", () => {
     const option = (
       id: string,
-      launchActionId: AgentStudioQuickActionOption["launchActionId"],
+      launchActionId: AgentStudioSessionQuickActionOption["launchActionId"],
       disabledReason?: string,
     ): AgentStudioQuickActionOption => {
-      const built: AgentStudioQuickActionOption = {
+      const built: AgentStudioSessionQuickActionOption = {
+        kind: "session_start",
         id,
         role: "build",
         launchActionId,
@@ -83,6 +87,30 @@ describe("quickActionItems", () => {
         icon: "git-pull-request",
         disabled: true,
         detail: "Requires an existing Builder session.",
+        command: true,
+      },
+    ]);
+  });
+
+  test("shows the workflow icon of a task action", () => {
+    const items = quickActionItems([
+      {
+        kind: "task_action",
+        id: "task:human_approve",
+        taskAction: "human_approve",
+        placement: "trailing",
+        label: "Approve Task",
+        description: "",
+        disabled: false,
+      },
+    ]);
+    expect(items).toEqual([
+      {
+        id: "task:human_approve",
+        title: "Approve Task",
+        icon: "circle-check-big",
+        disabled: false,
+        detail: undefined,
         command: true,
       },
     ]);

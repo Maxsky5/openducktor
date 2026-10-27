@@ -7,12 +7,13 @@ import {
   toHostOperationError,
 } from "../../../effect/host-errors";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
+import type { TaskRecord } from "../../../ports/task-repository-ports";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { TaskCompletionState } from "../task-completion-state";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import { completeTaskPublication } from "./complete-task-publication";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
-import { cleanupDirectMergeTaskState } from "./task-worktree-cleanup";
+import { cleanupConfirmedMergeClose } from "./task-close-cleanup";
 import { enrichTask } from "./task-workflow-helpers";
 import { decisionTransition, type AdmittedTaskEvent } from "./task-workflow-events";
 
@@ -25,6 +26,7 @@ export const closeMergedTask = (
     > & { taskActivityGuard: TaskActivityGuardPort | undefined; workflow: TaskWorkflow },
   input: TaskDirectMergeCompleteIntent,
   merge: DirectMergeRecord,
+  current: TaskRecord,
   state: TaskCompletionState,
   decision: AdmittedTaskEvent,
   operation: "direct-merge" | "complete-direct-merge",
@@ -42,25 +44,34 @@ export const closeMergedTask = (
             yield* completeTaskPublication(gitPort, input, merge, state);
             state.observation.phase = "cleanup";
             yield* completionState.publish(state);
-            if (!state.observation.cleanupCompleted) {
-              yield* cleanupDirectMergeTaskState(
-                services,
+            // A cleanup that kept the worktree runs again when a retry removes it.
+            const needsCleanup =
+              state.observation.cleanupCompleted !== true ||
+              (input.removeWorktree && state.keptWorktree === true);
+            if (needsCleanup) {
+              yield* cleanupConfirmedMergeClose({
+                dependencies: services,
                 taskStore,
+                lifecycle: services.taskSessionLifecycleCoordinator,
                 repoPath,
-                taskId,
-                merge,
-                (branch) => {
-                  state.deletedSourceBranch = branch;
+                workflow: services.workflow,
+                task: current,
+                // Direct merge requires a clean worktree, so a dirty one fails the close.
+                worktreeCleanup: { remove: input.removeWorktree, force: false },
+                onBranchDeleting: (branch) => {
+                  state.deletedBranches = [...(state.deletedBranches ?? []), branch];
                 },
-              );
+              });
               state.observation.cleanupCompleted = true;
+              if (input.removeWorktree) delete state.keptWorktree;
+              else state.keptWorktree = true;
             }
             const task = yield* Effect.uninterruptible(
               taskStore.transitionTask({ repoPath, taskId, ...decisionTransition(decision) }).pipe(
                 Effect.tap(() =>
                   Effect.sync(() => {
                     state.observation.taskClosed = true;
-                    delete state.deletedSourceBranch;
+                    delete state.deletedBranches;
                   }),
                 ),
               ),
@@ -75,17 +86,26 @@ export const closeMergedTask = (
 
       let failure = toHostOperationError(Cause.squash(result.cause), `task.${operation}`);
       const stage = state.observation.cleanupCompleted ? "close_task" : state.observation.phase;
-      if (state.deletedSourceBranch && !state.observation.taskClosed) {
-        const branch = state.deletedSourceBranch;
-        const restored = yield* Effect.result(gitPort.restoreDeletedBranch(repoPath, branch));
+      if (state.deletedBranches && !state.observation.taskClosed) {
+        const unrestored: { name: string; oid: string; cause: unknown }[] = [];
+        for (const branch of state.deletedBranches) {
+          const restored = yield* Effect.result(gitPort.restoreDeletedBranch(repoPath, branch));
+          if (restored._tag === "Failure") unrestored.push({ ...branch, cause: restored.failure });
+        }
         delete state.observation.cleanupCompleted;
-        if (restored._tag === "Failure") {
+        delete state.keptWorktree;
+        const [firstUnrestored] = unrestored;
+        if (firstUnrestored) {
+          const branches = unrestored
+            .map((branch) => `${branch.name} at ${branch.oid} (${errorMessage(branch.cause)})`)
+            .join(", ");
           failure = new HostOperationError({
             operation: "task.cleanup.restore-source",
-            message: `${failure.message}\nTask completion failed and its source branch could not be restored: ${errorMessage(restored.failure)}. Restore ${branch.name} at ${branch.oid} before retrying completion.`,
-            cause: restored.failure,
+            message: `${failure.message}\nTask completion failed and its local branches could not be restored: ${branches}. Restore them before retrying completion.`,
+            cause: firstUnrestored.cause,
           });
-        } else delete state.deletedSourceBranch;
+          state.deletedBranches = unrestored.map(({ name, oid }) => ({ name, oid }));
+        } else delete state.deletedBranches;
       }
       state.observation.phase = "settled";
       state.observation.failure = {

@@ -13,10 +13,11 @@ import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { hasOpenDialog } from "@/components/ui/open-dialogs";
 import { isPlatformChord } from "@/lib/keyboard-shortcuts";
-import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
+import type { WorkspaceScopeAction, WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { CommandPaletteContext, type CommandPaletteContextValue } from "./command-palette-context";
 import { CommandPaletteDialog } from "./command-palette-dialog";
 import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
+import { MergeCheckDialog } from "./merge-check-dialog";
 import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
 import { useRecentItems } from "./recent-items";
 import { useWorkspaceIntentRunner } from "./use-workspace-intent-runner";
@@ -34,12 +35,24 @@ export function CommandPaletteProvider({
   children,
 }: PropsWithChildren<{ shell: CommandPaletteShell }>): ReactElement {
   const [isOpen, setOpen] = useState(false);
-  const [syncChoice, setSyncChoice] = useState<{
+  const [scopeChoice, setScopeChoice] = useState<{
+    action: WorkspaceScopeAction;
     open: boolean;
-    workspace: PullRequestSyncTarget | null;
-  }>({ open: false, workspace: null });
-  const openPullRequestSync = useCallback((workspace: PullRequestSyncTarget | null) => {
-    setSyncChoice({ open: true, workspace: workspace ? { ...workspace } : null });
+    workspace: WorkspaceScopeTarget | null;
+  }>({ action: "pull_request_sync", open: false, workspace: null });
+  const openScopeChoice = useCallback(
+    (action: WorkspaceScopeAction, workspace: WorkspaceScopeTarget | null) => {
+      setScopeChoice({ action, open: true, workspace: workspace ? { ...workspace } : null });
+    },
+    [],
+  );
+  const closeScopeChoice = useCallback(
+    () => setScopeChoice((current) => ({ ...current, open: false })),
+    [],
+  );
+  const onScopeChoiceCloseAutoFocus = useCallback((event: Event) => {
+    event.preventDefault();
+    focusIfConnected(previousFocusRef.current);
   }, []);
   const [pageCommands, setPageCommands] = useState<CommandPalettePageCommand[]>([]);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -108,7 +121,7 @@ export function CommandPaletteProvider({
       {children}
       <CommandPaletteDialog
         open={isOpen}
-        openPullRequestSync={openPullRequestSync}
+        openScopeChoice={openScopeChoice}
         platform={platform}
         shell={shell}
         pageCommands={pageCommands}
@@ -124,13 +137,16 @@ export function CommandPaletteProvider({
         }}
       />
       <PullRequestSyncDialog
-        open={syncChoice.open}
-        workspace={syncChoice.workspace}
-        onClose={() => setSyncChoice((current) => ({ ...current, open: false }))}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          focusIfConnected(previousFocusRef.current);
-        }}
+        open={scopeChoice.open && scopeChoice.action === "pull_request_sync"}
+        workspace={scopeChoice.workspace}
+        onClose={closeScopeChoice}
+        onCloseAutoFocus={onScopeChoiceCloseAutoFocus}
+      />
+      <MergeCheckDialog
+        open={scopeChoice.open && scopeChoice.action === "merge_check"}
+        workspace={scopeChoice.workspace}
+        onClose={closeScopeChoice}
+        onCloseAutoFocus={onScopeChoiceCloseAutoFocus}
       />
     </CommandPaletteContext>
   );

@@ -40,7 +40,7 @@ import type {
   AgentSessionState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import type { AgentStudioSessionQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import {
   buildAgentStudioSelectionQueryUpdate,
   type AgentStudioQueryUpdate as QueryUpdate,
@@ -363,7 +363,7 @@ export function useAgentStudioSessionStartFlow({
   );
 
   const handleQuickAction = useCallback(
-    (option: AgentStudioQuickActionOption): void => {
+    (option: AgentStudioSessionQuickActionOption): void => {
       if (option.disabled) {
         return;
       }
@@ -423,6 +423,6 @@ export function useAgentStudioSessionStartFlow({
     ) => Promise<SessionStartWorkflowResult | undefined>;
     startLaunchKickoff: () => Promise<void>;
     handleCreateSession: (option: SessionCreateOption) => void;
-    handleQuickAction: (option: AgentStudioQuickActionOption) => void;
+    handleQuickAction: (option: AgentStudioSessionQuickActionOption) => void;
   };
 }

@@ -26,6 +26,7 @@ import {
   type TaskPullRequestDetectResult,
   type TaskStopImpact,
   type TaskStopImpactRequest,
+  type TaskWorktreeCleanupImpact,
 } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -76,6 +77,7 @@ import {
   mapTaskMutationProgressErrors,
 } from "./task-error-mapping";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
+import { createTaskWorktreeUseCases } from "./use-cases/manage-task-worktree";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpdateModelInput,
@@ -83,6 +85,7 @@ import type {
   BuildBlockedInput,
   BuildCompletedInput,
   BuildStartInput,
+  CloseTaskInput,
   CreateTaskUseCaseInput,
   DeleteTaskInput,
   DirectMergeInput,
@@ -181,6 +184,11 @@ export type TaskService = {
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
   listTaskIds(input: RepoPathInput): Effect.Effect<string[], TaskServiceError>;
   getTaskStopImpact(input: TaskStopImpactRequest): Effect.Effect<TaskStopImpact, TaskServiceError>;
+  getTaskWorktreeCleanupImpact(
+    input: TaskIdInput,
+  ): Effect.Effect<TaskWorktreeCleanupImpact, TaskServiceError>;
+  /** Removes the worktree and local branches of a closed task. */
+  removeTaskWorktree(input: TaskIdInput): Effect.Effect<void, TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
   agentSessionsList(input: TaskIdInput): Effect.Effect<AgentSessionRecord[], TaskServiceError>;
   agentSessionsListForTasks(
@@ -209,7 +217,7 @@ export type TaskService = {
   ): Effect.Effect<TaskCard, TaskServiceError>;
   createTask(input: CreateTaskUseCaseInput): Effect.Effect<TaskCard, TaskServiceError>;
   deleteTask(input: DeleteTaskInput): Effect.Effect<TaskDeleteResult, TaskServiceError>;
-  closeTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
+  closeTask(input: CloseTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetImplementation(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   updateTask(input: UpdateTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -228,7 +236,6 @@ export type TaskService = {
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanRequestChanges(input: OptionalNoteInput): Effect.Effect<TaskCard, TaskServiceError>;
-  humanApprove(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   repoPullRequestSync(
     input: RepoPullRequestSyncRequest,
   ): Effect.Effect<RepoPullRequestSyncResponse, TaskServiceError>;
@@ -362,6 +369,7 @@ const createTaskServiceImplementation = (
     ...createArtifactUseCases(useCaseInput),
     ...createTaskQueryUseCases(useCaseInput),
     ...createTaskStopImpactUseCase(useCaseInput),
+    ...createTaskWorktreeUseCases(useCaseInput),
     ...createTaskApprovalContextUseCase(useCaseInput),
     ...createTaskPullRequestDetectionUseCase(useCaseInput),
     ...createTaskPullRequestManagementUseCases(useCaseInput),
@@ -461,7 +469,6 @@ const createTaskServiceImplementation = (
     findTask: (input) => mapTaskServiceErrors(service.findTask(input)),
     listTaskReferences: (input) => mapTaskServiceErrors(service.listTaskReferences(input)),
     getTaskMetadata: (input) => mapTaskServiceErrors(service.getTaskMetadata(input)),
-    humanApprove: (input) => mapTaskServiceErrors(service.humanApprove(input)),
     humanRequestChanges: (input) => mapTaskServiceErrors(service.humanRequestChanges(input)),
     linkMergedPullRequest: (input) =>
       mapTaskMutationProgressErrors(service.linkMergedPullRequest(input)),
@@ -470,6 +477,9 @@ const createTaskServiceImplementation = (
     listTaskIds: (input) => mapTaskServiceErrors(service.listTaskIds(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
     getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
+    getTaskWorktreeCleanupImpact: (input) =>
+      mapTaskServiceErrors(service.getTaskWorktreeCleanupImpact(input)),
+    removeTaskWorktree: (input) => mapTaskServiceErrors(service.removeTaskWorktree(input)),
     repoPullRequestSync: (input) => mapTaskServiceErrors(service.repoPullRequestSync(input)),
     repoPullRequestSyncDetailed: (input) =>
       mapTaskMutationProgressErrors(service.repoPullRequestSyncDetailed(input)),

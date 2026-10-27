@@ -159,25 +159,50 @@ export const TaskLabelCountChip = memo(function TaskLabelCountChip({
   return <TaskChip label={`+${count}`} paint="muted" size={size} weight="semibold" />;
 });
 
+/** The desktop Merged badge: the task branch is merged into its target. */
+const MergedBadge = memo(function MergedBadge({
+  target,
+  size = "md",
+}: {
+  target: string;
+  size?: ChipSize;
+}): ReactElement {
+  return (
+    <TaskChip
+      label="Merged"
+      icon="git-merge"
+      paint="status-success"
+      size={size}
+      accessibilityLabel={`Branch merged into ${target}`}
+    />
+  );
+});
+
 /**
  * The status badges of a task, as the desktop card status row: QA Rejected, the pull request,
- * and the source issue. It renders nothing when the task has none.
+ * the source issue, and Merged. It renders nothing when the task has none.
  */
 export const TaskStatusChips = memo(function TaskStatusChips({
   task,
   qaRejected,
+  mergedTarget,
   size = "md",
 }: {
   task: Pick<TaskCard, "pullRequest" | "sourceIssue">;
   qaRejected: boolean;
+  /** The target that the task branch is merged into. */
+  mergedTarget?: string | undefined;
   size?: ChipSize;
 }): ReactElement | null {
-  if (!qaRejected && !task.pullRequest && !task.sourceIssue) return null;
+  if (!qaRejected && !task.pullRequest && !task.sourceIssue && mergedTarget === undefined) {
+    return null;
+  }
   return (
     <View pointerEvents="box-none" style={styles.row}>
       {qaRejected ? <QaRejectedBadge size={size} /> : null}
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} size={size} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} size={size} /> : null}
+      {mergedTarget !== undefined ? <MergedBadge target={mergedTarget} size={size} /> : null}
     </View>
   );
 });

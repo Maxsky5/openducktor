@@ -55,7 +55,7 @@ const plainDescription = (description: string): readonly TaskConfirmCopySegment[
   { text: description, emphasis: false },
 ];
 
-const plural = (count: number, noun: string): string => `${noun}${count === 1 ? "" : "s"}`;
+const pluralNoun = (count: number, noun: string): string => `${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * A description that names the task by its title and its ID, as the user knows the title. The
@@ -81,6 +81,10 @@ const namedDescription = (
   };
 };
 
+/** The text of a failed read of the sessions that an action stops. */
+export const stopImpactReadErrorMessage = (error: string): string =>
+  `Unable to check how many active sessions will be stopped: ${error}`;
+
 /** The active session line of a confirmation, or null when no active session stops. */
 export const taskStopImpactLine = (
   count: number | null,
@@ -88,11 +92,7 @@ export const taskStopImpactLine = (
   operation: TaskCleanupOperationLabel,
 ): TaskConfirmCopyLine | null => {
   if (error !== null) {
-    return {
-      text: `Unable to check how many active sessions will be stopped: ${error}`,
-      emphasis: false,
-      error: true,
-    };
+    return { text: stopImpactReadErrorMessage(error), emphasis: false, error: true };
   }
   if (count !== null && count > 0) return line(formatActiveSessionStopMessage(count, operation));
   return null;
@@ -115,40 +115,6 @@ const stopImpactLines = (
   return lines;
 };
 
-const closeTerminalLine = (terminalCount: number): string => {
-  if (terminalCount === 0) return "No running task terminals will be stopped.";
-  return `${terminalCount} task ${plural(terminalCount, "terminal")}, including action terminals, will be stopped before the task closes.`;
-};
-
-/** The Close Task confirmation. It keeps the task record and removes task worktrees. */
-export const buildTaskCloseConfirmCopy = (
-  task: TaskConfirmSubject,
-  impact: TaskConfirmImpact,
-): TaskConfirmCopy => {
-  return {
-    title: "Close Task",
-    ...namedDescription("Close ", task, " manually and move it to Done?"),
-    tone: "warning",
-    lines: [
-      line(
-        "This manual override moves the task to Done and bypasses unfinished workflow steps.",
-        true,
-      ),
-      line("No code is merged and no pull request is created, updated, or merged."),
-      line(closeTerminalLine(impact.terminalCount)),
-      ...stopImpactLines(impact, "close"),
-      line(
-        formatCleanupImpactMessage(impact, "close") ??
-          "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost.",
-      ),
-      line(
-        "The task record, all artifacts, and linked history are retained. Free artifacts become read-only.",
-      ),
-    ],
-    confirmLabel: { idle: "Close task", pending: "Closing...", checking: CHECKING_LABEL },
-  };
-};
-
 /** The Reset Task confirmation. It keeps the task record and clears workflow artifacts. */
 export const buildTaskResetConfirmCopy = (
   task: TaskConfirmSubject,
@@ -163,7 +129,7 @@ export const buildTaskResetConfirmCopy = (
   if (impact.terminalCount > 0) {
     lines.push(
       line(
-        `${impact.terminalCount} associated ${plural(impact.terminalCount, "terminal")} will be terminated before the task resets.`,
+        `${impact.terminalCount} associated ${pluralNoun(impact.terminalCount, "terminal")} will be terminated before the task resets.`,
       ),
     );
   }
@@ -198,7 +164,7 @@ export const buildTaskDeleteConfirmCopy = (
   if (impact.terminalCount > 0) {
     lines.push(
       line(
-        `${impact.terminalCount} associated ${plural(impact.terminalCount, "terminal")} will be terminated before deletion.`,
+        `${impact.terminalCount} associated ${pluralNoun(impact.terminalCount, "terminal")} will be terminated before deletion.`,
       ),
     );
   }
@@ -265,7 +231,7 @@ export const buildTaskResetImplementationConfirmCopy = (
   if (input.terminalCount > 0) {
     lines.push(
       line(
-        `${input.terminalCount} associated ${plural(input.terminalCount, "terminal")} will be terminated before the implementation resets.`,
+        `${input.terminalCount} associated ${pluralNoun(input.terminalCount, "terminal")} will be terminated before the implementation resets.`,
       ),
     );
   }

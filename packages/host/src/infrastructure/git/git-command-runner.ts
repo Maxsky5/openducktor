@@ -41,6 +41,8 @@ export type GitCommandRunner = (
      * where default decoding writes U+FFFD. A read with stdin or `onStarted` cannot use it.
      */
     strictUtf8?: boolean;
+    /** Variables that override the host environment for this command. */
+    env?: Readonly<Record<string, string>> | undefined;
   },
 ) => Effect.Effect<
   GitCommandResult & {
@@ -229,7 +231,7 @@ export const createDefaultGitRunner = (
   return (workingDirectory, args, options) =>
     Effect.gen(function* () {
       const platform = launchOptions.platform ?? process.platform;
-      const commandEnv = createGitEnvironment(readEnv(), platform);
+      const commandEnv = { ...createGitEnvironment(readEnv(), platform), ...options?.env };
       const command = yield* resolveCommand();
       const spawned = options?.stdin !== undefined || options?.onStarted !== undefined;
       if (spawned && options?.strictUtf8) {
@@ -342,6 +344,16 @@ export const runGitAllowFailure = (
   },
   GitCommandError
 > => runner(workingDirectory, args, { allowFailure: true });
+export const runGitWithStdin = (
+  runner: GitCommandRunner,
+  workingDirectory: string,
+  args: string[],
+  stdin: string,
+) =>
+  Effect.gen(function* () {
+    const result = yield* runner(workingDirectory, args, { stdin });
+    return result.stdout;
+  });
 export const runGitWithStdinAllowFailure = (
   runner: GitCommandRunner,
   workingDirectory: string,

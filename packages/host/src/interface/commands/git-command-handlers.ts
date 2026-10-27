@@ -3,6 +3,7 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import {
   parseGitAbortConflictInput,
   parseGitAheadBehindInput,
+  parseGitFetchRemoteInput,
   parseGitChangeSelectionInput,
   parseGitCommitAllInput,
   parseGitCommitStagedInput,
@@ -31,7 +32,7 @@ export const createGitCommandHandlers = (gitService: GitService) =>
     git_commits_ahead_behind: (args) =>
       gitService.commitsAheadBehind(parseGitAheadBehindInput(args)),
     git_create_worktree: (args) => gitService.createWorktree(parseGitCreateWorktreeInput(args)),
-    git_fetch_remote: (args) => gitService.fetchRemote(parseGitAheadBehindInput(args)),
+    git_fetch_remote: (args) => gitService.fetchRemote(parseGitFetchRemoteInput(args)),
     git_get_branches: (args) => gitService.getBranches(parseGitScopeInput(args)),
     git_get_current_branch: (args) => gitService.getCurrentBranch(parseGitScopeInput(args)),
     git_get_diff: (args) => gitService.getDiff(parseGitDiffInput(args)),

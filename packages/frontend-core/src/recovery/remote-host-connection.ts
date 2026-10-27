@@ -171,6 +171,11 @@ export const createRemoteHostConnection = ({
         if (event.channel === "openducktor://runtime-changed")
           logListenerFailure(listener(event.payload));
       }, listener),
+    subscribeTaskMergeStatusUpdates: (listener) =>
+      subscribe((event) => {
+        if (event.channel === "openducktor://task-merge-status-updated")
+          logListenerFailure(listener(event.payload));
+      }, listener),
     subscribeBrowserTabEvents: (listener) =>
       subscribe((event) => {
         if (event.channel === "openducktor://browser-event")

@@ -1,4 +1,4 @@
-import type { GitFetchRemoteResult, GitPushBranchResult } from "@openducktor/contracts";
+import type { GitPushBranchResult } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -222,7 +222,11 @@ const resolveTargetRemoteName = (
   const remote = targetBranch.slice(0, slash);
   return availableRemotes.has(remote) ? remote : undefined;
 };
-const resolveRefreshFetchRemotes = (
+/**
+ * The remotes that a Git panel fetch updates: the remote of the current branch upstream and the
+ * remote of the compare target.
+ */
+export const resolveFetchRemotes = (
   runner: GitCommandRunner,
   workingDirectory: string,
   targetBranch: string,
@@ -260,41 +264,6 @@ const resolveRefreshFetchRemotes = (
       pushUniqueRemote(remotes, seen, targetRemote);
     }
     return remotes;
-  });
-export const fetchRemote = (
-  runner: GitCommandRunner,
-  workingDirectory: string,
-  targetBranch: string,
-): Effect.Effect<GitFetchRemoteResult, GitRemoteSyncError> =>
-  Effect.gen(function* () {
-    const remotes = yield* resolveRefreshFetchRemotes(runner, workingDirectory, targetBranch);
-    if (remotes.length === 0) {
-      return {
-        outcome: "skipped_no_remote",
-        output:
-          "Skipped git fetch because no applicable remote is configured for this repo or branch.",
-      };
-    }
-    const outputs: string[] = [];
-    for (const remote of remotes) {
-      const result = yield* runGitAllowFailure(runner, workingDirectory, [
-        "fetch",
-        "--prune",
-        "--",
-        remote,
-      ]);
-      const output = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
-      if (!result.ok) {
-        return yield* Effect.fail(
-          gitOperationError(`git fetch --prune ${remote} failed: ${output}`, "git.fetch"),
-        );
-      }
-      outputs.push(output.length === 0 ? `Fetched ${remote}` : output);
-    }
-    return {
-      outcome: "fetched",
-      output: outputs.join("\n"),
-    };
   });
 export const pushBranch = (
   runner: GitCommandRunner,

@@ -53,6 +53,8 @@ export const tasks = sqliteTable(
     sourceNumber: text("source_number"),
     sourceUrl: text("source_url"),
     directMergeJson: text("direct_merge_json"),
+    // Null follows the global setting. Migration 0010 adds a column check for 0 and 1.
+    removeWorktreeOnClose: integer("remove_worktree_on_close", { mode: "boolean" }),
     createdAt: integer("created_at_ms", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at_ms", { mode: "timestamp_ms" }).notNull(),
   },

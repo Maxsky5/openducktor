@@ -168,12 +168,13 @@ const gitFetchRemote = async (
   invokeFn: InvokeFn,
   repoPath: string,
   targetBranch: string,
-  workingDir?: string,
+  options: { force: boolean; workingDir?: string },
 ): Promise<GitFetchRemoteResult> => {
   const request: GitFetchRemoteRequest = {
     repoPath,
     targetBranch,
-    workingDir,
+    workingDir: options.workingDir,
+    force: options.force,
   };
   return invokeFn(
     "git_fetch_remote",
@@ -181,6 +182,7 @@ const gitFetchRemote = async (
       repoPath: request.repoPath,
       targetBranch: request.targetBranch,
       workingDir: request.workingDir ?? null,
+      force: request.force,
     },
     gitFetchRemoteResultSchema,
   );
@@ -454,12 +456,13 @@ export class HostGitClient {
     return gitPullBranch(this.invokeFn, repoPath, workingDir);
   }
 
+  /** Without `force`, the host skips a remote that it fetched in the last 5 minutes. */
   async gitFetchRemote(
     repoPath: string,
     targetBranch: string,
-    workingDir?: string,
+    options: { force: boolean; workingDir?: string },
   ): Promise<GitFetchRemoteResult> {
-    return gitFetchRemote(this.invokeFn, repoPath, targetBranch, workingDir);
+    return gitFetchRemote(this.invokeFn, repoPath, targetBranch, options);
   }
 
   async gitGetStatus(repoPath: string, workingDir?: string): Promise<FileStatus[]> {

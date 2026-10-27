@@ -9,7 +9,7 @@ import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
-import { TASK_DETAILS_WORKFLOW_ACTIONS } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
+import { taskDetailsWorkflowActions } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import {
   resolveHistoricalSessionRoles,
   resolveSessionTargetOptions,
@@ -17,6 +17,8 @@ import {
 import { TaskCloseConfirmDialog } from "@/components/features/task-details/task-close-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
+import { TaskRemoveWorktreeConfirmDialog } from "@/components/features/task-details/task-remove-worktree-confirm-dialog";
+import { TaskReadError } from "@/components/features/task-details/task-close-confirm-content";
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
 import {
   TaskDetailsSheetFooter,
@@ -108,7 +110,7 @@ export function TaskDetailsSheetContent(
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    detailActions: TASK_DETAILS_WORKFLOW_ACTIONS,
+    detailActions: taskDetailsWorkflowActions(viewModel.removeWorktreeConfirm.isAvailable),
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
@@ -142,6 +144,11 @@ export function TaskDetailsSheetContent(
         />
       </div>
 
+      {viewModel.removeWorktreeConfirm.sheetReadError ? (
+        <div className="border-t border-border bg-card px-5 py-2">
+          <TaskReadError read={viewModel.removeWorktreeConfirm.sheetReadError} />
+        </div>
+      ) : null}
       <TaskDetailsSheetFooter {...footerProps} />
 
       {/* Inside the sheet content, so the non-modal sheet treats focus in them as its own. */}
@@ -152,7 +159,10 @@ export function TaskDetailsSheetContent(
         <TaskResetConfirmDialog {...viewModel.resetConfirm.dialog} task={task} />
       ) : null}
       {workflowActions?.onCloseTask ? (
-        <TaskCloseConfirmDialog {...viewModel.closeConfirm.dialog} task={task} />
+        <TaskCloseConfirmDialog {...viewModel.closeConfirm.dialog} />
+      ) : null}
+      {workflowActions?.onRemoveTaskWorktree ? (
+        <TaskRemoveWorktreeConfirmDialog {...viewModel.removeWorktreeConfirm.dialog} />
       ) : null}
     </>
   );
@@ -199,7 +209,7 @@ function createTaskDetailsViewModelOptions({
   taskSessions,
 }: {
   activeWorkspace: TaskDetailsSheetProps["activeWorkspace"];
-  task: TaskDetailsSheetProps["task"];
+  task: TaskCard;
   open: boolean;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
   workflowActions: TaskWorkflowActions | null;
@@ -207,19 +217,16 @@ function createTaskDetailsViewModelOptions({
   historicalSessions: AgentSessionRecord[];
   taskSessions: KanbanTaskSession[];
 }): Parameters<typeof useTaskDetailsSheetViewModel>[0] {
-  const options: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
+  return {
     activeWorkspace: activeWorkspace ?? null,
     task,
     open,
     onOpenChange,
     ...workflowActions,
     onDelete,
+    resolveSessionOptionsByRole: (role: AgentRole) =>
+      resolveSessionTargetOptions(historicalSessions, taskSessions, role),
   };
-  if (task) {
-    options.resolveSessionOptionsByRole = (role: AgentRole) =>
-      resolveSessionTargetOptions(historicalSessions, taskSessions, role);
-  }
-  return options;
 }
 
 function useTaskDetailsCloseRegistration(

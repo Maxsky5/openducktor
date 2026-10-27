@@ -55,7 +55,7 @@ import {
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 import { BrowserRuntimeProvider } from "@/features/browser";
-import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import type { AgentStudioSessionQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import {
   createGitActionsFixture,
   createBuildToolsFixture,
@@ -153,7 +153,7 @@ type OrchestrationState = {
   sessionStartModal: SessionStartModalModel | null;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
   agentStudioHeaderModel: AgentStudioHeaderModel;
-  gitConflictQuickAction: AgentStudioQuickActionOption | null;
+  gitConflictQuickAction: AgentStudioSessionQuickActionOption | null;
   taskExecutionDocumentPanelModel: TaskExecutionDocumentPanelModel | null;
   agentChatModel: AgentChatModel;
   pullRequestReview: {
@@ -228,10 +228,10 @@ let tasksState: TasksStateContextValue = {
   setTaskTargetBranch: mock(async () => undefined),
   deleteTask: mock(async () => undefined),
   closeTask: mock(async () => undefined),
+  removeTaskWorktree: mock(async () => {}),
   resetTaskImplementation: mock(async () => undefined),
   resetTask: mock(async () => undefined),
   transitionTask: mock(async () => undefined),
-  humanApproveTask: mock(async () => undefined),
   humanRequestChangesTask: mock(async () => undefined),
   detectingPullRequestTaskIds: new Set<string>(),
   linkingMergedPullRequestTaskId: null,
@@ -688,10 +688,10 @@ beforeEach(async () => {
     setTaskTargetBranch: mock(async () => undefined),
     deleteTask: mock(async () => undefined),
     closeTask: mock(async () => undefined),
+    removeTaskWorktree: mock(async () => {}),
     resetTaskImplementation: mock(async () => undefined),
     resetTask: mock(async () => undefined),
     transitionTask: mock(async () => undefined),
-    humanApproveTask: mock(async () => undefined),
     humanRequestChangesTask: mock(async () => undefined),
     detectingPullRequestTaskIds: new Set<string>(),
     linkingMergedPullRequestTaskId: null,
@@ -906,6 +906,7 @@ describe("useAgentsPageShellModel", () => {
       pendingMergedPullRequest: {
         taskId: "task-1",
         taskTitle: "Original task",
+        taskRemoveWorktreeOnClose: null,
         pullRequest: {
           providerId: "github",
           number: 268,
@@ -1025,7 +1026,8 @@ describe("useAgentsPageShellModel", () => {
   });
 
   test("adds the git conflict quick action from the build tools to the chat header", async () => {
-    const gitConflictQuickAction: AgentStudioQuickActionOption = {
+    const gitConflictQuickAction: AgentStudioSessionQuickActionOption = {
+      kind: "session_start",
       id: "quick:build_rebase_conflict_resolution",
       role: "build",
       launchActionId: "build_rebase_conflict_resolution",

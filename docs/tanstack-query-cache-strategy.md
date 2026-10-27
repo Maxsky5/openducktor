@@ -73,6 +73,8 @@ Runtime catalog reads follow these rules:
 | Task approval context | 60 sec |
 | Host runtime and MCP bridge status | Infinite, updated by events |
 | Saved Autopilot rules | Infinite, invalidated by events |
+| Task merge status | Infinite, updated by events |
+| Task worktree cleanup impact | 0 |
 
 Task details and editing use `unfilteredRepoTaskDataQueryOptions` and `tasksListAll`, with a separate cache key from the retained Kanban list. Task events carry changed cards, including closed tasks outside Done retention. Both lists apply these cards and removals without another host read; only the Kanban list applies the event cutoff. A stream gap marks the complete list incomplete before the board read starts. Later events cannot make that baseline fresh. Observed complete lists read again during recovery; inactive lists wait for their next view. A successful full read clears the incomplete state.
 
@@ -92,11 +94,15 @@ Each query client sends one live refresh at a time, including across replacement
 
 When a replacement snapshot arrives, the stream cancels all session-list reads and advances the batch epoch. Work that started before the snapshot does not store records, start a live refresh, or report success. A read whose response returned before the snapshot cannot be cancelled. If it has no older list to keep, its query goes back to its first state. A stopped stream starts no live refresh for the events or the snapshot that it started.
 
-Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, `host-runtime-status.ts`, and `autopilot.ts`.
+Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, `host-runtime-status.ts`, `autopilot.ts`, `task-merge-status.ts`, and `task-worktree-cleanup-impact.ts`.
 
 The saved Autopilot rules have their own entry, apart from the settings snapshot, so no settings mutation writes or cancels them. The `autopilot_settings_saved` run event and a reconnect after missed events invalidate the entry.
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
+
+Each repository has one task merge status entry. The `openducktor://task-merge-status-updated` event owns it after the first read. Each event cancels the read in progress for its repository, then replaces the entry with the event snapshot. Check again replaces the entry with the snapshot that `task_merge_status_check` returns. A reconnect with missed events invalidates all entries. Do not poll it.
+
+The task worktree cleanup impact runs only while a close confirmation, a worktree removal confirmation, or the detail sheet of a closed task is open. It has a zero stale time and a zero garbage collection time, so each opening reads current Git state. A close or a worktree removal invalidates it.
 
 Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. It also cancels the read in progress for that task. The query options use `structuralSharing` to keep a committed list when an older read result arrives after the update. A caller that joined the cancelled read receives the committed list. Workspace session updates use their existing record event. These updates do not trigger another read.
 

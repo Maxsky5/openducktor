@@ -17,6 +17,12 @@ export const issueTypeSchema = workflowIdSchema;
 /** An action of the task workflow. */
 export const taskActionSchema = workflowIdSchema;
 
+/**
+ * Whether a close of the task removes its worktree and local task branch. Null follows the global
+ * Git setting of the same name.
+ */
+export const taskRemoveWorktreeOnCloseSchema = z.boolean().nullable();
+
 export const taskPrioritySchema = z.number().int().min(0).max(4);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
@@ -54,6 +60,7 @@ export const taskCardSchema = z.object({
   status: taskStatusSchema,
   priority: taskPrioritySchema.default(2),
   issueType: issueTypeSchema,
+  removeWorktreeOnClose: taskRemoveWorktreeOnCloseSchema.default(null),
   availableActions: z.array(taskActionSchema),
   labels: z.array(z.string()).default([]),
   targetBranch: z.preprocess(
@@ -90,6 +97,8 @@ export const taskDirectMergeInputSchema = z.strictObject({
     (value) => (value === null ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
+  /** A merge that closes the task removes the task worktree and its local task branch. */
+  removeWorktree: z.boolean(),
 });
 export type TaskDirectMergeInput = z.infer<typeof taskDirectMergeInputSchema>;
 
@@ -111,6 +120,7 @@ export const taskCreateInputSchema = z.object({
   priority: taskPrioritySchema.default(2),
   description: z.string().optional(),
   labels: z.array(z.string()).optional(),
+  removeWorktreeOnClose: taskRemoveWorktreeOnCloseSchema.optional(),
 });
 export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
 
@@ -124,6 +134,7 @@ export const taskUpdatePatchSchema = z.object({
     (value) => (value === null ? undefined : value),
     gitTargetBranchSchema.optional(),
   ),
+  removeWorktreeOnClose: taskRemoveWorktreeOnCloseSchema.optional(),
 });
 export type TaskUpdatePatch = z.infer<typeof taskUpdatePatchSchema>;
 
@@ -151,3 +162,25 @@ export const taskStopImpactSchema = z.object({
   removedWorktreeCount: z.number().int().nonnegative().optional(),
 });
 export type TaskStopImpact = z.infer<typeof taskStopImpactSchema>;
+
+export const taskCloseInputSchema = z.strictObject({
+  repoPath: z.string().min(1),
+  taskId: z.string().min(1),
+  /** The close removes the task worktree and its local task branch. */
+  removeWorktree: z.boolean(),
+});
+export type TaskCloseInput = z.infer<typeof taskCloseInputSchema>;
+
+/** What a close or a worktree removal does to the worktrees and branches of one task. */
+export const taskWorktreeCleanupImpactSchema = z.object({
+  /** The existing worktrees that a cleanup removes: the task worktree and session worktrees. */
+  worktreePaths: z.array(z.string()),
+  /** The local task branches that a cleanup deletes. */
+  branchNames: z.array(z.string()),
+  uncommittedFileCount: z.number().int().nonnegative(),
+  /** The task matches the merge detection candidate rule. */
+  mergeCandidate: z.boolean(),
+  /** The current tip of the task branch. Null when the task has no single task branch. */
+  branchOid: z.string().nullable(),
+});
+export type TaskWorktreeCleanupImpact = z.infer<typeof taskWorktreeCleanupImpactSchema>;

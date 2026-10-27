@@ -1715,7 +1715,7 @@ describe("use-repo-settings-operations", () => {
     const optimisticSnapshot = { ...createSettingsSnapshot(), theme: "dark" as const };
     const authoritativeSnapshot = {
       ...createSettingsSnapshot(),
-      git: { defaultMergeMethod: "squash" as const },
+      git: { defaultMergeMethod: "squash" as const, removeWorktreeOnClose: false },
     };
     const workspaceGetSettingsSnapshot = mock(async () => {
       return workspaceGetSettingsSnapshot.mock.calls.length === 1
@@ -1741,9 +1741,11 @@ describe("use-repo-settings-operations", () => {
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(optimisticSnapshot);
       await harness.getLatest().saveGlobalGitConfig({
         defaultMergeMethod: "squash",
+        removeWorktreeOnClose: false,
       });
       expect(workspaceUpdateGlobalGitConfig).toHaveBeenCalledWith({
         defaultMergeMethod: "squash",
+        removeWorktreeOnClose: false,
       });
       expect(applyWorkspaceRecords).not.toHaveBeenCalled();
       expect(applyWorkspaceRecord).not.toHaveBeenCalled();

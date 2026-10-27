@@ -24,6 +24,8 @@ This document defines persisted task status, UI labels, issue type rules, and ta
 
 `close_task` is an administrative override. It does not prove that code was merged, QA passed, or all workflow steps finished.
 
+Merge detection can propose `close_task` for a task whose branch is merged. It never closes a task by itself. See [merge detection](task-workflow-actions.md#merge-detection).
+
 The sidebar excludes sessions for `closed` tasks. If the visible task closes, the Sessions page returns to Kanban. Closing a task keeps its saved session history.
 
 ## Issue types

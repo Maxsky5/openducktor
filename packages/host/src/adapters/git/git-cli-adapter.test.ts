@@ -608,7 +608,7 @@ describe("createGitCliAdapter", () => {
       Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/missing")),
     ).resolves.toBe(false);
   });
-  test("fetches the current branch upstream remote and compare target remote once each", async () => {
+  test("resolves the current branch upstream remote and compare target remote once each", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
       runner: (_workingDirectory, args) => {
@@ -625,21 +625,17 @@ describe("createGitCliAdapter", () => {
               "config --get branch.feature/electron.merge": "refs/heads/feature/electron\n",
               "for-each-ref --format=%(upstream) refs/heads/feature/electron":
                 "refs/remotes/origin/feature/electron\n",
-              "fetch --prune -- origin": "",
-              "fetch --prune -- backup": "Fetched backup\n",
             }[command] ?? "",
           stderr: "",
         });
       },
     });
-    await expect(Effect.runPromise(git.fetchRemote("/repo", "backup/main"))).resolves.toEqual({
-      outcome: "fetched",
-      output: "Fetched origin\nFetched backup",
-    });
-    expect(calls).toContain("fetch --prune -- origin");
-    expect(calls).toContain("fetch --prune -- backup");
+    await expect(
+      Effect.runPromise(git.resolveFetchRemotes("/repo", "backup/main")),
+    ).resolves.toEqual(["origin", "backup"]);
+    expect(calls.some((call) => call.startsWith("fetch"))).toBe(false);
   });
-  test("skips fetch when no applicable remote can be resolved", async () => {
+  test("resolves no remote when none applies", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
         "branch --show-current": "feature/local\n",
@@ -649,11 +645,7 @@ describe("createGitCliAdapter", () => {
         "for-each-ref --format=%(refname) refs/remotes": "",
       }),
     });
-    await expect(Effect.runPromise(git.fetchRemote("/repo", "main"))).resolves.toEqual({
-      outcome: "skipped_no_remote",
-      output:
-        "Skipped git fetch because no applicable remote is configured for this repo or branch.",
-    });
+    await expect(Effect.runPromise(git.resolveFetchRemotes("/repo", "main"))).resolves.toEqual([]);
   });
   test("pulls upstream commits with a fast-forward merge after fetching the configured upstream", async () => {
     const calls: string[] = [];

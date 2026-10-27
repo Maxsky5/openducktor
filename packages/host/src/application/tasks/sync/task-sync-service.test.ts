@@ -290,7 +290,7 @@ describe("task mutation gate and pull request sync", () => {
           },
         },
       });
-      await Effect.runPromise(service.syncOpenWorkspacePullRequests());
+      await Effect.runPromise(service.syncOpenWorkspaces());
       expect(calls).toEqual([{ repoPath: "/first" }, { repoPath: "/repo" }, { repoPath: "/last" }]);
       expect(events).toMatchObject(
         ["/first", "/repo", "/last"].map((repoPath) => ({
@@ -301,6 +301,78 @@ describe("task mutation gate and pull request sync", () => {
       );
     },
   );
+
+  test("runs a merge detection pass after each workspace pull request sync", async () => {
+    const { eventBus } = createEventBus();
+    const steps: string[] = [];
+    const logs: string[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      logger: { error: (message) => Effect.sync(() => logs.push(message)) },
+      taskService: {
+        repoPullRequestSyncDetailed: ({ repoPath }) =>
+          Effect.sync(() => {
+            steps.push(`sync:${repoPath}`);
+            return { ran: true, changedTaskIds: [] };
+          }),
+      },
+      mergeDetection: {
+        runPass: (repoPath) =>
+          Effect.suspend(() => {
+            steps.push(`detect:${repoPath}`);
+            return repoPath === "/first"
+              ? Effect.fail(new HostOperationError({ operation: "test", message: "Git failed." }))
+              : Effect.succeed({ repoPath, tasks: [] });
+          }),
+      },
+      workspaceSettingsService: {
+        listWorkspaces: () => Effect.succeed([workspace("/first"), workspace("/last")]),
+      },
+    });
+
+    await Effect.runPromise(service.syncOpenWorkspaces());
+
+    expect(steps).toEqual(["sync:/first", "detect:/first", "sync:/last", "detect:/last"]);
+    expect(logs).toEqual([
+      "Merge detection iteration failed; the scheduler will retry on the next interval: /first: Git failed.",
+    ]);
+  });
+
+  test("skips a workspace that closed or went away after the loop listed it", async () => {
+    const { eventBus } = createEventBus();
+    const steps: string[] = [];
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: {
+        repoPullRequestSyncDetailed: ({ repoPath }) =>
+          Effect.sync(() => {
+            steps.push(`sync:${repoPath}`);
+            return { ran: true, changedTaskIds: [] };
+          }),
+      },
+      mergeDetection: {
+        runPass: (repoPath) =>
+          Effect.sync(() => {
+            steps.push(`detect:${repoPath}`);
+            return { repoPath, tasks: [] };
+          }),
+      },
+      workspaceSettingsService: {
+        listWorkspaces: () =>
+          Effect.succeed([workspace("/open"), workspace("/closed"), workspace("/removed")]),
+        getWorkspaceCatalog: () =>
+          Effect.succeed({
+            openWorkspaces: [workspace("/open")],
+            closedWorkspaces: [workspace("/closed")],
+            incompleteRemovals: [],
+          }),
+      },
+    });
+
+    await Effect.runPromise(service.syncOpenWorkspaces());
+
+    expect(steps).toEqual(["sync:/open", "detect:/open"]);
+  });
 
   test("publishes partial sync progress once and returns the original failure", async () => {
     const { eventBus, events } = createEventBus();
@@ -451,7 +523,7 @@ describe("task mutation gate and pull request sync", () => {
               ]),
           },
         });
-        const loop = yield* service.startPullRequestSyncLoop();
+        const loop = yield* service.startTaskSyncLoop();
         yield* TestClock.adjust(0);
         yield* loop.stop();
         return { logs, calls };
@@ -495,7 +567,7 @@ describe("task mutation gate and pull request sync", () => {
     });
     const snapshots = await Effect.runPromise(
       Effect.gen(function* () {
-        const loop = yield* service.startPullRequestSyncLoop();
+        const loop = yield* service.startTaskSyncLoop();
         try {
           yield* TestClock.adjust(0);
           const startup = [...calls];
@@ -571,7 +643,7 @@ describe("task mutation gate and pull request sync", () => {
             },
           });
 
-          const loop = yield* service.startPullRequestSyncLoop();
+          const loop = yield* service.startTaskSyncLoop();
           const reportedFailure = yield* Deferred.await(failureReported);
           const stopResult = yield* Effect.result(loop.stop());
           return { reportedFailure, stopResult };
@@ -632,7 +704,7 @@ describe("task mutation gate and pull request sync", () => {
           },
         });
 
-        const loop = yield* service.startPullRequestSyncLoop();
+        const loop = yield* service.startTaskSyncLoop();
         yield* Deferred.await(logStarted);
         const stopFiber = yield* Effect.forkChild(
           Effect.gen(function* () {
@@ -697,7 +769,7 @@ describe("task mutation gate and pull request sync", () => {
           },
         });
 
-        const loop = yield* service.startPullRequestSyncLoop();
+        const loop = yield* service.startTaskSyncLoop();
         yield* Deferred.await(logStarted);
         const stopFiber = yield* Effect.forkChild(
           Effect.gen(function* () {
@@ -756,7 +828,7 @@ describe("task mutation gate and pull request sync", () => {
           },
         });
 
-        const loop = yield* service.startPullRequestSyncLoop();
+        const loop = yield* service.startTaskSyncLoop();
         yield* TestClock.adjust(1);
         yield* Deferred.await(syncStarted);
         yield* loop.stop();
@@ -769,6 +841,7 @@ describe("task mutation gate and pull request sync", () => {
     );
 
     expect(eventsBeforeAndAfterRelease).toEqual({ beforeRelease: [], afterRelease: [] });
-    expect(calls).toEqual(["/repo"]);
+    // Workspaces sync in parallel, so both syncs were in flight at the stop.
+    expect(calls).toEqual(["/repo", "/other"]);
   });
 });

@@ -315,11 +315,11 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.run(async (state) => {
         await state.refreshWorktree("scheduled");
       });
-      expect(fetch).toHaveBeenCalledWith(
-        "/repo",
-        "refs/remotes/origin/release",
-        "/repo/.worktrees/task-24",
-      );
+      // A scheduled refresh lets the host skip a remote that it fetched recently.
+      expect(fetch).toHaveBeenCalledWith("/repo", "refs/remotes/origin/release", {
+        force: false,
+        workingDir: "/repo/.worktrees/task-24",
+      });
       expect(harness.getLatest().comparison?.unavailableReason).toBeNull();
     } finally {
       await harness.unmount();
