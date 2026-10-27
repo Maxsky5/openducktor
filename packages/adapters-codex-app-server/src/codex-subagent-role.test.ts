@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import {
@@ -12,7 +12,7 @@ import {
   requestThreadId,
 } from "./codex-app-server-adapter.test-harness";
 import { codexCollabAgentToolCallFixture } from "./test-fixtures/codex-protocol";
-import type { CodexJsonRpcRequest } from "./index";
+import type { CodexAppServerAdapterOptions, CodexJsonRpcRequest } from "./index";
 
 const activity = (kind: "started" | "completed", childThreadId = "child-thread") => ({
   type: "subAgentActivity" as const,
@@ -63,10 +63,14 @@ class SubagentRoleTransport extends RecordingTransport {
   }
 }
 
-const observeParent = async (transport = new SubagentRoleTransport()) => {
+const observeParent = async (
+  transport = new SubagentRoleTransport(),
+  options: Partial<CodexAppServerAdapterOptions> = {},
+) => {
   const stream = createRuntimeStreamSubscription();
   const events: AgentEvent[] = [];
   const adapter = createAdapterWithTransport(transport, {
+    ...options,
     subscribeEvents: stream.subscribeEvents,
     onLiveSessionMutation: (mutation) => {
       events.push(...mutation.transcriptEvents);
@@ -97,6 +101,39 @@ const observeParent = async (transport = new SubagentRoleTransport()) => {
 };
 
 describe("Codex subagent roles", () => {
+  test.each(["live", "history"] as const)(
+    "matches aliased directories for %s roles",
+    async (mode) => {
+      const transport = new SubagentRoleTransport();
+      transport.child.cwd = "/native-worktree";
+      const directoriesMatch = mock(
+        async (left: string, right: string) =>
+          left === right || (left === "/native-worktree" && right === "/repo"),
+      );
+      if (mode === "live") {
+        const live = await observeParent(transport, { directoriesMatch });
+        await live.emit();
+        expect(live.events.at(-1)).toMatchObject({
+          type: "assistant_part",
+          part: { externalSessionId: "child-thread", agent: "explorer" },
+        });
+        expect(live.events.some((event) => event.type === "session_error")).toBe(false);
+      } else {
+        const history = await createAdapterWithTransport(transport, {
+          directoriesMatch,
+        }).loadSessionHistory(codexSessionRuntimeRef("parent-thread"));
+        expect(history.flatMap((message) => message.parts)).toContainEqual(
+          expect.objectContaining({
+            kind: "subagent",
+            externalSessionId: "child-thread",
+            agent: "explorer",
+          }),
+        );
+      }
+      expect(directoriesMatch).toHaveBeenCalledWith("/native-worktree", "/repo");
+    },
+  );
+
   test.each([
     { role: "thermo-nuclear-review-subagent", nickname: "Dalton", prompt: null },
     { role: "thermo-nuclear-code-quality-review-subagent", nickname: "Godel", prompt: null },
@@ -261,12 +298,17 @@ describe("Codex subagent roles", () => {
     "rejects child metadata with a mismatched %s",
     async (field) => {
       const transport = new SubagentRoleTransport();
+      transport.child.cwd = "/native-worktree";
       transport.child[field] = "another-scope";
+      const directoriesMatch = mock(async (left: string, right: string) => left === right);
       await expect(
-        createAdapterWithTransport(transport).loadSessionHistory(
+        createAdapterWithTransport(transport, { directoriesMatch }).loadSessionHistory(
           codexSessionRuntimeRef("parent-thread"),
         ),
       ).rejects.toThrow("subagent metadata");
+      if (field !== "cwd") {
+        expect(directoriesMatch).not.toHaveBeenCalledWith("/native-worktree", "/repo");
+      }
     },
   );
 });

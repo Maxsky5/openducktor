@@ -1,6 +1,6 @@
 import type { AgentSessionForkPoint, WorkspaceSession } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AgentChatForkActions } from "@/components/features/agents/agent-chat/agent-chat-fork-context";
 import { useForkNavigation } from "@/components/features/agents/agent-chat/use-fork-navigation";
 import { useDialogPresence } from "@/components/ui/dialog";
@@ -10,6 +10,7 @@ import {
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionForkDialog } from "./workspace-session-fork-dialog";
 
@@ -37,40 +38,44 @@ export function useWorkspaceSessionFork({
     openChild: (record: WorkspaceSession) => void;
     committedRecord: WorkspaceSession | null;
   } | null>(null);
-  const source = workspaceSessionIdentity(record);
+  const source = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const open = request?.open === true && active && record.archivedAt === null;
   const present = useDialogPresence(open);
-  const actions: AgentChatForkActions | null =
-    source && record.archivedAt === null
-      ? {
-          disabledReason,
-          isPending: (point) =>
-            pending.has(sessionForkRequestKey(workspace.repoPath, source, point)),
-          onFork: (point) => {
-            if (
-              disabledReason ||
-              pending.has(sessionForkRequestKey(workspace.repoPath, source, point))
-            )
-              return;
-            const navigate = captureNavigation();
-            setRequest({
-              open: true,
-              point,
-              committedRecord: null,
-              openChild: (child) => {
-                navigate(
-                  {
-                    kind: "workspace_session",
-                    workspaceId: workspace.workspaceId,
-                    sessionId: child.id,
-                  },
-                  workspace.repoPath,
-                );
+  const actions = useMemo<AgentChatForkActions | null>(() => {
+    if (!source || record.archivedAt !== null) return null;
+    return {
+      disabledReason,
+      isPending: (point) => pending.has(sessionForkRequestKey(workspace.repoPath, source, point)),
+      onFork: (point) => {
+        if (disabledReason || pending.has(sessionForkRequestKey(workspace.repoPath, source, point)))
+          return;
+        const navigate = captureNavigation();
+        setRequest({
+          open: true,
+          point,
+          committedRecord: null,
+          openChild: (child) => {
+            navigate(
+              {
+                kind: "workspace_session",
+                workspaceId: workspace.workspaceId,
+                sessionId: child.id,
               },
-            });
+              workspace.repoPath,
+            );
           },
-        }
-      : null;
+        });
+      },
+    };
+  }, [
+    source,
+    record.archivedAt,
+    disabledReason,
+    pending,
+    captureNavigation,
+    workspace.repoPath,
+    workspace.workspaceId,
+  ]);
   return {
     actions,
     dialog:

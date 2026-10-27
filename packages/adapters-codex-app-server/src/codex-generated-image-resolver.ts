@@ -323,6 +323,7 @@ export class CodexGeneratedImageResolver {
       throw new Error(
         "Image public history does not match the requested session and working directory.",
       );
+    this.assertCurrent(owner);
     owner.runtime.savedImages.set(threadId, {
       workingDirectory: ref.workingDirectory,
       items: savedImagesOf(response),

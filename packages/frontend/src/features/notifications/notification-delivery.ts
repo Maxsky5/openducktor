@@ -3,7 +3,7 @@ import type {
   NotificationNavigationTarget,
   NotificationOccurrence,
 } from "@openducktor/contracts";
-import { play as playCuelume, type SoundName } from "cuelume";
+import { play as playCuelume, type SoundName, unlock as unlockCuelume } from "cuelume";
 import { ArrowUpRight } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -78,31 +78,30 @@ export type GestureTarget = {
   addEventListener(type: string, listener: EventListener, options?: AddEventListenerOptions): void;
   removeEventListener(type: string, listener: EventListener): void;
 };
-const CUELUME_UNLOCK_VOLUME = 0.000_001;
 
 export const installCuelumeGestureUnlock = ({
-  play = playCuelume,
+  unlock = unlockCuelume,
   target = document,
 }: {
-  play?: PlayCuelume;
+  unlock?: typeof unlockCuelume;
   target?: GestureTarget;
 } = {}): (() => void) => {
-  let unlocked = false;
-  const unlock = (): void => {
-    if (unlocked) {
+  let attempted = false;
+  const onGesture = (): void => {
+    if (attempted) {
       return;
     }
-    unlocked = true;
-    target.removeEventListener("pointerdown", unlock);
-    target.removeEventListener("keydown", unlock);
-    play("success", { volume: CUELUME_UNLOCK_VOLUME });
+    attempted = true;
+    target.removeEventListener("pointerdown", onGesture);
+    target.removeEventListener("keydown", onGesture);
+    void unlock();
   };
 
-  target.addEventListener("pointerdown", unlock, { passive: true });
-  target.addEventListener("keydown", unlock);
+  target.addEventListener("pointerdown", onGesture, { passive: true });
+  target.addEventListener("keydown", onGesture);
 
   return () => {
-    target.removeEventListener("pointerdown", unlock);
-    target.removeEventListener("keydown", unlock);
+    target.removeEventListener("pointerdown", onGesture);
+    target.removeEventListener("keydown", onGesture);
   };
 };

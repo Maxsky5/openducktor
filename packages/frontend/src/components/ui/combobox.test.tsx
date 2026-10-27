@@ -35,6 +35,36 @@ const createGroupedOptions = (): ComboboxGroup[] => [
 ];
 
 describe("Combobox", () => {
+  test("defers unselected option reads until the list opens", async () => {
+    const readUnselectedValue = mock(() => "feature");
+    const options = [
+      { value: "main", label: "Main" },
+      {
+        get value() {
+          return readUnselectedValue();
+        },
+        label: "Feature",
+      },
+    ];
+    const { rerender } = render(
+      <Combobox value="main" options={options} onValueChange={() => {}} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Main" })).toBeTruthy();
+    expect(readUnselectedValue).not.toHaveBeenCalled();
+
+    rerender(<Combobox value="main" options={[...options]} onValueChange={() => {}} />);
+
+    expect(readUnselectedValue).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Main" }));
+    });
+
+    expect(screen.getByRole("option", { name: "Feature" })).toBeTruthy();
+    expect(readUnselectedValue).toHaveBeenCalled();
+  });
+
   // The DOM test environment has no layout, so these cases check the height rule of the trigger.
   test("grows a wrapping trigger with its value and keeps a single-line trigger fixed", () => {
     const options = [{ value: "/a/very/long/path", label: "/a/very/long/path" }];

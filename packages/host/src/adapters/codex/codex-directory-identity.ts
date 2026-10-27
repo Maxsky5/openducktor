@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../domain/path-comparison";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
@@ -13,6 +14,7 @@ export const createCodexDirectoryMatcher =
   (left, right) => {
     // Saved sessions can outlive their worktree when both paths are unchanged.
     if (left === right) return Effect.succeed(true);
+    if (!isAbsolute(left) || !isAbsolute(right)) return Effect.succeed(false);
     return Effect.gen(function* () {
       const canonicalLeft = yield* filesystem.canonicalize(left);
       const canonicalRight = yield* filesystem.canonicalize(right);

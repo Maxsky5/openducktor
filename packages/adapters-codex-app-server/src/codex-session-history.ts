@@ -28,6 +28,7 @@ import type {
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type {
   CodexAppServerClient,
+  CodexAppServerAdapterOptions,
   CodexSessionState,
   CodexThreadHistoryReadResponse,
 } from "./types";
@@ -48,6 +49,7 @@ type CodexSessionHistoryInput = {
   runtime: CodexSessionHistoryRuntime;
   prepareImageGenerations?: CodexImageGenerationPreparer | undefined;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
+  directoriesMatch: CodexAppServerAdapterOptions["directoriesMatch"];
   readRunningTurnModel: (threadId: string, turnId: string) => AgentModelSelection | undefined;
 };
 
@@ -56,6 +58,7 @@ export const loadCodexSessionHistory = async ({
   session,
   runtime,
   threadInventory,
+  directoriesMatch,
   prepareImageGenerations,
   readRunningTurnModel,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
@@ -107,6 +110,7 @@ export const loadCodexSessionHistory = async ({
     input,
     response,
     historyOwnership.inheritedThreadIdsByTurnId,
+    directoriesMatch,
   );
   return toHistory({
     input,
@@ -163,6 +167,7 @@ const loadSubagentRoles = async (
   input: LoadAgentSessionHistoryInput,
   response: CodexThreadHistoryReadResponse,
   inheritedThreadIdsByTurnId: ReadonlyMap<string, string>,
+  directoriesMatch: CodexAppServerAdapterOptions["directoriesMatch"],
 ): Promise<Map<string, string | undefined>> => {
   const parentsByChild = new Map<string, string>();
   for (const { item, turn } of codexTurnItemsFromThreadRead(response)) {
@@ -177,7 +182,7 @@ const loadSubagentRoles = async (
       if (parentThreadId === input.externalSessionId) {
         scope.workingDirectory = input.workingDirectory;
       }
-      const role = await readCodexSubagentRole(client, childThreadId, scope);
+      const role = await readCodexSubagentRole(client, childThreadId, scope, directoriesMatch);
       return [childThreadId, role] as const;
     }),
   );

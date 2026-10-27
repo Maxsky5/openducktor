@@ -12,7 +12,7 @@ import { AgentChatAssistantMessage } from "./agent-chat-assistant-message";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { Brain, Cpu, FileX, Hammer, LoaderCircle } from "lucide-react";
-import { Fragment, type ReactElement, type ReactNode } from "react";
+import { Fragment, type ReactElement, type ReactNode, useState } from "react";
 import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
 import { BrowserAnnotationMessageChips } from "@/features/browser-annotations/browser-annotation-message-chips";
 import { cn } from "@/lib/utils";
@@ -491,18 +491,42 @@ const ToolMessageBody = ({
 
 const SystemMessageDisclosure = ({
   label,
+  text,
   children,
 }: {
   label: string;
+  text: string;
   children: ReactNode;
-}): ReactElement => (
-  <details className="rounded border border-border">
-    <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      {label}
-    </summary>
-    <div className="border-t border-border p-2">{children}</div>
-  </details>
-);
+}): ReactElement => {
+  const [isBodyMounted, setIsBodyMounted] = useState(false);
+  return (
+    <details
+      className="rounded border border-border"
+      onToggle={(event) => {
+        if (!event.currentTarget.open) setIsBodyMounted(false);
+      }}
+    >
+      <summary
+        className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClickCapture={(event) => {
+          // SAFETY: This summary is a direct child of the details element above.
+          const disclosure = event.currentTarget.parentElement as HTMLDetailsElement;
+          setIsBodyMounted(!disclosure.open);
+        }}
+      >
+        {label}
+      </summary>
+      <div
+        className={cn(
+          "border-t border-border p-2",
+          !isBodyMounted && "whitespace-pre-wrap break-words",
+        )}
+      >
+        {isBodyMounted ? children : text}
+      </div>
+    </details>
+  );
+};
 
 const renderSystemMessage = (
   message: AgentChatMessage,
@@ -512,14 +536,14 @@ const renderSystemMessage = (
   const instructions = resolveInstructionsMessage(message, systemPromptBody);
   if (instructions) {
     return (
-      <SystemMessageDisclosure label={instructions.toggleLabel}>
+      <SystemMessageDisclosure label={instructions.toggleLabel} text={instructions.markdown}>
         <AgentChatMarkdownRenderer markdown={instructions.markdown} variant="compact" />
       </SystemMessageDisclosure>
     );
   }
   if (message.role !== "system" || sessionRuntimeKind !== "opencode") return null;
   return (
-    <SystemMessageDisclosure label="Show system message">
+    <SystemMessageDisclosure label="Show system message" text={message.content}>
       <AgentChatTranscriptProse className="leading-6 text-foreground">
         {message.content}
       </AgentChatTranscriptProse>

@@ -1,5 +1,6 @@
 import { expect, test, mock } from "bun:test";
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
+import type { CodexAppServerAdapterOptions } from "./types";
 import {
   codexImageGenerationPart,
   type CodexImageGenerationItem,
@@ -33,6 +34,7 @@ const createImageHarness = (
   cwd = "/repo",
   threadId = ref.externalSessionId,
   prepareImageGenerations?: CodexImageGenerationPreparer,
+  directoriesMatch?: CodexAppServerAdapterOptions["directoriesMatch"],
 ) => {
   const calls: Array<{ method: string; params: unknown }> = [];
   const gate = createDeferred<void>();
@@ -61,6 +63,7 @@ const createImageHarness = (
     },
   };
   if (prepareImageGenerations) options.prepareImageGenerations = prepareImageGenerations;
+  if (directoriesMatch) options.directoriesMatch = directoriesMatch;
   const { adapter } = createHarness(options);
   return {
     adapter,
@@ -176,6 +179,47 @@ test("concurrent reads share history and a released runtime cannot publish their
   for (const result of await results) {
     expect(result.status).toBe("rejected");
     if (result.status === "rejected") expect(String(result.reason)).toContain("runtime changed");
+  }
+});
+
+test("canceled directory matching cannot cache saved image history", async () => {
+  const started = createDeferred<void>();
+  const finish = createDeferred<boolean>();
+  let comparisons = 0;
+  const native = { ...completed(), savedPath: "/generated/image.png" };
+  const harness = createImageHarness(
+    [native],
+    "/repo",
+    ref.externalSessionId,
+    undefined,
+    async () => {
+      if (comparisons++ > 0) return true;
+      started.resolve();
+      return finish.promise;
+    },
+  );
+  await harness.adapter.prepareRuntime("runtime-live");
+  const caller = new AbortController();
+  const image = { itemId: "image", turnId: "turn", revision: "file-digest" };
+  const canceled = harness.adapter
+    .resolveGeneratedImageSource({ ref, ...image }, caller.signal)
+    .then(
+      () => undefined,
+      (cause: unknown) => cause,
+    );
+  try {
+    await started.promise;
+    caller.abort(new Error("preview canceled"));
+    finish.resolve(true);
+    expect(await canceled).toBe(caller.signal.reason);
+
+    const batch = await harness.adapter.beginGeneratedImageBatch({ ref, images: [image] });
+    harness.adapter.releaseGeneratedImageBatch(batch);
+    expect(harness.calls.filter(({ method }) => method === "thread/turns/list")).toHaveLength(2);
+  } finally {
+    finish.resolve(true);
+    await canceled;
+    harness.adapter.releaseRuntime("runtime-live");
   }
 });
 

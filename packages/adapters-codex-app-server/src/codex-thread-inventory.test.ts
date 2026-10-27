@@ -598,7 +598,11 @@ describe("CodexThreadInventoryReader", () => {
     ["thread-idle", "/other"],
     ["other-thread", "/repo"],
   ])("rejects read-only history for native thread %s in %s", async (id, cwd) => {
-    const reader = new CodexThreadInventoryReader(async (left, right) => left === right);
+    const reader = new CodexThreadInventoryReader(async (left, right) => {
+      if (id !== "thread-idle")
+        throw new Error("Another thread must not reach directory matching.");
+      return left === right;
+    });
     const calls: string[] = [];
     const client = createInventoryClient({
       threadRead: async () => {

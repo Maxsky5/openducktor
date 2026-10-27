@@ -440,7 +440,7 @@ const createControllerHarness = ({
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
-  test("loads saved history through a directory symlink and rejects unresolved or different directories", async () => {
+  test("loads saved history through a directory symlink and rejects invalid or different directories", async () => {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-codex-directory-"));
     const nativeDirectory = join(temporaryDirectory, "native-worktree");
     const savedDirectory = join(temporaryDirectory, "saved-worktree");
@@ -453,12 +453,20 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       process.platform === "win32" ? "junction" : "dir",
     );
     const nativeCwd = await realpath(nativeDirectory);
+    let returnedCwd = nativeCwd;
     const savedRef = { ...ref, workingDirectory: savedDirectory };
     const historyRequests: unknown[] = [];
+    const canonicalizeRequests: string[] = [];
+    const filesystem = createFilesystemAdapter();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
-        directoriesMatch: createCodexDirectoryMatcher(createFilesystemAdapter()),
+        directoriesMatch: createCodexDirectoryMatcher({
+          canonicalize: (path) => {
+            canonicalizeRequests.push(path);
+            return filesystem.canonicalize(path);
+          },
+        }),
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer: {
           ...codexAppServer,
@@ -466,7 +474,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
             if (input.method !== "thread/read") {
               return Effect.die(new Error(`Unexpected request ${input.method}`));
             }
-            return Effect.succeed(threadReadResult(ref.externalSessionId, nativeCwd));
+            return Effect.succeed(threadReadResult(ref.externalSessionId, returnedCwd));
           },
           listThreadTurns: (input) => {
             historyRequests.push(input);
@@ -495,6 +503,25 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         expect.objectContaining({ runtimeId: runtime.runtimeId, threadId: ref.externalSessionId }),
       ]);
       expect(await Effect.runPromise(prepared.adapter.listSnapshots())).toEqual([]);
+      for (const [workingDirectory, nativeDirectory, code] of [
+        [".", process.cwd(), "scope_mismatch"],
+        ["", nativeCwd, "request_failed"],
+        [process.cwd(), ".", "scope_mismatch"],
+        [savedDirectory, "", "scope_mismatch"],
+      ] as const) {
+        returnedCwd = nativeDirectory;
+        const canonicalizeCount = canonicalizeRequests.length;
+        const result = await Effect.runPromise(Effect.result(loadHistory(workingDirectory)));
+        expect(result._tag).toBe("Failure");
+        if (result._tag !== "Failure") throw new Error("Expected directory mismatch");
+        expect(result.failure).toMatchObject({
+          _tag: "RuntimeQueryError",
+          failure: { code },
+        });
+        expect(canonicalizeRequests).toHaveLength(canonicalizeCount);
+        expect(historyRequests).toHaveLength(1);
+      }
+      returnedCwd = nativeCwd;
       for (const [workingDirectory, code] of [
         [otherDirectory, "scope_mismatch"],
         [join(temporaryDirectory, "missing-worktree"), "request_failed"],
@@ -510,8 +537,13 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       }
       expect(historyRequests).toHaveLength(1);
       await rm(nativeDirectory, { recursive: true });
-      expect(await Effect.runPromise(loadHistory(nativeCwd))).toEqual([]);
-      expect(historyRequests).toHaveLength(2);
+      const canonicalizeCount = canonicalizeRequests.length;
+      for (const workingDirectory of [nativeCwd, "."]) {
+        returnedCwd = workingDirectory;
+        expect(await Effect.runPromise(loadHistory(workingDirectory))).toEqual([]);
+        expect(canonicalizeRequests).toHaveLength(canonicalizeCount);
+      }
+      expect(historyRequests).toHaveLength(3);
     } finally {
       await Effect.runPromise(prepared.discard());
       await rm(temporaryDirectory, { recursive: true, force: true });

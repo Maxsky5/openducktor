@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { buildSessionPolicyNoticeMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-notice-messages";
 import {
   createMessageCardElement,
@@ -8,6 +10,8 @@ import {
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+
+enableReactActEnvironment();
 
 describe("AgentChatMessageCard system messages", () => {
   test("renders a Claude permission mismatch as a warning card", () => {
@@ -136,24 +140,71 @@ describe("AgentChatMessageCard system messages", () => {
   test.each([
     { label: "Show system prompt", prefix: "System prompt:\n\n" },
     { label: "Show instruction update", prefix: AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX },
-  ])("renders $label as an expandable card", ({ label, prefix }) => {
-    const html = renderToStaticMarkup(
+  ])("keeps $label searchable with lazy Markdown", async ({ label, prefix }) => {
+    const rendered = render(
       createMessageCardElement({
         message: {
           id: "sys-1",
           role: "system",
-          content: `${prefix}Always validate tool inputs before execution.`,
+          content: `${prefix}Always **validate tool inputs** before execution.`,
           timestamp: "2026-02-22T10:22:00.000Z",
         },
       }),
     );
 
-    expect(html).toContain(label);
-    expect(html).toContain("Always validate tool inputs");
+    try {
+      const summary = rendered.getByText(label, { selector: "summary" });
+      const disclosure = summary.closest("details");
+      expect(disclosure?.open).toBe(false);
+      expect(disclosure?.textContent).toContain(
+        "Always **validate tool inputs** before execution.",
+      );
+      expect(disclosure?.querySelector("strong")).toBeNull();
+
+      if (!disclosure) throw new Error("Expected the system disclosure");
+      await act(async () => {
+        disclosure.open = true;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(disclosure.querySelector("strong") === null).toBe(true);
+      expect(disclosure.textContent).toContain("Always **validate tool inputs** before execution.");
+      await act(async () => {
+        disclosure.open = false;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      fireEvent.click(summary);
+      await waitFor(() => {
+        expect(disclosure?.open).toBe(true);
+        expect(disclosure?.querySelector("strong")?.textContent).toBe("validate tool inputs");
+      });
+      expect(disclosure?.querySelector("p")?.textContent).toBe(
+        "Always validate tool inputs before execution.",
+      );
+
+      fireEvent.click(summary);
+      await waitFor(() => {
+        expect(disclosure?.open).toBe(false);
+        expect(disclosure?.textContent).toContain(
+          "Always **validate tool inputs** before execution.",
+        );
+        expect(disclosure?.querySelector("strong")).toBeNull();
+      });
+
+      fireEvent.click(summary);
+      await waitFor(() => {
+        expect(disclosure?.querySelector("strong")?.textContent).toBe("validate tool inputs");
+      });
+      expect(disclosure?.querySelector("p")?.textContent).toBe(
+        "Always validate tool inputs before execution.",
+      );
+    } finally {
+      rendered.unmount();
+    }
   });
 
-  test("wraps long unbroken system prose outside system-prompt cards", () => {
-    const html = renderToStaticMarkup(
+  test("keeps closed system prose searchable and wraps it when opened", async () => {
+    const rendered = render(
       createMessageCardElement({
         message: {
           id: "system-long-token",
@@ -164,8 +215,21 @@ describe("AgentChatMessageCard system messages", () => {
       }),
     );
 
-    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
-    expect(html).toContain("whitespace-pre-wrap break-words leading-6 text-foreground");
+    try {
+      const disclosure = rendered.container.querySelector("details");
+      expect(disclosure?.open).toBe(false);
+      expect(disclosure?.textContent).toContain(LONG_TRANSCRIPT_SAMPLE);
+      expect(disclosure?.querySelector("p")).toBeNull();
+      fireEvent.click(rendered.getByText("Show system message", { selector: "summary" }));
+      await waitFor(() => {
+        expect(rendered.container.querySelector("p")?.textContent).toBe(LONG_TRANSCRIPT_SAMPLE);
+      });
+      expect(rendered.container.querySelector("p")?.className).toContain(
+        "whitespace-pre-wrap break-words leading-6 text-foreground",
+      );
+    } finally {
+      rendered.unmount();
+    }
   });
 
   test("renders subagent cards without the shared System header", () => {

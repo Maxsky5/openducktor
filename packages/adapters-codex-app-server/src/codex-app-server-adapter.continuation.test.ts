@@ -19,6 +19,7 @@ import {
 import { CodexAppServerAdapter } from "./index";
 import type {
   CodexAppServerRequestResult,
+  CodexAppServerAdapterOptions,
   CodexAppServerThreadStatus,
   CodexJsonRpcTransport,
 } from "./types";
@@ -59,6 +60,7 @@ const createContinuationAdapter = ({
   turnStartError,
   continuationTurnStatus = "inProgress",
   threadSetNameError,
+  directoriesMatch = async (left, right) => left === right,
 }: {
   threadStatus: CodexAppServerThreadStatus;
   latestTurnStatus: "completed" | "failed" | "inProgress" | "interrupted";
@@ -67,13 +69,14 @@ const createContinuationAdapter = ({
   turnStartError?: Error;
   continuationTurnStatus?: "failed" | "inProgress" | "interrupted";
   threadSetNameError?: () => Error | undefined;
+  directoriesMatch?: CodexAppServerAdapterOptions["directoriesMatch"];
 }) => {
   const calls: RecordedCall[] = [];
   let resumeCount = 0;
   const adapter = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
-    directoriesMatch: async (left, right) => left === right,
+    directoriesMatch,
     runtime: makeRuntimeSummary("runtime-live"),
     transportFactory: (): CodexJsonRpcTransport => ({
       async request({ method, params }) {
@@ -154,6 +157,25 @@ const continuationInput = (
 const methodsOf = (calls: RecordedCall[]) => calls.map((call) => call.method);
 
 describe("CodexAppServerAdapter interrupted-turn continuation", () => {
+  test("keeps directory resolution failures as typed identity mismatches", async () => {
+    const cause = new Error("Restore directory access.");
+    const { adapter, calls } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "interrupted",
+      directoriesMatch: async () => {
+        throw cause;
+      },
+    });
+
+    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+      reason: "identity_mismatch",
+      message: cause.message,
+      resumeCause: cause,
+    });
+    expect(methodsOf(calls)).not.toContain("thread/resume");
+    expect(methodsOf(calls)).not.toContain("turn/start");
+  });
+
   test("continues an interrupted latest turn with an empty turn/start input", async () => {
     const { adapter, calls } = createContinuationAdapter({
       threadStatus: { type: "idle" },

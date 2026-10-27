@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { formatBrowserAnnotationsMessage } from "@/features/browser-annotations/browser-annotation-message";
 import {
@@ -107,19 +107,21 @@ You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. 
       name: "unclassified system text",
       content: "Keep **literal** text.\n\n<runtime-note>\n  Preserve the spaces.\n</runtime-note>",
     },
-  ])("keeps $name in a closed system disclosure with the full text", ({ content }) => {
+  ])("shows the full text of $name when the system disclosure opens", async ({ content }) => {
     const rendered = render(createMessageCardElement({ message: buildMessage("system", content) }));
 
     try {
       const summary = rendered.getByText("Show system message", { selector: "summary" });
       const disclosure = summary.closest("details");
       expect(disclosure?.open).toBe(false);
-      expect(disclosure?.querySelector("p")?.textContent).toBe(content);
+      expect(disclosure?.querySelector("p")).toBeNull();
 
       fireEvent.click(summary);
 
-      expect(disclosure?.open).toBe(true);
-      expect(disclosure?.querySelector("p")?.textContent).toBe(content);
+      await waitFor(() => {
+        expect(disclosure?.open).toBe(true);
+        expect(disclosure?.querySelector("p")?.textContent).toBe(content);
+      });
     } finally {
       rendered.unmount();
     }

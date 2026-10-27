@@ -35,7 +35,6 @@ describe("AgentChatMessageCard messages", () => {
     expect(details).not.toBeNull();
     expect(details?.open).toBe(false);
     expect(details?.querySelector("summary")?.textContent?.trim()).toBe(label);
-    expect(details?.textContent).toContain("Instructions from the runtime.");
   });
 
   test("shows only the runtime when Codex history omits the turn model", () => {
