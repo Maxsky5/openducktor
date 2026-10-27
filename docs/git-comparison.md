@@ -59,24 +59,17 @@ If a task has no saved target and repository settings fail to load, the panel sh
 
 ## Refresh
 
-Every refresh reads the branch first and follows a branch that its own read finds. Focus and visibility refreshes ask the host to fetch when the panel's five-minute limit permits. The host then skips a remote that it fetched in the last five minutes. Manual Refresh always fetches. Soft refresh reads local Git data without fetching. Concurrent refreshes for the same repository, directory, target, and checkout share a pending fetch. A manual Refresh does not join a pending focus fetch, because the host can skip that fetch. The branch choices read again after each fetch request that finds a remote, because a recent host fetch can be newer than the branch list.
-
-## Remote fetch
-
-`git_fetch_remote` fetches the remote of the current branch upstream and the remote of the compare target. The host owns one fetch for each remote of a repository. The Git panel and merge detection share it, so the worktrees of a repository do not fetch the same remote twice:
-
-- A fetch updates every branch of the remote and prunes the branches that the remote deleted.
-- A request while a fetch of that remote runs waits for that fetch.
-- A request without `force` skips a remote that a fetch of the last five minutes updated. The result is `skipped_recent`. Manual Refresh and Check again use `force`.
-- The fetch cannot ask for credentials. It adds the batch option of the SSH program variant that Git detects. A remote that needs a password or a host key confirmation fails, and the error tells why.
-- The fetch does not change `FETCH_HEAD`.
-- A fetch fails after 60 seconds.
+Every refresh reads the branch first and follows a branch that its own read finds. Focus and visibility refreshes fetch the selected target's remote when its five-minute fetch limit permits. Manual Refresh always attempts the fetch. Soft refresh reads local Git data without fetching. Concurrent refreshes for the same repository, directory, target, and checkout share a pending fetch.
 
 Manual Refresh shows its pending state before any Git work starts. More clicks join the pending refresh. A Refresh that starts before the checkout is known belongs to the first checkout that the panel shows. Each session, target choice, and checkout keeps its own Refresh: a return shows its running Refresh, and a click joins it. A checkout from another place shows the new branch without the old Refresh state or failure. A branch that Refresh itself finds takes that Refresh. A new target choice starts its own Refresh, and a failure of the previous choice does not show for it. Loaded default settings keep the default choice, so that Refresh continues. The local changes read starts with the fetch, so a slow fetch does not delay it. Local changes also hold the upstream counts, so a manual Refresh reads them again after the fetch, and that read gives the result. Without a fetch, a failure of the first read stays, and the refresh reports it after the other steps end. If Refresh finds a new branch or loads missing settings, it continues with the new comparison, and it stays pending until that work ends. Its result includes a failure of that work. If another session or target opens before that work starts, the work ends without a read, because that view has its own refresh. Branch changes and History read again after the fetch ends. The file views read again after the Git steps, also when a Git step fails, because local files can change without the remote. They show their own state. A failed manual refresh keeps the last loaded changes and shows the failure until a later refresh succeeds. A failed read of local changes, Branch changes, or a shown History fails the manual refresh and the refresh after a Git action. A confirmed commit, change, push, pull, or rebase stays a success, and its message tells the user that the panel could not update. A background refresh leaves each read failure to the view that shows it. After a failed target check or fetch, the Git reads run one time and no read repeats.
 
 The Git reads of one refresh send one refresh ID. The host checks a worktree directory once for that ID: it reads the repository and the directory with one `git rev-parse` each, in parallel, and the worktree list once. The branch, comparison, Branch changes, local changes, file tree, and file reads of that refresh share the result. A new refresh checks again. A chat file save checks the directory again, because it must check it at write time.
 
 When an agent of an open workspace ends a turn, the Git data of its working directory reads again: at once when a panel shows it, and otherwise when a panel shows it next. A refresh that a hidden panel or another context stops leaves the Git data of its context stale, so a return to it reads again. A focus, soft, or action refresh reads both diff scopes and the shown History again. It ends when its view moves to another session or closes, also when the user returns. The returned view reads again by itself. A completed Git change keeps its original directory, and a late refresh error cannot appear in another session.
+
+## Remote fetch
+
+The host runs one fetch at a time for each remote of a repository, and the Git panel and merge detection share it. A fetch updates the configured branches of the remote and prunes deleted branches. A request during a fetch waits for it. A request without `force` skips a remote that a fetch of the last five minutes updated. Manual Refresh and Check again force the fetch. The fetch never asks for credentials and fails after 60 seconds.
 
 ## Panel integration
 

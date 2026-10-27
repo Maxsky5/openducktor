@@ -100,9 +100,9 @@ The saved Autopilot rules have their own entry, apart from the settings snapshot
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
-Each repository has one task merge status entry. The `openducktor://task-merge-status-updated` event owns it after the first read. Each event cancels the read in progress for its repository, then replaces the entry with the event snapshot. Check again replaces the entry with the snapshot that `task_merge_status_check` returns. A reconnect with missed events invalidates all entries. Do not poll it.
+The `openducktor://task-merge-status-updated` event replaces the task merge status entry of its repository. A reconnect with missed events invalidates all entries. Do not poll it.
 
-The task worktree cleanup impact runs only while a close confirmation, a worktree removal confirmation, or the detail sheet of a closed task is open. It has a zero stale time and a zero garbage collection time, so each opening reads current Git state. A close or a worktree removal invalidates it.
+The task worktree cleanup impact reads only while a confirmation or the detail sheet of a closed task is open, so each opening reads current Git state.
 
 Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. It also cancels the read in progress for that task. The query options use `structuralSharing` to keep a committed list when an older read result arrives after the update. A caller that joined the cancelled read receives the committed list. Workspace session updates use their existing record event. These updates do not trigger another read.
 
