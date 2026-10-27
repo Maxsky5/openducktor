@@ -54,7 +54,7 @@ const phaseLabels = {
   canceled: "Canceled",
 };
 
-export function SessionStartupTrace({
+export function StartupTrace({
   attempt,
   className,
   onOpen,

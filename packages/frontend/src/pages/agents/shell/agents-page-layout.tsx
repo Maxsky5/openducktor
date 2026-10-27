@@ -49,7 +49,7 @@ import type {
   AgentStudioRightPanelBridgeModel,
   AgentStudioSelectedFileRefreshModel,
 } from "./use-agent-studio-right-panel-bridge";
-import { InlineSessionStartup } from "@/features/session-startup/inline-session-startup";
+import { InlineStartup } from "@/features/session-startup/inline-session-startup";
 
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
@@ -357,7 +357,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       <ChatFileLinkProvider owner={fileLinkOwner}>
         <ChatArtifactLinkProvider owner={chatArtifactLinkOwner}>
           <div className="flex h-full min-h-0 flex-col">
-            <InlineSessionStartup
+            <InlineStartup
               repoPath={chatFileLinkOwner.repoPath}
               taskId={chatFileLinkOwner.taskId}
               role={chatHeaderModel.selectedRole}

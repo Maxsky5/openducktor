@@ -121,10 +121,7 @@ const terminalCommandResultsEqual = (
     return false;
   if (left.type === "failed" && right.type === "failed" && left.message !== right.message)
     return false;
-  return (
-    left.outputTail.length === right.outputTail.length &&
-    left.outputTail.every((line, index) => line === right.outputTail[index])
-  );
+  return arraysEqualByIdentity(left.outputTail, right.outputTail);
 };
 
 type TerminalSummaryComparator = (left: TerminalSummary, right: TerminalSummary) => boolean;

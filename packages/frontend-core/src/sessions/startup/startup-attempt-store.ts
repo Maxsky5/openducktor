@@ -425,9 +425,6 @@ export const createStartupAttemptStore = (
     setRecoveryActions(id: string, recoveryActions: readonly StartupRecoveryAction[]) {
       update(id, (attempt) => ({ ...attempt, recoveryActions }));
     },
-    setPresentation(id: string, presentation: StartupPresentation) {
-      update(id, (attempt) => ({ ...attempt, presentation }));
-    },
     continueInBackground(id: string) {
       update(id, (attempt) =>
         attempt.origin.scope.kind === "task"

@@ -149,12 +149,10 @@ export const prepareWorkflowLaunch = (
           });
     if (resolved.kind === "skipped") return resolved;
     const decision = resolved.decision;
-    const isRepair =
-      request.policy.kind === "manual" &&
-      request.instruction.kind === "none" &&
-      request.startup !== undefined &&
-      decision.startMode === "reuse";
-    if (!action.startModes.includes(decision.startMode) && !isRepair)
+    if (
+      !action.startModes.includes(decision.startMode) &&
+      !isStartupRepair(request, decision.startMode)
+    )
       return yield* launchValidationError(
         `Action '${actionId}' does not permit '${decision.startMode}'.`,
       );
@@ -261,6 +259,15 @@ export const prepareWorkflowLaunch = (
       parts,
     };
   });
+
+export const isStartupRepair = (
+  request: WorkflowLaunchAttemptRequest,
+  startMode: WorkflowLaunchDecision["startMode"],
+): boolean =>
+  request.policy.kind === "manual" &&
+  request.instruction.kind === "none" &&
+  request.startup !== undefined &&
+  startMode === "reuse";
 
 const launchValidationError = (message: string) =>
   new HostValidationError({ field: "workflowLaunch", message });

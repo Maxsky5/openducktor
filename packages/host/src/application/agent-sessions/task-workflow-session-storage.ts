@@ -90,27 +90,26 @@ export const readStoredWorkflowSession = (
         externalSessionId: input.externalSessionId,
       }),
     ),
-    Effect.flatMap((sessions) => {
-      const stored = findWorkflowSession(sessions, scope.role, input);
-      return stored
-        ? (operation === "read-resume"
-            ? updateStartup((progress) =>
-                progress.ownership({ state: "saved", target: { kind: "task", record: stored } }),
-              )
-            : Effect.void
-          ).pipe(Effect.as(stored))
-        : Effect.fail(
-            new HostValidationError({
-              field: "externalSessionId",
-              message: `Task '${scope.taskId}' does not own session '${input.externalSessionId}' for role '${scope.role}'.`,
-              details: {
-                repoPath: input.repoPath,
-                taskId: scope.taskId,
-                externalSessionId: input.externalSessionId,
-              },
-            }),
+    Effect.flatMap((sessions) =>
+      Effect.gen(function* () {
+        const stored = findWorkflowSession(sessions, scope.role, input);
+        if (!stored)
+          return yield* new HostValidationError({
+            field: "externalSessionId",
+            message: `Task '${scope.taskId}' does not own session '${input.externalSessionId}' for role '${scope.role}'.`,
+            details: {
+              repoPath: input.repoPath,
+              taskId: scope.taskId,
+              externalSessionId: input.externalSessionId,
+            },
+          });
+        if (operation === "read-resume")
+          yield* updateStartup((progress) =>
+            progress.ownership({ state: "saved", target: { kind: "task", record: stored } }),
           );
-    }),
+        return stored;
+      }),
+    ),
   );
 };
 

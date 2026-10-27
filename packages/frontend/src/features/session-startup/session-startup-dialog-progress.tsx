@@ -4,7 +4,7 @@ import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
-import { SessionStartupTrace } from "./session-startup-trace";
+import { StartupTrace } from "./session-startup-trace";
 import { useStartupDialogAttempt } from "./use-startup-dialog-attempt";
 import { useOpenStartupSession } from "./use-open-startup-session";
 
@@ -15,7 +15,7 @@ type StartupDialogActions = {
   onRepairSavedSession?: (() => void) | undefined;
 };
 
-export function SessionStartupProgressContent({
+export function StartupDialogProgress({
   startupAttemptId,
   open,
   ...actions
@@ -57,7 +57,7 @@ function Trace({
     );
   if (attempt.navigationTarget)
     return <SavedSessionTrace attempt={attempt} openAfterRecovery={openAfterRecovery} />;
-  return <SessionStartupTrace attempt={attempt} className="min-h-0 flex-1" />;
+  return <StartupTrace attempt={attempt} className="min-h-0 flex-1" />;
 }
 
 function SavedSessionTrace({
@@ -81,7 +81,7 @@ function SavedSessionTrace({
   }, [attempt.id, connection, openAfterRecovery, openSession]);
   return (
     <>
-      <SessionStartupTrace attempt={attempt} onOpen={openSession} className="min-h-0 flex-1" />
+      <StartupTrace attempt={attempt} onOpen={openSession} className="min-h-0 flex-1" />
       {openError ? (
         <p role="alert" className="mt-3 break-words text-sm text-destructive">
           {openError}

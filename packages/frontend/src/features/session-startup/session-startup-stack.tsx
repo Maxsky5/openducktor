@@ -6,12 +6,12 @@ import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SessionStartupTrace } from "./session-startup-trace";
+import { StartupTrace } from "./session-startup-trace";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { useOpenStartupSession } from "./use-open-startup-session";
 import { retainStartupPresentations } from "./startup-presentation";
 
-export function SessionStartupStack(): ReactElement | null {
+export function StartupNotifications(): ReactElement | null {
   const connection = useClientConnection();
   const { startupAttempts } = connection;
   const attempts = useStartupAttempts();
@@ -53,7 +53,7 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): ReactElement {
         <CardTitle>Session startup</CardTitle>
       </CardHeader>
       <CardContent>
-        <SessionStartupTrace attempt={attempt} onOpen={openSession} />
+        <StartupTrace attempt={attempt} onOpen={openSession} />
         {openError ? (
           <p role="alert" className="mt-3 break-words text-sm text-destructive">
             {openError}

@@ -14,7 +14,7 @@ import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/ag
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { hasStartupPreparedHandoff } from "@openducktor/frontend-core/sessions/startup/startup-prepared-handoff";
-import { InlineSessionStartup } from "@/features/session-startup/inline-session-startup";
+import { InlineStartup } from "@/features/session-startup/inline-session-startup";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { useTaskSessionFork } from "./use-task-session-fork";
 
@@ -134,7 +134,7 @@ function createForkHarness({
           Fork reply
         </button>
         <output aria-label="Fork error">{error}</output>
-        <InlineSessionStartup repoPath="/repo" taskId="task" role="build" />
+        <InlineStartup repoPath="/repo" taskId="task" role="build" />
       </>
     );
   }

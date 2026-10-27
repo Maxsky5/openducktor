@@ -183,13 +183,9 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
               ? { kind: "unsent", instruction }
               : { kind: "uncertain" };
         yield* updateStartup((progress) => {
-          progress.instruction({
-            state: attempt.result.acceptedMessage
-              ? "accepted"
-              : attempt.delivery?.kind === "unsent"
-                ? "not_sent"
-                : "unknown",
-          });
+          if (attempt.result.acceptedMessage) progress.instruction({ state: "accepted" });
+          else if (attempt.delivery?.kind === "unsent") progress.instruction({ state: "not_sent" });
+          else progress.instruction({ state: "unknown" });
           progress.step({
             id: "instruction",
             label: "Submit initial instruction",
@@ -262,14 +258,9 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           else if (reported.success !== null) result.failure.noticeId = reported.success;
         }
         yield* updateStartup((progress) => {
-          progress.settle(
-            result.status === "canceled"
-              ? "canceled"
-              : result.status === "failed"
-                ? "failed"
-                : "completed",
-            result.failure?.message,
-          );
+          if (result.status === "canceled" || result.status === "failed")
+            progress.settle(result.status, result.failure?.message);
+          else progress.settle("completed", result.failure?.message);
           result.startupProgress = progress.snapshot();
         });
         yield* Deferred.succeed(attempt.done, structuredClone(result));

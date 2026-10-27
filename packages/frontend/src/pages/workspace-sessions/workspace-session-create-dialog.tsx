@@ -31,7 +31,7 @@ import { WorkspaceSessionExistingWorktreeField } from "./workspace-session-exist
 import { WorkspaceSessionTargetBranchField } from "./workspace-session-target-branch-field";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
-import { SessionStartupProgressContent } from "@/features/session-startup/session-startup-dialog-progress";
+import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
@@ -106,7 +106,7 @@ export function WorkspaceSessionCreateDialog({
           <DialogDescription>Choose where the agent works and how it starts.</DialogDescription>
         </DialogHeader>
         {startupAttemptId ? (
-          <SessionStartupProgressContent
+          <StartupDialogProgress
             open={open}
             startupAttemptId={startupAttemptId}
             onClose={close}

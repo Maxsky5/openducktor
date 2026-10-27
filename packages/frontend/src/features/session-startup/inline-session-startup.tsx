@@ -4,10 +4,10 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { Button } from "@/components/ui/button";
-import { SessionStartupTrace } from "./session-startup-trace";
+import { StartupTrace } from "./session-startup-trace";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 
-export function InlineSessionStartup({
+export function InlineStartup({
   repoPath,
   taskId,
   role,
@@ -17,7 +17,7 @@ export function InlineSessionStartup({
   role: AgentRole | null;
 }): ReactElement | null {
   return (
-    <InlineSessionStartupOwner
+    <InlineStartupOwner
       key={JSON.stringify([repoPath, taskId, role])}
       repoPath={repoPath}
       taskId={taskId}
@@ -26,7 +26,7 @@ export function InlineSessionStartup({
   );
 }
 
-function InlineSessionStartupOwner({
+function InlineStartupOwner({
   repoPath,
   taskId,
   role,
@@ -69,7 +69,7 @@ function InlineSessionStartupOwner({
     <div className="flex max-h-[55dvh] shrink-0 flex-col gap-3 overflow-y-auto border-b border-border bg-card p-4">
       {matching.map((attempt) => (
         <div key={attempt.id} className="flex min-h-0 flex-col gap-3">
-          <SessionStartupTrace attempt={attempt} />
+          <StartupTrace attempt={attempt} />
           {!startupIsPending(attempt) ? (
             <Button
               type="button"

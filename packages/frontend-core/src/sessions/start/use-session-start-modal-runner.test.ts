@@ -454,8 +454,7 @@ describe("useSessionStartModalRunner failures", () => {
         if (modal?.phase.kind !== "progress") throw new Error("Startup progress is missing.");
         const id = modal.phase.startupAttemptId;
         await harness.run((runner) => {
-          if (presentation === "notification")
-            connection.startupAttempts.setPresentation(id, presentation);
+          if (presentation === "notification") connection.startupAttempts.continueInBackground(id);
           runner.sessionStartModal?.onOpenChange(false);
         });
         expect(harness.getLatest().sessionStartModal).toBeNull();

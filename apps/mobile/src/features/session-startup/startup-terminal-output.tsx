@@ -20,7 +20,7 @@ import { createTerminalOutputSession } from "../terminals/terminal-output-sessio
 import { TERMINAL_PAGE } from "../terminals/terminal-page";
 import { useTerminalBridge } from "../terminals/use-terminal-bridge";
 import { useStartupPresentation } from "./startup-presentation-context";
-import { createStartupOutputReading } from "./startup-output-reading";
+import { createStartupOutputReader } from "./startup-output-reading";
 
 export function StartupTerminalOutput({
   attemptId,
@@ -60,7 +60,7 @@ export function StartupTerminalOutput({
   useEffect(() => () => session?.dispose(), [session]);
   const post = useCallback((message: TerminalPageInbound) => page.current?.post(message), []);
   const reader = useMemo(
-    () => createStartupOutputReading({ reading, post, onText: setOutputText }),
+    () => createStartupOutputReader({ reading, post, onText: setOutputText }),
     [post, reading],
   );
   const { terminalPanel, terminalForeground, terminalSelection } = theme.colors;

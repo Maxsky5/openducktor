@@ -70,15 +70,6 @@ type UseAgentStudioSessionStartFlowArgs = {
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
 type AgentStudioSessionStartGateResult = SessionStartWorkflowResult | undefined;
 
-const buildSessionStartKey = (params: {
-  workspaceId: string | null;
-  taskId: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
-}): string => {
-  return JSON.stringify([params.workspaceId, params.taskId, params.role, params.launchActionId]);
-};
-
 export function useAgentStudioSessionStartFlow({
   branches = [],
   favoriteState,
@@ -425,3 +416,12 @@ export function useAgentStudioSessionStartFlow({
     handleQuickAction: (option: AgentStudioSessionQuickActionOption) => void;
   };
 }
+
+const buildSessionStartKey = (params: {
+  workspaceId: string | null;
+  taskId: string;
+  role: AgentRole;
+  launchActionId: SessionLaunchActionId;
+}): string => {
+  return JSON.stringify([params.workspaceId, params.taskId, params.role, params.launchActionId]);
+};

@@ -32,7 +32,7 @@ import {
   createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { SessionStartupStack } from "@/features/session-startup/session-startup-stack";
+import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 
 function renderCreation(
@@ -251,7 +251,7 @@ function renderCreation(
           {location.pathname}
           {location.search}
         </output>
-        <SessionStartupStack />
+        <StartupNotifications />
         {open ? (
           <WorkspaceSessionCreateDialog
             workspace={workspace}

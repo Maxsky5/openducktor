@@ -16,6 +16,7 @@ import {
   prepareWorkflowLaunch,
   resolveLaunchWorkspace,
   requireLaunchAction,
+  isStartupRepair,
 } from "./workflow-launch-preparation";
 import type {
   WorkflowLaunchAttemptRequest,
@@ -146,12 +147,7 @@ export const createWorkflowLaunchService = (
           agentSessions,
         });
       }
-      if (
-        request.policy.kind === "manual" &&
-        request.instruction.kind === "none" &&
-        request.startup !== undefined &&
-        decision.startMode === "reuse"
-      )
+      if (isStartupRepair(request, decision.startMode))
         yield* deps.sessions.completeSavedStart({ repoPath, sessionScope, session });
       yield* finalizeStartup(toControlSessionRef(repoPath, session));
       if (parts === undefined) return;

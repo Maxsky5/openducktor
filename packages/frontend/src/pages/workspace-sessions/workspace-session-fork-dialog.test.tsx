@@ -27,7 +27,7 @@ import {
 import { WorkspaceSessionForkDialog } from "./workspace-session-fork-dialog";
 import { HostInvokeError } from "@openducktor/host-client";
 import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
-import { SessionStartupStack } from "@/features/session-startup/session-startup-stack";
+import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   createWorkspaceRecordFixture,
@@ -125,7 +125,7 @@ function renderFork(
           {location.pathname}
           {location.search}
         </output>
-        <SessionStartupStack />
+        <StartupNotifications />
         {open ? (
           <WorkspaceSessionForkDialog
             open={open}

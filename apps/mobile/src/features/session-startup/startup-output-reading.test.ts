@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { TerminalPageInbound } from "@/rich-content/isolated-page/terminal-page-messages";
-import { createStartupOutputReading, type StartupOutputReading } from "./startup-output-reading";
+import { createStartupOutputReader, type StartupOutputReading } from "./startup-output-reading";
 
 test("a transferred output view preserves its reader position through replay and restore", () => {
   const reading: StartupOutputReading = {
@@ -9,7 +9,7 @@ test("a transferred output view preserves its reader position through replay and
     textOffset: 16,
   };
   const posted: TerminalPageInbound[] = [];
-  const view = createStartupOutputReading({
+  const view = createStartupOutputReader({
     reading,
     post: (message) => posted.push(message),
     onText: () => {},
@@ -22,7 +22,7 @@ test("a transferred output view preserves its reader position through replay and
   view.receive({ type: "terminal_viewport", row: 40, follow: false, restored: true });
   view.receive({ type: "terminal_viewport", row: 20, follow: false, restored: false });
   expect(reading.viewport).toEqual({ row: 20, follow: false });
-  const transferred = createStartupOutputReading({
+  const transferred = createStartupOutputReader({
     reading,
     post: (message) => posted.push(message),
     onText: () => {},
@@ -37,7 +37,7 @@ test("output without a prior viewport starts following after hydration and keeps
   const reading: StartupOutputReading = { text: null, textOffset: 0 };
   const text: string[] = [];
   const posted: TerminalPageInbound[] = [];
-  const view = createStartupOutputReading({
+  const view = createStartupOutputReader({
     reading,
     post: (message) => posted.push(message),
     onText: (message) => text.push(message),

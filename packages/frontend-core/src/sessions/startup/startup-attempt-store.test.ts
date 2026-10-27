@@ -7,7 +7,7 @@ import type {
 import type { StartupProgressListener } from "../../connection/host-connection";
 import { connectionReconnectedEvent } from "../../recovery/connection-control-events";
 import { createTestHostConnection } from "../../test-support/test-client-connection";
-import { createStartupAttemptStore } from "./startup-attempt-store";
+import { createStartupAttemptStore, type StartupPresentation } from "./startup-attempt-store";
 import { HostInvokeError } from "@openducktor/host-client";
 import { canOpenStartupSession } from "./startup-navigation";
 
@@ -68,7 +68,7 @@ const harness = (
     isCurrent: () => true,
     release: () => {},
   },
-  instructionRequired = false,
+  presentation: StartupPresentation = "dialog",
 ) => {
   let listener: StartupProgressListener | null = null;
   let admit!: () => void;
@@ -89,8 +89,7 @@ const harness = (
   const id = store.begin({
     origin,
     label: "Start chat",
-    presentation: "dialog",
-    instructionRequired,
+    presentation,
   });
   return {
     store,
@@ -256,13 +255,12 @@ test("retains typed partial ownership after a lost event and never downgrades a 
 });
 
 test("records one absolute success deadline and drops expired feedback after hidden time", async () => {
-  const { store, id, admit } = harness();
+  const { store, id, admit } = harness(undefined, "notification");
   const command = store.operation(id, async (context) => ({
     startupProgress: preparedProgress(context, 1),
   }));
   admit();
   await command;
-  store.setPresentation(id, "notification");
   await store.complete(id);
   const deadline = store.getAttempt(id)!.status.successExpiresAt!;
   await store.complete(id);

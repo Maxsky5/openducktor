@@ -4,7 +4,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
-import { SessionStartupTrace } from "./session-startup-trace";
+import { StartupTrace } from "./session-startup-trace";
 
 const progress = (): StartupOperationSnapshot => ({
   context: { startupAttemptId: "start", operationId: "prepare" },
@@ -53,7 +53,7 @@ test("keeps the same rows and expanded details as startup fails and dependent wo
   const current = attempt();
   const view = render(
     <QueryProvider connection={connection}>
-      <SessionStartupTrace attempt={current} />
+      <StartupTrace attempt={current} />
     </QueryProvider>,
   );
   try {
@@ -81,7 +81,7 @@ test("keeps the same rows and expanded details as startup fails and dependent wo
     snapshot.steps[2] = { ...snapshot.steps[2]!, state: "not_run" };
     view.rerender(
       <QueryProvider connection={connection}>
-        <SessionStartupTrace
+        <StartupTrace
           attempt={{
             ...current,
             operations: [snapshot],
@@ -105,7 +105,7 @@ test("preserves details and reading position when the same attempt moves to a no
   const current = attempt();
   const view = render(
     <QueryProvider connection={connection}>
-      <SessionStartupTrace attempt={current} />
+      <StartupTrace attempt={current} />
     </QueryProvider>,
   );
   const details = view.getByRole("list").querySelector("details");
@@ -120,7 +120,7 @@ test("preserves details and reading position when the same attempt moves to a no
   view.unmount();
   const notice = render(
     <QueryProvider connection={connection}>
-      <SessionStartupTrace attempt={{ ...current, presentation: "notification" }} />
+      <StartupTrace attempt={{ ...current, presentation: "notification" }} />
     </QueryProvider>,
   );
   try {
@@ -152,7 +152,7 @@ test("shows an asynchronous action as failed when a signal accompanies exit code
   ];
   const view = render(
     <QueryProvider connection={connection}>
-      <SessionStartupTrace attempt={current} />
+      <StartupTrace attempt={current} />
     </QueryProvider>,
   );
   try {
@@ -193,7 +193,7 @@ test("shows the exact saved draft without an Open session action or a replacemen
   };
   const view = render(
     <QueryProvider connection={connection}>
-      <SessionStartupTrace attempt={saved} />
+      <StartupTrace attempt={saved} />
     </QueryProvider>,
   );
   try {

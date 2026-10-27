@@ -20,8 +20,8 @@ import {
   useWorkspacePreviewTransitionGuard,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { SessionStartupProgressContent } from "./session-startup-dialog-progress";
-import { SessionStartupStack } from "./session-startup-stack";
+import { StartupDialogProgress } from "./session-startup-dialog-progress";
+import { StartupNotifications } from "./session-startup-stack";
 import { useOpenStartupSession } from "./use-open-startup-session";
 
 test.each([
@@ -159,13 +159,13 @@ test.each([
             {location.pathname}
             {location.search}
           </output>
-          <SessionStartupStack />
+          <StartupNotifications />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Startup</DialogTitle>
               </DialogHeader>
-              <SessionStartupProgressContent
+              <StartupDialogProgress
                 open={open}
                 startupAttemptId={id}
                 onClose={() => {

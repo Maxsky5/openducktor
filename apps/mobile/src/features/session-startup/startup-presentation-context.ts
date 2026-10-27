@@ -1,7 +1,7 @@
 import { createContext, use, useEffect } from "react";
 import type { StartupOutputReading } from "./startup-output-reading";
 
-type StartupPresentation = {
+type StartupTraceState = {
   expanded: Readonly<Record<string, ReadonlySet<string>>>;
   scroll: Map<string, number>;
   toggle(attemptId: string, stepId: string): void;
@@ -9,13 +9,13 @@ type StartupPresentation = {
   sheetClosers: Map<string, () => void>;
 };
 
-export const StartupPresentationContext = createContext<StartupPresentation | null>(null);
+export const StartupPresentationContext = createContext<StartupTraceState | null>(null);
 
-export const useStartupPresentation = (): StartupPresentation => {
-  const presentation = use(StartupPresentationContext);
-  if (!presentation)
+export const useStartupPresentation = (): StartupTraceState => {
+  const traceState = use(StartupPresentationContext);
+  if (!traceState)
     throw new Error("Session startup presentation is missing from the connection tree.");
-  return presentation;
+  return traceState;
 };
 
 /** Exact attempt ownership keeps an overlay action from closing another native sheet. */

@@ -370,12 +370,10 @@ export const createRemoteHostClient = (
           ? 3 * REMOTE_STREAM_HEARTBEAT_INTERVAL_MS
           : null;
         state = { ...state, host: accepted.host };
-        if (previousHostInstanceId !== accepted.host.hostInstanceId) cursor = null;
-        if (
-          previousHostInstanceId !== null &&
-          previousHostInstanceId !== accepted.host.hostInstanceId
-        )
-          pendingHostChanged = true;
+        if (previousHostInstanceId !== accepted.host.hostInstanceId) {
+          cursor = null;
+          if (previousHostInstanceId !== null) pendingHostChanged = true;
+        }
         const replay = deferred<BrowserReplayComplete>();
         const attached = deferred<void>();
         const setupTimer = setTimeout(() => {

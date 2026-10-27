@@ -38,7 +38,7 @@ export function StartupTrace({
   presentation?: StartupPresentation;
 }): ReactElement | null {
   const attempt = useStartupAttempt(attemptId);
-  const presentation = useStartupPresentation();
+  const traceState = useStartupPresentation();
   const phase = attempt?.status.phase;
   const current = attempt?.status.confirmation === "current";
   useAnnounce(startupAnnouncement(attempt, expectedPresentation));
@@ -77,8 +77,8 @@ export function StartupTrace({
         style={styles.scroll}
         contentContainerStyle={styles.steps}
         nestedScrollEnabled
-        contentOffset={{ x: 0, y: presentation.scroll.get(attemptId) ?? 0 }}
-        onScroll={(event) => presentation.scroll.set(attemptId, event.nativeEvent.contentOffset.y)}
+        contentOffset={{ x: 0, y: traceState.scroll.get(attemptId) ?? 0 }}
+        onScroll={(event) => traceState.scroll.set(attemptId, event.nativeEvent.contentOffset.y)}
         scrollEventThrottle={100}
       >
         {rows.length === 0 ? (
@@ -91,8 +91,8 @@ export function StartupTrace({
               key={key}
               attemptId={attemptId}
               step={step}
-              expanded={presentation.expanded[attemptId]?.has(key) === true}
-              toggle={() => presentation.toggle(attemptId, key)}
+              expanded={traceState.expanded[attemptId]?.has(key) === true}
+              toggle={() => traceState.toggle(attemptId, key)}
             />
           ))
         )}

@@ -33,7 +33,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import { workspaceSessionValidationError } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-create-input";
 import { NewWorktreeBranchFields, WorktreeNameField } from "./workspace-session-worktree-inputs";
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
-import { SessionStartupProgressContent } from "@/features/session-startup/session-startup-dialog-progress";
+import { StartupDialogProgress } from "@/features/session-startup/session-startup-dialog-progress";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
@@ -146,7 +146,7 @@ export function WorkspaceSessionForkDialog({
           <DialogDescription>{FORK_CHAT_TEXT.description}</DialogDescription>
         </DialogHeader>
         {startupAttemptId ? (
-          <SessionStartupProgressContent
+          <StartupDialogProgress
             open={open}
             startupAttemptId={startupAttemptId}
             onClose={close}

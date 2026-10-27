@@ -33,22 +33,6 @@ const START_ACTIONS = {
   StartSessionSheetAction,
   (flow: UseTaskSessionStartFlowResult, taskId: string) => void
 >;
-const isStartAction = (value: string | null): value is StartSessionSheetAction =>
-  value !== null && Object.hasOwn(START_ACTIONS, value);
-const isLaunchAction = (value: string | null): value is SessionLaunchActionId =>
-  BUILTIN_LAUNCH_ACTION_IDS.some((launch) => launch === value);
-
-/** A task workflow action, or the session launch action of a desktop quick action. */
-type StartRequest =
-  | { kind: "action"; action: StartSessionSheetAction }
-  | { kind: "launch"; launch: SessionLaunchActionId };
-
-const startRequestOf = (action: string | null, launch: string | null): StartRequest | null => {
-  if (isStartAction(action)) return { kind: "action", action };
-  if (isLaunchAction(launch)) return { kind: "launch", launch };
-  return null;
-};
-
 /**
  * The start sheet of a task workflow action or a quick action. Its params name the workspace,
  * the task, and the action.
@@ -75,6 +59,22 @@ export function StartSessionRoute(): ReactElement {
     </WorkflowSheetFrame>
   );
 }
+
+const isStartAction = (value: string | null): value is StartSessionSheetAction =>
+  value !== null && Object.hasOwn(START_ACTIONS, value);
+const isLaunchAction = (value: string | null): value is SessionLaunchActionId =>
+  BUILTIN_LAUNCH_ACTION_IDS.some((launch) => launch === value);
+
+/** A task workflow action, or the session launch action of a desktop quick action. */
+type StartRequest =
+  | { kind: "action"; action: StartSessionSheetAction }
+  | { kind: "launch"; launch: SessionLaunchActionId };
+
+const startRequestOf = (action: string | null, launch: string | null): StartRequest | null => {
+  if (isStartAction(action)) return { kind: "action", action };
+  if (isLaunchAction(launch)) return { kind: "launch", launch };
+  return null;
+};
 
 function StartSessionContent({
   workspace,

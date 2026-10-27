@@ -10,7 +10,7 @@ export type StartupOutputReading = {
 };
 
 /** Ignore replay scroll events until the page restores the saved position. */
-export const createStartupOutputReading = ({
+export const createStartupOutputReader = ({
   reading,
   post,
   onText,
