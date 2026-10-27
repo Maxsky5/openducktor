@@ -75,6 +75,8 @@ When the terminal closes or its process fails before the command ends, the resul
 
 The terminal keeps its initial command result in `TerminalSummary.initialCommandResult` until the terminal is forgotten. The command owner observes settlement even when its startup caller has left. Startup traces show each action and its available output without opening a terminal panel. A non-waiting action can finish after startup is ready; its result remains visible in the trace and terminal.
 
+The connection's startup stream applies action results to loaded terminal lists even after startup feedback expires. Open terminal tabs receive the result without another list read. An older list response cannot remove a confirmed result for the same host and terminal.
+
 Each visible startup output renderer has a separate read-only transport connection and replay cursor. It sends only attachment, detachment, and parsed-output acknowledgements. It sends no input or PTY resize, joins no command recovery barrier, and closes no PTY when released.
 
 The label stays for the full terminal life. OSC titles do not replace it. During the command phase, workspace activity checks report the terminal as active, and an unconfirmed close returns `confirmation_required`. The command phase does not use the PTY rule that reports a non-zero exit before output as `spawn_failed`. The terminal `exit` reports the PTY process exit. Ctrl+C stops a foreground command and returns to the prompt when the shell remains open.

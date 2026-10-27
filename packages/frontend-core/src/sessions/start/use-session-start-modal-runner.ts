@@ -75,6 +75,7 @@ export function useSessionStartModalRunner({
   workspaceRepoPath,
   scopeKey = workspaceRepoPath,
   workspaceId = scopeKey,
+  onBackgroundTransfer,
 }: {
   branches?: GitBranch[];
   favoriteState: SessionStartModalModel["favoriteState"];
@@ -82,6 +83,7 @@ export function useSessionStartModalRunner({
   workspaceRepoPath: string | null;
   workspaceId?: string | null;
   scopeKey?: string | null;
+  onBackgroundTransfer?: ((attemptId: string) => void) | undefined;
 }): SessionStartModalRunnerResult {
   const { feedback, startupAttempts } = useClientConnection();
   const scopeRef = useRef(scopeKey);
@@ -198,11 +200,12 @@ export function useSessionStartModalRunner({
       if (pendingRunRef.current === run) {
         pendingRunRef.current = null;
         closeStartModal();
+        onBackgroundTransfer?.(run.startupAttemptId);
       }
       if (confirmationsRef.current.get(run.scopeKey) !== run) run.cancel();
       releaseConfirmation(run);
     },
-    [closeStartModal, releaseConfirmation, startupAttempts],
+    [closeStartModal, onBackgroundTransfer, releaseConfirmation, startupAttempts],
   );
 
   useEffect(

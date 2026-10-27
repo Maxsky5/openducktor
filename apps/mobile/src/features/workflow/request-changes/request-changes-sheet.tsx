@@ -45,10 +45,8 @@ function RequestChangesContent({
   workspace: WorkspaceRecord;
   taskId: string;
 }): ReactElement {
-  const { flow, navigation, tasks, settings, branchesFailure } = useTaskStartFlow(
-    workspace,
-    taskId,
-  );
+  const { flow, navigation, tasks, settings, branchesFailure, backgroundAttemptId } =
+    useTaskStartFlow(workspace, taskId);
   const confirmDiscard = useConfirmDiscard();
   const task = tasks.find((entry) => entry.id === taskId) ?? null;
   const feedback = flow.humanReviewFeedbackModal;
@@ -64,7 +62,7 @@ function RequestChangesContent({
   });
 
   // Cancel, Android back, and the swipe gesture ask before they drop typed feedback.
-  const remove = requestChangesRemove(feedback, start);
+  const remove = requestChangesRemove(feedback, start, backgroundAttemptId !== null);
   const hasUnsentFeedback = remove === "confirm_discard";
   const discardFeedback = () => {
     void confirmDiscard({

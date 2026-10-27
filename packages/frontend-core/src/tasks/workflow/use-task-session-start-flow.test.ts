@@ -1,10 +1,14 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "../../sessions/start/session-start-orchestration";
 import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
-import { createRuntimeHookHarness } from "../../test-support/runtime-hook-harness";
+import {
+  createRuntimeDefinitionsContextValue,
+  createRuntimeHookHarness,
+} from "../../test-support/runtime-hook-harness";
 import {
   createAgentSessionSummaryFixture,
   createTaskCardFixture,
@@ -150,6 +154,94 @@ describe("useTaskSessionStartFlow", () => {
       expect(args.runSessionStartWorkflow).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("reports a background transfer while Request Changes feedback awaits the launch", async () => {
+    const pending = Promise.withResolvers<void>();
+    const session = builderSession("builder-1", "2026-02-22T10:00:00.000Z");
+    const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(async () => {
+      await pending.promise;
+      return { ...session, postStartActionError: null };
+    });
+    const onBackgroundTransfer = mock((_attemptId: string) => {});
+    const openTaskView = mock<OpenTaskView>(() => {});
+    const feedback = createFeedbackFake();
+    const connection = createTestClientConnection({
+      feedback,
+      client: {
+        workspaceGetRepoConfig: async () =>
+          repoConfigSchema.parse({
+            workspaceId: "workspace-1",
+            workspaceName: "Workspace",
+            repoPath: "/repo",
+            agentStudioState: { openTaskIds: [] },
+          }),
+      },
+    });
+    const harness = createRuntimeHookHarness(
+      useTaskSessionStartFlow,
+      createArgs({
+        sessions: [session],
+        runSessionStartWorkflow,
+        openTaskView,
+        onBackgroundTransfer,
+      }),
+      {
+        connection,
+        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+          loadRepoRuntimeCatalog: async () => ({}),
+        }),
+      },
+    );
+    let feedbackSubmission!: Promise<void>;
+    let feedbackSettled = false;
+    await harness.mount();
+    try {
+      await harness.run((flow) => flow.onHumanRequestChanges("TASK-1"));
+      await harness.run((flow) => {
+        flow.humanReviewFeedbackModal?.onMessageChange("Rename the export button.");
+      });
+      await harness.run((flow) => {
+        feedbackSubmission = flow.humanReviewFeedbackModal!.onConfirm();
+        void feedbackSubmission.then(() => {
+          feedbackSettled = true;
+        });
+      });
+      await harness.waitFor((flow) => Boolean(flow.sessionStartModal?.kickoffPrompt));
+      await harness.run((flow) => {
+        const start = flow.sessionStartModal!;
+        void start.onConfirm({
+          startMode: "reuse",
+          sourceSessionOptionValue: start.existingSessionOptions[0]!.value,
+          runInBackground: true,
+        });
+      });
+
+      expect(feedback.shownOf("error")).toEqual([]);
+      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
+      const launch = runSessionStartWorkflow.mock.calls[0]![0];
+      const attemptId = launch.startupAttemptId;
+      if (!attemptId) throw new Error("The launch must name its startup attempt.");
+      expect(onBackgroundTransfer.mock.calls).toEqual([[attemptId]]);
+      expect(connection.startupAttempts.getAttempt(attemptId)?.presentation).toBe("notification");
+      expect(harness.getLatest().sessionStartModal).toBeNull();
+      expect(harness.getLatest().humanReviewFeedbackModal).toMatchObject({
+        message: "Rename the export button.",
+        isSubmitting: true,
+      });
+      expect(feedbackSettled).toBe(false);
+      expect(openTaskView).not.toHaveBeenCalled();
+
+      await harness.run(() => pending.resolve());
+      await feedbackSubmission;
+      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
+      expect(openTaskView).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve();
+      await harness.unmount();
+      await connection.dispose();
     }
   });
 });

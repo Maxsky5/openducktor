@@ -24,6 +24,7 @@ describe("requestChangesRemove", () => {
     expect(
       requestChangesRemove(typed, { open: false, isStarting: false, phase: { kind: "progress" } }),
     ).toBe("leave");
+    expect(requestChangesRemove(typed, null, true)).toBe("leave");
   });
 
   test("closes at once when nothing is typed", () => {

@@ -84,6 +84,7 @@ const harness = (
       },
     }),
     preparation,
+    () => {},
   );
   const id = store.begin({
     origin,

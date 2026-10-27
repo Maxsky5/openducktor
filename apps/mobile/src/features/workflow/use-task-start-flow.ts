@@ -14,7 +14,7 @@ import {
   type OpenTaskView,
   useTaskSessionStartFlow,
 } from "@openducktor/frontend-core/tasks/workflow/use-task-session-start-flow";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigation } from "expo-router";
 import { reportMessageRetry } from "./start-session/message-retry-store";
 import { showNoSession } from "./task-action-routing";
@@ -28,6 +28,7 @@ import { useRepairedStartupHandoff } from "@/features/session-startup/use-repair
 
 export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
   const connection = useClientConnection();
+  const [backgroundAttemptId, setBackgroundAttemptId] = useState<string | null>(null);
   const { tasks } = useRequiredContext(TasksStateContext, "useTaskStartFlow");
   const sessions = useAgentSessionSummaries();
   const {
@@ -93,6 +94,7 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
     onPostStartMessageFailure,
     workspaceRepoPath: repoPath,
     runSessionStartWorkflow,
+    onBackgroundTransfer: setBackgroundAttemptId,
   });
   const start = flow.sessionStartModal;
   const attemptId = start?.phase.kind === "progress" ? start.phase.startupAttemptId : null;
@@ -102,15 +104,10 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
   useEffect(() => {
     if (attemptId && !attempt) navigation.close();
   }, [attempt, attemptId, navigation]);
+  // Let the sheet's removal guard update before closing it.
   useEffect(() => {
-    if (
-      start?.phase.kind === "progress" &&
-      !start.open &&
-      connection.startupAttempts.getAttempt(start.phase.startupAttemptId)?.presentation ===
-        "notification"
-    )
-      navigation.close();
-  }, [connection, navigation, start]);
+    if (backgroundAttemptId) navigation.close();
+  }, [backgroundAttemptId, navigation]);
   // A start reads the role defaults and the target branch when its choices open, so it waits for
   // the current repository settings.
   const settings = useMemo(
@@ -121,5 +118,14 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
     }),
     [repoSettingsError, repoSettingsReady, retryRepoSettings],
   );
-  return { flow, navigation, tasks, sessions, settings, branchesFailure, gitProvider };
+  return {
+    flow,
+    navigation,
+    tasks,
+    sessions,
+    settings,
+    branchesFailure,
+    gitProvider,
+    backgroundAttemptId,
+  };
 }

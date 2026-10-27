@@ -1043,6 +1043,9 @@ test.each(["submit", "continue"] as const)(
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
     const opened = mock(() => {});
+    const onBackgroundTransfer = mock((attemptId: string) => {
+      expect(connection.startupAttempts.getAttempt(attemptId)?.presentation).toBe("notification");
+    });
     const workflow = mock(async (input: Parameters<RunSessionStartWorkflow>[0]) => {
       await (input.request.taskId === "TASK-1" ? first.promise : second.promise);
       return {
@@ -1095,6 +1098,7 @@ test.each(["submit", "continue"] as const)(
         workspaceRepoPath: "/repo",
         workspaceId: "workspace",
         scopeKey: "workspace",
+        onBackgroundTransfer,
       },
       {
         connection,
@@ -1120,10 +1124,14 @@ test.each(["submit", "continue"] as const)(
     } as const;
     let resultA!: Promise<Awaited<ReturnType<typeof startKanbanSessionFlow>> | undefined>;
     let resultB!: Promise<Awaited<ReturnType<typeof startKanbanSessionFlow>> | undefined>;
+    let firstSettled = false;
     await harness.mount();
     try {
       await harness.run((runner) => {
         resultA = runner.runSessionStartRequest(request, execute);
+        void resultA.then(() => {
+          firstSettled = true;
+        });
       });
       await harness.waitFor((runner) =>
         Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
@@ -1138,10 +1146,15 @@ test.each(["submit", "continue"] as const)(
         void confirm?.(choices);
       });
       expect(execute).toHaveBeenCalledTimes(1);
+      if (transfer === "continue") expect(onBackgroundTransfer).not.toHaveBeenCalled();
       if (transfer === "continue")
         await harness.run((runner) => {
           runner.sessionStartModal?.onContinueInBackground();
         });
+      expect(onBackgroundTransfer.mock.calls).toEqual([
+        [execute.mock.calls[0]![0].startupAttemptId],
+      ]);
+      expect(firstSettled).toBe(false);
       expect(harness.getLatest().sessionStartModal).toBeNull();
       expect(harness.getLatest().isSessionStarting).toBe(false);
       await harness.run((runner) => {
@@ -1180,6 +1193,10 @@ test.each(["submit", "continue"] as const)(
       });
       expect((await resultB)?.externalSessionId).toBe("native-TASK-2");
       expect(execute).toHaveBeenCalledTimes(2);
+      expect(onBackgroundTransfer.mock.calls).toEqual([
+        [execute.mock.calls[0]![0].startupAttemptId],
+        [execute.mock.calls[1]![0].startupAttemptId],
+      ]);
       expect(opened).not.toHaveBeenCalled();
       expect(feedback.shownOf("error")).toEqual([]);
     } finally {

@@ -63,6 +63,7 @@ type UseTaskSessionStartFlowArgs = {
   onPostStartMessageFailure: (result: SessionStartWorkflowResult) => void;
   workspaceRepoPath: string | null;
   runSessionStartWorkflow: RunSessionStartWorkflow;
+  onBackgroundTransfer?: (attemptId: string) => void;
 };
 
 export type UseTaskSessionStartFlowResult = {
@@ -142,6 +143,7 @@ export function useTaskSessionStartFlow({
   onPostStartMessageFailure,
   workspaceRepoPath,
   runSessionStartWorkflow,
+  onBackgroundTransfer,
 }: UseTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
   const { feedback, startupAttempts } = useClientConnection();
   const queryClient = useQueryClient();
@@ -156,6 +158,7 @@ export function useTaskSessionStartFlow({
       favoriteState,
       repoSettings,
       workspaceRepoPath,
+      onBackgroundTransfer,
     });
 
   const {

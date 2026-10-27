@@ -65,6 +65,7 @@ export const createStartupAttemptStore = (
     isCurrent: (id: string, handoff: StartupPreparedHandoff) => boolean;
     release: (id: string) => void;
   },
+  updateTerminalResults: (progress: StartupOperationSnapshot) => void,
 ) => {
   const entries = new Map<string, AttemptEntry>();
   const listeners = new Set<() => void>();
@@ -89,8 +90,10 @@ export const createStartupAttemptStore = (
     }
   };
   const accept = (progress: StartupOperationSnapshot) => {
+    if (disposed) return;
+    updateTerminalResults(progress);
     const entry = entries.get(progress.context.startupAttemptId);
-    if (!entry || disposed || !entry.operationIds.includes(progress.context.operationId)) return;
+    if (!entry || !entry.operationIds.includes(progress.context.operationId)) return;
     if (
       progress.workspaceId !== entry.attempt.origin.workspaceId ||
       progress.repoPath !== entry.attempt.origin.repoPath
@@ -316,10 +319,10 @@ export const createStartupAttemptStore = (
         if (result.startupProgress) accept(result.startupProgress);
         return result;
       } catch (cause) {
-        if (entries.get(id) !== entry || disposed) throw cause;
         const progress =
           cause instanceof HostInvokeError ? cause.failure?.startupProgress : undefined;
         if (progress) accept(progress);
+        if (entries.get(id) !== entry || disposed) throw cause;
         update(id, (attempt) =>
           !progress &&
           attempt.status.confirmation === "current" &&

@@ -1,5 +1,14 @@
-import type { TerminalListFilter, TerminalListResponse } from "@openducktor/contracts";
-import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
+import type {
+  StartupOperationSnapshot,
+  TerminalListFilter,
+  TerminalListResponse,
+} from "@openducktor/contracts";
+import {
+  type QueryClient,
+  type QueryKey,
+  queryOptions,
+  replaceEqualDeep,
+} from "@tanstack/react-query";
 import { connectionHost } from "../connection/client-connection";
 import { skippedQueryOptions } from "./skipped-query";
 
@@ -40,7 +49,50 @@ export const terminalListByFilterQueryOptions = ({
         enabled,
         retry: false,
         staleTime: 0,
+        // A list read can start before an action result arrives.
+        structuralSharing: (previous, incoming) => {
+          // SAFETY: terminal list keys hold only TerminalListResponse values.
+          const current = previous as TerminalListResponse | undefined;
+          // SAFETY: the terminal list query returns a TerminalListResponse.
+          const next = incoming as TerminalListResponse;
+          if (!current || current.hostInstanceId !== next.hostInstanceId)
+            return replaceEqualDeep(previous, incoming);
+          return replaceEqualDeep(current, {
+            ...next,
+            terminals: next.terminals.map((terminal) => {
+              const known = current.terminals.find(
+                (item) => item.terminalId === terminal.terminalId,
+              );
+              return terminal.initialCommandResult === undefined &&
+                known?.initialCommandResult !== undefined
+                ? { ...terminal, initialCommandResult: known.initialCommandResult }
+                : terminal;
+            }),
+          });
+        },
       });
+
+/** Action outcomes remain available in loaded terminal lists after startup feedback ends. */
+export const updateTerminalCommandResults = (
+  queryClient: QueryClient,
+  progress: StartupOperationSnapshot,
+): void => {
+  for (const [key, current] of queryClient.getQueriesData<TerminalListResponse>({
+    queryKey: terminalQueryKeys.all,
+  })) {
+    if (!current || current.hostInstanceId !== progress.hostInstanceId) continue;
+    let changed = false;
+    const terminals = current.terminals.map((terminal) => {
+      const result = progress.steps.find(
+        (step) => step.action?.terminalId === terminal.terminalId && step.action.result,
+      )?.action?.result;
+      if (!result) return terminal;
+      changed = true;
+      return { ...terminal, initialCommandResult: result };
+    });
+    if (changed) queryClient.setQueryData(key, { ...current, terminals });
+  }
+};
 
 /**
  * Refreshes the terminal list of one owner. Call it after a host command that can open terminals,
