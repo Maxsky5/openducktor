@@ -38,20 +38,28 @@ export const pickTaskBranch = (
   return { kind: "ambiguous", branches: relatedBranches.map((branch) => branch.name).sort() };
 };
 
-export type BranchReflogEntryKind = "commit" | "creation" | "reset" | "other";
+export type BranchReflogEntryKind = "commit" | "creation" | "reset" | "rebase" | "other";
 
 /** Git writes these reflog subjects when it makes a new commit on the checked-out branch. */
 const OWN_COMMIT_SUBJECT_PREFIXES = ["commit", "cherry-pick:", "revert:", "am:"] as const;
 
+/** Git writes this subject when a rebase of the branch ends, as `rebase (finish): <ref> onto <oid>`. */
+const REBASE_FINISH_SUBJECT = /\(finish\): \S+ onto (\S+)$/;
+
 /**
  * The kind of one branch reflog entry. A `commit`, `cherry-pick`, `revert`, or `am` entry gives
  * the branch a commit of its own. `branch: Created` starts the branch. `branch: Reset` and
- * `reset:` move it, and they drop the commits that the new tip does not hold. Pull and rebase
- * entries do not count.
+ * `reset:` move it, and they drop the commits that the new tip does not hold. A finished rebase
+ * replaces the earlier commits with new ones on its base. Pull entries do not count.
  */
 export const branchReflogEntryKind = (subject: string): BranchReflogEntryKind => {
   if (OWN_COMMIT_SUBJECT_PREFIXES.some((prefix) => subject.startsWith(prefix))) return "commit";
   if (subject.startsWith("branch: Created")) return "creation";
   if (subject.startsWith("branch:") || subject.startsWith("reset:")) return "reset";
+  if (REBASE_FINISH_SUBJECT.test(subject)) return "rebase";
   return "other";
 };
+
+/** The base commit of a finished rebase entry. */
+export const rebaseBaseOid = (subject: string): string | undefined =>
+  REBASE_FINISH_SUBJECT.exec(subject)?.[1];

@@ -15,7 +15,8 @@ import {
   taskCloseConfirmLabel,
 } from "@openducktor/frontend-core/tasks/details/task-close-copy";
 import { TaskCloseConfirmContent } from "./task-close-confirm-content";
-import { focusDialogContent, TaskIdentity } from "./task-identity";
+import { focusDialogContent } from "@/lib/focus-dialog-content";
+import { TaskIdentity } from "./task-identity";
 import { TaskReadsLoading } from "./task-reads-loading";
 import type { TaskCloseConfirmDialogModel } from "@openducktor/frontend-core/tasks/details/use-task-close-confirm-dialog";
 

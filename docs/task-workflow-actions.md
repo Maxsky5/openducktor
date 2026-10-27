@@ -167,14 +167,15 @@ The task sync loop syncs up to four open workspaces at a time. For each workspac
 
 A pass reads the task list first. Without candidates, it makes no Git call. Otherwise it fetches each target remote once through the [shared remote fetch](git-comparison.md#remote-fetch). A scheduled pass skips a remote that a fetch of the last five minutes updated. `task_merge_status_check` always fetches.
 
-A pass checks again only the candidates whose branch tip or target tip changed. The number of Git calls does not grow with the number of tasks. One `git log -g --stdin` call reads the reflogs of all new branch tips, and each result stays until its tip moves. Only a reset entry in a reflog adds a `git merge-base --is-ancestor` call. Then one `git for-each-ref --format=%(ahead-behind:<target>)` call for each target tip counts the commits of the task branches that the target does not have. One `git merge-tree --write-tree --stdin` call writes the merge trees of all branches that need the tree check. The references and the merge pairs go on stdin or as one branch prefix pattern, so many tasks do not make a command line that is too long. At most four Git commands of merge detection run at a time, for all workspaces together.
+A pass checks again only the candidates whose branch tip or target tip changed. The number of Git calls does not grow with the number of tasks. One `git log -g --stdin` call reads the reflogs of all new branch tips, and each result stays until its tip moves. Only a reflog with a reset entry adds `git merge-base --is-ancestor` calls. Then one `git for-each-ref --format=%(ahead-behind:<target>)` call for each target tip counts the commits of the task branches that the target does not have. One `git merge-tree --write-tree --stdin` call writes the merge trees of all branches that need the tree check. The references and the merge pairs go on stdin or as one branch prefix pattern, so many tasks do not make a command line that is too long. At most four Git commands of merge detection run at a time, for all workspaces together.
 
 The check uses Git facts only. First it reads the branch reflog, newest entry first, to find a commit that the branch got after its creation:
 
 - A `commit`, `cherry-pick:`, `revert:`, or `am:` entry is such an own commit.
 - A `branch: Created` entry ends the scan with no own commit.
-- A `reset:` or `branch: Reset` entry drops commits when the old tip is not in the new tip. An older `commit` entry then counts only when the new tip of each later dropping reset still holds that commit. So a reset that keeps some or all task commits does not hide them.
-- Pull and rebase entries do not count.
+- A `reset:` or `branch: Reset` entry sets the branch to its new tip. After the newest reset, an older `commit` entry counts only when the tip of that reset holds the commit. So a reset that keeps some or all task commits, or a reset back to a dropped commit, does not hide them.
+- A rebase replaces the earlier commits with new commits on its base. A `rebase (finish): <ref> onto <base>` entry before the newest reset counts when the reset tip is in the rebased history and is not in the base.
+- Pull entries and other rebase entries do not count.
 
 Git maintenance expires old reflog entries, so an empty reflog is a normal case. Commits that the target does not have are then the work of the branch. A tip that the target has can be a branch that never got a commit, so it has nothing to merge.
 

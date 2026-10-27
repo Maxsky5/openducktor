@@ -1,6 +1,6 @@
 import type { TaskMergeCheckResult } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { branchReflogEntryKind } from "../../../domain/task";
+import { branchReflogEntryKind, rebaseBaseOid } from "../../../domain/task";
 import type { GitPort, GitPortError, GitReflogEntry, GitRefTip } from "../../../ports/git-port";
 
 /**
@@ -59,39 +59,32 @@ export const branchMergeResult = (
 };
 
 /**
- * Whether the branch still has a commit that it got after its creation. A reset that drops
- * commits keeps the older commits that its new tip still holds, so each later reset decides
- * which older commits remain.
+ * Whether the branch still has a commit that it got after its creation. A reset sets the branch to
+ * its tip, so a commit before the newest reset stays only when that tip holds it. A rebase before
+ * that reset replaced the earlier commits, so the rebase counts when the tip holds a commit that
+ * the rebase made on its base.
  */
 const hasOwnCommit = (gitPort: GitPort, gitRepoPath: string, entries: readonly GitReflogEntry[]) =>
   Effect.gen(function* () {
-    const droppingResetTips: string[] = [];
-    for (const [index, entry] of entries.entries()) {
+    let resetTip: string | undefined;
+    for (const entry of entries) {
       const kind = branchReflogEntryKind(entry.subject);
       if (kind === "creation") return false;
-      if (
-        kind === "commit" &&
-        (yield* isInEachTip(gitPort, gitRepoPath, entry.oid, droppingResetTips))
-      ) {
-        return true;
-      }
       if (kind === "reset") {
-        // When the reset is the oldest entry, the tip before it is unknown.
-        const previous = entries[index + 1];
-        if (!previous) return false;
-        if (!(yield* gitPort.isAncestor(gitRepoPath, previous.oid, entry.oid))) {
-          droppingResetTips.push(entry.oid);
+        resetTip ??= entry.oid;
+      } else if (kind === "commit") {
+        if (resetTip === undefined) return true;
+        if (yield* gitPort.isAncestor(gitRepoPath, entry.oid, resetTip)) return true;
+      } else if (kind === "rebase" && resetTip !== undefined) {
+        const base = rebaseBaseOid(entry.subject);
+        if (
+          base !== undefined &&
+          (yield* gitPort.isAncestor(gitRepoPath, resetTip, entry.oid)) &&
+          !(yield* gitPort.isAncestor(gitRepoPath, resetTip, base))
+        ) {
+          return true;
         }
       }
     }
     return false;
-  });
-
-/** Whether each tip holds the commit. */
-const isInEachTip = (gitPort: GitPort, gitRepoPath: string, oid: string, tips: readonly string[]) =>
-  Effect.gen(function* () {
-    for (const tip of tips) {
-      if (!(yield* gitPort.isAncestor(gitRepoPath, oid, tip))) return false;
-    }
-    return true;
   });

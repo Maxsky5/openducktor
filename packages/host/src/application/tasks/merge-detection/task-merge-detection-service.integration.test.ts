@@ -260,10 +260,29 @@ describe("merge detection with real Git", () => {
     run(repo, "cherry-pick", "side");
     run(repo, "checkout", "main");
     run(repo, "push", "origin", "odt/t-pick");
+    // A reset back to a dropped commit restores it.
+    run(repo, "checkout", "-b", "odt/t-restore", "origin/main");
+    await commitFile(repo, "t-restore.txt", "restore\n");
+    run(repo, "reset", "--hard", "HEAD~1");
+    run(repo, "reset", "--hard", "ORIG_HEAD");
+    run(repo, "checkout", "main");
+    run(repo, "push", "origin", "odt/t-restore");
+    // A reset after a rebase keeps the rebased task commit that its tip holds.
+    run(repo, "checkout", "-b", "rebase-base", "origin/main");
+    await commitFile(repo, "rebase-base.txt", "base\n");
+    run(repo, "checkout", "-b", "odt/t-rebase", "origin/main");
+    await commitFile(repo, "t-rebase-a.txt", "a\n");
+    await commitFile(repo, "t-rebase-b.txt", "b\n");
+    run(repo, "rebase", "rebase-base");
+    run(repo, "reset", "--hard", "HEAD~1");
+    run(repo, "checkout", "main");
+    run(repo, "push", "origin", "odt/t-rebase");
     run(other, "fetch", "origin");
     run(other, "merge", "--ff-only", "origin/odt/t-reset");
     run(other, "merge", "--no-ff", "-m", "Merge t-partial", "origin/odt/t-partial");
     run(other, "merge", "--no-ff", "-m", "Merge t-pick", "origin/odt/t-pick");
+    run(other, "merge", "--no-ff", "-m", "Merge t-restore", "origin/odt/t-restore");
+    run(other, "merge", "--no-ff", "-m", "Merge t-rebase", "origin/odt/t-rebase");
     run(other, "push", "origin", "main");
     run(repo, "fetch", "origin");
     run(repo, "merge", "--ff-only", "origin/main");
@@ -281,6 +300,8 @@ describe("merge detection with real Git", () => {
       taskCard("t-reset"),
       taskCard("t-partial"),
       taskCard("t-pick"),
+      taskCard("t-restore"),
+      taskCard("t-rebase"),
       { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
     ]);
     const snapshot = await Effect.runPromise(service.runPass("/workspace"));
@@ -290,6 +311,8 @@ describe("merge detection with real Git", () => {
       "t-reset": "merged",
       "t-partial": "merged",
       "t-pick": "merged",
+      "t-restore": "merged",
+      "t-rebase": "merged",
       "t-cherry": "not_merged:0",
     });
   }, 30_000);

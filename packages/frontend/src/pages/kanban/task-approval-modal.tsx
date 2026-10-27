@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
-import { focusDialogContent, TaskIdentity } from "@/components/features/task-details/task-identity";
+import { TaskIdentity } from "@/components/features/task-details/task-identity";
+import { focusDialogContent } from "@/lib/focus-dialog-content";
 import {
   Dialog,
   DialogContent,

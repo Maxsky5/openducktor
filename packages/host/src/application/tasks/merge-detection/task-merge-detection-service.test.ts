@@ -328,10 +328,14 @@ describe("task merge detection service", () => {
   });
 
   test("a branch is merged only when its reflog shows a commit of its own", async () => {
-    // The branch history is base -> work -> later. The target holds the branch tip.
+    // The branch history is base -> work -> later. A rebase onto main-2 rewrites it as
+    // main-2 -> work-2 -> later-2. The target holds the branch tip.
     const parents = new Map([
       ["work", "base"],
       ["later", "work"],
+      ["main-2", "base"],
+      ["work-2", "main-2"],
+      ["later-2", "work-2"],
     ]);
     const isAncestorOf = (ancestor: string, descendant: string): boolean => {
       let current: string | undefined = descendant;
@@ -400,6 +404,46 @@ describe("task merge detection service", () => {
         ])
       ).status?.result,
     ).toMatchObject({ kind: "merged" });
+    // A reset back to a dropped commit restores it.
+    expect(
+      (
+        await reflogResult([
+          { oid: "work", subject: "reset: moving to work" },
+          { oid: "base", subject: "reset: moving to HEAD~1" },
+          { oid: "work", subject: "commit: task work" },
+          created,
+        ])
+      ).status?.result,
+    ).toMatchObject({ kind: "merged" });
+    // A rebase rewrites the task commits, so a later reset keeps the rebased commit of its tip.
+    const rebased = {
+      oid: "later-2",
+      subject: "rebase (finish): refs/heads/odt/task-1 onto main-2",
+    };
+    const beforeRebase = [
+      { oid: "later", subject: "commit: later work" },
+      { oid: "work", subject: "commit: task work" },
+      created,
+    ];
+    expect(
+      (
+        await reflogResult([
+          { oid: "work-2", subject: "reset: moving to HEAD~1" },
+          rebased,
+          ...beforeRebase,
+        ])
+      ).status?.result,
+    ).toMatchObject({ kind: "merged" });
+    // A reset to the rebase base drops every rebased commit.
+    expect(
+      (
+        await reflogResult([
+          { oid: "main-2", subject: "reset: moving to main-2" },
+          rebased,
+          ...beforeRebase,
+        ])
+      ).status?.result,
+    ).toMatchObject({ kind: "not_merged", unmergedCommitCount: 0 });
   });
 
   test("a branch without reflog entries is checked from its commits, with no failure", async () => {
