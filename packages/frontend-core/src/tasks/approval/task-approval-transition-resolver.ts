@@ -1,7 +1,9 @@
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./task-approval-types";
 import {
+  isTaskApprovalInteractive,
   isTaskApprovalReady,
+  type TaskApprovalFlowInteractiveState,
   type TaskApprovalFlowOpenState,
   type TaskApprovalFlowReadyState,
   type TaskApprovalFlowState,
@@ -15,9 +17,10 @@ type MissingBuilderWorktreeApprovalState = TaskApprovalFlowOpenState & {
 export type TaskApprovalSubmissionRoute =
   | { kind: "ignore" }
   | {
-      kind: "complete_missing_builder_worktree";
+      kind: "close_missing_builder_worktree";
       approval: MissingBuilderWorktreeApprovalState;
     }
+  | { kind: "close_task"; approval: TaskApprovalFlowInteractiveState }
   | { kind: "submit_direct_merge"; approval: TaskApprovalFlowReadyState; repoPath: string }
   | { kind: "submit_pull_request"; approval: TaskApprovalFlowReadyState; repoPath: string };
 
@@ -30,7 +33,7 @@ export const resolveTaskApprovalOpenMode = (args: {
   gitProviderContext: RepositoryGitProviderContext;
   requestedMode: TaskApprovalMode | undefined;
 }): TaskApprovalMode => {
-  if (args.requestedMode === "direct_merge") {
+  if (args.requestedMode === "direct_merge" || args.requestedMode === "close_task") {
     return args.requestedMode;
   }
 
@@ -63,13 +66,18 @@ export const resolveTaskApprovalSubmissionRoute = (
 ): TaskApprovalSubmissionRoute => {
   if (isMissingBuilderWorktreeApprovalState(state)) {
     return {
-      kind: "complete_missing_builder_worktree",
+      kind: "close_missing_builder_worktree",
       approval: state,
     };
   }
 
   if (state.kind === "open" && state.stage === "complete_direct_merge") {
     return { kind: "ignore" };
+  }
+
+  // A close needs no approval context, so it works when that read failed.
+  if (repoPath && isTaskApprovalInteractive(state) && state.mode === "close_task") {
+    return { kind: "close_task", approval: state };
   }
 
   if (!repoPath || !isTaskApprovalReady(state)) {

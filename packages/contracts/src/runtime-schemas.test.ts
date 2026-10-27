@@ -652,6 +652,7 @@ describe("runtime schemas", () => {
       repoPath: "/repo",
       targetBranch: "origin/main",
       workingDir: null,
+      force: true,
     });
     const fetchResult = gitFetchRemoteResultSchema.parse({
       outcome: "fetched",
@@ -663,11 +664,18 @@ describe("runtime schemas", () => {
         "Skipped git fetch because no applicable remote is configured for this repo or branch.",
     });
 
+    const recentResult = gitFetchRemoteResultSchema.parse({
+      outcome: "skipped_recent",
+      output: "Skipped git fetch because a fetch of the last 5 minutes updated each remote.",
+    });
+
     expect(fetchRequest.repoPath).toBe("/repo");
     expect(fetchRequest.workingDir).toBeUndefined();
+    expect(fetchRequest.force).toBe(true);
     expect(fetchResult.outcome).toBe("fetched");
     expect(fetchResult.output).toContain("origin/main");
     expect(skippedResult.outcome).toBe("skipped_no_remote");
+    expect(recentResult.outcome).toBe("skipped_recent");
   });
 
   test("git pull branch result rejects unknown and malformed payloads", () => {
@@ -695,6 +703,14 @@ describe("runtime schemas", () => {
       gitFetchRemoteRequestSchema.parse({
         repoPath: "/repo",
         targetBranch: "   ",
+        force: false,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitFetchRemoteRequestSchema.parse({
+        repoPath: "/repo",
+        targetBranch: "origin/main",
       }),
     ).toThrow();
 

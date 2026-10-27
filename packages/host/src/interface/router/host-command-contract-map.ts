@@ -27,6 +27,7 @@ import type { createSystemDiagnosticsCommandHandlers } from "../commands/system-
 import type { createSystemPlatformCommandHandlers } from "../commands/system-platform-command-handlers";
 import type { createTaskAssetCommandHandlers } from "../commands/task-asset-command-handlers";
 import type { createTaskCommandHandlers } from "../commands/task-command-handlers";
+import type { createTaskMergeStatusCommandHandlers } from "../commands/task-merge-status-command-handlers";
 import type { createRepoActionCommandHandlers } from "../commands/repo-action-command-handlers";
 import type { createTaskWorktreeCommandHandlers } from "../commands/task-worktree-command-handlers";
 import type { createTerminalCommandHandlers } from "../commands/terminal-command-handlers";
@@ -63,6 +64,7 @@ type AllHostCommandHandlers = ReturnType<typeof createWorkspaceSessionLaunchComm
   ReturnType<typeof createSystemPlatformCommandHandlers> &
   ReturnType<typeof createTaskAssetCommandHandlers> &
   ReturnType<typeof createTaskCommandHandlers> &
+  ReturnType<typeof createTaskMergeStatusCommandHandlers> &
   ReturnType<typeof createTaskWorktreeCommandHandlers> &
   ReturnType<typeof createTerminalCommandHandlers> &
   ReturnType<typeof createRepoActionCommandHandlers> &

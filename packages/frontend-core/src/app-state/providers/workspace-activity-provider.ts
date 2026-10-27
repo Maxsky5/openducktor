@@ -9,6 +9,7 @@ import {
 import { createWorkspaceActivityObserver } from "../../workspace-activity/workspace-activity-observer";
 import { useHostConnection } from "../../connection/client-connection-react";
 import { observeWorkspaceSessionRecords } from "../../queries/workspace-session-updates";
+import { observeTaskMergeStatusUpdates } from "../../queries/task-merge-status";
 import { createAgentSessionListLiveSync } from "../../queries/agent-sessions";
 import { createAgentTurnGitSync } from "../../queries/agent-turn-git-sync";
 import { getSessionHistoryFreshnessTracker } from "../../queries/agent-session-history-freshness-tracker";
@@ -70,6 +71,9 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
       }),
     [archivedSessions, liveSource],
   );
+
+  // Merge detection events keep the merge status of each workspace current without polling.
+  useEffect(() => observeTaskMergeStatusUpdates(queryClient), [queryClient]);
 
   // Saved chat events keep archived lists current without polling.
   useEffect(

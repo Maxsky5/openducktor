@@ -175,6 +175,7 @@ function renderColumn(column: Column, model: KanbanPageContentModel): ReactEleme
       pendingState={model.pendingState}
       taskSessionsByTaskId={model.taskSessionsByTaskId}
       historicalSessionsByTaskId={model.historicalSessionsByTaskId}
+      mergedTargetByTaskId={model.mergedTargetByTaskId}
       activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
       taskActivityStateByTaskId={model.taskActivityStateByTaskId}
       onOpenDetails={model.onOpenDetails}
@@ -185,6 +186,7 @@ function renderColumn(column: Column, model: KanbanPageContentModel): ReactEleme
       onHumanApprove={model.onHumanApprove}
       onHumanRequestChanges={model.onHumanRequestChanges}
       onResetImplementation={model.onResetImplementation}
+      onCloseTask={model.onCloseTask}
     />
   );
 }

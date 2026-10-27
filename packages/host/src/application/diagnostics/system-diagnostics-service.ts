@@ -6,6 +6,20 @@ import type { RepoStoreDiagnostics, TaskStoreError } from "../../ports/task-repo
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { UserEnvironmentPort } from "../../ports/user-environment-port";
 
+/** Merge detection reads `for-each-ref --format=%(ahead-behind:...)`, which Git 2.41 added. */
+const MINIMUM_GIT_VERSION = { major: 2, minor: 41 } as const;
+
+/** Why a `git --version` output is below the version that OpenDucktor needs, or null. */
+const gitVersionError = (version: string): string | null => {
+  const match = /(\d+)\.(\d+)/.exec(version);
+  if (!match) return `Unable to read the Git version from "${version}".`;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const { major: minimumMajor, minor: minimumMinor } = MINIMUM_GIT_VERSION;
+  if (major > minimumMajor || (major === minimumMajor && minor >= minimumMinor)) return null;
+  return `Git ${minimumMajor}.${minimumMinor} or later is required, and Git ${major}.${minor} is installed. Update Git.`;
+};
+
 export type SystemDiagnosticsService = {
   pathCheck(forceRefresh?: boolean): Effect.Effect<PathCheck>;
   gitCheck(): Effect.Effect<GitCheck>;
@@ -54,7 +68,8 @@ export const createSystemDiagnosticsService = ({
           error: `Failed reading git --version from ${executablePath}${detail}`,
         };
       }
-      return { ok: true, executablePath, version: version.success, error: null };
+      const error = gitVersionError(version.success);
+      return { ok: error === null, executablePath, version: version.success, error };
     });
   },
   taskStoreCheck(repoPath) {

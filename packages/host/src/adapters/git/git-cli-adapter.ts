@@ -38,6 +38,8 @@ import {
   suggestedSquashCommitMessage,
   switchBranch,
 } from "../../infrastructure/git/git-merge";
+import { createGitMergeDetectionMethods } from "../../infrastructure/git/git-merge-detection";
+import { createGitRemoteFetchMethods } from "../../infrastructure/git/git-remote-fetch";
 import { restoreWorktreeToReference } from "../../infrastructure/git/git-reset";
 import {
   getCurrentBranchUnchecked,
@@ -50,11 +52,11 @@ import {
 import {
   abortConflict,
   commitAll,
-  fetchRemote,
   pullBranch,
   pushBranch,
   rebaseAbort,
   rebaseBranch,
+  resolveFetchRemotes,
 } from "../../infrastructure/git/git-sync";
 import {
   configureBranchUpstream,
@@ -388,9 +390,11 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         });
       });
     },
-    fetchRemote(workingDirectory, targetBranch) {
-      return fetchRemote(runner, workingDirectory, targetBranch);
+    resolveFetchRemotes(workingDirectory, targetBranch) {
+      return resolveFetchRemotes(runner, workingDirectory, targetBranch);
     },
+    ...createGitRemoteFetchMethods(runner, readEnv),
+    ...createGitMergeDetectionMethods(runner),
     pullBranch(workingDirectory) {
       return pullBranch(runner, workingDirectory);
     },

@@ -79,10 +79,10 @@ export function useTaskOperations({
     setTaskTargetBranch: mutationCommands.setTaskTargetBranch,
     deleteTask: mutationCommands.deleteTask,
     closeTask: mutationCommands.closeTask,
+    removeTaskWorktree: mutationCommands.removeTaskWorktree,
     resetTaskImplementation: resetOperations.resetTaskImplementation,
     resetTask: resetOperations.resetTask,
     transitionTask: mutationCommands.transitionTask,
-    humanApproveTask: mutationCommands.humanApproveTask,
     humanRequestChangesTask: mutationCommands.humanRequestChangesTask,
   };
 }

@@ -38,8 +38,12 @@ const slugifyTitle = (value: string): string => {
   return slug.replace(/^-+|-+$/g, "").slice(0, 40);
 };
 
+/** The configured branch prefix without trailing slashes. */
+export const cleanTaskBranchPrefix = (branchPrefix: string): string =>
+  branchPrefix.trim().replace(/\/+$/g, "") || DEFAULT_BRANCH_PREFIX;
+
 export const buildBranchName = (prefix: string, taskId: string, title: string): string => {
-  const cleanPrefix = prefix.trim().replace(/\/+$/g, "") || DEFAULT_BRANCH_PREFIX;
+  const cleanPrefix = cleanTaskBranchPrefix(prefix);
   const slug = slugifyTitle(title);
   return slug ? `${cleanPrefix}/${taskId}-${slug}` : `${cleanPrefix}/${taskId}`;
 };

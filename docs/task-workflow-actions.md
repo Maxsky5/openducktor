@@ -16,6 +16,7 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 - `qa_start`
 - `open_qa`
 - `close_task`
+- `remove_worktree`
 - `human_request_changes`
 - `human_approve`
 
@@ -29,11 +30,13 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 | `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
 | `open_qa` | Open the linked QA session. No transition. |
 | `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
-| `human_approve` | Move `ai_review` or `human_review` to `closed`. |
+| `human_approve` | Open the approval modal for an `ai_review` or `human_review` task. No direct transition. |
 
 ## Event actions
 
 An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_close` for `task.close`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
+
+`human_approve` opens the approval modal and sends no event. The host uses its `review.approve` event only to allow the approval reads.
 
 ## Session startup
 
@@ -67,6 +70,12 @@ The host waits for publication consent, then completes publication, cleanup, and
 
 Cleanup releases the live state of the task sessions before it removes the task worktree. A later runtime read then does not report the removed worktree as a session fault, so Delete can run on the closed task.
 
+## Approval modal
+
+The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. Close Task runs `task_close`, so it merges no code and changes no pull request.
+
+Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the builder worktree is missing, the modal offers Close Task and Reset Implementation. When the approval context read fails, it offers only Close Task.
+
 ## Reset implementation
 
 `reset_implementation` discards the current build and QA attempt. It can run from `in_progress`, `blocked`, `ai_review`, or `human_review`.
@@ -96,13 +105,41 @@ Reject the action while a live role still owns task state. Reject it when branch
 
 ## Close task
 
-`close_task` moves any non-closed task to `closed` from the task detail sheet. It is an administrative override.
+`close_task` moves any non-closed task to `closed`. It is an administrative override.
 
-The action keeps the task record, user fields, all artifacts, session history, pull request data, and direct merge data. It stops task terminals and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
+The action keeps the task record, user fields, all artifacts, session history, pull request data, and direct merge data. It stops task terminals and running sessions. It removes the task worktrees only when `removeWorktree` is `true`. If cleanup is unsafe or incomplete, the action fails and the task keeps its status.
 
 Reject it while a live role owns mutable task state.
 
-Only the task detail sheet can show `close_task`. Do not show it on a Kanban card, Task Workflows quick action, bulk action, header, or command palette.
+The task detail sheet shows `close_task` for every non-closed task. A Kanban card and the session page header show it as their main action, with a "Merged" marker, only for a merged task branch. Do not show it in a bulk action or the command palette.
+
+## Worktree cleanup on close
+
+The global setting `git.removeWorktreeOnClose` sets whether a close removes the task worktrees and related local branches. It is on by default. The task field `removeWorktreeOnClose` overrides it for one task: `true` removes, `false` keeps, and `null` follows the setting.
+
+Each user close command takes a required `removeWorktree` value: `task_close`, `task_direct_merge`, `task_direct_merge_complete`, and `task_pull_request_link_merged`. Its confirmation starts from the task value, else the setting. The choice applies to that close only. Pull request sync has no confirmation, so it uses the task value, else the setting.
+
+A confirmed close removes the task worktree, the session worktrees, and the related local branches. Pull request sync removes only the worktree of the source branch and that branch, and uncommitted files make that close fail. A close that keeps the worktree still stops task terminals.
+
+## Remove worktree
+
+`remove_worktree` is available for a closed task. The detail sheet shows it while the task has a managed worktree or a related local branch.
+
+`task_worktree_remove` stops task terminals, removes the managed worktrees, and force-deletes the related local branches. Commits that exist only on these branches are lost. It changes no other task data.
+
+## Merge detection
+
+The host checks whether task branches are merged into their targets. It never closes a task. It only proposes Close Task.
+
+A task is a candidate when its status is `in_progress`, `blocked`, `ai_review`, or `human_review`, its local task branch exists, and it has no pending direct merge. The target is the saved task target, else the repository default target.
+
+The task sync loop runs a pass for each open workspace every five minutes, after its pull request sync. `task_merge_status_check` runs a pass on request: Check again in the approval modal, and Check merged tasks in the command palette for one or all open workspaces. A pass fetches each target remote through the [shared remote fetch](git-comparison.md#remote-fetch).
+
+A branch is merged when it has a commit of its own and the target holds its work. The target holds the work when it contains the branch tip, or when a merge of the branch into the target gives the target tree, as after a rebase or squash merge. The branch reflog gives the own commits: the `commit`, `cherry-pick`, `revert`, and `am` entries that the branch still holds after its resets and rebases. When Git maintenance has expired the older reflog entries, so that the creation entry is missing, commits that the target lacks count as own work, and a tip that the target holds is not merged.
+
+Merge detection needs Git 2.41 or later. A failed check keeps the last result with the failure, and the next pass tries again.
+
+The host keeps the results in memory and publishes each workspace snapshot on `openducktor://task-merge-status-updated`. Each result names the branch tip that it checked. A close confirmation shows a branch that moved after the check as not checked.
 
 ## Merged pull requests
 
@@ -124,7 +161,7 @@ Use "Sync pull requests" in the command palette to start a manual sync. Each run
 
 Manual sync keeps its chosen targets when you change pages or workspaces. The progress toast names the scope, and this client cannot start another manual run until it finishes. A batch run ignores workspaces without a configured, enabled Git provider. These workspaces do not cause a warning or appear in the result. If none can sync, the result explains that no open workspace has an enabled provider. Other skipped or failed workspaces remain in the result, with recovery instructions. A workspace that closes before its turn is skipped. Manual sync does not change the automatic schedule.
 
-Pull request sync records the merged pull request. Before it closes the task, it stops task terminals and live task sessions, releases the task sessions, and removes the task worktree and local source branch. If cleanup fails, the task keeps its current status and the host reports the error.
+Pull request sync records the merged pull request. Before it closes the task, it stops task terminals and live task sessions and releases the task sessions. It removes the task worktree and local source branch when the task value or the global setting asks for it. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules
 
@@ -137,5 +174,7 @@ Non-closed Kanban cards show shortcuts for existing Spec, Planner, Builder, and 
 Each session shortcut opens the preferred active session for its role or the latest historical session. The selected target keeps its external session ID, runtime, and working directory. Opening a shortcut does not create a session or change task status.
 
 Current card and detail views use all action IDs except `view_details`, which the card click and details panel already provide.
+
+The session page header shows Approve Task for a task that allows `human_approve`. It leads for a `human_review` task when the repository has no enabled Git provider.
 
 When you add an action ID, update backend derivation, the transition matrix, the status and action docs, and UI mapping in one change.

@@ -35,4 +35,5 @@ export const TASK_ACTION_ICONS = {
   reset_implementation: "rotate-ccw",
   reset_task: "rotate-ccw",
   close_task: "circle-check-big",
+  remove_worktree: "folder-x",
 } as const satisfies Record<TaskWorkflowAction, IconName>;

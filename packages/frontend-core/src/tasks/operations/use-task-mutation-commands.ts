@@ -14,6 +14,7 @@ import {
 import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
 import { invalidateRepoIssueItemsQueries } from "../../queries/issue-items";
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
+import { invalidateTaskWorktreeCleanupImpact } from "../../queries/task-worktree-cleanup-impact";
 import {
   createProductionTaskChatDraftCleanup,
   type TaskChatDraftCleanup,
@@ -30,6 +31,7 @@ import type {
   BuiltinStateId as TaskStatus,
   BuiltinTaskCard as TaskCard,
 } from "@openducktor/workflows";
+import type { CloseTaskOptions } from "../../types/task-close";
 
 type UseTaskMutationCommandsArgs = {
   activeRepoPath: string | null;
@@ -47,9 +49,10 @@ export type TaskMutationCommands = {
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  closeTask: (taskId: string) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  /** Removes the worktree and local branches of a closed task. */
+  removeTaskWorktree: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
-  humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
@@ -66,14 +69,14 @@ export type TaskMutationCommandHostPort = {
     assets?: TaskAssetDescriptionMutation,
   ) => Promise<TaskCard>;
   taskDelete: (repoPath: string, taskId: string) => Promise<void>;
-  taskClose: (repoPath: string, taskId: string) => Promise<void>;
+  taskClose: (repoPath: string, taskId: string, removeWorktree: boolean) => Promise<void>;
+  taskWorktreeRemove: (repoPath: string, taskId: string) => Promise<void>;
   taskTransition: (
     repoPath: string,
     taskId: string,
     status: TaskStatus,
     reason?: string,
   ) => Promise<void>;
-  humanApprove: (repoPath: string, taskId: string) => Promise<void>;
   humanRequestChanges: (repoPath: string, taskId: string, note?: string) => Promise<void>;
 };
 
@@ -88,11 +91,9 @@ const createHostTaskMutationPort = (host: HostClient): TaskMutationCommandHostPo
   taskClose: async (...args) => {
     await host.taskClose(...args);
   },
+  taskWorktreeRemove: (...args) => host.taskWorktreeRemove(...args),
   taskTransition: async (...args) => {
     await host.taskTransition(...args);
-  },
-  humanApprove: async (...args) => {
-    await host.humanApprove(...args);
   },
   humanRequestChanges: async (...args) => {
     await host.humanRequestChanges(...args);
@@ -103,6 +104,7 @@ export type TaskMutationCommandCacheImpact = {
   removeDeletedTaskCaches: (repoPath: string, taskId: string) => Promise<void>;
   invalidateTaskStopImpact: (repoPath: string) => Promise<void>;
   invalidateTaskWorktree: (repoPath: string, taskId: string) => Promise<void>;
+  invalidateTaskWorktreeCleanupImpact: (repoPath: string, taskId: string) => Promise<void>;
 };
 
 type CreateTaskMutationCommandsArgs = {
@@ -199,7 +201,7 @@ export const createTaskMutationCommands = ({
     ]);
   };
 
-  const closeTask = async (taskId: string): Promise<void> => {
+  const closeTask = async (taskId: string, { removeWorktree }: CloseTaskOptions): Promise<void> => {
     await runTaskMutation({
       run: async (repoPath) => {
         await taskChatDraftCleanup.runMutation({
@@ -209,17 +211,36 @@ export const createTaskMutationCommands = ({
           taskIds: [taskId],
           mutation: async () => {
             try {
-              await hostPort.taskClose(repoPath, taskId);
+              await hostPort.taskClose(repoPath, taskId, removeWorktree);
             } finally {
               await cacheImpact.invalidateTaskStopImpact(repoPath);
             }
+            // The cleanup impact keeps no cache, so the next confirmation reads it again.
             await cacheImpact.invalidateTaskWorktree(repoPath, taskId);
           },
         });
       },
       successTitle: "Task closed",
-      successDescription: taskId,
+      successDescription: worktreeCleanupDescription(taskId, removeWorktree),
       failureTitle: "Failed to close task",
+    });
+  };
+
+  const removeTaskWorktree = async (taskId: string): Promise<void> => {
+    await runTaskMutation({
+      run: async (repoPath) => {
+        try {
+          await hostPort.taskWorktreeRemove(repoPath, taskId);
+        } finally {
+          await Promise.all([
+            cacheImpact.invalidateTaskWorktree(repoPath, taskId),
+            cacheImpact.invalidateTaskWorktreeCleanupImpact(repoPath, taskId),
+          ]);
+        }
+      },
+      successTitle: "Worktree removed",
+      successDescription: worktreeCleanupDescription(taskId, true),
+      failureTitle: "Failed to remove worktree",
     });
   };
 
@@ -253,23 +274,6 @@ export const createTaskMutationCommands = ({
     });
   };
 
-  const humanApproveTask = async (taskId: string): Promise<void> => {
-    await runTaskMutation({
-      run: async (repoPath) => {
-        await taskChatDraftCleanup.runMutation({
-          queryClient,
-          repoPath,
-          workspaceId: activeWorkspaceId,
-          taskIds: [taskId],
-          mutation: () => hostPort.humanApprove(repoPath, taskId),
-        });
-      },
-      successTitle: "Task approved",
-      successDescription: taskId,
-      failureTitle: "Failed to approve task",
-    });
-  };
-
   const humanRequestChangesTask = async (taskId: string, note?: string): Promise<void> => {
     await runTaskMutation({
       run: async (repoPath) => {
@@ -287,8 +291,8 @@ export const createTaskMutationCommands = ({
     setTaskTargetBranch,
     deleteTask,
     closeTask,
+    removeTaskWorktree,
     transitionTask,
-    humanApproveTask,
     humanRequestChangesTask,
   };
 };
@@ -317,6 +321,8 @@ export function useTaskMutationCommands({
         queryClient.invalidateQueries({
           queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
         }),
+      invalidateTaskWorktreeCleanupImpact: (repoPath, taskId) =>
+        invalidateTaskWorktreeCleanupImpact(queryClient, repoPath, taskId),
     }),
     [queryClient],
   );
@@ -343,3 +349,8 @@ export function useTaskMutationCommands({
     ],
   );
 }
+
+const worktreeCleanupDescription = (taskId: string, removed: boolean): string =>
+  removed
+    ? `${taskId}. Its worktree and local branch were removed.`
+    : `${taskId}. Its worktree and local branch were kept.`;

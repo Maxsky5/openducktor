@@ -45,6 +45,8 @@ export type KanbanPageContentModel = {
   filter: Pick<KanbanBoardFilterModel, "isActive" | "onClear">;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
+  /** The target of each task whose branch is merged. Its card proposes Close Task. */
+  mergedTargetByTaskId: ReadonlyMap<string, string>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
@@ -55,6 +57,7 @@ export type KanbanPageContentModel = {
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string) => void;
+  onCloseTask: (taskId: string) => void;
 };
 
 export type KanbanPageModels = {

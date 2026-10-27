@@ -368,6 +368,7 @@ describe("createGitCommandHandlers", () => {
       router.invoke("git_fetch_remote", {
         repoPath: "/repo",
         targetBranch: "origin/main",
+        force: true,
       }),
     ).resolves.toEqual({ outcome: "fetched", output: "Fetched origin" });
     await expect(
@@ -477,7 +478,7 @@ describe("createGitCommandHandlers", () => {
       },
       {
         method: "fetchRemote",
-        input: { repoPath: "/repo", targetBranch: "origin/main" },
+        input: { repoPath: "/repo", targetBranch: "origin/main", force: true },
       },
       {
         method: "pullBranch",

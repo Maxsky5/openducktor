@@ -8,10 +8,6 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { loadAgentSessionListFromQuery } from "@openducktor/frontend-core/queries/agent-sessions";
 import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
-import {
-  buildActiveTaskSessionContextByTaskId,
-  buildTaskSessionsByTaskId,
-} from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { resolveTaskPullRequestActions } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
@@ -20,7 +16,7 @@ import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { useTaskActions } from "@/features/workflow/use-task-actions";
+import { TaskReadError } from "@/features/workflow/close/task-close-content";
 import { useTaskOwnerResolution } from "@/features/work-owner/use-task-owner-resolution";
 import type { ResolvedTaskOwner } from "@/features/work-owner/work-owner-model";
 import { routes } from "@/navigation/routes";
@@ -35,12 +31,7 @@ import { useCompactHeight } from "@/ui/use-wide-layout";
 import { useRepoTask } from "@/features/work-owner/use-repo-task";
 import { buildDocumentRows } from "../documents/document-rows";
 import { useTaskDescriptionSource } from "../documents/use-task-document-sources";
-import { TaskActionsMenu, TaskPrimaryAction } from "./task-actions-panel";
-import {
-  resolveTaskDetailsActions,
-  taskDetailsMenuChoice,
-  taskDetailsMenuItems,
-} from "./task-details-model";
+import { TaskPrimaryAction } from "./task-actions-panel";
 import {
   buildTaskDetailsRows,
   type DetailsRow,
@@ -53,6 +44,7 @@ import { type SummaryPullRequestActions, TaskSummary } from "./task-summary";
 import { taskWorkflowSteps } from "./task-workflow-model";
 import { TaskWorkflowRail } from "./task-workflow-rail";
 import { useTaskSessionGroups } from "./use-task-session-groups";
+import { useTaskDetailsActions } from "./use-task-details-actions";
 import { useTaskWorkspaceScope } from "./use-task-workspace-scope";
 
 /**
@@ -166,22 +158,6 @@ function TaskDetailsContent({
   const scope = useTaskWorkspaceScope(workspaceId, { selectOnFocus: !embedded });
   const provider = useQuery(repositoryGitProviderContextQueryOptions(repoPath));
   const providerReadError = gitProviderReadError(provider.error);
-  const actions = useTaskActions({
-    workspace,
-    tasks,
-    outcome: {
-      onStarted: (request) => {
-        if (request.action === "delete") onDeleteStarted();
-      },
-      onSucceeded: (request) => {
-        if (request.action === "delete" && !embedded) router.back();
-      },
-      onFailed: (request) => {
-        if (request.action === "delete") onDeleteFailed();
-      },
-    },
-  });
-
   const queryClient = useQueryClient();
   const {
     groups: sessionGroups,
@@ -194,25 +170,6 @@ function TaskDetailsContent({
     () => taskWorkflowSteps(task, sessionGroups),
     [sessionGroups, task],
   );
-  const taskSessions = useMemo(
-    () => buildTaskSessionsByTaskId(summaries).get(task.id) ?? [],
-    [summaries, task.id],
-  );
-  const activeContext = useMemo(
-    () => buildActiveTaskSessionContextByTaskId(summaries).get(task.id),
-    [summaries, task.id],
-  );
-  const detailsActions = useMemo(
-    () =>
-      resolveTaskDetailsActions({
-        task,
-        taskSessions,
-        historicalSessions: records,
-        activeSessionRole: activeContext?.role,
-      }),
-    [activeContext?.role, records, task, taskSessions],
-  );
-
   const description = useTaskDescriptionSource(task, workspaceId, repoPath);
   // A low window, such as a phone in landscape, keeps the summary in a pane beside the sections,
   // so the workflow and the main action stay in view.
@@ -237,9 +194,21 @@ function TaskDetailsContent({
   }, [refetchHistory, refreshTasks]);
   const { pulling: refreshing, pull: refresh } = usePullRefresh(refreshDetails);
 
-  const { runAction, confirm } = actions;
   const pullRequestActions = resolveTaskPullRequestActions(task, provider.data, providerReadError);
   const unlinking = unlinkingPullRequestTaskIds.has(task.id);
+  const { primary, runAction, menu, worktreeReadError, confirmations } = useTaskDetailsActions({
+    workspace,
+    task,
+    tasks,
+    summaries,
+    records,
+    scopeReady: scope.ready,
+    showUnlink: pullRequestActions.showUnlink,
+    unlinking,
+    embedded,
+    onDeleteStarted,
+    onDeleteFailed,
+  });
   const detecting = detectingPullRequestTaskIds.has(task.id);
   // As on desktop, Detect PR also waits for a completed Builder.
   const showDetect = pullRequestActions.showDetect && canDetectTaskPullRequest(task);
@@ -270,57 +239,25 @@ function TaskDetailsContent({
       unlinking,
     ],
   );
-  const menuItems = useMemo(
-    () =>
-      taskDetailsMenuItems({
-        actions: detailsActions,
-        enabled: scope.ready,
-        showUnlink: pullRequestActions.showUnlink,
-        unlinking,
-      }),
-    [detailsActions, pullRequestActions.showUnlink, scope.ready, unlinking],
-  );
-  const selectMenu = useCallback(
-    (id: string) => {
-      const choice = taskDetailsMenuChoice(id, detailsActions);
-      if (!choice) return;
-      switch (choice.kind) {
-        case "delete":
-          confirm(task, "delete");
-          return;
-        case "unlink_pull_request":
-          void unlinkPullRequest(task.id);
-          return;
-        case "action":
-          runAction(task, choice.action.action, detailsActions.sessionOptionsOf);
-          return;
-      }
-    },
-    [confirm, detailsActions, runAction, task, unlinkPullRequest],
-  );
-  const menu = useMemo(
-    () => <TaskActionsMenu taskTitle={task.title} items={menuItems} onSelect={selectMenu} />,
-    [menuItems, selectMenu, task.title],
-  );
-
   const summary = useMemo(
     () => (
       <TaskSummary task={task} pullRequest={summaryPullRequest} accessory={embedded ? menu : null}>
         <TaskWorkflowRail workspaceId={workspaceId} taskTitle={task.title} steps={workflowSteps} />
         <TaskPrimaryAction
           taskTitle={task.title}
-          action={detailsActions.primary}
+          action={primary}
           enabled={scope.ready}
           blockedReason={scope.blockedReason}
-          onAction={(action) => runAction(task, action.action, detailsActions.sessionOptionsOf)}
+          onAction={(action) => runAction(action.action)}
           onEdit={() => router.push(routes.editTask(workspaceId, task.id))}
         />
+        {worktreeReadError ? <TaskReadError read={worktreeReadError} /> : null}
       </TaskSummary>
     ),
     [
-      detailsActions,
       embedded,
       menu,
+      primary,
       router,
       runAction,
       scope.blockedReason,
@@ -329,6 +266,7 @@ function TaskDetailsContent({
       task,
       workflowSteps,
       workspaceId,
+      worktreeReadError,
     ],
   );
 
@@ -394,7 +332,7 @@ function TaskDetailsContent({
             />
           </View>
         </View>
-        {actions.confirmations}
+        {confirmations}
       </View>
     </ViewportProvider>
   );

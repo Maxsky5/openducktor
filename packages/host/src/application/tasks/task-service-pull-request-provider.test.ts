@@ -493,6 +493,7 @@ describe("createTaskService Pull Request provider ports", () => {
         .linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: mergedPullRequest("github"),
         })
         .pipe(Effect.flip),
@@ -511,6 +512,7 @@ describe("createTaskService Pull Request provider ports", () => {
       service.linkMergedPullRequest({
         repoPath: "/repo",
         taskId: "task-1",
+        removeWorktree: true,
         pullRequest: mergedPullRequest("gitlab"),
       }),
     );
@@ -528,6 +530,7 @@ describe("createTaskService Pull Request provider ports", () => {
         .linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: mergedPullRequest("github"),
         })
         .pipe(Effect.flip),

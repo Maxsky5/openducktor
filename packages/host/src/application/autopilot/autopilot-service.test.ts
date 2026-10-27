@@ -1,6 +1,7 @@
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, describe, expect, test } from "bun:test";
+import { noMergeDetection } from "../tasks/sync/task-sync-service.test-support";
 import {
   type AutopilotOutcome,
   type AutopilotRunEvent,
@@ -210,6 +211,7 @@ const createAutopilotHarness = async ({
   let saved = configFor(rules);
   const sync = createTaskSyncService({
     taskService: base,
+    mergeDetection: noMergeDetection,
     taskEventStream: {
       publish: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 }),
       subscribe: () => {

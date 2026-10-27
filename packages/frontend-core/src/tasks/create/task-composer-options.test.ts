@@ -11,6 +11,7 @@ describe("task composer options", () => {
   test("starts a new task as a normal priority task", () => {
     expect(toComposerState(null)).toEqual({
       issueType: "task",
+      removeWorktreeOnClose: null,
       title: "",
       priority: 2,
       description: "",
@@ -21,6 +22,7 @@ describe("task composer options", () => {
   test("copies the user fields of a task", () => {
     const task = createTaskCardFixture({
       issueType: "bug",
+      removeWorktreeOnClose: null,
       title: "Fix login",
       priority: 0,
       description: "Steps",
@@ -28,6 +30,7 @@ describe("task composer options", () => {
     });
     expect(toComposerState(task)).toEqual({
       issueType: "bug",
+      removeWorktreeOnClose: null,
       title: "Fix login",
       priority: 0,
       description: "Steps",

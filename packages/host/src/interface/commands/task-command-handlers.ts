@@ -16,6 +16,7 @@ import {
   parseBuildBlockedInput,
   parseBuildCompletedInput,
   parseBuildStartInput,
+  parseCloseTaskInput,
   parseCreateTaskInput,
   parseApplyTaskEventInput,
   parseDeleteTaskInput,
@@ -59,8 +60,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     build_resumed: (args) =>
       taskService.buildResumed(parseTaskIdInput(args, "build_resumed input")),
     build_start: (args) => taskService.buildStart(parseBuildStartInput(args)),
-    human_approve: (args) =>
-      taskService.humanApprove(parseTaskIdInput(args, "human_approve input")),
     human_request_changes: (args) =>
       taskService.humanRequestChanges(
         parseOptionalNoteInput(args, "human_request_changes input", "human_request_changes note"),
@@ -69,7 +68,7 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.repoPullRequestSync(parseRepoPullRequestSyncInput(args)),
     task_approval_context_get: (args) =>
       taskService.getApprovalContext(parseTaskIdInput(args, "task_approval_context_get input")),
-    task_close: (args) => taskService.closeTask(parseTaskIdInput(args, "task_close input")),
+    task_close: (args) => taskService.closeTask(parseCloseTaskInput(args)),
     task_pull_request_detect: (args) =>
       taskService.detectPullRequest(parseTaskIdInput(args, "task_pull_request_detect input")),
     task_direct_merge: (args) => taskService.directMerge(parseDirectMergeInput(args)),
@@ -102,6 +101,12 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     task_reset_implementation: (args) =>
       taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),
     task_stop_impact_get: (args) => taskService.getTaskStopImpact(parseTaskStopImpactInput(args)),
+    task_worktree_cleanup_impact_get: (args) =>
+      taskService.getTaskWorktreeCleanupImpact(
+        parseTaskIdInput(args, "task_worktree_cleanup_impact_get input"),
+      ),
+    task_worktree_remove: (args) =>
+      taskService.removeTaskWorktree(parseTaskIdInput(args, "task_worktree_remove input")),
     task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),
     task_apply_event: (args) => taskService.applyTaskEvent(parseApplyTaskEventInput(args)),
     task_update: (args) => taskService.updateTask(parseUpdateTaskInput(args)),

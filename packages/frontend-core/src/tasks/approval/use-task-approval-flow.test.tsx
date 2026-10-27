@@ -80,7 +80,7 @@ const defaultGitPushBranch: GitPushBranch = async () => ({
   output: "",
 });
 const defaultGitAbortConflict: HostClient["gitAbortConflict"] = async () => ({ output: "" });
-const defaultHumanApproveTask = async () => {};
+const defaultCloseTask = async (_taskId: string, _options: { removeWorktree: boolean }) => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
 const createDefaultAgentSessions = (): Awaited<ReturnType<HostClient["agentSessionsList"]>> => [
   {
@@ -112,7 +112,7 @@ const taskDirectMergeCompleteMock = mock(defaultTaskDirectMergeComplete);
 const taskPullRequestUpsertMock = mock(defaultTaskPullRequestUpsert);
 const gitPushBranchMock = mock(defaultGitPushBranch);
 const gitAbortConflictMock = mock(defaultGitAbortConflict);
-const humanApproveTaskMock = mock(defaultHumanApproveTask);
+const closeTaskMock = mock(defaultCloseTask);
 const openResetImplementationMock = mock(defaultOpenResetImplementation);
 const agentSessionsListMock = mock(defaultAgentSessionsList);
 const agentSessionsListForTasksMock = mock(defaultAgentSessionsListForTasks);
@@ -202,6 +202,7 @@ const registerDependencySpies = (): void => {
       agentDefaults: {},
     }),
     workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
   };
 };
 
@@ -246,6 +247,8 @@ const waitForTaskApprovalModalLoaded = async (): Promise<void> => {
     if (latestHarnessValue?.taskApprovalModal?.stage === "approval") {
       expect(latestHarnessValue.taskApprovalModal.isLoading).toBe(false);
     }
+    // The cleanup choice starts from the settings, which load with the modal.
+    expect(latestHarnessValue?.taskApprovalModal?.removeWorktree).not.toBeNull();
   });
 };
 
@@ -336,7 +339,7 @@ const createUseTaskApprovalFlowArgs = (
   loadGitProviderContext: async () => null,
   requestPullRequestGeneration: async () => undefined,
   refreshTasks: async () => {},
-  humanApproveTask: humanApproveTaskMock,
+  closeTask: closeTaskMock,
   openResetImplementation: openResetImplementationMock,
   showPullRequestCreated,
   showGitProviderContextLoadFailure,
@@ -411,8 +414,8 @@ describe("useTaskApprovalFlow", () => {
     gitPushBranchMock.mockImplementation(defaultGitPushBranch);
     gitAbortConflictMock.mockClear();
     gitAbortConflictMock.mockImplementation(defaultGitAbortConflict);
-    humanApproveTaskMock.mockClear();
-    humanApproveTaskMock.mockImplementation(defaultHumanApproveTask);
+    closeTaskMock.mockClear();
+    closeTaskMock.mockImplementation(defaultCloseTask);
     openResetImplementationMock.mockClear();
     openResetImplementationMock.mockImplementation(defaultOpenResetImplementation);
     agentSessionsListMock.mockClear();
@@ -1070,7 +1073,7 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("keeps missing builder context as a fail-fast approval-loading error", async () => {
+  test("shows a missing builder context as the approval-context error", async () => {
     taskApprovalContextGetMock.mockImplementationOnce(async () => {
       throw new Error(
         "Human approval requires a builder worktree for task TASK-1. Start Builder first.",
@@ -1100,14 +1103,69 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
+    await waitFor(() => {
+      expect(expectApprovalModal().approvalContextError).toBe(
+        "Human approval requires a builder worktree for task TASK-1. Start Builder first.",
+      );
+    });
+    expect(expectApprovalModal().mode).toBe("close_task");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("opens with Close Task selected for a merged task branch and closes with the cleanup choice", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
+    hostClientFakes.taskMergeStatusGet = async (repoPath) => ({
+      repoPath,
+      tasks: [
+        {
+          taskId: "TASK-1",
+          branch: "odt/TASK-1",
+          targetBranch: { remote: "origin", branch: "main" },
+          result: { kind: "merged", checkedAt: "2026-10-25T10:00:00.000Z", branchOid: "tip" },
+        },
+      ],
+    });
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+          closeTask: closeTaskMock,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+    expect(expectApprovalModal().mode).toBe("close_task");
+
+    await act(async () => {
+      expectApprovalModal().onRemoveWorktreeChange(false);
+    });
+    await act(async () => {
+      expectApprovalModal().onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: false });
+    expect(taskDirectMergeMock).not.toHaveBeenCalled();
     await waitForTaskApprovalModalClosed();
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Failed to open approval flow",
-      expect.objectContaining({
-        description:
-          "Human approval requires a builder worktree for task TASK-1. Start Builder first.",
-      }),
-    );
 
     await act(async () => {
       await harness.unmount();
@@ -1141,7 +1199,7 @@ describe("useTaskApprovalFlow", () => {
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
-          humanApproveTask: humanApproveTaskMock,
+          closeTask: closeTaskMock,
         }),
       );
       return null;
@@ -1156,11 +1214,11 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onCompleteMissingBuilderWorktree();
+      expectMissingBuilderWorktreeModal().onCloseMissingBuilderWorktree();
       await Promise.resolve();
     });
 
-    expect(humanApproveTaskMock).toHaveBeenCalledWith("TASK-1");
+    expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: true });
     await waitForTaskApprovalModalClosed();
 
     await act(async () => {
@@ -1172,7 +1230,7 @@ describe("useTaskApprovalFlow", () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createMissingBuilderWorktreeApprovalContextResult(),
     );
-    humanApproveTaskMock.mockImplementationOnce(async () => {
+    closeTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
     });
 
@@ -1187,7 +1245,7 @@ describe("useTaskApprovalFlow", () => {
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
-          humanApproveTask: humanApproveTaskMock,
+          closeTask: closeTaskMock,
         }),
       );
       return null;
@@ -1202,7 +1260,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onCompleteMissingBuilderWorktree();
+      expectMissingBuilderWorktreeModal().onCloseMissingBuilderWorktree();
       await Promise.resolve();
     });
 
@@ -1211,10 +1269,8 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
       "Task is no longer reviewable",
     );
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Approval failed",
-      expect.objectContaining({ description: "Task is no longer reviewable" }),
-    );
+    // The close shows its own failure toast, so the modal adds none.
+    expect(toastErrorMock).not.toHaveBeenCalledWith("Approval failed", expect.anything());
 
     await act(async () => {
       await harness.unmount();
@@ -1273,7 +1329,7 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("keeps non-recoverable approval-context failures fail-fast", async () => {
+  test("keeps Close Task available when the approval context read fails", async () => {
     taskApprovalContextGetMock.mockImplementationOnce(async () => {
       throw new Error("Builder branch is detached");
     });
@@ -1289,6 +1345,7 @@ describe("useTaskApprovalFlow", () => {
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
+          closeTask: closeTaskMock,
         }),
       );
       return null;
@@ -1300,12 +1357,21 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
       await Promise.resolve();
     });
+    await waitForTaskApprovalModalLoaded();
 
+    expect(expectApprovalModal()).toMatchObject({
+      mode: "close_task",
+      approvalContextError: "Builder branch is detached",
+    });
+    expect(toastErrorMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      expectApprovalModal().onConfirm();
+      await Promise.resolve();
+    });
+
+    expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: true });
     await waitForTaskApprovalModalClosed();
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Failed to open approval flow",
-      expect.objectContaining({ description: "Builder branch is detached" }),
-    );
 
     await act(async () => {
       await harness.unmount();
@@ -1520,11 +1586,13 @@ describe("useTaskApprovalFlow", () => {
       },
       mergeMethod: "squash",
       squashCommitMessage: "feat: merged task",
+      removeWorktree: true,
     });
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith(
       "/repo",
       "TASK-1",
+      true,
       expect.objectContaining({
         expectedMerge: expect.objectContaining({ sourceBranch: "odt/TASK-1" }),
         expectedPublication: expect.objectContaining({
@@ -1590,6 +1658,7 @@ describe("useTaskApprovalFlow", () => {
       },
       mergeMethod: "merge_commit",
       squashCommitMessage: undefined,
+      removeWorktree: true,
     });
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
@@ -1649,6 +1718,7 @@ describe("useTaskApprovalFlow", () => {
       },
       mergeMethod: "merge_commit",
       squashCommitMessage: undefined,
+      removeWorktree: true,
     });
     await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
@@ -1708,7 +1778,12 @@ describe("useTaskApprovalFlow", () => {
 
     expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
     expect(gitPushBranchMock).not.toHaveBeenCalled();
-    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1", expect.any(Object));
+    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith(
+      "/repo",
+      "TASK-1",
+      true,
+      expect.any(Object),
+    );
     await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
       description: "session lookup failed",

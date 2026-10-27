@@ -28,6 +28,8 @@ export type TaskApprovalFlowOpenState = {
   /** True when the connection lost the result of the last submit. The host may have run it. */
   errorOutcomeUnknown: boolean;
   approvalContext: TaskApprovalContext | null;
+  /** The approval context read failed. Only Close Task works, because it needs no merge data. */
+  approvalContextError: string | null;
   workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
@@ -59,6 +61,7 @@ export type TaskApprovalFlowAction =
       approvalContext: TaskApprovalContext;
     } & TaskApprovalFlowOpenPayload)
   | ({ type: "load_missing_builder_worktree" } & TaskApprovalFlowOpenPayload)
+  | ({ type: "load_failed"; approvalContextError: string } & TaskApprovalFlowOpenPayload)
   | { type: "close" }
   | { type: "start_submitting" }
   | { type: "return_to_editable"; errorMessage: string | null; errorOutcomeUnknown: boolean }
@@ -112,6 +115,7 @@ const buildTaskApprovalLoadingState = (
   errorMessage: payload.errorMessage,
   errorOutcomeUnknown: false,
   approvalContext: null,
+  approvalContextError: null,
   workspaceIdentity: payload.workspaceIdentity,
 });
 
@@ -132,6 +136,7 @@ const buildTaskApprovalLoadedState = (
   errorMessage: payload.errorMessage,
   errorOutcomeUnknown: false,
   approvalContext: payload.approvalContext,
+  approvalContextError: null,
   workspaceIdentity: payload.workspaceIdentity,
 });
 
@@ -152,6 +157,7 @@ const buildMissingBuilderWorktreeState = (
   errorMessage: payload.errorMessage,
   errorOutcomeUnknown: false,
   approvalContext: null,
+  approvalContextError: null,
   workspaceIdentity: payload.workspaceIdentity,
 });
 
@@ -166,6 +172,12 @@ export function taskApprovalFlowReducer(
       return buildTaskApprovalLoadedState(action);
     case "load_missing_builder_worktree":
       return buildMissingBuilderWorktreeState(action);
+    case "load_failed":
+      return {
+        ...buildTaskApprovalLoadingState(action),
+        phase: "ready",
+        approvalContextError: action.approvalContextError,
+      };
     case "close":
       return CLOSED_TASK_APPROVAL_STATE;
     case "start_submitting":

@@ -35,6 +35,7 @@ export const BUILTIN_ACTION_IDS = [
   "close_task",
   "human_request_changes",
   "human_approve",
+  "remove_worktree",
 ] as const;
 export type BuiltinActionId = (typeof BUILTIN_ACTION_IDS)[number];
 

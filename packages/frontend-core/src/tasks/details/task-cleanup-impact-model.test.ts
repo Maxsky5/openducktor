@@ -20,6 +20,7 @@ const stopImpact = (overrides: Partial<TaskStopImpactState> = {}): TaskStopImpac
   removedWorktreeCount: 0,
   isLoading: false,
   error: null,
+  retry: () => {},
   ...overrides,
 });
 

@@ -8,7 +8,11 @@ import type {
   ArtifactSelection,
   TaskArtifactsProps,
 } from "@/components/features/task-artifacts/task-artifacts";
-import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import type {
+  AgentStudioQuickActionOption,
+  AgentStudioSessionQuickActionOption,
+  AgentStudioTaskQuickAction,
+} from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
   type AgentStudioChatComposerContext,
@@ -22,7 +26,9 @@ type AgentStudioSessionActionsContext = AgentStudioChatSessionActionsContext & {
   handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
-  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
+  handleQuickAction: (option: AgentStudioSessionQuickActionOption) => void;
+  /** Opens a task workflow from the header, such as the approval modal. */
+  runTaskQuickAction: (action: AgentStudioTaskQuickAction) => void;
   openTaskDetails: () => void;
 };
 
@@ -46,6 +52,17 @@ export function useAgentStudioPageModels({
   composer,
 }: UseAgentStudioPageModelsArgs) {
   const agentStudioReady = selectedSession.selectedSession.runtimeReadiness.state === "ready";
+  const { handleQuickAction, runTaskQuickAction } = sessionActions;
+  const onQuickAction = useCallback(
+    (option: AgentStudioQuickActionOption): void => {
+      if (option.kind === "task_action") {
+        runTaskQuickAction(option.taskAction);
+        return;
+      }
+      handleQuickAction(option);
+    },
+    [handleQuickAction, runTaskQuickAction],
+  );
 
   const {
     workflowSessionByRole,
@@ -68,7 +85,7 @@ export function useAgentStudioPageModels({
     onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
     onPrepareMessageFirstSession: sessionActions.handlePrepareMessageFirstSession,
-    onQuickAction: sessionActions.handleQuickAction,
+    onQuickAction,
     workflow: {
       workflowStateByRole,
       workflowSessionByRole,

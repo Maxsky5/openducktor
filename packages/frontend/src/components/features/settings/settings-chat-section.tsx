@@ -11,9 +11,9 @@ import {
   type ChatLineOverflow,
   type ChatSettings,
 } from "@openducktor/contracts";
-import { type ReactElement, useId } from "react";
-import { Switch } from "@/components/ui/switch";
+import type { ReactElement } from "react";
 import { isApplePlatform } from "@/lib/device-platform";
+import { SettingsSwitchRow } from "./settings-switch-row";
 import {
   type SettingsSegmentedOption,
   SettingsSegmentedOptionRow,
@@ -23,15 +23,6 @@ type SettingsChatSectionProps = {
   chat: ChatSettings;
   disabled: boolean;
   onUpdateChat: (updater: (current: ChatSettings) => ChatSettings) => void;
-};
-
-type ChatSettingSwitchRowProps = {
-  title: string;
-  description: string;
-  checked: boolean;
-  disabled: boolean;
-  ariaLabel: string;
-  onCheckedChange: (checked: boolean) => void;
 };
 
 const toSegmentedOptions = <Value extends string>(
@@ -68,36 +59,6 @@ const hunkSeparatorOptions = toSegmentedOptions(CHAT_HUNK_SEPARATOR_VALUES, {
   simple: "Simple",
 } satisfies Record<ChatHunkSeparators, string>);
 
-function ChatSettingSwitchRow({
-  title,
-  description,
-  checked,
-  disabled,
-  ariaLabel,
-  onCheckedChange,
-}: ChatSettingSwitchRowProps): ReactElement {
-  const descriptionId = useId();
-  return (
-    <div className="rounded-md border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <p id={descriptionId} className="text-xs text-muted-foreground">
-            {description}
-          </p>
-        </div>
-        <Switch
-          checked={checked}
-          onCheckedChange={onCheckedChange}
-          disabled={disabled}
-          aria-label={ariaLabel}
-          aria-describedby={descriptionId}
-        />
-      </div>
-    </div>
-  );
-}
-
 export function SettingsChatSection({
   chat,
   disabled,
@@ -112,7 +73,7 @@ export function SettingsChatSection({
         </p>
       </div>
 
-      <ChatSettingSwitchRow
+      <SettingsSwitchRow
         title="Steer messages by default"
         description={`After you save, Enter and Send steer messages. ${isApplePlatform() ? "Cmd+Enter" : "Ctrl+Enter"} uses ordinary delivery, which queues messages while the session works or already has queued messages.`}
         checked={chat.steerMessagesByDefault}
@@ -123,7 +84,7 @@ export function SettingsChatSection({
         }
       />
 
-      <ChatSettingSwitchRow
+      <SettingsSwitchRow
         title="Show Thinking Messages"
         description="Thinking messages are hidden by default. When enabled, they will appear in session transcripts after you save settings."
         checked={chat.showThinkingMessages}
@@ -134,7 +95,7 @@ export function SettingsChatSection({
         }
       />
 
-      <ChatSettingSwitchRow
+      <SettingsSwitchRow
         title="Show conversation minimap"
         description="Shows your messages beside session transcripts. Changes apply after you save settings."
         checked={chat.showConversationMinimap}
@@ -145,7 +106,7 @@ export function SettingsChatSection({
         }
       />
 
-      <ChatSettingSwitchRow
+      <SettingsSwitchRow
         title="Expand file diffs by default"
         description="File diffs in session transcripts will start expanded after you save settings."
         checked={chat.expandFileDiffsByDefault}

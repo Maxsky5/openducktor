@@ -46,7 +46,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   version: 4,
   system: {},
   theme: "light",
-  git: { defaultMergeMethod: "merge_commit" },
+  git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
   appearance: DEFAULT_APPEARANCE_SETTINGS,
   chat: DEFAULT_CHAT_SETTINGS,

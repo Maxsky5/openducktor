@@ -29,6 +29,7 @@ export const createTestHostConnection = (
     subscribeWorkspaceProviderSetupUpdates: noSubscription,
     subscribeWorkspaceSessionUpdates: noSubscription,
     subscribeRuntimeChanges: noSubscription,
+    subscribeTaskMergeStatusUpdates: noSubscription,
     subscribeBrowserTabEvents: noSubscription,
     subscribeRunEvents: noSubscription,
     subscribeAzureDevOpsConnectionUpdates: noSubscription,

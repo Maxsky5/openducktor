@@ -6,6 +6,7 @@ import { createTaskSyncService } from "./task-sync-service";
 
 type TaskSyncServiceTestInput = Omit<
   Parameters<typeof createTaskSyncService>[0],
+  | "mergeDetection"
   | "onBackgroundFailure"
   | "publicationReporter"
   | "taskEventStream"
@@ -13,7 +14,10 @@ type TaskSyncServiceTestInput = Omit<
   | "workspaceSettingsService"
 > &
   Partial<
-    Pick<Parameters<typeof createTaskSyncService>[0], "onBackgroundFailure" | "publicationReporter">
+    Pick<
+      Parameters<typeof createTaskSyncService>[0],
+      "mergeDetection" | "onBackgroundFailure" | "publicationReporter"
+    >
   > & {
     workspaceSettingsService: Pick<
       Parameters<typeof createTaskSyncService>[0]["workspaceSettingsService"],
@@ -30,20 +34,33 @@ type TaskSyncServiceTestInput = Omit<
       Partial<Pick<Parameters<typeof createTaskSyncService>[0]["taskService"], "listTasks">>;
   };
 
+/** A merge detection pass that finds no candidates. */
+export const noMergeDetection = {
+  runPass: (repoPath: string) => Effect.succeed({ repoPath, tasks: [] }),
+};
+
 export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) => {
   const stream = createTaskEventStream({ reporter: { report: () => {} } });
   return createTaskSyncService({
     ...input,
     workspaceSettingsService: {
       getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+      // Each listed workspace is open, so the sync loop syncs it.
       getWorkspaceCatalog: () =>
-        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+        input.workspaceSettingsService.listWorkspaces().pipe(
+          Effect.map((openWorkspaces) => ({
+            openWorkspaces,
+            closedWorkspaces: [],
+            incompleteRemovals: [],
+          })),
+        ),
       ...input.workspaceSettingsService,
     },
     taskService: {
       listTasks: () => Effect.succeed([task(), task({ id: "task-2", title: "Task 2" })]),
       ...input.taskService,
     },
+    mergeDetection: input.mergeDetection ?? noMergeDetection,
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     publicationReporter: input.publicationReporter ?? { report: () => Effect.void },
     taskEventStream: {
@@ -83,6 +100,7 @@ export const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {

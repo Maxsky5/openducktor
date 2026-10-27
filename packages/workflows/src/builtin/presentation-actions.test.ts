@@ -243,6 +243,32 @@ describe("resolveTaskCardActions", () => {
     expect(resolveTaskCardActions(task).allActions).toEqual(["open_builder"]);
   });
 
+  test("leads kanban card actions with close_task for a merged task branch", () => {
+    const task = createTaskCardFixture({
+      status: "human_review",
+      issueType: "task",
+      availableActions: ["open_builder", "human_approve", "close_task"],
+    });
+
+    const result = resolveTaskCardActions(task, { leadingAction: "close_task" });
+
+    expect(result.primaryAction).toBe("close_task");
+    expect(result.secondaryActions).toContain("human_approve");
+  });
+
+  test("keeps remove_worktree in the details sheet only", () => {
+    const task = createTaskCardFixture({
+      status: "closed",
+      issueType: "task",
+      availableActions: ["remove_worktree"],
+    });
+
+    expect(resolveTaskCardActions(task).allActions).toEqual([]);
+    expect(resolveTaskCardActions(task, { include: ["remove_worktree"] }).allActions).toEqual([
+      "remove_worktree",
+    ]);
+  });
+
   test("ignores close_task for Agent Studio quick actions", () => {
     const task = createTaskCardFixture({
       status: "in_progress",

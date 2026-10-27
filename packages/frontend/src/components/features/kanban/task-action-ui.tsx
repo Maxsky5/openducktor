@@ -1,4 +1,4 @@
-import { ArrowUpRightFromSquare, CircleCheckBig, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowUpRightFromSquare, CircleCheckBig, FolderX, RotateCcw, Undo2 } from "lucide-react";
 import type { ReactElement } from "react";
 import {
   BuilderRoleIcon,
@@ -19,6 +19,7 @@ export const TASK_ACTION_ICON = {
   reset_implementation: <RotateCcw className="size-3.5" />,
   reset_task: <RotateCcw className="size-3.5" />,
   close_task: <CircleCheckBig className="size-3.5" />,
+  remove_worktree: <FolderX className="size-3.5" />,
   build_start: <BuilderRoleIcon className="size-3.5" />,
   qa_start: <QaRoleIcon className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,

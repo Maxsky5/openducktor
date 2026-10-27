@@ -22,6 +22,7 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "in_progress",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   pullRequest: undefined,

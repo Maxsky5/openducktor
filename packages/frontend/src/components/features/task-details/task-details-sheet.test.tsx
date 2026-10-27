@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
@@ -19,7 +19,10 @@ import type {
 } from "@openducktor/frontend-core/queries/use-task-stop-impact";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createGitProviderContextFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 enableReactActEnvironment();
@@ -88,9 +91,14 @@ const createActiveWorkspaceValue = () => ({
   activeWorkspace: createWorkspaceStateValue().activeWorkspace,
   setActiveWorkspace: () => {},
 });
+/** The close confirmation starts its cleanup choice from the settings. */
+const createSheetConnection = () =>
+  createTestClientConnection({
+    client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+  });
 
 const IsolatedProviders = ({ children }: PropsWithChildren) => (
-  <QueryProvider>
+  <QueryProvider connection={createSheetConnection()}>
     <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
       <ActiveWorkspaceContext value={createActiveWorkspaceValue()}>
         {children}
@@ -98,6 +106,19 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
     </WorkspaceStateContext.Provider>
   </QueryProvider>
 );
+
+/** The view model reads the close impact, so its hook needs the query and workspace providers. */
+const createViewModelHarness = <Props, State>(useHook: (props: Props) => State, props: Props) =>
+  createSharedHookHarness(useHook, props, { wrapper: IsolatedProviders });
+
+/** The close runs only after its default cleanup choice loads from the settings. */
+const waitForCloseDefault = async (harness: {
+  getLatest: () => { closeConfirm: { dialog: { removeWorktree: boolean | null } } };
+}): Promise<void> => {
+  await waitFor(() => {
+    expect(harness.getLatest().closeConfirm.dialog.removeWorktree).toBe(true);
+  });
+};
 
 const createTaskCleanupImpactHookMock = () =>
   mock((_taskIds: string[], _enabled: boolean) => ({
@@ -116,6 +137,7 @@ const createTaskStopImpactHookMock = () =>
     removedWorktreeCount: null,
     isLoading: false,
     error: null,
+    retry: () => {},
   }));
 
 const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
@@ -133,6 +155,7 @@ const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
   onResetImplementation: mock(() => {}),
   onResetTask: mock(async () => {}),
   onCloseTask: mock(async () => {}),
+  onRemoveTaskWorktree: mock(async () => {}),
   onDelete: mock(async () => {}),
   onConfirmTaskAction: mock(() => {}),
   onDetectPullRequest: mock(() => {}),
@@ -215,7 +238,7 @@ describe("TaskDetailsSheet", () => {
 
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
         workspaceId: "workspace-a",
         workspaceName: "Workspace A",
@@ -258,6 +281,7 @@ describe("TaskDetailsSheet", () => {
       removedWorktreeCount: null,
       isLoading: true,
       error: null,
+      retry: () => {},
     };
     const taskStopImpactHookMock = mock(
       (_args: Parameters<typeof useTaskStopImpact>[0]) => loadingStopImpact,
@@ -286,7 +310,7 @@ describe("TaskDetailsSheet", () => {
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
       taskStopImpactHook: taskStopImpactHookMock,
     };
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, harnessOptions);
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, harnessOptions);
 
     try {
       await harness.mount();
@@ -302,6 +326,7 @@ describe("TaskDetailsSheet", () => {
           removedWorktreeCount: null,
           isLoading: false,
           error: null,
+          retry: () => {},
         }),
       );
       await harness.update({ ...harnessOptions });
@@ -317,7 +342,7 @@ describe("TaskDetailsSheet", () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
         workspaceId: "workspace-a",
         workspaceName: "Workspace A",
@@ -344,6 +369,7 @@ describe("TaskDetailsSheet", () => {
         removedWorktreeCount: null,
         isLoading: false,
         error: "host unavailable",
+        retry: () => {},
       }),
     });
 
@@ -365,7 +391,7 @@ describe("TaskDetailsSheet", () => {
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
         workspaceId: "workspace-a",
         workspaceName: "Workspace A",
@@ -389,13 +415,12 @@ describe("TaskDetailsSheet", () => {
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
-    // One cleanup read for each confirmation: Delete, Reset Task, and Close Task.
-    const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-3);
+    // One cleanup read for each confirmation: Delete and Reset Task. Close Task reads its own impact.
+    const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-2);
 
     try {
       await harness.mount();
       expect(latestImpactCalls()).toEqual([
-        [["TASK-1"], false],
         [["TASK-1"], false],
         [["TASK-1"], false],
       ]);
@@ -404,21 +429,11 @@ describe("TaskDetailsSheet", () => {
       expect(latestImpactCalls()).toEqual([
         [["TASK-1"], true],
         [["TASK-1"], false],
-        [["TASK-1"], false],
       ]);
 
       await harness.run((viewModel) => viewModel.deleteConfirm.dialog.onCancel());
       await harness.run((viewModel) => viewModel.resetConfirm.openDialog());
       expect(latestImpactCalls()).toEqual([
-        [["TASK-1"], false],
-        [["TASK-1"], true],
-        [["TASK-1"], false],
-      ]);
-
-      await harness.run((viewModel) => viewModel.resetConfirm.dialog.onCancel());
-      await harness.run((viewModel) => viewModel.closeConfirm.openDialog());
-      expect(latestImpactCalls()).toEqual([
-        [["TASK-1"], false],
         [["TASK-1"], false],
         [["TASK-1"], true],
       ]);
@@ -435,7 +450,7 @@ describe("TaskDetailsSheet", () => {
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const onOpenChange = mock((_open: boolean) => {});
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       task,
       open: true,
       onOpenChange,
@@ -463,11 +478,11 @@ describe("TaskDetailsSheet", () => {
       title: "Task 1",
       availableActions: ["close_task"],
     });
-    const onCloseTask = mock(async () => {});
+    const onCloseTask = mock(async (_taskId: string, _options: { removeWorktree: boolean }) => {});
     const onOpenChange = mock(() => {});
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
         workspaceId: "workspace-a",
         workspaceName: "Workspace A",
@@ -499,9 +514,10 @@ describe("TaskDetailsSheet", () => {
       expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
       expect(onCloseTask).not.toHaveBeenCalled();
 
+      await waitForCloseDefault(harness);
       await harness.run((viewModel) => viewModel.closeConfirm.dialog.onConfirm());
 
-      expect(onCloseTask).toHaveBeenCalledWith("TASK-1");
+      expect(onCloseTask).toHaveBeenCalledWith("TASK-1", { removeWorktree: true });
       expect(onOpenChange).toHaveBeenCalledWith(false);
     } finally {
       await harness.unmount();
@@ -517,7 +533,7 @@ describe("TaskDetailsSheet", () => {
     });
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+    const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       activeWorkspace: {
         workspaceId: "workspace-a",
         workspaceName: "Workspace A",
@@ -545,12 +561,68 @@ describe("TaskDetailsSheet", () => {
     try {
       await harness.mount();
       await harness.run((viewModel) => viewModel.closeConfirm.openDialog());
+      await waitForCloseDefault(harness);
       await harness.run((viewModel) => viewModel.closeConfirm.dialog.onConfirm());
 
       expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
       expect(harness.getLatest().closeConfirm.dialog.operation.error).toBe("close failed");
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("shows a failed worktree read of a closed task with Retry", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const { TaskWorkflowActionsContext } =
+      await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
+    let failRead = true;
+    const impactGet = mock(async () => {
+      if (failRead) throw new Error("Unable to read the kept worktree: permission denied.");
+      return {
+        worktreePaths: ["/worktrees/TASK-1"],
+        branchNames: ["odt/TASK-1"],
+        uncommittedFileCount: 0,
+        mergeCandidate: false,
+        branchOid: null,
+      };
+    });
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeCleanupImpactGet: impactGet,
+        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+      },
+    });
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      status: "closed",
+      availableActions: ["remove_worktree"],
+    });
+    const message = "Unable to read the kept worktree: permission denied.";
+    const view = render(
+      <QueryProvider connection={connection}>
+        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
+          <ActiveWorkspaceContext value={createActiveWorkspaceValue()}>
+            <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsValue()}>
+              <TaskDetailsSheet task={task} open onOpenChange={() => {}} />
+            </TaskWorkflowActionsContext.Provider>
+          </ActiveWorkspaceContext>
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    try {
+      expect(await screen.findByText(message)).toBeTruthy();
+      failRead = false;
+      // The read settles inside act, so React applies its result before the next check.
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await waitFor(() => expect(screen.queryByText(message)).toBeNull());
+      expect(impactGet).toHaveBeenCalledTimes(2);
+    } finally {
+      view.unmount();
     }
   });
 

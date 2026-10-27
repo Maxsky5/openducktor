@@ -27,6 +27,7 @@ import {
 import { taskMetadata } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
 import {
+  listDirectMergeTaskIdsInDatabase,
   listTaskIdsInDatabase,
   requireTaskRow,
   taskReferenceCandidates,
@@ -237,6 +238,13 @@ export const createSqliteTaskRepository = ({
             const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
             return yield* taskMetadata(session, row, taskWorkflows.forTask(row));
           }),
+      );
+    },
+    listDirectMergeTaskIds(input) {
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.listDirectMergeTaskIds",
+        ({ session }) => listDirectMergeTaskIdsInDatabase(session),
       );
     },
     listPullRequestSyncCandidates(input) {

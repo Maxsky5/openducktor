@@ -731,6 +731,12 @@ const builtinActions = [
     eventId: "close-task",
     availableWhen: nonClosed,
   },
+  {
+    id: "remove_worktree",
+    kind: "view",
+    label: "Remove Worktree",
+    availableWhen: { stateIn: ["closed"] },
+  },
 ] satisfies BuiltinAction[];
 
 const builtinSignals = [
@@ -815,6 +821,7 @@ const secondaryActions: BuiltinActionId[] = [
   "reset_implementation",
   "reset_task",
   "close_task",
+  "remove_worktree",
 ];
 
 /** The source of the built-in definition. */

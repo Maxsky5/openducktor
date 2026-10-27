@@ -189,7 +189,7 @@ describe("createTaskService approval context", () => {
             return Effect.sync(() => {
               return {
                 ...createDefaultGlobalConfig(),
-                git: { defaultMergeMethod: "squash" },
+                git: { defaultMergeMethod: "squash", removeWorktreeOnClose: true },
               };
             });
           },

@@ -38,6 +38,7 @@ type KanbanColumnProps = {
   pendingState?: WorkflowPendingState | undefined;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, HistoricalSessions>;
+  mergedTargetByTaskId: ReadonlyMap<string, string>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
@@ -48,6 +49,7 @@ type KanbanColumnProps = {
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;
+  onCloseTask?: (taskId: string) => void;
 };
 
 export function KanbanColumn({
@@ -56,6 +58,7 @@ export function KanbanColumn({
   pendingState,
   taskSessionsByTaskId,
   historicalSessionsByTaskId,
+  mergedTargetByTaskId,
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
@@ -66,6 +69,7 @@ export function KanbanColumn({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  onCloseTask,
 }: KanbanColumnProps): ReactElement {
   const theme = laneTheme(column.id);
   const cardLayoutsByTaskId = useMemo(
@@ -82,6 +86,7 @@ export function KanbanColumn({
             activeSessionRole: context?.role,
             taskActivityState: getRequiredTaskActivityState(taskActivityStateByTaskId, task.id),
             pendingState,
+            mergedTarget: mergedTargetByTaskId.get(task.id),
           };
           return [task.id, getCardLayout(inputs)];
         }),
@@ -91,6 +96,7 @@ export function KanbanColumn({
       activeTaskSessionContextByTaskId,
       taskSessionsByTaskId,
       historicalSessionsByTaskId,
+      mergedTargetByTaskId,
       taskActivityStateByTaskId,
       pendingState,
     ],
@@ -122,6 +128,9 @@ export function KanbanColumn({
       onPlan,
     };
     if (context?.role) cardProps.activeSessionRole = context.role;
+    const mergedTarget = mergedTargetByTaskId.get(task.id);
+    if (mergedTarget !== undefined) cardProps.mergedTarget = mergedTarget;
+    if (onCloseTask) cardProps.onCloseTask = onCloseTask;
     if (onQaStart) cardProps.onQaStart = onQaStart;
     if (onHumanApprove) cardProps.onHumanApprove = onHumanApprove;
     if (onHumanRequestChanges) cardProps.onHumanRequestChanges = onHumanRequestChanges;

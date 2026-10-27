@@ -39,6 +39,7 @@ const mergeInput = {
   taskId: "task-1",
   input: {
     mergeMethod: "merge_commit" as const,
+    removeWorktree: true,
     expected: {
       taskStatus: "ai_review" as const,
       sourceBranch: "odt/task-1",

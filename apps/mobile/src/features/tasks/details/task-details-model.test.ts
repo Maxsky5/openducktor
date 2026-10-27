@@ -19,6 +19,7 @@ describe("resolveTaskDetailsActions", () => {
       taskSessions: [],
       historicalSessions: [],
       activeSessionRole: undefined,
+      canRemoveWorktree: false,
     });
     expect(actions.primary?.label).toBe("Start Builder");
     expect(actions.others.map((action) => action.label)).toEqual([
@@ -48,6 +49,7 @@ describe("resolveTaskDetailsActions", () => {
         taskSessions: [],
         historicalSessions,
         activeSessionRole: undefined,
+        canRemoveWorktree: false,
       });
       return [actions.primary, ...actions.others].flatMap((action) =>
         action ? [[action.action, action.disabled]] : [],
@@ -58,12 +60,27 @@ describe("resolveTaskDetailsActions", () => {
     expect(all([builder])).toContainEqual(["open_builder", false]);
   });
 
+  test("offers Remove Worktree only while the worktree or the task branch remains", () => {
+    const task = createTaskCardFixture({ status: "closed", availableActions: ["remove_worktree"] });
+    const resolve = (canRemoveWorktree: boolean) =>
+      resolveTaskDetailsActions({
+        task,
+        taskSessions: [],
+        historicalSessions: [],
+        activeSessionRole: undefined,
+        canRemoveWorktree,
+      }).primary?.label ?? null;
+    expect(resolve(true)).toBe("Remove Worktree");
+    expect(resolve(false)).toBeNull();
+  });
+
   test("shows no action that the host does not list", () => {
     const actions = resolveTaskDetailsActions({
       task: createTaskCardFixture({ status: "open", availableActions: [] }),
       taskSessions: [],
       historicalSessions: [],
       activeSessionRole: undefined,
+      canRemoveWorktree: false,
     });
     expect(actions.primary).toBeNull();
     expect(actions.others).toEqual([]);
@@ -79,6 +96,7 @@ describe("taskDetailsMenuItems", () => {
     taskSessions: [],
     historicalSessions: [],
     activeSessionRole: undefined,
+    canRemoveWorktree: false,
   });
 
   test("lists the other workflow actions, Unlink PR, and Delete", () => {

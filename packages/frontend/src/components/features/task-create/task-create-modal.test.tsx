@@ -65,6 +65,7 @@ const controllerMock: ReturnType<
   loadDocumentSection: async (_section: "spec" | "plan", _force?: boolean) => {},
   state: {
     issueType: "task",
+    removeWorktreeOnClose: null,
     title: "Task",
     priority: 2,
     description: "",

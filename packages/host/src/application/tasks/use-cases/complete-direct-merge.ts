@@ -18,6 +18,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
+  workspaceSettingsService,
   worktreeFiles,
   completionState,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "completeDirectMerge"> => ({
@@ -26,7 +27,14 @@ export const createTaskCompleteDirectMergeUseCase = ({
       const { taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireMergedTaskCleanupDependencies(
-          { gitPort, settingsConfig, taskWorktreeService, terminalService, worktreeFiles },
+          {
+            gitPort,
+            settingsConfig,
+            taskWorktreeService,
+            terminalService,
+            workspaceSettingsService,
+            worktreeFiles,
+          },
           "task_direct_merge_complete",
         ),
       );
@@ -89,6 +97,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
         },
         { ...input, repoPath },
         merge,
+        current,
         state,
         decision,
         "complete-direct-merge",

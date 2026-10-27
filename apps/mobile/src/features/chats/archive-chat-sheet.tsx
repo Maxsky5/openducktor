@@ -25,7 +25,7 @@ import { SheetFrame } from "@/navigation/sheet-frame";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { RuntimeIcon } from "@/ui/brand-icons";
 import { Button } from "@/ui/button";
-import { SwitchRow } from "@/ui/fields";
+import { SwitchCard } from "@/ui/switch-card";
 import { Icon } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Callout } from "@/ui/callout";
@@ -119,14 +119,12 @@ function WorktreeChoice({
   }
   return (
     <View style={styles.worktree}>
-      <View style={styles.switchCard}>
-        <SwitchRow
-          label={ARCHIVE_CHAT_TEXT.removeWorktree}
-          value={form.removeWorktree}
-          onValueChange={onChange}
-          disabled={disabled || form.sharedNotice !== null || form.taskNotice !== null}
-        />
-      </View>
+      <SwitchCard
+        label={ARCHIVE_CHAT_TEXT.removeWorktree}
+        value={form.removeWorktree}
+        onValueChange={onChange}
+        disabled={disabled || form.sharedNotice !== null || form.taskNotice !== null}
+      />
       {form.sharedNotice ? (
         <Text variant="footnote" style={styles.muted}>
           {form.sharedNotice}
@@ -337,13 +335,6 @@ const styles = StyleSheet.create((theme) => ({
   chatPath: { color: theme.desktop.mutedForeground },
   muted: { color: theme.desktop.mutedForeground },
   worktree: { gap: theme.space.sm },
-  switchCard: {
-    borderRadius: theme.radius.lg,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderColor: theme.desktop.border,
-    overflow: "hidden",
-  },
   footer: { gap: theme.space.sm },
   checking: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
   checkingText: { color: theme.desktop.mutedForeground },

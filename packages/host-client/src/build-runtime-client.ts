@@ -140,14 +140,6 @@ const humanRequestChanges = async (
   return invokeFn("human_request_changes", { repoPath, taskId, note }, builtinTaskCardSchema);
 };
 
-const humanApprove = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  taskId: string,
-): Promise<TaskCard> => {
-  return invokeFn("human_approve", { repoPath, taskId }, builtinTaskCardSchema);
-};
-
 const taskApprovalContextGet = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -178,11 +170,17 @@ const taskDirectMergeComplete = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
+  removeWorktree: boolean,
   publicationConsent?: TaskDirectMergeCompleteIntent["publicationConsent"],
 ): Promise<TaskCard> => {
   return invokeFn(
     "task_direct_merge_complete",
-    taskDirectMergeCompleteIntentSchema.parse({ repoPath, taskId, publicationConsent }),
+    taskDirectMergeCompleteIntentSchema.parse({
+      repoPath,
+      taskId,
+      removeWorktree,
+      publicationConsent,
+    }),
     builtinTaskCardSchema,
   );
 };
@@ -227,10 +225,11 @@ const taskPullRequestLinkMerged = async (
   repoPath: string,
   taskId: string,
   pullRequest: PullRequest,
+  removeWorktree: boolean,
 ) => {
   return invokeFn(
     "task_pull_request_link_merged",
-    { repoPath, taskId, pullRequest },
+    { repoPath, taskId, pullRequest, removeWorktree },
     builtinTaskCardSchema,
   );
 };
@@ -328,10 +327,6 @@ export class HostAgentClient {
     return humanRequestChanges(this.invokeFn, repoPath, taskId, note);
   }
 
-  async humanApprove(repoPath: string, taskId: string): Promise<TaskCard> {
-    return humanApprove(this.invokeFn, repoPath, taskId);
-  }
-
   async taskApprovalContextGet(
     repoPath: string,
     taskId: string,
@@ -350,9 +345,16 @@ export class HostAgentClient {
   async taskDirectMergeComplete(
     repoPath: string,
     taskId: string,
+    removeWorktree: boolean,
     publicationConsent?: TaskDirectMergeCompleteIntent["publicationConsent"],
   ): Promise<TaskCard> {
-    return taskDirectMergeComplete(this.invokeFn, repoPath, taskId, publicationConsent);
+    return taskDirectMergeComplete(
+      this.invokeFn,
+      repoPath,
+      taskId,
+      removeWorktree,
+      publicationConsent,
+    );
   }
 
   async taskPullRequestUpsert(repoPath: string, taskId: string, title: string, body: string) {
@@ -367,8 +369,13 @@ export class HostAgentClient {
     return taskPullRequestDetect(this.invokeFn, repoPath, taskId);
   }
 
-  async taskPullRequestLinkMerged(repoPath: string, taskId: string, pullRequest: PullRequest) {
-    return taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest);
+  async taskPullRequestLinkMerged(
+    repoPath: string,
+    taskId: string,
+    pullRequest: PullRequest,
+    removeWorktree: boolean,
+  ) {
+    return taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest, removeWorktree);
   }
 
   async repoPullRequestSync(

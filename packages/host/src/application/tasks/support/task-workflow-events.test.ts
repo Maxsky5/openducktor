@@ -22,6 +22,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "open",
   priority: 1,
   issueType: "feature",
+  removeWorktreeOnClose: null,
   labels: [],
   artifactSummary: {
     spec: { present: false },

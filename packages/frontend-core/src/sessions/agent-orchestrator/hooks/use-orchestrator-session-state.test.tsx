@@ -16,6 +16,7 @@ const taskFixture: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {

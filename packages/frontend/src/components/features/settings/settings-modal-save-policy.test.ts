@@ -48,16 +48,25 @@ describe("settings-modal-save-policy", () => {
     expect(
       hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
         defaultMergeMethod: "merge_commit",
+        removeWorktreeOnClose: true,
       }),
     ).toBe(true);
     expect(
       hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
         defaultMergeMethod: "squash",
+        removeWorktreeOnClose: true,
+      }),
+    ).toBe(false);
+    expect(
+      hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
+        defaultMergeMethod: "merge_commit",
+        removeWorktreeOnClose: false,
       }),
     ).toBe(false);
     expect(
       hasSameSaveReadyGlobalGitConfig(null, {
         defaultMergeMethod: "merge_commit",
+        removeWorktreeOnClose: true,
       }),
     ).toBe(false);
   });

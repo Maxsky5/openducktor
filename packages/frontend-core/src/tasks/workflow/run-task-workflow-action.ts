@@ -20,6 +20,7 @@ type TaskWorkflowCallbacks = {
   // The details sheet passes its confirmation dialogs here, not the handlers of the context.
   onResetTask?: ((taskId: string) => void) | undefined;
   onCloseTask?: ((taskId: string) => void) | undefined;
+  onRemoveTaskWorktree?: ((taskId: string) => void) | undefined;
 };
 
 type TaskWorkflowActionContext = {
@@ -68,6 +69,9 @@ export const runTaskWorkflowAction = (
       return;
     case "close_task":
       callbacks.onCloseTask?.(taskId);
+      return;
+    case "remove_worktree":
+      callbacks.onRemoveTaskWorktree?.(taskId);
       return;
     default:
       return;

@@ -6,7 +6,6 @@ import type {
   GitCommitAllResult,
   GitConflictAbortResult,
   GitCurrentBranch,
-  GitFetchRemoteResult,
   GitPullBranchResult,
   GitPushBranchResult,
   GitRebaseAbortResult,
@@ -29,6 +28,7 @@ import type {
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import { createGitService as createEffectGitService } from "./git-service";
+import { createRemoteFetchService } from "./remote-fetch-service";
 
 const createGitService = (...args: Parameters<typeof createEffectGitService>) =>
   createEffectGitService(...args);
@@ -48,7 +48,8 @@ type FakeGitPortInput = {
   worktreeStatuses?: Record<string, GitWorktreeStatusData>;
   switchedBranches?: Record<string, GitCurrentBranch>;
   aheadBehind?: Record<string, CommitsAheadBehind>;
-  fetchResults?: Record<string, GitFetchRemoteResult>;
+  /** The remotes that a fetch of a working directory and target uses. */
+  fetchRemotes?: Record<string, string[]>;
   pullResults?: Record<string, GitPullBranchResult>;
   commitResults?: Record<string, GitCommitAllResult>;
   pushResults?: Record<string, GitPushBranchResult>;
@@ -74,7 +75,7 @@ const createFakeGitPort = ({
   worktreeStatuses = {},
   switchedBranches = {},
   aheadBehind = {},
-  fetchResults = {},
+  fetchRemotes = {},
   pullResults = {},
   commitResults = {},
   pushResults = {},
@@ -92,6 +93,10 @@ const createFakeGitPort = ({
     readPublicationTarget: () => Effect.die(new Error("unexpected publication target")),
     inspectPublication: () => Effect.die(new Error("unexpected publication inspect")),
     pushBoundPublication: () => Effect.die(new Error("unexpected bound publication")),
+    listRefTips: () => Effect.die(new Error("unexpected ref tip list")),
+    countCommitsAhead: () => Effect.die(new Error("unexpected ahead count")),
+    mergeTreeOids: () => Effect.die(new Error("unexpected merge tree")),
+    readReflogs: () => Effect.die(new Error("unexpected reflog read")),
     canonicalizePath(path) {
       return Effect.tryPromise({
         try: async () => {
@@ -389,24 +394,12 @@ const createFakeGitPort = ({
           }),
       });
     },
-    fetchRemote(workingDir, targetBranch) {
-      return Effect.tryPromise({
-        try: async () => {
-          return (
-            fetchResults[`${workingDir}|${targetBranch}`] ?? {
-              outcome: "skipped_no_remote",
-              output:
-                "Skipped git fetch because no applicable remote is configured for this repo or branch.",
-            }
-          );
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
+    resolveFetchRemotes(workingDir, targetBranch) {
+      return Effect.succeed(fetchRemotes[`${workingDir}|${targetBranch}`] ?? []);
+    },
+    fetchRemote(repoPath, remote) {
+      calls.push(`fetch:${repoPath}:${remote}`);
+      return Effect.succeed(`Fetched ${remote}`);
     },
     pullBranch(workingDir) {
       return Effect.tryPromise({
@@ -974,34 +967,55 @@ describe("createGitService", () => {
       detached: false,
     });
   });
-  test("fetches remotes from an authorized worktree", async () => {
-    const service = createGitService(
-      createFakeGitPort({
-        canonicalPaths: {
-          "/repo": "/canonical/repo",
-          "/worktree": "/canonical/worktree",
-        },
-        gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
-        fetchResults: {
-          "/canonical/worktree|origin/main": {
-            outcome: "fetched",
-            output: "Fetched origin",
-          },
-        },
-      }),
-    );
-    await expect(
+  test("fetches remotes from an authorized worktree once for its repository", async () => {
+    const calls: string[] = [];
+    const gitPort = createFakeGitPort({
+      canonicalPaths: {
+        "/repo": "/canonical/repo",
+        "/worktree": "/canonical/worktree",
+      },
+      gitRepositories: ["/canonical/repo", "/canonical/worktree"],
+      linkedWorktrees: { "/canonical/worktree": "/canonical/repo" },
+      fetchRemotes: { "/canonical/worktree|origin/main": ["origin"] },
+      calls,
+    });
+    const service = createGitService({ gitPort, remoteFetch: createRemoteFetchService(gitPort) });
+    const fetch = (force: boolean) =>
       Effect.runPromise(
         service.fetchRemote({
           repoPath: "/repo",
           targetBranch: "origin/main",
           workingDir: "/worktree",
+          force,
         }),
+      );
+
+    await expect(fetch(false)).resolves.toEqual({ outcome: "fetched", output: "Fetched origin" });
+    await expect(fetch(false)).resolves.toEqual({
+      outcome: "skipped_recent",
+      output: "Skipped git fetch because a fetch of the last 5 minutes updated each remote.",
+    });
+    await expect(fetch(true)).resolves.toEqual({ outcome: "fetched", output: "Fetched origin" });
+    // The fetch uses the repository, so every worktree of it shares the result.
+    expect(calls.filter((call) => call.startsWith("fetch:"))).toEqual([
+      "fetch:/canonical/repo:origin",
+      "fetch:/canonical/repo:origin",
+    ]);
+  });
+  test("skips the fetch when no remote applies", async () => {
+    const gitPort = createFakeGitPort({
+      canonicalPaths: { "/repo": "/canonical/repo" },
+      gitRepositories: ["/canonical/repo"],
+    });
+    const service = createGitService({ gitPort, remoteFetch: createRemoteFetchService(gitPort) });
+    await expect(
+      Effect.runPromise(
+        service.fetchRemote({ repoPath: "/repo", targetBranch: "main", force: true }),
       ),
     ).resolves.toEqual({
-      outcome: "fetched",
-      output: "Fetched origin",
+      outcome: "skipped_no_remote",
+      output:
+        "Skipped git fetch because no applicable remote is configured for this repo or branch.",
     });
   });
   test("pulls an authorized worktree branch", async () => {

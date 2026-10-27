@@ -2,15 +2,15 @@ import type { HostClient } from "@openducktor/host-client";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import type { PullRequestSyncScope, PullRequestSyncTarget } from "@/types/pull-request-sync";
+import type { WorkspaceScope, WorkspaceScopeTarget } from "@/types/workspace-scope";
 
 export function useManualPullRequestSync(client: Pick<HostClient, "repoPullRequestSync">) {
-  const [pendingScope, setPendingScope] = useState<PullRequestSyncScope | null>(null);
+  const [pendingScope, setPendingScope] = useState<WorkspaceScope | null>(null);
   // Block a second call before React commits the pending scope.
   const pendingRef = useRef(false);
 
   const sync = useCallback(
-    async (scope: PullRequestSyncScope): Promise<void> => {
+    async (scope: WorkspaceScope): Promise<void> => {
       if (pendingRef.current || scope.targets.length === 0) return;
       const captured = {
         kind: scope.kind,
@@ -107,7 +107,7 @@ export function useManualPullRequestSync(client: Pick<HostClient, "repoPullReque
 }
 
 type WorkspaceResult = {
-  target: PullRequestSyncTarget;
+  target: WorkspaceScopeTarget;
   status: "synced" | "skipped" | "unconfirmed";
   message: string;
 };

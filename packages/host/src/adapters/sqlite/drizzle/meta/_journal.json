@@ -71,6 +71,13 @@
       "when": 1792969664504,
       "tag": "0009_generic_task_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793100820061,
+      "tag": "0010_task_remove_worktree_on_close",
+      "breakpoints": true
     }
   ]
 }

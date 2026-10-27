@@ -9,7 +9,10 @@ export type TaskCompletionState = {
   mergeUncertain?: true;
   publication?: BoundGitPublication;
   progress?: GitPublicationProgress;
-  deletedSourceBranch?: { name: string; oid: string };
+  /** The branches that the cleanup deleted. A failed close restores them. */
+  deletedBranches?: { name: string; oid: string }[];
+  /** The completed cleanup kept the worktree, so a retry that removes it cleans up again. */
+  keptWorktree?: true;
   observation: TaskCompletionObservation;
 };
 export const createTaskCompletionState = (

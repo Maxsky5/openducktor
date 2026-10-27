@@ -1,6 +1,7 @@
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
+import { noMergeDetection } from "./task-sync-service.test-support";
 import {
   workflowArtifactId,
   type ExternalTaskSyncEvent,
@@ -57,6 +58,7 @@ describe("committed task cards", () => {
       };
       const sync = createTaskSyncService({
         taskService: base,
+        mergeDetection: noMergeDetection,
         taskEventStream: stream,
         workspaceSettingsService: {
           getWorkspaceCatalog: () =>

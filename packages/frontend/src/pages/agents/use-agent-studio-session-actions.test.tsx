@@ -698,6 +698,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.run((state) => {
       state.handleQuickAction({
+        kind: "session_start",
         id: "quick:build_pull_request_generation",
         role: "build",
         launchActionId: "build_pull_request_generation",
@@ -777,6 +778,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.run((state) => {
       state.handleQuickAction({
+        kind: "session_start",
         id: "quick:build_after_human_request_changes",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -1037,6 +1039,7 @@ describe("useAgentStudioSessionActions", () => {
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
       });
       const quickAction = {
+        kind: "session_start",
         id: "quick:spec_initial",
         role: "spec",
         launchActionId: "spec_initial",

@@ -76,13 +76,13 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     refreshTasks,
     deleteTask,
     closeTask,
+    removeTaskWorktree,
     syncPullRequests,
     unlinkPullRequest,
     detectingPullRequestTaskIds,
     unlinkingPullRequestTaskIds,
     resetTask,
     resetTaskImplementation,
-    humanApproveTask,
   } = useTasksState();
   const { sessionStartNotifications } = useNotificationContext();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
@@ -193,7 +193,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     tasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
-    humanApproveTask,
+    closeTask,
     openResetImplementation,
     onResolveGitConflict: handleResolveTaskGitConflict,
     showPullRequestCreated: showPullRequestCreatedToast,
@@ -212,6 +212,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     tasks,
     onResetTask: resetTask,
     onDelete,
+    onCloseTask: closeTask,
     // A details sheet of the task also closes, as after a confirmation in the sheet.
     onSucceeded: closeTaskDetails,
   });
@@ -257,6 +258,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       },
       onResetTask: resetTask,
       onCloseTask: closeTask,
+      onRemoveTaskWorktree: removeTaskWorktree,
       onDelete,
       onConfirmTaskAction,
       onDetectPullRequest: (taskId) => {
@@ -295,6 +297,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       openResetImplementation,
       openTaskApproval,
       registerTaskDetailsClose,
+      removeTaskWorktree,
       resetTask,
       syncPullRequests,
       taskSessionsByTaskId,

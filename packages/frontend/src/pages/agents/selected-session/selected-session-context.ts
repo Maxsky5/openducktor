@@ -73,6 +73,8 @@ export type AgentStudioSelectedSessionContextInput = {
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
+  /** The target that the task branch is merged into. */
+  mergedTarget?: string | null;
 };
 
 export const buildAgentStudioSelectedSessionContext = ({
@@ -85,6 +87,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   roleLabelByRole,
   gitProviderContext,
   gitProviderReadError = null,
+  mergedTarget = null,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
   const { identity: selectedSessionIdentity, loadedSession } = selectedSession;
   const workflow = buildWorkflowModelContext({
@@ -96,6 +99,7 @@ export const buildAgentStudioSelectedSessionContext = ({
     roleLabelByRole,
     gitProviderContext,
     gitProviderReadError,
+    mergedTarget,
   });
   const pendingApprovalRequests =
     loadedSession?.pendingApprovals ?? EMPTY_PENDING_APPROVAL_REQUESTS;

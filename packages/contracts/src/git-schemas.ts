@@ -171,8 +171,12 @@ export type RepoGitConfig = z.infer<typeof repoGitConfigSchema>;
 
 export const globalGitConfigSchema = z.object({
   defaultMergeMethod: gitMergeMethodSchema.default("merge_commit"),
+  /** A task close removes the task worktree and its local task branch. */
+  removeWorktreeOnClose: z.boolean().default(true),
 });
 export type GlobalGitConfig = z.infer<typeof globalGitConfigSchema>;
+
+export const DEFAULT_GLOBAL_GIT_CONFIG: GlobalGitConfig = globalGitConfigSchema.parse({});
 
 export const gitPullRequestStateSchema = z.enum(["open", "draft", "merged", "closed_unmerged"]);
 export type GitPullRequestState = z.infer<typeof gitPullRequestStateSchema>;
@@ -290,6 +294,8 @@ export type GitPublicationPreview = z.infer<typeof gitPublicationPreviewSchema>;
 export const taskDirectMergeCompleteIntentSchema = z.strictObject({
   repoPath: z.string().trim().min(1),
   taskId: z.string().trim().min(1),
+  /** The completion removes the task worktree and its local task branch. */
+  removeWorktree: z.boolean(),
   publicationConsent: z
     .strictObject({
       expectedMerge: directMergeRecordSchema,
@@ -370,6 +376,8 @@ export const gitFetchRemoteRequestSchema = z.object({
   repoPath: z.string(),
   targetBranch: z.string().trim().min(1),
   workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  /** A manual Refresh fetches always. Otherwise a fetch of the last 5 minutes is current enough. */
+  force: z.boolean(),
 });
 export type GitFetchRemoteRequest = z.infer<typeof gitFetchRemoteRequestSchema>;
 
@@ -380,6 +388,11 @@ export const gitFetchRemoteResultSchema = z.discriminatedUnion("outcome", [
   }),
   z.object({
     outcome: z.literal("skipped_no_remote"),
+    output: z.string(),
+  }),
+  /** A fetch of the last 5 minutes updated every remote, so no fetch ran. */
+  z.object({
+    outcome: z.literal("skipped_recent"),
     output: z.string(),
   }),
 ]);

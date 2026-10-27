@@ -17,6 +17,7 @@ const card = (id: string): TaskCard => ({
   status: "open",
   issueType: "task",
   priority: 2,
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {

@@ -12,20 +12,14 @@ import type { TaskApprovalFlowReadyState } from "./task-approval-flow-state";
 import { connectionHost } from "../../connection/client-connection";
 import type { HostClient } from "@openducktor/host-client";
 
-type SubmitDirectMergeApprovalArgs = {
+type DirectMergeApprovalArgs = {
   approval: TaskApprovalFlowReadyState;
   queryClient: QueryClient;
   repoPath: string;
   refreshTasks: () => Promise<void>;
   workspaceId: string | null;
-};
-
-type CompleteDirectMergeApprovalArgs = {
-  approval: TaskApprovalFlowReadyState;
-  queryClient: QueryClient;
-  repoPath: string;
-  refreshTasks: () => Promise<void>;
-  workspaceId: string | null;
+  /** The close that the merge completes removes the task worktree and its local branch. */
+  removeWorktree: boolean;
 };
 
 export type SubmitDirectMergeApprovalResult =
@@ -62,7 +56,8 @@ export async function submitDirectMergeApproval({
   repoPath,
   refreshTasks,
   workspaceId,
-}: SubmitDirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
+  removeWorktree,
+}: DirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
   const host = connectionHost(queryClient);
   const approvalContext = approval.approvalContext;
   const directMergeResult = await runTaskMutationWithChatDraftCleanup({
@@ -83,6 +78,7 @@ export async function submitDirectMergeApproval({
           approval.mergeMethod === "squash"
             ? approval.squashCommitMessage.trim() || undefined
             : undefined,
+        removeWorktree,
       }),
     shouldCleanup: (result) => result.outcome !== "conflicts" && result.task.status === "closed",
   });
@@ -136,7 +132,8 @@ export async function completeDirectMergeApproval({
   repoPath,
   refreshTasks,
   workspaceId,
-}: CompleteDirectMergeApprovalArgs): Promise<{ successDescription: string }> {
+  removeWorktree,
+}: DirectMergeApprovalArgs): Promise<{ successDescription: string }> {
   const host = connectionHost(queryClient);
   const approvalContext = approval.approvalContext;
   const publishTarget = approvalContext.publishTarget;
@@ -148,7 +145,7 @@ export async function completeDirectMergeApproval({
     workspaceId,
     taskIds: [approval.taskId],
     mutation: async () => {
-      let publicationConsent: Parameters<HostClient["taskDirectMergeComplete"]>[2];
+      let publicationConsent: Parameters<HostClient["taskDirectMergeComplete"]>[3];
       if (publishTarget) {
         if (!approvalContext.directMerge || !approvalContext.publicationPreview)
           throw new Error(
@@ -159,7 +156,12 @@ export async function completeDirectMergeApproval({
           expectedPublication: approvalContext.publicationPreview,
         };
       }
-      await host.taskDirectMergeComplete(repoPath, approval.taskId, publicationConsent);
+      await host.taskDirectMergeComplete(
+        repoPath,
+        approval.taskId,
+        removeWorktree,
+        publicationConsent,
+      );
     },
   });
   await refreshTasks();

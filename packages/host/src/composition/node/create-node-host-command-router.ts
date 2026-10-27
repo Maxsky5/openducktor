@@ -28,6 +28,7 @@ import { createLocalAttachmentService } from "../../application/attachments/loca
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
 import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
+import { createRemoteFetchService } from "../../application/git/remote-fetch-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
 import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
@@ -51,6 +52,7 @@ import { createRuntimeDefinitionsCommandHandlers } from "../../interface/command
 import { createRuntimeCommandHandlers } from "../../interface/commands/runtime-command-handlers";
 import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
+import { createTaskMergeStatusCommandHandlers } from "../../interface/commands/task-merge-status-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createRepoActionCommandHandlers } from "../../interface/commands/repo-action-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
@@ -183,6 +185,8 @@ export const assembleNodeEffectHostCommandRouter = (
       eventBus,
       lifecycleLogger,
     });
+  // The Git panel and merge detection share one fetch of each remote.
+  const remoteFetch = createRemoteFetchService(git);
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const workingDirectoryDependencies = { gitPort: git, settingsConfig, workspaceSettingsService };
   let resolvedMcpHostBridge = mcpHostBridge;
@@ -291,6 +295,9 @@ export const assembleNodeEffectHostCommandRouter = (
       taskEventPublicationReporter,
       workspaceSettingsService,
     },
+    publishMergeStatus: (snapshot) =>
+      eventBus?.publish({ channel: "openducktor://task-merge-status-updated", payload: snapshot }),
+    remoteFetch,
     canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
     agentSessionLiveStateService,
     repositoryPolicy: workspaceSessions.persistence,
@@ -407,6 +414,7 @@ export const assembleNodeEffectHostCommandRouter = (
     startupSweep,
     taskAssetStagingService,
     taskSyncService,
+    mergeDetection: taskSessions.mergeDetection,
     terminalService,
     browserService,
     sessionLaunches: {
@@ -461,9 +469,11 @@ export const assembleNodeEffectHostCommandRouter = (
       ...defaultPorts,
       settingsConfig,
       repoStoreDiagnostics: taskStore,
+      remoteFetch,
     }),
     ...createTaskAssetCommandHandlers(taskAssetStagingService),
     ...createTaskCommandHandlers(taskService),
+    ...createTaskMergeStatusCommandHandlers(taskSessions.mergeDetection),
     ...createTaskWorktreeCommandHandlers(taskWorktreeService),
     ...createTerminalCommandHandlers(terminalService),
     ...createBrowserCommandHandlers(browserService),

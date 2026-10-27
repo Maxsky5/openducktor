@@ -10,6 +10,7 @@ type HookArgs = Parameters<typeof useAgentStudioPullRequestModalModel>[0];
 const createPendingPullRequest = (): NonNullable<HookArgs["pendingMergedPullRequest"]> => ({
   taskId: "task-1",
   taskTitle: "Original task",
+  taskRemoveWorktreeOnClose: null,
   pullRequest: {
     providerId: "github",
     number: 268,
@@ -69,7 +70,7 @@ describe("useAgentStudioPullRequestModalModel", () => {
       expect(model?.pullRequest).toBe(pendingMergedPullRequest.pullRequest);
       expect(model?.isLinking).toBe(true);
 
-      model?.onConfirm();
+      model?.onConfirm({ removeWorktree: true });
       model?.onCancel();
 
       expect(onLinkMergedPullRequest).toHaveBeenCalledTimes(1);

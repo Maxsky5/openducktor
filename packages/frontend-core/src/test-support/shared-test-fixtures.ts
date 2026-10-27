@@ -113,6 +113,7 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   pullRequest: undefined,
@@ -236,6 +237,7 @@ export const createSettingsSnapshotFixture = (
     theme: "light",
     git: {
       defaultMergeMethod: "merge_commit",
+      removeWorktreeOnClose: true,
       ...git,
     },
     system: {},

@@ -142,6 +142,7 @@ const buildModel = () => ({
   onPrepareMessageFirstSession: () => {},
   quickActions: [
     {
+      kind: "session_start" as const,
       id: "quick:build_implementation_start",
       role: "build" as const,
       launchActionId: "build_implementation_start" as const,
@@ -151,6 +152,7 @@ const buildModel = () => ({
       disabled: false,
     },
     {
+      kind: "session_start" as const,
       id: "quick:build_pull_request_generation",
       role: "build" as const,
       launchActionId: "build_pull_request_generation" as const,
@@ -162,6 +164,7 @@ const buildModel = () => ({
     },
   ],
   primaryQuickAction: {
+    kind: "session_start" as const,
     id: "quick:build_implementation_start",
     role: "build" as const,
     launchActionId: "build_implementation_start" as const,
@@ -600,6 +603,137 @@ describe("AgentStudioHeader", () => {
     );
   });
 
+  test("keeps Approve Task reachable while a working session disables session actions", async () => {
+    const onQuickAction = mock(() => {});
+    const busyPrimary = {
+      kind: "session_start" as const,
+      id: "quick:qa_review",
+      role: "qa" as const,
+      launchActionId: "qa_review" as const,
+      label: "Request QA Review",
+      description: "Open the start-session flow for QA.",
+      postStartAction: "kickoff" as const,
+      disabled: true,
+      disabledReason: "Wait for the current session to finish.",
+    };
+    const approveTask = {
+      kind: "task_action" as const,
+      id: "task:human_approve",
+      taskAction: "human_approve" as const,
+      placement: "trailing" as const,
+      label: "Approve Task",
+      description: "Open the approval flow to merge, open a pull request, or close the task.",
+      disabled: false,
+    };
+    render(
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: {
+          ...buildModel(),
+          sessionCreateOptions: [],
+          quickActions: [busyPrimary, approveTask],
+          primaryQuickAction: busyPrimary,
+          onQuickAction,
+        },
+      }),
+    );
+
+    const primary = screen.getByRole<HTMLButtonElement>("button", {
+      name: /Run quick action: Request QA Review/i,
+    });
+    expect(primary.disabled).toBe(true);
+    const menuTrigger = screen.getByRole<HTMLButtonElement>("button", {
+      name: /Open quick actions menu/i,
+    });
+    expect(menuTrigger.disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(menuTrigger);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Approve Task"));
+    });
+
+    expect(onQuickAction).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "task_action", taskAction: "human_approve" }),
+    );
+  });
+
+  test("keeps the merged marker while the git conflict action leads", () => {
+    const resolveConflict = {
+      kind: "session_start" as const,
+      id: "quick:build_rebase_conflict_resolution",
+      role: "build" as const,
+      launchActionId: "build_rebase_conflict_resolution" as const,
+      label: "Resolve Git Conflict",
+      description: "Ask Builder to resolve the active git conflict.",
+      postStartAction: "send_message" as const,
+      disabled: false,
+    };
+    const closeTask = {
+      kind: "task_action" as const,
+      id: "task:close_task",
+      taskAction: "close_task" as const,
+      placement: "leading" as const,
+      label: "Close Task",
+      description: "The task branch is merged into origin/main.",
+      mergedTarget: "origin/main",
+      disabled: false,
+    };
+    render(
+      createElement(AgentStudioHeader, {
+        repoActions: null,
+        viewControls: null,
+        openIn: null,
+        model: {
+          ...buildModel(),
+          quickActions: [resolveConflict, closeTask],
+          primaryQuickAction: resolveConflict,
+          onResolveGitConflictQuickAction: () => {},
+        },
+      }),
+    );
+
+    expect(screen.getByTestId("agent-studio-merged-marker").textContent).toContain(
+      "Merged into origin/main",
+    );
+  });
+
+  test("keeps the quick-actions menu closed when every action is disabled", () => {
+    const busyPrimary = {
+      kind: "session_start" as const,
+      id: "quick:qa_review",
+      role: "qa" as const,
+      launchActionId: "qa_review" as const,
+      label: "Request QA Review",
+      description: "Open the start-session flow for QA.",
+      postStartAction: "kickoff" as const,
+      disabled: true,
+      disabledReason: "Wait for the current session to finish.",
+    };
+    const html = renderToStaticMarkup(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(AgentStudioHeader, {
+          repoActions: null,
+          viewControls: null,
+          openIn: null,
+          model: {
+            ...buildModel(),
+            sessionCreateOptions: [],
+            quickActions: [busyPrimary],
+            primaryQuickAction: busyPrimary,
+          },
+        }),
+      ),
+    );
+
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Open quick actions menu"/);
+  });
+
   test("renders the wider quick-actions popover with the taller result list", async () => {
     const { unmount } = render(
       createElement(AgentStudioHeader, {
@@ -610,6 +744,7 @@ describe("AgentStudioHeader", () => {
           ...buildModel(),
           quickActions: [
             {
+              kind: "session_start" as const,
               id: "quick:build_implementation_start",
               role: "build" as const,
               launchActionId: "build_implementation_start" as const,
@@ -621,6 +756,7 @@ describe("AgentStudioHeader", () => {
           ],
           sessionCreateOptions: [],
           primaryQuickAction: {
+            kind: "session_start" as const,
             id: "quick:build_implementation_start",
             role: "build" as const,
             launchActionId: "build_implementation_start" as const,
@@ -657,6 +793,7 @@ describe("AgentStudioHeader", () => {
           ...buildModel(),
           quickActions: [
             {
+              kind: "session_start" as const,
               id: "quick:build_implementation_start",
               role: "build" as const,
               launchActionId: "build_implementation_start" as const,
@@ -668,6 +805,7 @@ describe("AgentStudioHeader", () => {
           ],
           sessionCreateOptions: [],
           primaryQuickAction: {
+            kind: "session_start" as const,
             id: "quick:build_implementation_start",
             role: "build" as const,
             launchActionId: "build_implementation_start" as const,
@@ -753,6 +891,7 @@ describe("AgentStudioHeader", () => {
           ...buildModel(),
           quickActions: [
             {
+              kind: "session_start" as const,
               id: "quick:build_rebase_conflict_resolution",
               role: "build" as const,
               launchActionId: "build_rebase_conflict_resolution" as const,
@@ -763,6 +902,7 @@ describe("AgentStudioHeader", () => {
             },
           ],
           primaryQuickAction: {
+            kind: "session_start" as const,
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,
@@ -800,6 +940,7 @@ describe("AgentStudioHeader", () => {
           isCreatingSession: false,
           options: [
             {
+              kind: "session_start" as const,
               id: "quick:build_rebase_conflict_resolution",
               role: "build" as const,
               launchActionId: "build_rebase_conflict_resolution" as const,
@@ -810,6 +951,7 @@ describe("AgentStudioHeader", () => {
             },
           ],
           primaryAction: {
+            kind: "session_start" as const,
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,

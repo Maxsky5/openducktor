@@ -246,7 +246,7 @@ describe("task service with a custom task workflow", () => {
     expect(await status(id)).toBe("reviewing");
   });
 
-  test("approves and rejects a reviewed task with the review effect events", async () => {
+  test("requests changes on a reviewed task with the review effect event", async () => {
     const { id } = await createArticle();
     const input = { repoPath: harness.repoPath, taskId: id };
     await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
@@ -255,11 +255,6 @@ describe("task service with a custom task workflow", () => {
 
     await Effect.runPromise(service().humanRequestChanges({ ...input, note: "Shorter intro" }));
     expect(await status(id)).toBe("writing");
-
-    await save(id, "draft", "writer");
-    await save(id, "review", "editor", "accept");
-    await Effect.runPromise(service().humanApprove(input));
-    expect(await status(id)).toBe("published");
   });
 
   test("closes a task into its terminal close state and resets it to the initial state", async () => {
@@ -267,7 +262,7 @@ describe("task service with a custom task workflow", () => {
     const second = await createArticle();
 
     const closed = await Effect.runPromise(
-      service().closeTask({ repoPath: harness.repoPath, taskId: first.id }),
+      service().closeTask({ repoPath: harness.repoPath, taskId: first.id, removeWorktree: true }),
     );
     expect(closed.status).toBe("shelved");
 
@@ -340,8 +335,8 @@ describe("task service with a workflow for each task", () => {
     );
     expect(String(rejected)).toContain("task_transition cannot move tasks to writing");
 
-    await Effect.runPromise(tasks.closeTask(input(article.id)));
-    await Effect.runPromise(tasks.closeTask(input(feature.id)));
+    await Effect.runPromise(tasks.closeTask({ ...input(article.id), removeWorktree: true }));
+    await Effect.runPromise(tasks.closeTask({ ...input(feature.id), removeWorktree: true }));
     expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("shelved");
     expect((await Effect.runPromise(tasks.findTask(input(feature.id))))?.status).toBe("closed");
     const visible = await Effect.runPromise(

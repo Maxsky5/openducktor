@@ -24,6 +24,7 @@ const baseTask: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "feature",
+  removeWorktreeOnClose: null,
   availableActions: ["set_spec"],
   labels: [],
   artifactSummary: {

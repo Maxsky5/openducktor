@@ -1,11 +1,8 @@
 import type { TaskWorkflow } from "@openducktor/workflows";
-import {
-  type AgentSessionRecord,
-  DEFAULT_BRANCH_PREFIX,
-  type RepoConfig,
-} from "@openducktor/contracts";
+import { type AgentSessionRecord, type RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
+import { cleanTaskBranchPrefix } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -65,8 +62,7 @@ export const isRelatedTaskBranch = (
   branchPrefix: string,
   taskId: string,
 ): boolean => {
-  const cleanPrefix = branchPrefix.trim().replace(/\/+$/g, "") || DEFAULT_BRANCH_PREFIX;
-  const taskPrefix = `${cleanPrefix}/${taskId}`;
+  const taskPrefix = `${cleanTaskBranchPrefix(branchPrefix)}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);
 };
 export const validateExistingTaskWorktreeCandidate = (
@@ -348,6 +344,8 @@ export const runTaskLocalCleanup = ({
   worktreeCleanupOperation,
   worktreeFiles,
   worktreePaths,
+  forceWorktreeRemoval = true,
+  onBranchDeleting,
 }: {
   branchNames: string[];
   gitPort: GitPort;
@@ -360,6 +358,10 @@ export const runTaskLocalCleanup = ({
   worktreeCleanupOperation: TaskWorktreeCleanupOperation;
   worktreeFiles: WorktreeFilePort | undefined;
   worktreePaths: string[];
+  /** False makes a worktree with uncommitted changes fail the cleanup. */
+  forceWorktreeRemoval?: boolean;
+  /** Gets each branch and its tip just before Git deletes it, so a caller can restore it. */
+  onBranchDeleting?: ((branch: { name: string; oid: string }) => void) | undefined;
 }) =>
   Effect.gen(function* () {
     if (!terminalService) {
@@ -394,7 +396,7 @@ export const runTaskLocalCleanup = ({
           {
             repoPath,
             worktreePath,
-            force: true,
+            force: forceWorktreeRemoval,
             managedWorktreeBasePath,
             missingOutsideManagedRootPathPolicy: "skip",
           },
@@ -404,7 +406,7 @@ export const runTaskLocalCleanup = ({
     }
 
     for (const branchName of branchNames) {
-      yield* gitPort.deleteLocalBranch(repoPath, branchName, true);
+      yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting);
       progress.deletedBranches.push(branchName);
     }
   });

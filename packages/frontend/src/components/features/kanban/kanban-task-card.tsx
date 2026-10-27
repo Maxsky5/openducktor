@@ -7,7 +7,7 @@ import {
   type BuiltinTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { AgentSessionRecord, KanbanTaskCardView } from "@openducktor/contracts";
-import { PlayCircle, Tag } from "lucide-react";
+import { GitMerge, PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
 import type {
   KanbanTaskActivityState,
@@ -31,6 +31,7 @@ import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workf
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
@@ -58,6 +59,9 @@ type CardProps = {
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;
+  /** The target that the task branch is merged into. The card then proposes Close Task. */
+  mergedTarget?: string | undefined;
+  onCloseTask?: ((taskId: string) => void) | undefined;
 };
 
 export const KanbanTaskCard = memo(function KanbanTaskCard({
@@ -77,6 +81,8 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  mergedTarget,
+  onCloseTask,
 }: CardProps): ReactElement {
   const isActive =
     (hasActiveSession ?? true) &&
@@ -120,20 +126,12 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         ) : (
           <NormalTaskIdentity task={task} onOpenDetails={onOpenDetails} />
         )}
-        {isCompact ? <TaskStatus task={task} compact /> : <TaskMeta task={task} />}
-        {taskSessions.map((session) =>
-          session.statusUnavailableReason ? (
-            <p
-              key={agentSessionIdentityKey(session)}
-              role="status"
-              className="mt-1 break-words text-xs text-muted-foreground"
-            >
-              {BUILTIN_ROLE_LABELS[session.role]}
-              {session.activityState === "error" ? " error" : ""}. Status unavailable:{" "}
-              {session.statusUnavailableReason}
-            </p>
-          ) : null,
+        {isCompact ? (
+          <TaskStatus task={task} mergedTarget={mergedTarget} compact />
+        ) : (
+          <TaskMeta task={task} mergedTarget={mergedTarget} />
         )}
+        <SessionStatusNotes taskSessions={taskSessions} />
         <TaskActions
           task={task}
           taskSessions={taskSessions}
@@ -150,6 +148,8 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           {...(onHumanApprove ? { onHumanApprove } : {})}
           {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
           {...(onResetImplementation ? { onResetImplementation } : {})}
+          mergedTarget={mergedTarget}
+          onCloseTask={onCloseTask}
         />
       </div>
     </article>
@@ -263,6 +263,27 @@ const sameTaskSessions = (
   return true;
 };
 
+/** The sessions whose status cannot be read, with the reason. */
+function SessionStatusNotes({ taskSessions }: { taskSessions: KanbanTaskSession[] }): ReactElement {
+  return (
+    <>
+      {taskSessions.map((session) =>
+        session.statusUnavailableReason ? (
+          <p
+            key={agentSessionIdentityKey(session)}
+            role="status"
+            className="mt-1 break-words text-xs text-muted-foreground"
+          >
+            {BUILTIN_ROLE_LABELS[session.role]}
+            {session.activityState === "error" ? " error" : ""}. Status unavailable:{" "}
+            {session.statusUnavailableReason}
+          </p>
+        ) : null,
+      )}
+    </>
+  );
+}
+
 function sameProps(previous: CardProps, next: CardProps): boolean {
   return (
     sameTask(previous.task, next.task) &&
@@ -284,7 +305,9 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
     previous.onQaStart === next.onQaStart &&
     previous.onHumanApprove === next.onHumanApprove &&
     previous.onHumanRequestChanges === next.onHumanRequestChanges &&
-    previous.onResetImplementation === next.onResetImplementation
+    previous.onResetImplementation === next.onResetImplementation &&
+    previous.mergedTarget === next.mergedTarget &&
+    previous.onCloseTask === next.onCloseTask
   );
 }
 
@@ -390,13 +413,19 @@ function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
   );
 }
 
-function TaskMeta({ task }: { task: TaskCard }): ReactElement {
+function TaskMeta({
+  task,
+  mergedTarget,
+}: {
+  task: TaskCard;
+  mergedTarget: string | undefined;
+}): ReactElement {
   const displayLabels = toDisplayTaskLabels(task.labels);
 
   return (
     <div className="flex flex-col gap-1.5">
       <TaskPrimaryMeta task={task} />
-      <TaskStatus task={task} />
+      <TaskStatus task={task} mergedTarget={mergedTarget} />
       {displayLabels.length > 0 ? <TaskLabelRow labels={displayLabels} /> : null}
     </div>
   );
@@ -507,18 +536,22 @@ function CompactTaskIdentity({
 
 function TaskStatus({
   task,
+  mergedTarget,
   compact = false,
 }: {
   task: TaskCard;
+  mergedTarget: string | undefined;
   compact?: boolean;
 }): ReactElement | null {
-  const hasStatus = Boolean(task.pullRequest) || Boolean(task.sourceIssue);
+  const hasStatus =
+    Boolean(task.pullRequest) || Boolean(task.sourceIssue) || mergedTarget !== undefined;
   if (!hasStatus && !isQaRejectedTask(task)) {
     return null;
   }
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {mergedTarget !== undefined ? <MergedBadge target={mergedTarget} /> : null}
       <QaRejectedBadge task={task} />
       {task.pullRequest ? (
         <TaskPullRequestLink
@@ -533,6 +566,24 @@ function TaskStatus({
         />
       ) : null}
     </div>
+  );
+}
+
+function MergedBadge({ target }: { target: string }): ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          variant="success"
+          className="h-6 gap-1 rounded-full px-2 text-[11px]"
+          data-testid="kanban-task-merged-badge"
+        >
+          <GitMerge className="size-3" aria-hidden="true" />
+          Merged
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>Branch merged into {target}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -589,6 +640,8 @@ function TaskActions({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  onCloseTask,
+  mergedTarget,
   taskSessions,
   historicalSessions,
   hasActiveSession,
@@ -609,6 +662,7 @@ function TaskActions({
     activeSessionRole,
     taskActivityState,
     pendingState,
+    mergedTarget,
   });
   const { primaryActiveSession, primarySessionIsWaitingInput } = footer;
   if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0) return null;
@@ -650,6 +704,9 @@ function TaskActions({
         return;
       case "reset_implementation":
         onResetImplementation?.(task.id);
+        return;
+      case "close_task":
+        onCloseTask?.(task.id);
         return;
       default:
         return;

@@ -3,6 +3,7 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   repoConfigSchema,
   type GitProviderConfig,
+  type GlobalGitConfig,
   type GitProviderHealth,
   type SettingsRepoConfig,
 } from "@openducktor/contracts";
@@ -92,14 +93,34 @@ describe("settings git sections", () => {
   test("renders global Git defaults without provider details", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsGitSection, {
-        git: { defaultMergeMethod: "merge_commit" },
+        git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
         disabled: false,
-        onUpdateGit: () => ({ defaultMergeMethod: "merge_commit" }),
+        onUpdateGit: () => ({ defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true }),
       }),
     );
 
     expect(html).toContain("Default merge method");
     expect(html).not.toContain("GitHub CLI");
+  });
+
+  test("turns off the worktree removal on close", () => {
+    let git: GlobalGitConfig = { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true };
+    const view = render(
+      createElement(SettingsGitSection, {
+        git,
+        disabled: false,
+        onUpdateGit: (updater) => {
+          git = updater(git);
+        },
+      }),
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("switch", { name: "Remove task worktree on close" }));
+      expect(git.removeWorktreeOnClose).toBe(false);
+    } finally {
+      view.unmount();
+    }
   });
 
   test("renders repository readiness blockers when GitHub auth is missing", () => {

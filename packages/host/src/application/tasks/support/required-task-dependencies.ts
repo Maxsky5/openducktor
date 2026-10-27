@@ -130,6 +130,7 @@ type MergedTaskCleanupDependencies = {
   settingsConfig: SettingsConfigPort;
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
+  workspaceSettingsService: WorkspaceSettingsService;
   worktreeFiles?: WorktreeFilePort;
 };
 type MergedTaskCleanupDependencyInput = {
@@ -141,6 +142,7 @@ export const requireMergedTaskCleanupDependencies = (
     settingsConfig,
     taskWorktreeService,
     terminalService,
+    workspaceSettingsService,
     worktreeFiles,
   }: MergedTaskCleanupDependencyInput,
   operation: "repo_pull_request_sync" | "task_direct_merge_complete",
@@ -157,11 +159,15 @@ export const requireMergedTaskCleanupDependencies = (
   if (!terminalService) {
     throw missingTaskDependency(`Terminal service is required for ${operation}.`);
   }
+  if (!workspaceSettingsService) {
+    throw missingTaskDependency(`Workspace settings service is required for ${operation}.`);
+  }
   const dependencies: MergedTaskCleanupDependencies = {
     gitPort,
     settingsConfig,
     taskWorktreeService,
     terminalService,
+    workspaceSettingsService,
   };
   if (worktreeFiles) {
     dependencies.worktreeFiles = worktreeFiles;

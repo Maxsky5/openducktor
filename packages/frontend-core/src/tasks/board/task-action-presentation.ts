@@ -8,7 +8,7 @@ import type { KanbanTaskSession } from "./kanban-task-activity";
 export type TaskActionTone = "prominent" | "neutral" | "destructive" | "warning";
 
 export const taskActionIsDestructive = (action: TaskWorkflowAction): boolean =>
-  action === "reset_implementation" || action === "reset_task";
+  action === "reset_implementation" || action === "reset_task" || action === "remove_worktree";
 
 export const taskActionIsWarning = (action: TaskWorkflowAction): boolean => action === "close_task";
 

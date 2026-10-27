@@ -18,6 +18,10 @@ import type { CreateTaskServiceInput } from "../../application/tasks/task-servic
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskSessionStartPreparationService } from "../../application/tasks/worktrees/task-session-start-preparation-service";
 import { createNodeTaskEventServices } from "./node-task-event-services";
+import {
+  createTaskMergeDetectionService,
+  type CreateTaskMergeDetectionServiceInput,
+} from "../../application/tasks/merge-detection/task-merge-detection-service";
 import { createSessionTurnPreparation } from "../../application/agent-sessions/session-turn-preparation";
 import { createHostApprovalPolicy } from "../../application/agent-sessions/host-approval-policy";
 import { createHostOperationWorkers } from "../../effect/host-operation-workers";
@@ -44,6 +48,8 @@ type TaskServiceInput = Omit<
 export const createNodeTaskSessionServices = ({
   taskServiceInput,
   eventServiceInput,
+  publishMergeStatus,
+  remoteFetch,
   agentSessionLiveStateService,
   canonicalizeRepoPath,
   runtimeAdmission,
@@ -55,8 +61,10 @@ export const createNodeTaskSessionServices = ({
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<
     Parameters<typeof createNodeTaskEventServices>[0],
-    "baseTaskService" | "taskWorkflows"
+    "baseTaskService" | "taskWorkflows" | "mergeDetection"
   >;
+  publishMergeStatus: CreateTaskMergeDetectionServiceInput["publish"];
+  remoteFetch: CreateTaskMergeDetectionServiceInput["remoteFetch"];
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtimeAdmission: import("../../ports/runtime-admission-port").RuntimeAdmissionPort;
@@ -98,10 +106,21 @@ export const createNodeTaskSessionServices = ({
       readSessionRootRefs,
     }),
   });
+  // The task sync loop runs the scheduled merge detection passes.
+  const mergeDetection = createTaskMergeDetectionService({
+    taskStore: taskServiceInput.taskStore,
+    gitPort: taskServiceInput.gitPort,
+    remoteFetch,
+    settingsConfig: taskServiceInput.settingsConfig,
+    workspaceSettingsService: taskServiceInput.workspaceSettingsService,
+    publish: publishMergeStatus,
+    logger: eventServiceInput.lifecycleLogger,
+  });
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
     taskWorkflows: taskServiceInput.taskWorkflows,
     baseTaskService,
+    mergeDetection,
   });
   const completionWorkers = createHostOperationWorkers();
   const taskService = {
@@ -113,8 +132,9 @@ export const createNodeTaskSessionServices = ({
     ) => completionWorkers.run(eventServices.taskService.completeDirectMerge(input)),
     closeTask: (input: Parameters<typeof eventServices.taskService.closeTask>[0]) =>
       completionWorkers.run(eventServices.taskService.closeTask(input)),
-    humanApprove: (input: Parameters<typeof eventServices.taskService.humanApprove>[0]) =>
-      completionWorkers.run(eventServices.taskService.humanApprove(input)),
+    removeTaskWorktree: (
+      input: Parameters<typeof eventServices.taskService.removeTaskWorktree>[0],
+    ) => completionWorkers.run(eventServices.taskService.removeTaskWorktree(input)),
     linkMergedPullRequest: (
       input: Parameters<typeof eventServices.taskService.linkMergedPullRequest>[0],
     ) => completionWorkers.run(eventServices.taskService.linkMergedPullRequest(input)),
@@ -230,6 +250,7 @@ export const createNodeTaskSessionServices = ({
   });
   return {
     ...eventServices,
+    mergeDetection,
     taskService,
     shutdownCompletionOperations: completionWorkers.shutdown,
     agentSessionCommandService: { ...agentSessionCommandService, forkWorkflowSession },

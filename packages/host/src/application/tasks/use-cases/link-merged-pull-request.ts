@@ -17,18 +17,13 @@ import {
   taskEventPolicyError,
 } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
+import { cleanupConfirmedMergeClose } from "../support/task-close-cleanup";
 import {
   canSkipRelinkedPullRequestCleanup,
-  cleanupMergedTaskState,
   loadTaskBranchCleanup,
 } from "../support/task-worktree-cleanup";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
-
-type TaskBranchCleanup = {
-  sourceBranch: string;
-  targetBranch: string;
-};
 
 export const createTaskLinkMergedPullRequestUseCase = ({
   taskWorkflows,
@@ -45,7 +40,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "linkMergedPullRequest"> => ({
   linkMergedPullRequest(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId, pullRequest } = input;
+      const { repoPath, taskId, pullRequest, removeWorktree } = input;
 
       const current = yield* taskStore.getTask({ repoPath, taskId });
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
@@ -125,13 +120,15 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         taskId,
         "Pull request linking",
       );
-      let cleanup: TaskBranchCleanup | null = null;
+      // The cleanup needs the task branch. A relink can find it already removed.
+      let hasTaskBranch = false;
       if (metadata.pullRequest === undefined) {
-        cleanup = yield* loadCleanup;
+        yield* loadCleanup;
+        hasTaskBranch = true;
       } else {
         const cleanupResult = yield* Effect.result(loadCleanup);
         if (cleanupResult._tag === "Success") {
-          cleanup = cleanupResult.success;
+          hasTaskBranch = true;
         } else {
           const message = errorMessage(cleanupResult.failure);
           if (!canSkipRelinkedPullRequestCleanup(message)) {
@@ -140,7 +137,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         }
       }
 
-      if (cleanup !== null) {
+      if (hasTaskBranch) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
       yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
@@ -149,20 +146,17 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           if (closure.kind === "denied") {
             return yield* taskEventPolicyError(closeEvent, current, closure);
           }
-          const cleanupEffect = cleanup
-            ? cleanupMergedTaskState(
-                {
-                  ...dependencies,
-                  taskActivityGuard,
-                  taskSessionLifecycleCoordinator,
-                  workflow,
-                },
+          const cleanupEffect = hasTaskBranch
+            ? cleanupConfirmedMergeClose({
+                dependencies: { ...dependencies, taskActivityGuard },
                 taskStore,
+                lifecycle: taskSessionLifecycleCoordinator,
                 repoPath,
-                taskId,
-                cleanup.sourceBranch,
-                cleanup.targetBranch,
-              )
+                workflow,
+                task: current,
+                // The confirmation showed the uncommitted files that removal deletes.
+                worktreeCleanup: { remove: removeWorktree, force: true },
+              })
             : runTaskRuntimeCleanup({
                 progress: createTaskCleanupProgressState(),
                 repoPath,

@@ -6,6 +6,7 @@ import {
 } from "../../application/tasks/event-publishing-task-service";
 import {
   createTaskSyncService,
+  type CreateTaskSyncServiceInput,
   type TaskEventPublicationReporter,
   type TaskSyncService,
 } from "../../application/tasks/sync/task-sync-service";
@@ -28,6 +29,7 @@ export const createNodeTaskEventServices = ({
   acceptNotificationInput,
   observeStatusChanges,
   lifecycleLogger,
+  mergeDetection,
   onBackgroundFailure,
   taskEventPublicationReporter,
   workspaceSettingsService,
@@ -39,6 +41,7 @@ export const createNodeTaskEventServices = ({
     | undefined;
   observeStatusChanges: CommittedTaskStatusChangeObserver;
   lifecycleLogger: HostLifecycleLogger;
+  mergeDetection: CreateTaskSyncServiceInput["mergeDetection"];
   onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
   workspaceSettingsService: WorkspaceSettingsService;
@@ -62,6 +65,7 @@ export const createNodeTaskEventServices = ({
     acceptNotificationInput,
     observeStatusChanges,
     logger: lifecycleLogger,
+    mergeDetection,
     onBackgroundFailure,
     publicationReporter: taskEventPublicationReporter,
     taskEventStream,

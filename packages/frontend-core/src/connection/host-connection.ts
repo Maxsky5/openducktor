@@ -38,6 +38,11 @@ export type RuntimeChangeListener = (
   payload: HostEventPayload<"openducktor://runtime-changed"> | ConnectionControlEvent,
 ) => void | Promise<void>;
 
+/** Merge detection snapshots of a workspace. Control events report stream loss and reconnects. */
+export type TaskMergeStatusUpdateListener = (
+  payload: HostEventPayload<"openducktor://task-merge-status-updated"> | ConnectionControlEvent,
+) => void | Promise<void>;
+
 /** Browser tab changes. Control events report stream loss and reconnects. */
 export type BrowserTabEventListener = (
   payload: HostEventPayload<"openducktor://browser-event"> | ConnectionControlEvent,
@@ -61,6 +66,7 @@ export type HostConnection = {
     listener: WorkspaceSessionUpdateListener,
   ) => Promise<() => void>;
   subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
+  subscribeTaskMergeStatusUpdates: (listener: TaskMergeStatusUpdateListener) => Promise<() => void>;
   subscribeBrowserTabEvents: (listener: BrowserTabEventListener) => Promise<() => void>;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
   subscribeAzureDevOpsConnectionUpdates: (

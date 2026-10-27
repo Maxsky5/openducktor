@@ -491,6 +491,7 @@ describe("GitRefreshCoordinator", () => {
     now = SCHEDULED_FETCH_COOLDOWN_MS - 1;
     await coordinator.refresh("scheduled");
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(false);
     expect(view.steps.readInBackground).toHaveBeenCalledTimes(2);
 
     now = SCHEDULED_FETCH_COOLDOWN_MS * 2;
@@ -526,6 +527,29 @@ describe("GitRefreshCoordinator", () => {
     expect(fetchStep).toHaveBeenCalledTimes(1);
     expect(check).not.toHaveBeenCalled();
     expect(view.steps.readComparison).not.toHaveBeenCalled();
+  });
+
+  test("a manual Refresh forces its fetch and does not join a scheduled fetch", async () => {
+    const log: Log = [];
+    const scheduledFetch = deferred();
+    const fetchStep = mock((force: boolean) =>
+      force ? Promise.resolve() : scheduledFetch.promise,
+    );
+    const view = createView(log, {
+      steps: {
+        comparison: { fetchKey: "origin/main", fetch: fetchStep, check: async () => false },
+      },
+    });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(view);
+
+    const scheduled = coordinator.refresh("scheduled");
+    await flush();
+    await coordinator.refresh("hard");
+    scheduledFetch.resolve();
+    await scheduled;
+
+    expect(fetchStep.mock.calls).toEqual([[false], [true]]);
   });
 
   test("a hidden view reads no Git data but marks it stale, and its file views read again", async () => {

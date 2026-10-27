@@ -1,12 +1,29 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
+import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
+import type { TaskRecord, TaskStorePort } from "../../../ports/task-repository-ports";
+import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
+import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
-import type { TaskWorkflow } from "@openducktor/workflows";
-import { validateExistingTaskWorktreeCandidate } from "./task-cleanup-support";
-import type { TaskRecord } from "../../../ports/task-repository-ports";
+import { createTaskCleanupProgressState } from "./task-cleanup-progress";
+import {
+  collectRelatedTaskBranches,
+  managedWorktreeBaseForRepoConfig,
+  runTaskLocalCleanup,
+  validateExistingTaskWorktreeCandidate,
+} from "./task-cleanup-support";
+import { cleanupKeptTaskWorktree, releaseMergedTaskSessions } from "./task-worktree-cleanup";
+
+/** What a confirmed merge close does with the task worktree and its local branches. */
+export type WorktreeCleanup = {
+  remove: boolean;
+  /** Remove the worktree even when it has uncommitted changes. The user must confirm them. */
+  force: boolean;
+};
 
 type CloseWorktreeCandidate = {
   path: string;
@@ -98,4 +115,114 @@ export const collectCloseWorktreePaths = (
     }
 
     return paths;
+  });
+
+/**
+ * Collects the worktrees and local branches that the cleanup of one task removes. It holds the
+ * lifecycle of those worktrees for the rest of the scope.
+ */
+export const collectTaskCleanupTargets = ({
+  dependencies,
+  lifecycle,
+  repoPath,
+  branchPrefix,
+  workflow,
+  task,
+  sessions,
+  operationLabel,
+}: {
+  dependencies: Parameters<typeof collectCloseWorktreePaths>[0];
+  lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
+  repoPath: string;
+  branchPrefix: string;
+  workflow: TaskWorkflow;
+  task: TaskRecord;
+  sessions: AgentSessionRecord[];
+  operationLabel: string;
+}) =>
+  Effect.gen(function* () {
+    const worktreePaths = yield* collectCloseWorktreePaths(
+      dependencies,
+      repoPath,
+      workflow,
+      task,
+      sessions,
+    );
+    yield* lifecycle.acquireWorktreeLifecycle(worktreePaths);
+    const branchNames = yield* collectRelatedTaskBranches(
+      dependencies.gitPort,
+      repoPath,
+      branchPrefix,
+      [task.id],
+      worktreePaths,
+      operationLabel,
+    );
+    return { worktreePaths, branchNames };
+  });
+
+/**
+ * The cleanup of a merge close that the user confirmed. The confirmation shows the cleanup impact,
+ * so this cleanup removes the same targets as a manual close: the task worktree, the saved session
+ * worktrees, and every related local branch.
+ */
+export const cleanupConfirmedMergeClose = ({
+  dependencies,
+  taskStore,
+  lifecycle,
+  repoPath,
+  workflow,
+  task,
+  worktreeCleanup,
+  onBranchDeleting,
+}: {
+  dependencies: ReturnType<typeof requireMergedTaskCleanupDependencies> & {
+    taskActivityGuard?: TaskActivityGuardPort | undefined;
+  };
+  taskStore: Pick<TaskStorePort, "getTaskMetadata">;
+  lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
+  repoPath: string;
+  workflow: TaskWorkflow;
+  task: TaskRecord;
+  worktreeCleanup: WorktreeCleanup;
+  onBranchDeleting?: ((branch: { name: string; oid: string }) => void) | undefined;
+}) =>
+  Effect.gen(function* () {
+    const releaseDependencies = { ...dependencies, workflow };
+    if (!worktreeCleanup.remove) {
+      return yield* cleanupKeptTaskWorktree(releaseDependencies, taskStore, repoPath, task.id);
+    }
+    const progress = createTaskCleanupProgressState();
+    const repoConfig =
+      yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId: task.id });
+    const { worktreePaths, branchNames } = yield* collectTaskCleanupTargets({
+      dependencies,
+      lifecycle,
+      repoPath,
+      branchPrefix: repoConfig.branchPrefix,
+      workflow,
+      task,
+      sessions: metadata.agentSessions,
+      operationLabel: "close",
+    });
+    // The worktree lifecycle is held, so no runtime read restores a released session.
+    yield* releaseMergedTaskSessions(releaseDependencies, taskStore, repoPath, task.id);
+    yield* runTaskLocalCleanup({
+      branchNames,
+      gitPort: dependencies.gitPort,
+      managedWorktreeBasePath: managedWorktreeBaseForRepoConfig(
+        dependencies.settingsConfig,
+        repoConfig,
+      ),
+      progress,
+      repoPath,
+      settingsConfig: dependencies.settingsConfig,
+      taskIds: [task.id],
+      terminalService: dependencies.terminalService,
+      worktreeCleanupOperation: "task_close",
+      worktreeFiles: dependencies.worktreeFiles,
+      worktreePaths,
+      forceWorktreeRemoval: worktreeCleanup.force,
+      onBranchDeleting,
+    });
   });

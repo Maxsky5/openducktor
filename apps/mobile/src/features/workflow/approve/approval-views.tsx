@@ -10,7 +10,8 @@ import {
   directMergeCompletionButtonLabel,
   directMergeCompletionStageDescription,
   getDirectMergeCompletionContextError,
-  missingBuilderWorktreeConfirmLabel,
+  directMergeCompletionConfirmDisabled,
+  missingBuilderWorktreeConfirmDisabled,
   TASK_APPROVAL_COPY as COPY,
   type TaskApprovalTextWithCode,
   taskApprovalCompletionNextStepText,
@@ -20,6 +21,13 @@ import {
   taskApprovalUncommittedChangesMessage,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
 import { getTaskApprovalModalHeader } from "@openducktor/frontend-core/tasks/approval/task-approval-modal-header";
+import type { TaskCloseMergeCheck } from "@openducktor/frontend-core/tasks/approval/use-task-approval-merge-check";
+import { taskCloseConfirmLabel } from "@openducktor/frontend-core/tasks/details/task-close-copy";
+import type {
+  TaskApprovalImpact,
+  TaskCloseImpact,
+  TaskWorktreeImpact,
+} from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -28,7 +36,7 @@ import type {
   TaskGitConflictDialogModel,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import { Children, type ReactElement, type ReactNode } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useLinkOpener } from "@/rich-content/links/use-link-opener";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -40,7 +48,15 @@ import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead, FormPanel, OptionCard, SectionLabel } from "@/ui/form-rows";
+import { TaskCleanupChoice, TaskCloseContent } from "../close/task-close-content";
+import { TaskReadsLoading } from "../confirm/task-reads-loading";
 import { type ApprovalChoices, approvalChoices } from "./approval-method-model";
+
+/** The note of a stage that needs one, as under the desktop modal title. */
+function StageLead({ model }: { model: TaskApprovalModalModel }): ReactElement | null {
+  const { description } = getTaskApprovalModalHeader(model);
+  return description ? <FormLead text={description} /> : null;
+}
 
 /** A sentence with a branch or path in the code font, as the desktop approval text. */
 function CodeText({
@@ -149,11 +165,18 @@ function ChoiceSection({ label, children }: { label: string; children: ReactNode
 export function ApprovalStep({
   model,
   notice,
+  impact,
+  isPreparing,
+  mergeCheck,
 }: {
   model: TaskApprovalApprovalModalModel;
   notice: ReactNode;
+  impact: TaskApprovalImpact;
+  /** A read of the approval still runs, so the step shows the loader. */
+  isPreparing: boolean;
+  mergeCheck: TaskCloseMergeCheck | undefined;
 }): ReactElement {
-  const choices = approvalChoices(model);
+  const choices = approvalChoices(model, impact, isPreparing);
   const busy = model.isSubmitting;
   return (
     <ActionForm
@@ -172,7 +195,16 @@ export function ApprovalStep({
     >
       <Notices>
         {notice}
-        {model.hasUncommittedChanges ? (
+        {model.approvalContextError ? (
+          <Callout
+            tone="warning"
+            title={COPY.approvalContextErrorTitle}
+            message={model.approvalContextError}
+            detail={COPY.approvalContextErrorNote}
+          />
+        ) : null}
+        {/* A close does not need a clean worktree. Only a merge does. */}
+        {model.hasUncommittedChanges && model.mode !== "close_task" ? (
           <Callout
             tone="warning"
             title={COPY.uncommittedChangesTitle}
@@ -182,32 +214,18 @@ export function ApprovalStep({
         {errorNotice(model, COPY.approvalFailedTitle)}
       </Notices>
       <FormBody>
-        <FormLead text={getTaskApprovalModalHeader(model).description} />
-        {model.isLoading ? (
-          <ApprovalLoading />
+        {isPreparing ? (
+          <TaskReadsLoading />
         ) : (
-          <ApprovalChoiceForm model={model} choices={choices} />
+          <ApprovalChoiceForm
+            model={model}
+            choices={choices}
+            impact={impact}
+            mergeCheck={mergeCheck}
+          />
         )}
       </FormBody>
     </ActionForm>
-  );
-}
-
-/** The approval step while it reads the task and the repository. */
-function ApprovalLoading(): ReactElement {
-  const theme = useAppTheme();
-  return (
-    <View style={styles.loading} accessibilityRole="progressbar">
-      <ActivityIndicator color={theme.desktop.statusRunning} />
-      <View style={styles.loadingText}>
-        <Text variant="subhead" weight="medium" style={styles.centered}>
-          {COPY.loadingTitle}
-        </Text>
-        <Text variant="subhead" tone="tertiary" style={styles.centered}>
-          {COPY.loadingDescription}
-        </Text>
-      </View>
-    </View>
   );
 }
 
@@ -215,9 +233,13 @@ function ApprovalLoading(): ReactElement {
 function ApprovalChoiceForm({
   model,
   choices,
+  impact,
+  mergeCheck,
 }: {
   model: TaskApprovalApprovalModalModel;
   choices: ApprovalChoices;
+  impact: TaskApprovalImpact;
+  mergeCheck: TaskCloseMergeCheck | undefined;
 }): ReactElement {
   const openLink = useLinkOpener(undefined);
   const busy = model.isSubmitting;
@@ -241,7 +263,24 @@ function ApprovalChoiceForm({
         </ChoiceSection>
       ) : null}
       <MergeChoices model={model} choices={choices} />
+      {model.mode === "direct_merge" ? (
+        <TaskCleanupChoice
+          impact={impact.worktree}
+          removeWorktree={model.removeWorktree}
+          onRemoveWorktreeChange={model.onRemoveWorktreeChange}
+          disabled={busy}
+        />
+      ) : null}
       <PullRequestChoices model={model} choices={choices} />
+      {model.mode === "close_task" ? (
+        <TaskCloseContent
+          impact={impact.close}
+          mergeCheck={mergeCheck}
+          removeWorktree={model.removeWorktree}
+          onRemoveWorktreeChange={model.onRemoveWorktreeChange}
+          disabled={busy}
+        />
+      ) : null}
       {pullRequestUrl ? (
         <Button
           label="Open Existing Pull Request"
@@ -357,11 +396,18 @@ function PullRequestChoices({
   );
 }
 
-/** The builder worktree is gone: complete the task, or reset the implementation. */
+/** The builder worktree is gone: close the task, or reset the implementation. */
 export function MissingWorktreeStep({
   model,
+  impact,
+  isPreparing,
+  mergeCheck,
 }: {
   model: TaskApprovalMissingBuilderWorktreeModalModel;
+  impact: TaskCloseImpact;
+  /** A read of the approval still runs, so the step shows the loader. */
+  isPreparing: boolean;
+  mergeCheck: TaskCloseMergeCheck | undefined;
 }): ReactElement {
   const busy = model.isSubmitting;
   return (
@@ -379,33 +425,30 @@ export function MissingWorktreeStep({
       }
       primary={
         <Button
-          label={missingBuilderWorktreeConfirmLabel(busy)}
+          label={taskCloseConfirmLabel(busy)}
           size="lg"
           loading={busy}
           command
-          disabled={busy}
-          onPress={model.onCompleteMissingBuilderWorktree}
+          disabled={missingBuilderWorktreeConfirmDisabled(model, impact, isPreparing)}
+          onPress={model.onCloseMissingBuilderWorktree}
           fill
         />
       }
     >
       <Notices>{errorNotice(model, COPY.recoveryFailedTitle)}</Notices>
       <FormBody>
-        <FormLead text={getTaskApprovalModalHeader(model).description} />
-        <TonePanel
-          tone="warning"
-          icon="triangle-alert"
-          title={COPY.missingWorktreeTitle}
-          message={COPY.missingWorktreeDescription}
-        />
-        <FormPanel>
-          <Text variant="subhead" weight="semibold">
-            {COPY.nextStepChoiceTitle}
-          </Text>
-          <Text variant="subhead" tone="tertiary">
-            {COPY.nextStepChoiceDescription}
-          </Text>
-        </FormPanel>
+        <StageLead model={model} />
+        {isPreparing ? (
+          <TaskReadsLoading />
+        ) : (
+          <TaskCloseContent
+            impact={impact}
+            mergeCheck={mergeCheck}
+            removeWorktree={model.removeWorktree}
+            onRemoveWorktreeChange={model.onRemoveWorktreeChange}
+            disabled={busy}
+          />
+        )}
       </FormBody>
     </ActionForm>
   );
@@ -483,8 +526,14 @@ function PublishTarget({
 /** The local merge is applied: publish it when the target has a remote, then mark the task done. */
 export function CompletionStep({
   model,
+  impact,
+  isPreparing,
 }: {
   model: TaskApprovalCompletionModalModel;
+  /** The completion closes the task, so it names the worktree that stays or goes first. */
+  impact: TaskWorktreeImpact;
+  /** A read of the approval still runs, so the step shows the loader. */
+  isPreparing: boolean;
 }): ReactElement {
   const busy = model.isSubmitting;
   const contextError = getDirectMergeCompletionContextError(model);
@@ -509,7 +558,7 @@ export function CompletionStep({
           size="lg"
           loading={busy}
           command
-          disabled={busy || contextError !== null}
+          disabled={directMergeCompletionConfirmDisabled(model, impact, isPreparing)}
           onPress={model.onCompleteDirectMerge}
           fill
         />
@@ -524,8 +573,9 @@ export function CompletionStep({
         ) : null}
       </Notices>
       <FormBody>
-        <FormLead text={getTaskApprovalModalHeader(model).description} />
-        {contextError ? null : (
+        <StageLead model={model} />
+        {isPreparing ? <TaskReadsLoading /> : null}
+        {contextError || isPreparing ? null : (
           <>
             <TonePanel tone="info" icon="check" title={COPY.localMergeReadyTitle}>
               <CodeText text={taskApprovalLocalMergeReadyText(localBranch)} tone="label" />
@@ -540,6 +590,12 @@ export function CompletionStep({
                 <PublishTarget target={model.publishTarget} preview={model.publicationPreview} />
               ) : null}
             </FormPanel>
+            <TaskCleanupChoice
+              impact={impact}
+              removeWorktree={model.removeWorktree}
+              onRemoveWorktreeChange={model.onRemoveWorktreeChange}
+              disabled={busy}
+            />
           </>
         )}
       </FormBody>
@@ -657,20 +713,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.layout.screenPadding,
     paddingTop: theme.space.md,
   },
-  loading: {
-    minHeight: 200,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: theme.space.md,
-    padding: theme.space.xxl,
-    borderRadius: theme.radius.xl,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderColor: theme.desktop.border,
-    backgroundColor: theme.colors.insetFill,
-  },
-  loadingText: { gap: 2 },
-  centered: { textAlign: "center" },
   section: { gap: theme.space.md },
   cards: { gap: theme.space.md },
   squash: { minHeight: 112, textAlignVertical: "top" },

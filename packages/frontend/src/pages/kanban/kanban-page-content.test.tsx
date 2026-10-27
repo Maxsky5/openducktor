@@ -32,6 +32,7 @@ const model: KanbanPageContentModel = {
   filter: { isActive: false, onClear: () => {} },
   taskSessionsByTaskId: new Map(),
   historicalSessionsByTaskId: new Map(),
+  mergedTargetByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},
@@ -42,6 +43,7 @@ const model: KanbanPageContentModel = {
   onHumanApprove: () => {},
   onHumanRequestChanges: () => {},
   onResetImplementation: () => {},
+  onCloseTask: () => {},
 };
 
 describe("KanbanPageContent", () => {

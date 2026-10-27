@@ -1,12 +1,19 @@
 import type { PullRequest } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
 import type { ComboboxGroup } from "@/components/ui/combobox";
-import type { SessionStartPostAction } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import type { WorkflowRailStep } from "@/types/agent-workflow";
 import type {
   BuiltinLaunchActionId as SessionLaunchActionId,
   BuiltinRoleId as AgentRole,
 } from "@openducktor/workflows";
+import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+
+export type {
+  AgentStudioQuickActionOption,
+  AgentStudioSessionQuickActionOption,
+  AgentStudioTaskQuickAction,
+  AgentStudioTaskQuickActionOption,
+} from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 
 export type AgentRoleOption = {
   role: AgentRole;
@@ -34,17 +41,6 @@ export type AgentSessionCreateOption = {
   launchActionId: SessionLaunchActionId;
   label: string;
   description: string;
-  disabled: boolean;
-  disabledReason?: string;
-};
-
-export type AgentStudioQuickActionOption = {
-  id: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
-  label: string;
-  description: string;
-  postStartAction: SessionStartPostAction;
   disabled: boolean;
   disabledReason?: string;
 };

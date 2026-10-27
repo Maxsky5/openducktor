@@ -17,6 +17,10 @@ type BuildTaskApprovalModalModelArgs = {
   reset: () => void;
   resetMissingBuilderWorktree: () => void;
   state: TaskApprovalFlowOpenState;
+  taskTitle: string;
+  /** The effective cleanup choice. Null while its default value loads. */
+  removeWorktree: boolean | null;
+  onRemoveWorktreeChange: (removeWorktree: boolean) => void;
   gitProviderContext: RepositoryGitProviderContext | undefined;
   gitProviderContextError: Error | null;
 };
@@ -28,6 +32,9 @@ export const buildTaskApprovalModalModel = ({
   reset,
   resetMissingBuilderWorktree,
   state,
+  taskTitle,
+  removeWorktree,
+  onRemoveWorktreeChange,
   gitProviderContext,
   gitProviderContextError,
 }: BuildTaskApprovalModalModelArgs): TaskApprovalModalModel => {
@@ -56,9 +63,12 @@ export const buildTaskApprovalModalModel = ({
   const baseModal = {
     open: true,
     taskId: state.taskId,
+    taskTitle,
     isSubmitting: state.phase === "submitting",
     errorMessage: state.errorMessage,
     errorOutcomeUnknown: state.errorOutcomeUnknown,
+    removeWorktree,
+    onRemoveWorktreeChange,
     onOpenChange: (open: boolean) => {
       if (!open) {
         reset();
@@ -70,7 +80,7 @@ export const buildTaskApprovalModalModel = ({
     return {
       ...baseModal,
       stage: "missing_builder_worktree",
-      onCompleteMissingBuilderWorktree: confirm,
+      onCloseMissingBuilderWorktree: confirm,
       onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
     } satisfies TaskApprovalMissingBuilderWorktreeModalModel;
   }
@@ -97,6 +107,7 @@ export const buildTaskApprovalModalModel = ({
     pullRequestSupported,
     pullRequestAvailable,
     pullRequestUnavailableReason,
+    approvalContextError: state.approvalContextError,
     hasUncommittedChanges: approvalContext?.hasUncommittedChanges ?? false,
     uncommittedFileCount: approvalContext?.uncommittedFileCount ?? 0,
     pullRequestUrl: approvalContext?.pullRequest?.url ?? null,

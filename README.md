@@ -71,7 +71,7 @@ See the [installation guide](docs/installation.md) for requirements, more instal
 
 OpenDucktor runs on macOS, Windows, and Linux.
 
-- `git`
+- `git` 2.41 or later
 - `opencode`, `codex`, or `claude`
 - `gh` plus `gh auth login` if you use GitHub and want OpenDucktor to open pull requests for you
 

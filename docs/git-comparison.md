@@ -67,6 +67,10 @@ The Git reads of one refresh send one refresh ID. The host checks a worktree dir
 
 When an agent of an open workspace ends a turn, the Git data of its working directory reads again: at once when a panel shows it, and otherwise when a panel shows it next. A refresh that a hidden panel or another context stops leaves the Git data of its context stale, so a return to it reads again. A focus, soft, or action refresh reads both diff scopes and the shown History again. It ends when its view moves to another session or closes, also when the user returns. The returned view reads again by itself. A completed Git change keeps its original directory, and a late refresh error cannot appear in another session.
 
+## Remote fetch
+
+The host runs one fetch at a time for each remote of a repository, and the Git panel and merge detection share it. A fetch updates the configured branches of the remote and prunes deleted branches. A request during a fetch waits for it. A request without `force` skips a remote that a fetch of the last five minutes updated. Manual Refresh and Check again force the fetch. The fetch never asks for credentials and fails after 60 seconds.
+
 ## Panel integration
 
 The comparison check, refresh path, and read projection live in `packages/frontend-core/src/git`, so the desktop and mobile clients share them:

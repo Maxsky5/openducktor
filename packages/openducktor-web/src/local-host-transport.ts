@@ -24,6 +24,7 @@ import {
   type BrowserTabEventListener,
   logListenerFailure,
   type RuntimeChangeListener,
+  type TaskMergeStatusUpdateListener,
   type TaskStreamFrame,
   type TaskStreamSubscription,
 } from "@openducktor/frontend-core/connection/host-connection";
@@ -71,6 +72,7 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
+const TASK_MERGE_STATUS_EVENT_CHANNEL = "openducktor://task-merge-status-updated";
 const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
 const HOST_EVENT_STREAM_PATH = "events";
 export const APP_TOKEN_HEADER = "x-openducktor-app-token";
@@ -637,6 +639,20 @@ export const subscribeLocalHostRuntimeChanges = async (
       if (isBrowserSseControlEvent(event)) {
         return listener(event);
       } else if (event.channel === RUNTIME_CHANGED_EVENT_CHANNEL) {
+        return listener(event.payload);
+      }
+    }),
+  );
+};
+
+export const subscribeLocalHostTaskMergeStatusUpdates = async (
+  listener: TaskMergeStatusUpdateListener,
+): Promise<() => void> => {
+  return runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(TASK_MERGE_STATUS_EVENT_CHANNEL, (event) => {
+      if (isBrowserSseControlEvent(event)) {
+        return listener(event);
+      } else if (event.channel === TASK_MERGE_STATUS_EVENT_CHANNEL) {
         return listener(event.payload);
       }
     }),

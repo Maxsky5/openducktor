@@ -54,6 +54,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {
@@ -576,6 +577,21 @@ const createBuildStartGitPort = ({
     fetchRemote() {
       return Effect.die(new Error("unexpected fetch"));
     },
+    listRefTips() {
+      return Effect.die(new Error("unexpected ref tip list"));
+    },
+    resolveFetchRemotes() {
+      return Effect.die(new Error("unexpected fetch remote resolution"));
+    },
+    countCommitsAhead() {
+      return Effect.die(new Error("unexpected ahead count"));
+    },
+    mergeTreeOids() {
+      return Effect.die(new Error("unexpected merge tree"));
+    },
+    readReflogs() {
+      return Effect.die(new Error("unexpected reflog read"));
+    },
     pullBranch() {
       return Effect.die(new Error("unexpected pull"));
     },
@@ -742,6 +758,21 @@ const createDirectMergeGitPort = ({
     },
     fetchRemote() {
       return Effect.die(new Error("unexpected fetch"));
+    },
+    listRefTips() {
+      return Effect.die(new Error("unexpected ref tip list"));
+    },
+    resolveFetchRemotes() {
+      return Effect.die(new Error("unexpected fetch remote resolution"));
+    },
+    countCommitsAhead() {
+      return Effect.die(new Error("unexpected ahead count"));
+    },
+    mergeTreeOids() {
+      return Effect.die(new Error("unexpected merge tree"));
+    },
+    readReflogs() {
+      return Effect.die(new Error("unexpected reflog read"));
     },
     pullBranch() {
       return Effect.die(new Error("unexpected pull"));

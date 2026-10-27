@@ -187,6 +187,7 @@ const task = (status: TaskCard["status"]): TaskCard => ({
   status,
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {

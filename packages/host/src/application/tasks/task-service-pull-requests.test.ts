@@ -1748,205 +1748,219 @@ describe("createTaskService pull requests", () => {
       "A local direct merge is already recorded for task task-1. Finish or discard that direct merge workflow before opening a pull request.",
     );
   });
-  test("syncs a merged linked pull request and closes the task", async () => {
-    const calls: unknown[] = [];
-    const buildSession = createAgentSessionRecord({
-      workingDirectory: "/worktrees/repo/task-1",
-    });
-    const linkedPullRequest = {
-      providerId: "github" as const,
-      number: 42,
-      url: "https://github.com/openai/openducktor/pull/42",
-      state: "open" as const,
-      createdAt: "2026-05-01T00:00:00.000Z",
-      updatedAt: "2026-05-02T00:00:00.000Z",
-    };
-    const taskStore: TaskStorePort = {
-      listPullRequestSyncCandidates(input) {
-        return Effect.sync(() => {
-          calls.push({ type: "syncCandidates", input });
-          return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
-        });
-      },
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [
-              task({
-                status: "human_review",
-                pullRequest: linkedPullRequest,
+  for (const removeWorktreeOnClose of [null, false] as const) {
+    test(`syncs a merged linked pull request and closes the task with removeWorktreeOnClose ${removeWorktreeOnClose}`, async () => {
+      const calls: unknown[] = [];
+      const buildSession = createAgentSessionRecord({
+        workingDirectory: "/worktrees/repo/task-1",
+      });
+      const linkedPullRequest = {
+        providerId: "github" as const,
+        number: 42,
+        url: "https://github.com/openai/openducktor/pull/42",
+        state: "open" as const,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      };
+      const taskStore: TaskStorePort = {
+        listPullRequestSyncCandidates(input) {
+          return Effect.sync(() => {
+            calls.push({ type: "syncCandidates", input });
+            return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
+          });
+        },
+        listTasks(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "list", input });
+              return [
+                task({
+                  status: "human_review",
+                  pullRequest: linkedPullRequest,
+                  removeWorktreeOnClose,
+                }),
+              ];
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
               }),
-            ];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTaskMetadata(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "metadata", input });
-            return {
-              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-              agentSessions: [buildSession],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      setPullRequest(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "setPullRequest", input });
-            return true;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "transition", input });
-            return task({ status: input.status });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createGithubTaskService({
-          gitPort: createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+          });
+        },
+        getTaskMetadata(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "metadata", input });
+              return {
+                artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
+                agentSessions: [buildSession],
+              };
             },
-            branches: {
-              "/repo": [
-                { name: "main", isCurrent: true, isRemote: false },
-                { name: "odt/task-1", isCurrent: false, isRemote: false },
-              ],
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+        setPullRequest(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "setPullRequest", input });
+              return true;
             },
-            ancestorResults: { "/repo|odt/task-1|main": true },
-          }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          systemCommands: createPullRequestSyncSystemCommands({
-            calls,
-            payload: githubPullResponsePayload({
-              number: 42,
-              state: "closed",
-              mergedAt: "2026-05-10T11:00:00.000Z",
-              updatedAt: "2026-05-10T11:00:00.000Z",
-            }),
-          }),
-          taskActivityGuard: createReleasingActivityGuard(calls),
-          taskStore,
-          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-          worktreeFiles: createBuildStartWorktreeFiles(calls),
-          workspaceSettingsService: createBuildWorkspaceSettingsService({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            hooks: { postComplete: [] },
-            git: {
-              provider: {
-                id: "github",
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+        transitionTask(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "transition", input });
+              return task({ status: input.status });
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+        createTask() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("unexpected create");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+        updateTask() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("unexpected update");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+        deleteTask() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("unexpected delete");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+      };
+      await expect(
+        Effect.runPromise(
+          createGithubTaskService({
+            gitPort: createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
               },
-            },
-          }),
-        }).repoPullRequestSync({ repoPath: "/repo" }),
-      ),
-    ).resolves.toEqual({ ok: true });
-    expect(calls).toContainEqual({
-      type: "setPullRequest",
-      input: {
-        repoPath: "/repo",
-        taskId: "task-1",
-        pullRequest: expect.objectContaining({ number: 42, state: "merged" }),
-      },
+              branches: {
+                "/repo": [
+                  { name: "main", isCurrent: true, isRemote: false },
+                  { name: "odt/task-1", isCurrent: false, isRemote: false },
+                ],
+              },
+              ancestorResults: { "/repo|odt/task-1|main": true },
+            }),
+            settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+            systemCommands: createPullRequestSyncSystemCommands({
+              calls,
+              payload: githubPullResponsePayload({
+                number: 42,
+                state: "closed",
+                mergedAt: "2026-05-10T11:00:00.000Z",
+                updatedAt: "2026-05-10T11:00:00.000Z",
+              }),
+            }),
+            taskActivityGuard: createReleasingActivityGuard(calls),
+            taskStore,
+            taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+            worktreeFiles: createBuildStartWorktreeFiles(calls),
+            workspaceSettingsService: createBuildWorkspaceSettingsService({
+              workspaceId: "repo",
+              repoPath: "/repo",
+              hooks: { postComplete: [] },
+              git: {
+                provider: {
+                  id: "github",
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
+              },
+            }),
+          }).repoPullRequestSync({ repoPath: "/repo" }),
+        ),
+      ).resolves.toEqual({ ok: true });
+      expect(calls).toContainEqual({
+        type: "setPullRequest",
+        input: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: expect.objectContaining({ number: 42, state: "merged" }),
+        },
+      });
+      expect(calls).toContainEqual({
+        type: "transition",
+        input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
+      });
+      // The global setting removes the worktree. The task override keeps it.
+      const cleanupCallSchema = z
+        .object({ type: z.enum(["removeWorktree", "deleteLocalBranch"]) })
+        .passthrough();
+      const cleanupCalls = calls.filter((call) => cleanupCallSchema.safeParse(call).success);
+      // The closure releases the task sessions, also when it keeps the worktree.
+      const releaseIndex = calls.findIndex(
+        (call) =>
+          JSON.stringify(call) ===
+          JSON.stringify({ type: "releaseSessions", sessionIds: [buildSession.externalSessionId] }),
+      );
+      expect(releaseIndex).toBeGreaterThan(-1);
+      // Null follows the global setting, which removes the worktree.
+      if (removeWorktreeOnClose === false) {
+        expect(cleanupCalls).toEqual([]);
+      } else {
+        expect(cleanupCalls).toContainEqual({
+          type: "deleteLocalBranch",
+          repoPath: "/repo",
+          branch: "odt/task-1",
+          force: false,
+        });
+        const removeIndex = calls.findIndex((call) =>
+          JSON.stringify(call).includes('"type":"removeWorktree"'),
+        );
+        expect(releaseIndex).toBeLessThan(removeIndex);
+      }
     });
-    expect(calls).toContainEqual({
-      type: "transition",
-      input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
-    });
-    expect(calls).toContainEqual({
-      type: "deleteLocalBranch",
-      repoPath: "/repo",
-      branch: "odt/task-1",
-      force: false,
-    });
-    const releaseIndex = calls.findIndex(
-      (call) =>
-        JSON.stringify(call) ===
-        JSON.stringify({ type: "releaseSessions", sessionIds: [buildSession.externalSessionId] }),
-    );
-    const removeIndex = calls.findIndex((call) =>
-      JSON.stringify(call).includes('"type":"removeWorktree"'),
-    );
-    expect(releaseIndex).toBeGreaterThan(-1);
-    expect(releaseIndex).toBeLessThan(removeIndex);
-  });
+  }
   test("syncs linked pull request metadata without a matching local remote", async () => {
     const calls: unknown[] = [];
     const linkedPullRequest = {
@@ -2834,6 +2848,7 @@ describe("createTaskService pull requests", () => {
         .linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: pullRequest(),
         })
         .pipe(Effect.flip),
@@ -2986,6 +3001,7 @@ describe("createTaskService pull requests", () => {
         service.linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: pullRequest(),
         }),
       ),
@@ -2999,19 +3015,18 @@ describe("createTaskService pull requests", () => {
         input: { repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() },
       },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      // The confirmed close removes the same targets as a manual close.
+      { type: "listBranches", workingDir: "/repo" },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "releaseSessions", sessionIds: [buildSession.externalSessionId] },
       {
         type: "removeWorktree",
         repoPath: "/repo",
         worktreePath: "/worktrees/repo/task-1",
-        force: false,
+        force: true,
       },
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
-      { type: "listBranches", workingDir: "/repo" },
-      { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
-      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: false },
+      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
@@ -3064,7 +3079,12 @@ describe("createTaskService pull requests", () => {
 
     const result = await Effect.runPromise(
       service
-        .linkMergedPullRequest({ repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() })
+        .linkMergedPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+          pullRequest: pullRequest(),
+        })
         .pipe(Effect.flip),
     );
 
@@ -3109,6 +3129,7 @@ describe("createTaskService pull requests", () => {
         service.linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: pullRequest(),
         }),
       ),
@@ -3239,6 +3260,7 @@ describe("createTaskService pull requests", () => {
         }).linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: pullRequest(),
         }),
       ),
@@ -3361,6 +3383,7 @@ describe("createTaskService pull requests", () => {
         }).linkMergedPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
+          removeWorktree: true,
           pullRequest: { ...pullRequest(), state: "open" },
         }),
       ),

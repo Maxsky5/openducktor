@@ -190,6 +190,8 @@ export type PullRequestRepository = {
   }): Effect.Effect<boolean, TaskStoreError>;
 };
 export type DirectMergeRepository = {
+  /** Read the IDs of the tasks that have a recorded direct merge, without loading metadata. */
+  listDirectMergeTaskIds(input: { repoPath: string }): Effect.Effect<string[], TaskStoreError>;
   setDirectMerge(input: {
     repoPath: string;
     taskId: string;

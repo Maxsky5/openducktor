@@ -27,6 +27,7 @@ const taskFixture: TaskCard = {
   status: "open",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   pullRequest: undefined,
@@ -425,20 +426,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanApprove(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "human_approve", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       humanRequestChanges(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -543,7 +530,9 @@ describe("createTaskCommandHandlers", () => {
       runHandler(handlers.task_delete?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toEqual({ ok: true });
     await expect(
-      runHandler(handlers.task_close?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_close?.({ repoPath: "/repo", taskId: "task-1", removeWorktree: false }),
+      ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(handlers.task_reset_implementation?.({ repoPath: "/repo", taskId: "task-1" })),
@@ -602,6 +591,7 @@ describe("createTaskCommandHandlers", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            removeWorktree: true,
             mergeMethod: "merge_commit",
             expected: {
               taskStatus: "human_review",
@@ -613,7 +603,13 @@ describe("createTaskCommandHandlers", () => {
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_direct_merge_complete?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_direct_merge_complete?.({
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
@@ -628,6 +624,7 @@ describe("createTaskCommandHandlers", () => {
             createdAt: "2026-05-10T10:00:00.000Z",
             updatedAt: "2026-05-10T11:00:00.000Z",
           },
+          removeWorktree: false,
         }),
       ),
     ).resolves.toBeDefined();
@@ -683,9 +680,6 @@ describe("createTaskCommandHandlers", () => {
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.human_approve?.({ repoPath: "/repo", taskId: "task-1" })),
-    ).resolves.toBeDefined();
-    await expect(
       runHandler(
         handlers.workflow_artifact_save?.({
           repoPath: "/repo",
@@ -730,7 +724,7 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "task_close",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { repoPath: "/repo", taskId: "task-1", removeWorktree: false },
       },
       {
         command: "task_reset_implementation",
@@ -786,6 +780,7 @@ describe("createTaskCommandHandlers", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            removeWorktree: true,
             mergeMethod: "merge_commit",
             expected: {
               taskStatus: "human_review",
@@ -797,7 +792,7 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "task_direct_merge_complete",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { repoPath: "/repo", taskId: "task-1", removeWorktree: true },
       },
       {
         command: "task_pull_request_link_merged",
@@ -812,6 +807,7 @@ describe("createTaskCommandHandlers", () => {
             createdAt: "2026-05-10T10:00:00.000Z",
             updatedAt: "2026-05-10T11:00:00.000Z",
           },
+          removeWorktree: false,
         },
       },
       {
@@ -851,10 +847,6 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
       },
       {
-        command: "human_approve",
-        input: { repoPath: "/repo", taskId: "task-1" },
-      },
-      {
         command: "workflow_artifact_save",
         input: {
           repoPath: "/repo",
@@ -891,6 +883,7 @@ test("passes reviewed publication consent through the completion command boundar
   const intent = {
     repoPath: "/repo",
     taskId: "task-1",
+    removeWorktree: true,
     publicationConsent: {
       expectedMerge: {
         method: "merge_commit" as const,

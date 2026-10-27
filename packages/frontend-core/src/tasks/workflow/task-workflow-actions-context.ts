@@ -6,6 +6,7 @@ import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { EditTaskSection } from "../create/task-composer-types";
 import type { TaskConfirmRequestAction } from "./task-confirm-actions";
 import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { CloseTaskOptions } from "../../types/task-close";
 
 export type TaskWorkflowActions = {
   kanbanPendingState?: WorkflowPendingState;
@@ -24,7 +25,9 @@ export type TaskWorkflowActions = {
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void;
   onResetTask: (taskId: string) => Promise<void>;
-  onCloseTask: (taskId: string) => Promise<void>;
+  onCloseTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  /** Removes the worktree and local branches of a closed task. */
+  onRemoveTaskWorktree: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   /** Open the confirmation of `action` for a task of the active workspace, on any page. */
   onConfirmTaskAction: (taskId: string, action: TaskConfirmRequestAction) => void;

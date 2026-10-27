@@ -1,4 +1,5 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { useMergedTaskTargets } from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
 import {
   DEFAULT_KANBAN_SETTINGS,
   type AgentSessionRecord,
@@ -37,6 +38,8 @@ export type BoardSessionLookup = {
   historyOf: (taskId: string) => AgentSessionRecord[];
   activeContextOf: (taskId: string) => ActiveTaskSessionContext | undefined;
   activityOf: (taskId: string) => KanbanTaskActivityState;
+  /** The target that the task branch is merged into. The card then proposes Close Task. */
+  mergedTargetOf: (taskId: string) => string | undefined;
 };
 
 export type TaskBoard = {
@@ -69,6 +72,7 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
   // Observe the task list read of the task owner without starting another read.
   const taskRead = useQuery({ ...repoTaskDataQueryOptions(workspace.repoPath), enabled: false });
 
+  const mergedTargetByTaskId = useMergedTaskTargets(workspace.repoPath, board.kanbanTasks);
   const summaries = useAgentSessionSummaries();
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(summaries), [summaries]);
   const activeContextByTaskId = useMemo(
@@ -99,8 +103,10 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
       historyOf: (taskId) => historicalSessionsByTaskId.get(taskId) ?? EMPTY_HISTORY,
       activeContextOf: (taskId) => activeContextByTaskId.get(taskId),
       activityOf: (taskId) => taskActivityStateByTaskId.get(taskId) ?? "idle",
+      mergedTargetOf: (taskId) => mergedTargetByTaskId.get(taskId),
     }),
     [
+      mergedTargetByTaskId,
       activeContextByTaskId,
       historicalSessionsByTaskId,
       taskActivityStateByTaskId,

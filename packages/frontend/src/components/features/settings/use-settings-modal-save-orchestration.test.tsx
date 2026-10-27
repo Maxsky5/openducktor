@@ -625,6 +625,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(didSave).toBe(true);
     expect(saveGlobalGitConfig).toHaveBeenCalledWith({
       defaultMergeMethod: "squash",
+      removeWorktreeOnClose: true,
     });
 
     await changedHarness.unmount();

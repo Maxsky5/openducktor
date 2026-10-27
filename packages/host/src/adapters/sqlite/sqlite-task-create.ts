@@ -26,6 +26,7 @@ export const taskInsertFromCreateInput = (
   labelsJson: encodeJson(normalizeLabels(task.labels ?? [])),
   priority: task.priority,
   pullRequestJson: null,
+  removeWorktreeOnClose: task.removeWorktreeOnClose ?? null,
   status,
   targetBranchJson: null,
   title: task.title,

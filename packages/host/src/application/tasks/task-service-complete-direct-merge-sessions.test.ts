@@ -15,6 +15,7 @@ import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildStartWorktreeFiles,
+  createBuildWorkspaceSettingsService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
   createTaskService,
@@ -22,7 +23,7 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
-const input = { repoPath: "/repo", taskId: "task-1" };
+const input = { repoPath: "/repo", taskId: "task-1", removeWorktree: true };
 const createHarness = ({
   countLiveSessions = () => Effect.succeed({ liveSessionCount: 0 }),
   sync = Effect.succeed({ ahead: 0, behind: 0 }),
@@ -87,6 +88,12 @@ const createHarness = ({
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
     taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
     worktreeFiles: createBuildStartWorktreeFiles(calls),
+    workspaceSettingsService: createBuildWorkspaceSettingsService({
+      workspaceId: "repo",
+      repoPath: "/repo",
+      hooks: { postComplete: [] },
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+    }),
     taskStore: {
       listTasks: () => Effect.sync(() => [current]),
       getTaskMetadata: () =>
@@ -229,6 +236,43 @@ describe("direct merge completion session guard", () => {
     );
     expect(source.exists()).toBe(false);
     expect(source.restores()).toBe(1);
+  });
+
+  test("deletes every related task branch and restores each one after a failed close", async () => {
+    const branches = new Map([
+      ["odt/task-1", "b".repeat(40)],
+      ["odt/task-1-retry", "c".repeat(40)],
+    ]);
+    const restored: string[] = [];
+    const harness = createHarness({
+      gitOverrides: {
+        listBranches: () =>
+          Effect.sync(() =>
+            [...branches.keys()].map((name) => ({ name, isCurrent: false, isRemote: false })),
+          ),
+        isMergeIncluded: () => Effect.succeed(true),
+        deleteLocalBranch: (_repo, name, _force, onDeleting) =>
+          Effect.sync(() => {
+            onDeleting?.({ name, oid: branches.get(name) ?? "" });
+            branches.delete(name);
+          }),
+        restoreDeletedBranch: (_repo, branch) =>
+          Effect.sync(() => {
+            branches.set(branch.name, branch.oid);
+            restored.push(branch.name);
+          }),
+      },
+      closure: Effect.fail(
+        new HostOperationError({ operation: "task.close", message: "Closure failed" }),
+      ),
+    });
+
+    await expect(Effect.runPromise(harness.service.completeDirectMerge(input))).rejects.toThrow(
+      "Closure failed",
+    );
+    // The confirmation lists every related branch, so the close deletes each one.
+    expect(restored.sort()).toEqual(["odt/task-1", "odt/task-1-retry"]);
+    expect([...branches.keys()].sort()).toEqual(["odt/task-1", "odt/task-1-retry"]);
   });
 
   test("settles a committed closure during shutdown without restoring a deleted branch", async () => {

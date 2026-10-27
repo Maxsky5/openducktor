@@ -1,5 +1,6 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
+import { z } from "zod";
 import type { TaskCompletionObservation } from "@openducktor/contracts";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
@@ -44,6 +45,7 @@ describe("createTaskService direct merge", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            removeWorktree: true,
             mergeMethod: "merge_commit",
             expected: {
               taskStatus: "ai_review",
@@ -97,6 +99,7 @@ describe("createTaskService direct merge", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            removeWorktree: true,
             mergeMethod: "merge_commit",
             expected: {
               taskStatus: "human_review",
@@ -204,7 +207,7 @@ describe("createTaskService direct merge", () => {
               calls.push({ type: "readConfig" });
               return {
                 ...createDefaultGlobalConfig(),
-                git: { defaultMergeMethod: "merge_commit" },
+                git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
               };
             });
           },
@@ -225,6 +228,7 @@ describe("createTaskService direct merge", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            removeWorktree: true,
             mergeMethod: "merge_commit",
             expected: {
               taskStatus: "ai_review",
@@ -354,7 +358,7 @@ describe("createTaskService direct merge", () => {
             readConfig: () =>
               Effect.succeed({
                 ...createDefaultGlobalConfig(),
-                git: { defaultMergeMethod: "merge_commit" },
+                git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
               }),
           },
         ),
@@ -375,6 +379,7 @@ describe("createTaskService direct merge", () => {
             repoPath: "/repo",
             taskId: "task-1",
             input: {
+              removeWorktree: true,
               mergeMethod: "merge_commit",
               expected: {
                 taskStatus: "ai_review",
@@ -477,7 +482,7 @@ describe("createTaskService direct merge", () => {
                 return Effect.sync(() => {
                   return {
                     ...createDefaultGlobalConfig(),
-                    git: { defaultMergeMethod: "merge_commit" },
+                    git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
                   };
                 });
               },
@@ -496,6 +501,7 @@ describe("createTaskService direct merge", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            removeWorktree: true,
             mergeMethod: "rebase",
             expected: {
               taskStatus: "human_review",
@@ -589,16 +595,24 @@ describe("createTaskService direct merge", () => {
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { postComplete: [] },
+      }),
     });
     await expect(
-      Effect.runPromise(service.completeDirectMerge({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.completeDirectMerge({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/repo" },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      // The confirmed close removes the same targets as a manual close.
+      { type: "listBranches", workingDir: "/repo" },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "releaseSessions", sessionIds: [buildSession.externalSessionId] },
       {
@@ -608,8 +622,6 @@ describe("createTaskService direct merge", () => {
         force: false,
       },
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
-      { type: "listBranches", workingDir: "/repo" },
-      { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "transition",
@@ -617,6 +629,89 @@ describe("createTaskService direct merge", () => {
       },
     ]);
   });
+  test("removes the worktree on a retry that changes the cleanup choice from keep to remove", async () => {
+    const calls: unknown[] = [];
+    const closedTask = task({ status: "closed" });
+    let transitionAttempts = 0;
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ status: "human_review" })]),
+      getTaskMetadata: () =>
+        Effect.succeed({
+          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
+          directMerge: {
+            method: "merge_commit",
+            sourceBranch: "odt/task-1",
+            targetBranch: { remote: "origin", branch: "main" },
+            mergedAt: "2026-05-10T11:00:00.000Z",
+          },
+          agentSessions: [],
+        }),
+      transitionTask: () => {
+        transitionAttempts += 1;
+        return transitionAttempts === 1
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "task-store.transition-task",
+                message: "The task store is busy.",
+              }),
+            )
+          : Effect.succeed(closedTask);
+      },
+    };
+    const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
+      taskActivityGuard: {
+        countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        cleanupTaskSessions: () => Effect.die(new Error("unexpected session cleanup")),
+      },
+      gitPort: createDirectMergeGitPort({
+        calls,
+        currentBranches: {
+          "/repo": { name: "main", detached: false },
+          "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+        },
+        branches: {
+          "/repo": [
+            { name: "main", isCurrent: true, isRemote: false },
+            { name: "odt/task-1", isCurrent: false, isRemote: false },
+          ],
+        },
+        aheadBehind: { "/repo|origin/main": { ahead: 0, behind: 0 } },
+        ancestorResults: { "/repo|odt/task-1|main": false },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { postComplete: [] },
+      }),
+    });
+    const input = { repoPath: "/repo", taskId: "task-1" };
+    const removeWorktreeCallSchema = z.object({ type: z.literal("removeWorktree") }).passthrough();
+    const removals = () => calls.filter((call) => removeWorktreeCallSchema.safeParse(call).success);
+
+    const kept = await Effect.runPromise(
+      Effect.result(service.completeDirectMerge({ ...input, removeWorktree: false })),
+    );
+    expect(kept._tag).toBe("Failure");
+    expect(removals()).toEqual([]);
+
+    await expect(
+      Effect.runPromise(service.completeDirectMerge({ ...input, removeWorktree: true })),
+    ).resolves.toMatchObject({ id: "task-1", status: "closed" });
+    expect(removals()).toEqual([
+      {
+        type: "removeWorktree",
+        repoPath: "/repo",
+        worktreePath: "/worktrees/repo/task-1",
+        force: false,
+      },
+    ]);
+  });
+
   test("requires publication consent before completing an unsynchronized merge", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
@@ -661,7 +756,12 @@ describe("createTaskService direct merge", () => {
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-        }).completeDirectMerge({ repoPath: "/repo", taskId: "task-1" }),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { postComplete: [] },
+          }),
+        }).completeDirectMerge({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
       ),
     ).rejects.toThrow("Publication is required.");
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
@@ -696,7 +796,12 @@ describe("createTaskService direct merge", () => {
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-        }).completeDirectMerge({ repoPath: "/repo", taskId: "task-1" }),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { postComplete: [] },
+          }),
+        }).completeDirectMerge({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
       ),
     ).rejects.toThrow("Task task-1 does not have a locally applied direct merge to complete.");
   });

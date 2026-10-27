@@ -13,7 +13,6 @@ import type {
   GitChangeSelectionResult,
   GitCurrentBranch,
   GitDiffScope,
-  GitFetchRemoteResult,
   GitFileStatusCounts,
   GitHistoryPage,
   GitHistoryPageRequest,
@@ -156,6 +155,17 @@ export type GitMergeBranchResult =
       conflictedFiles: string[];
       output: string;
     };
+export type GitRefTip = {
+  /** The full reference name, such as `refs/heads/main`. */
+  ref: string;
+  oid: string;
+  /** The tree of the commit. */
+  treeOid: string;
+  /** The worktree that has the branch checked out. */
+  worktreePath: string | null;
+};
+/** One reflog entry of a reference. `oid` is the value that the entry set. */
+export type GitReflogEntry = { oid: string; subject: string };
 export type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
@@ -308,10 +318,43 @@ export type GitPort = {
     workingDir: string,
     targetBranch: string,
   ): Effect.Effect<CommitsAheadBehind, GitPortError>;
-  fetchRemote(
+  /** The remotes that a Git panel fetch updates for the current branch and the compare target. */
+  resolveFetchRemotes(
     workingDir: string,
     targetBranch: string,
-  ): Effect.Effect<GitFetchRemoteResult, GitPortError>;
+  ): Effect.Effect<string[], GitPortError>;
+  /**
+   * Fetches every branch of one remote and prunes deleted branches. Git and SSH never ask for
+   * input, so a fetch that needs credentials fails. FETCH_HEAD does not change. Returns the output.
+   */
+  fetchRemote(repoPath: string, remote: string): Effect.Effect<string, GitPortError>;
+  /** Lists the references that match `for-each-ref` patterns, with their commit and tree. */
+  listRefTips(repoPath: string, patterns: string[]): Effect.Effect<GitRefTip[], GitPortError>;
+  /**
+   * The number of commits that `base` does not have, for each ref that the `for-each-ref` patterns
+   * match, in one call. A ref that `base` holds has 0. It needs Git 2.41 or later.
+   */
+  countCommitsAhead(
+    repoPath: string,
+    base: string,
+    patterns: string[],
+  ): Effect.Effect<Map<string, number>, GitPortError>;
+  /**
+   * The tree of a clean merge of each pair, in one call: `second` merged into `first`. A merge
+   * with conflicts gives null.
+   */
+  mergeTreeOids(
+    repoPath: string,
+    pairs: readonly { first: string; second: string }[],
+  ): Effect.Effect<(string | null)[], GitPortError>;
+  /**
+   * The reflog entries of each reference, newest first, in one call. A reference without a reflog
+   * has no entry in the map. A reference that does not exist fails the call.
+   */
+  readReflogs(
+    repoPath: string,
+    refs: readonly string[],
+  ): Effect.Effect<Map<string, GitReflogEntry[]>, GitPortError>;
   pullBranch(workingDir: string): Effect.Effect<GitPullBranchResult, GitPortError>;
   commitAll(workingDir: string, message: string): Effect.Effect<GitCommitAllResult, GitPortError>;
   commitStaged(

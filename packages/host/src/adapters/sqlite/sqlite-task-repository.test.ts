@@ -166,6 +166,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     const database = new Database(databasePath);
     try {
@@ -189,7 +190,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(10);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(11);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {
@@ -289,6 +290,41 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(first.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
     expect(second.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
     expect(second.id).not.toBe(first.id);
+  });
+
+  test("stores the worktree cleanup value of a task as 1, 0, or NULL", async () => {
+    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const created = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        status: "open",
+        task: { title: "Keep", issueType: "task", priority: 2, removeWorktreeOnClose: false },
+      }),
+    );
+    const stored = () => {
+      const database = new Database(databasePath, { readonly: true });
+      try {
+        return database
+          .query<{ value: number | null }, [string]>(
+            "SELECT remove_worktree_on_close AS value FROM tasks WHERE id = ?",
+          )
+          .get(created.id)?.value;
+      } finally {
+        database.close();
+      }
+    };
+    const update = (removeWorktreeOnClose: boolean | null) =>
+      Effect.runPromise(
+        store.updateTask({ repoPath, taskId: created.id, patch: { removeWorktreeOnClose } }),
+      );
+
+    expect(created.removeWorktreeOnClose).toBe(false);
+    expect(stored()).toBe(0);
+    expect((await update(true)).removeWorktreeOnClose).toBe(true);
+    expect(stored()).toBe(1);
+    // Null follows the global setting again.
+    expect((await update(null)).removeWorktreeOnClose).toBeNull();
+    expect(stored()).toBeNull();
   });
 
   test("caps generated task id prefixes at ten characters", async () => {

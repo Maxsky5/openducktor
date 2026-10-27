@@ -19,6 +19,7 @@ const closedTask = (): TaskCard => ({
   status: "closed",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {

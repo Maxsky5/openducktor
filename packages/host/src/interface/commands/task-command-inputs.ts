@@ -7,6 +7,7 @@ import {
   taskAssetDescriptionMutationSchema,
   taskCreateInputSchema,
   taskDirectMergeInputSchema,
+  taskCloseInputSchema,
   taskStatusSchema,
   type TaskStopImpactRequest,
   taskStopImpactRequestSchema,
@@ -18,6 +19,7 @@ import type {
   BuildBlockedInput,
   BuildCompletedInput,
   BuildStartInput,
+  CloseTaskInput,
   CreateTaskUseCaseInput,
   DeleteTaskInput,
   DirectMergeInput,
@@ -42,6 +44,7 @@ import {
   parseOptionalNote,
   parsePullRequest,
   parsePullRequestContent,
+  parseRequiredBoolean,
   parseRequiredMarkdown,
   parseTaskDirectMergeInput,
   parseTransitionStatus,
@@ -53,9 +56,11 @@ import {
   commandInputStringSchema,
   type CommandInputRecord,
   type HostCommandArgs,
+  parseCommandInput,
   requireParsedRecord,
 } from "./command-inputs";
 
+const requiredBooleanSchema = z.boolean();
 const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 const taskIdsSchema = z.array(z.unknown());
 
@@ -80,6 +85,9 @@ export const parseTaskStopImpactInput = (input: HostCommandArgs): TaskStopImpact
     field: "input",
   });
 };
+
+export const parseCloseTaskInput = (input: HostCommandArgs): CloseTaskInput =>
+  parseCommandInput(taskCloseInputSchema, input, "task_close");
 
 export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
@@ -160,6 +168,10 @@ export const parsePullRequestLinkMergedInput = (
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     pullRequest: parsePullRequest(pullRequestSchema.safeParse(record.pullRequest)),
+    removeWorktree: parseRequiredBoolean(
+      requiredBooleanSchema.safeParse(record.removeWorktree),
+      "removeWorktree",
+    ),
   };
 };
 

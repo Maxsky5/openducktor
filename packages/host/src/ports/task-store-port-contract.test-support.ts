@@ -346,6 +346,7 @@ export const describeTaskStorePortContract = (
       await expect(run(store.listPullRequestSyncCandidates({ repoPath }))).resolves.toMatchObject([
         expect.objectContaining({ id: task.id, pullRequest }),
       ]);
+      await expect(run(store.listDirectMergeTaskIds({ repoPath }))).resolves.toEqual([]);
 
       await run(store.setDirectMerge({ repoPath, taskId: task.id, directMerge }));
       await run(store.setPullRequest({ repoPath, taskId: task.id, pullRequest: null }));
@@ -353,6 +354,7 @@ export const describeTaskStorePortContract = (
         run(store.getTaskMetadata({ repoPath, taskId: task.id })),
       ).resolves.toMatchObject({ directMerge });
       await expect(run(store.listPullRequestSyncCandidates({ repoPath }))).resolves.toEqual([]);
+      await expect(run(store.listDirectMergeTaskIds({ repoPath }))).resolves.toEqual([task.id]);
     });
 
     test("upserts and clears persisted agent sessions by role", async () => {

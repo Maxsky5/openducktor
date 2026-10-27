@@ -21,37 +21,15 @@ export const requireTaskDeleteDependencies = (
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): TaskCleanupDependencies => {
-  if (!gitPort) {
-    throw missingTaskDependency("Git port is required for task_delete.");
-  }
-  if (!settingsConfig) {
-    throw missingTaskDependency("Settings config port is required for task_delete.");
-  }
-  if (!workspaceSettingsService) {
-    throw missingTaskDependency("Workspace settings service is required for task_delete.");
-  }
-
-  return { gitPort, settingsConfig, workspaceSettingsService };
-};
+): TaskCleanupDependencies =>
+  requireTaskCleanupDependencies("task_delete", gitPort, settingsConfig, workspaceSettingsService);
 
 export const requireTaskCloseDependencies = (
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): TaskCleanupDependencies => {
-  if (!gitPort) {
-    throw missingTaskDependency("Git port is required for task_close.");
-  }
-  if (!settingsConfig) {
-    throw missingTaskDependency("Settings config port is required for task_close.");
-  }
-  if (!workspaceSettingsService) {
-    throw missingTaskDependency("Workspace settings service is required for task_close.");
-  }
-
-  return { gitPort, settingsConfig, workspaceSettingsService };
-};
+): TaskCleanupDependencies =>
+  requireTaskCleanupDependencies("task_close", gitPort, settingsConfig, workspaceSettingsService);
 
 export const requireTaskCloseWorktreeService = (
   taskWorktreeService: TaskWorktreeService | undefined,
@@ -60,6 +38,25 @@ export const requireTaskCloseWorktreeService = (
     throw missingTaskDependency("Task worktree service is required for task_close.");
   }
   return taskWorktreeService;
+};
+
+export const requireTaskWorktreeDependencies = (
+  operation: string,
+  gitPort: GitPort | undefined,
+  settingsConfig: SettingsConfigPort | undefined,
+  workspaceSettingsService: WorkspaceSettingsService | undefined,
+  taskWorktreeService: TaskWorktreeService | undefined,
+): TaskCleanupDependencies & { taskWorktreeService: TaskWorktreeService } => {
+  const dependencies = requireTaskCleanupDependencies(
+    operation,
+    gitPort,
+    settingsConfig,
+    workspaceSettingsService,
+  );
+  if (!taskWorktreeService) {
+    throw missingTaskDependency(`Task worktree service is required for ${operation}.`);
+  }
+  return { ...dependencies, taskWorktreeService };
 };
 
 export const requireImplementationResetStoreDependencies = (taskStore: TaskStorePort) =>
@@ -74,3 +71,21 @@ export const requireImplementationResetStoreDependencies = (taskStore: TaskStore
     setDirectMerge: TaskStorePort["setDirectMerge"];
     setPullRequest: TaskStorePort["setPullRequest"];
   };
+
+const requireTaskCleanupDependencies = (
+  operation: string,
+  gitPort: GitPort | undefined,
+  settingsConfig: SettingsConfigPort | undefined,
+  workspaceSettingsService: WorkspaceSettingsService | undefined,
+): TaskCleanupDependencies => {
+  if (!gitPort) {
+    throw missingTaskDependency(`Git port is required for ${operation}.`);
+  }
+  if (!settingsConfig) {
+    throw missingTaskDependency(`Settings config port is required for ${operation}.`);
+  }
+  if (!workspaceSettingsService) {
+    throw missingTaskDependency(`Workspace settings service is required for ${operation}.`);
+  }
+  return { gitPort, settingsConfig, workspaceSettingsService };
+};

@@ -1,10 +1,10 @@
 import type { TaskStopImpactOperation } from "@openducktor/contracts";
 
-/** A task action that asks for confirmation. Reset Implementation has its own modal. */
-export type TaskConfirmAction = Exclude<TaskStopImpactOperation, "reset_implementation">;
-
 /**
- * A confirmation that opens on any page. Close Task asks for confirmation only in the details
- * sheet.
+ * A task action whose confirmation shows the cleanup impact. Reset Implementation has its own
+ * modal, and Close Task has its own confirmation with the cleanup choice.
  */
-export type TaskConfirmRequestAction = Exclude<TaskConfirmAction, "close">;
+export type TaskConfirmAction = Exclude<TaskStopImpactOperation, "reset_implementation" | "close">;
+
+/** A confirmation that opens on any page. */
+export type TaskConfirmRequestAction = TaskConfirmAction | "close";

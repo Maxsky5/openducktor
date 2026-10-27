@@ -41,7 +41,7 @@ describe("useTaskStopImpact", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: null,
         removedWorktreeCount: null,
         isLoading: false,
@@ -60,7 +60,7 @@ describe("useTaskStopImpact", () => {
     try {
       await harness.mount();
       await harness.waitFor(({ stopImpact }) => stopImpact.isLoading);
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: null,
         removedWorktreeCount: null,
         isLoading: true,
@@ -69,7 +69,7 @@ describe("useTaskStopImpact", () => {
 
       await harness.run(() => deferred.resolve({ stoppableSessionCount: 2 }));
       await harness.waitFor(({ stopImpact }) => !stopImpact.isLoading);
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: 2,
         removedWorktreeCount: null,
         isLoading: false,
@@ -98,7 +98,7 @@ describe("useTaskStopImpact", () => {
 
       await harness.run(() => firstRead.resolve({ stoppableSessionCount: 1 }));
       await harness.waitFor(({ stopImpact }) => !stopImpact.isLoading);
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: 1,
         removedWorktreeCount: null,
         isLoading: false,
@@ -114,7 +114,7 @@ describe("useTaskStopImpact", () => {
 
       await harness.run(() => secondRead.resolve({ stoppableSessionCount: 0 }));
       await harness.waitFor(({ stopImpact }) => !stopImpact.isLoading);
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: 0,
         removedWorktreeCount: null,
         isLoading: false,
@@ -135,7 +135,7 @@ describe("useTaskStopImpact", () => {
     try {
       await harness.mount();
       await harness.waitFor(({ stopImpact }) => !stopImpact.isLoading);
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: 0,
         removedWorktreeCount: 0,
         isLoading: false,
@@ -154,11 +154,34 @@ describe("useTaskStopImpact", () => {
     try {
       await harness.mount();
       await harness.waitFor(({ stopImpact }) => stopImpact.error !== null);
-      expect(harness.getLatest().stopImpact).toEqual({
+      expect(harness.getLatest().stopImpact).toMatchObject({
         stoppableSessionCount: null,
         removedWorktreeCount: null,
         isLoading: false,
         error: "host unavailable",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reads the count again on retry after a failed read", async () => {
+    let failRead = true;
+    const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, async () => {
+      if (failRead) throw new Error("host unavailable");
+      return { stoppableSessionCount: 3 };
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(({ stopImpact }) => stopImpact.error !== null);
+      failRead = false;
+      await harness.run(({ stopImpact }) => stopImpact.retry());
+      await harness.waitFor(({ stopImpact }) => stopImpact.error === null);
+      expect(harness.getLatest().stopImpact).toMatchObject({
+        stoppableSessionCount: 3,
+        isLoading: false,
+        error: null,
       });
     } finally {
       await harness.unmount();

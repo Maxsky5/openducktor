@@ -12,6 +12,7 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
+  type TaskMergeStatusSnapshot,
   type WorkspaceRecord,
   type WorkspaceSession,
 } from "@openducktor/contracts";
@@ -70,6 +71,7 @@ import {
   settingsSnapshotQueryOptions,
 } from "@openducktor/frontend-core/queries/workspace";
 import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
+import { ManualMergeCheckProvider } from "@/state/providers/manual-merge-check-provider";
 import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
 import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
@@ -344,10 +346,10 @@ const createTasksState = (tasks: TaskCard[] = []): TasksStateContextValue => ({
   setTaskTargetBranch: async () => undefined,
   deleteTask: async () => undefined,
   closeTask: async () => undefined,
+  removeTaskWorktree: async () => undefined,
   resetTaskImplementation: async () => undefined,
   resetTask: async () => undefined,
   transitionTask: async () => undefined,
-  humanApproveTask: async () => undefined,
   humanRequestChangesTask: async () => undefined,
 });
 
@@ -495,7 +497,9 @@ function AppShellTestEnvironment({
                                               <Route
                                                 element={
                                                   <ManualPullRequestSyncProvider>
-                                                    <AppShell />
+                                                    <ManualMergeCheckProvider>
+                                                      <AppShell />
+                                                    </ManualMergeCheckProvider>
                                                   </ManualPullRequestSyncProvider>
                                                 }
                                               >
@@ -1692,6 +1696,85 @@ describe("AppShell command palette", () => {
     } finally {
       cleanup();
       modal.mockRestore();
+    }
+  });
+
+  test("checks the named workspace from the chooser and disables the action while it runs", async () => {
+    const check = createDeferred<TaskMergeStatusSnapshot>();
+    const calls: string[] = [];
+    configurePaletteHost({
+      taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+      taskMergeStatusCheck: async (repoPath) => {
+        calls.push(repoPath);
+        return check.promise;
+      },
+    });
+    const toastLoading = spyOn(toast, "loading").mockReturnValue("merge-check");
+    const toastSuccess = spyOn(toast, "success").mockReturnValue("merge-check");
+    renderPalette();
+    try {
+      const palette = await openPalette();
+      search(palette, "check merged");
+      fireEvent.click(actionOption(palette, "Check merged tasks"));
+      const chooser = await screen.findByRole("dialog", { name: "Check merged tasks" });
+      expect(calls).toEqual([]);
+      fireEvent.click(within(chooser).getByRole("button", { name: "Check workspace OpenDucktor" }));
+      await waitFor(() => expect(calls).toEqual(["/repo"]));
+      // The fetch can take seconds, so a loading toast shows until the check ends.
+      expect(toastLoading).toHaveBeenCalledWith("Checking merged tasks: workspace OpenDucktor", {
+        description: "OpenDucktor fetches the target branches, then checks each task branch.",
+        duration: Infinity,
+        dismissible: false,
+      });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      const reopened = await openPalette();
+      search(reopened, "check merged");
+      expect(actionOption(reopened, "Check merged tasks").getAttribute("aria-disabled")).toBe(
+        "true",
+      );
+      await act(async () => check.resolve({ repoPath: "/repo", tasks: [] }));
+      await waitFor(() =>
+        expect(toastSuccess).toHaveBeenCalledWith(
+          "Merge check completed: workspace OpenDucktor",
+          expect.objectContaining({ id: "merge-check", closeButton: true, duration: 6000 }),
+        ),
+      );
+    } finally {
+      check.resolve({ repoPath: "/repo", tasks: [] });
+      toastLoading.mockRestore();
+      toastSuccess.mockRestore();
+    }
+  });
+
+  test("checks all open workspaces and keeps the toast when one check fails", async () => {
+    const calls: string[] = [];
+    configurePaletteHost({
+      taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+      taskMergeStatusCheck: async (repoPath) => {
+        calls.push(repoPath);
+        if (repoPath === "/fairnest") throw new Error("Workspace removal is incomplete.");
+        return { repoPath, tasks: [] };
+      },
+    });
+    const toastLoading = spyOn(toast, "loading").mockReturnValue("merge-check");
+    const toastWarning = spyOn(toast, "warning").mockReturnValue("merge-check");
+    renderPalette();
+    try {
+      const palette = await openPalette();
+      search(palette, "check merged");
+      fireEvent.click(actionOption(palette, "Check merged tasks"));
+      const chooser = await screen.findByRole("dialog", { name: "Check merged tasks" });
+      fireEvent.click(within(chooser).getByRole("button", { name: "Check all open workspaces" }));
+      await waitFor(() =>
+        expect(toastWarning).toHaveBeenCalledWith(
+          "Merge check partially completed: all open workspaces",
+          expect.objectContaining({ id: "merge-check", duration: Infinity }),
+        ),
+      );
+      expect([...calls].sort()).toEqual(["/fairnest", "/repo"]);
+    } finally {
+      toastLoading.mockRestore();
+      toastWarning.mockRestore();
     }
   });
 

@@ -1,5 +1,6 @@
 import { useAgentMessageSendPolicy } from "@openducktor/frontend-core/sessions/send/use-agent-message-send-policy";
 import { useCallback, useMemo } from "react";
+import type { AgentStudioTaskQuickAction } from "@/components/features/agents/agent-studio-header.types";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { useAgentOperations } from "@/state/app-state-provider";
@@ -24,6 +25,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
   openTaskDetails: () => void;
+  runTaskQuickAction: (action: AgentStudioTaskQuickAction) => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   agentOperations: Pick<
     ReturnType<typeof useAgentOperations>,
@@ -56,6 +58,7 @@ export function useAgentsPageOrchestrationShellModel({
   isForegroundLoadingTasks,
   routeSession,
   openTaskDetails,
+  runTaskQuickAction,
   runSessionStartWorkflow,
   agentOperations,
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
@@ -113,6 +116,7 @@ export function useAgentsPageOrchestrationShellModel({
     actions: {
       scheduleQueryUpdate,
       openTaskDetails,
+      runTaskQuickAction,
       runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
       assertCanPrepareSession,

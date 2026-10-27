@@ -40,6 +40,7 @@ import { ChecksStateProvider } from "./providers/checks-state-provider";
 import { DelegationStateProvider } from "@openducktor/frontend-core/app-state/providers/delegation-state-provider";
 import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
 import { HostRuntimeStatusProvider } from "@openducktor/frontend-core/app-state/providers/host-runtime-status-provider";
+import { ManualMergeCheckProvider } from "./providers/manual-merge-check-provider";
 import { ManualPullRequestSyncProvider } from "./providers/manual-pull-request-sync-provider";
 import { DocumentStateProvider } from "@openducktor/frontend-core/app-state/providers/document-state-provider";
 import { TasksStateProvider } from "@openducktor/frontend-core/app-state/providers/tasks-state-provider";
@@ -86,7 +87,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
                             <TerminalActivityProvider>
                               <AutopilotProvider>
                                 <ManualPullRequestSyncProvider>
-                                  {children}
+                                  <ManualMergeCheckProvider>{children}</ManualMergeCheckProvider>
                                 </ManualPullRequestSyncProvider>
                               </AutopilotProvider>
                             </TerminalActivityProvider>

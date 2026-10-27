@@ -1,6 +1,7 @@
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { noMergeDetection } from "./sync/task-sync-service.test-support";
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
@@ -34,6 +35,7 @@ const createServices = (
   });
   const sync = createTaskSyncService({
     taskService: base,
+    mergeDetection: noMergeDetection,
     taskEventStream: {
       publish: (event) => {
         events.push(event);

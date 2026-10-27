@@ -10,6 +10,7 @@ import type {
   GitConflictAbortResult,
   GitCurrentBranch,
   GitComparisonTarget,
+  GitFetchRemoteRequest,
   GitFetchRemoteResult,
   GitHistoryPage,
   GitHistoryPageRequest,
@@ -83,7 +84,8 @@ export type GitService = {
   commitsAheadBehind(
     input: GitAheadBehindInput,
   ): Effect.Effect<CommitsAheadBehind, GitServiceError>;
-  fetchRemote(input: GitAheadBehindInput): Effect.Effect<GitFetchRemoteResult, GitServiceError>;
+  /** Fetches the remotes of the current branch and the compare target through the shared fetch. */
+  fetchRemote(input: GitFetchRemoteRequest): Effect.Effect<GitFetchRemoteResult, GitServiceError>;
   pullBranch(input: GitScopeInput): Effect.Effect<GitPullBranchResult, GitServiceError>;
   commitAll(input: GitCommitAllInput): Effect.Effect<GitCommitAllResult, GitServiceError>;
   pushBranch(input: GitPushBranchInput): Effect.Effect<GitPushBranchResult, GitServiceError>;

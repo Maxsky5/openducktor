@@ -114,6 +114,7 @@ export * from "./workspace-identity-schemas";
 export * from "./subagent-schemas";
 export * from "./system-open-schemas";
 export * from "./task-asset-schemas";
+export * from "./task-merge-status-schemas";
 export * from "./task-schemas";
 export * from "./terminal-protocol";
 export * from "./terminal-schemas";

@@ -25,6 +25,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     status: "open",
     priority: 2,
     issueType: "task",
+    removeWorktreeOnClose: null,
     availableActions: [],
     labels: [],
     artifactSummary: {
@@ -122,6 +123,7 @@ describe("useAgentStudioHeaderModel", () => {
       disabled: false,
     };
     const quickAction = {
+      kind: "session_start" as const,
       id: "quick:build_implementation_start",
       role: "build" as const,
       launchActionId: "build_implementation_start" as const,

@@ -63,10 +63,10 @@ const createTasksState = (
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
   closeTask: async () => {},
+  removeTaskWorktree: async () => {},
   resetTaskImplementation: async () => {},
   resetTask: async () => {},
   transitionTask: async () => {},
-  humanApproveTask: async () => {},
   humanRequestChangesTask: async () => {},
 });
 

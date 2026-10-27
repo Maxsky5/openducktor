@@ -1,9 +1,17 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import { canonicalTargetBranch } from "../../lib/target-branch";
+import { taskCloseConfirmLabel } from "../details/task-close-copy";
+import {
+  isCloseBlocked,
+  type TaskApprovalImpact,
+  type TaskCloseImpact,
+  type TaskWorktreeImpact,
+} from "../details/use-task-close-impact";
 import type {
   PullRequestDraftMode,
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
+  TaskApprovalMissingBuilderWorktreeModalModel,
   TaskApprovalMode,
 } from "./task-approval-types";
 
@@ -18,6 +26,7 @@ export const TASK_APPROVAL_MODE_OPTIONS: ReadonlyArray<{
 }> = [
   { value: "direct_merge", label: "Direct Merge" },
   { value: "pull_request", label: "Pull Request" },
+  { value: "close_task", label: "Close Task" },
 ];
 
 export const TASK_APPROVAL_MERGE_METHOD_OPTIONS: ReadonlyArray<{
@@ -62,10 +71,10 @@ export const TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS: ReadonlyArray<{
 
 /** The fixed text of the approval flow. */
 export const TASK_APPROVAL_COPY = {
-  loadingTitle: "Preparing approval options",
-  loadingDescription: "OpenDucktor is loading the builder branch and provider readiness.",
-  uncommittedChangesTitle: "Uncommitted changes detected",
+  uncommittedChangesTitle: "Uncommitted changes",
   approvalFailedTitle: "Approval failed",
+  approvalContextErrorTitle: "Direct Merge and Pull Request are unavailable",
+  approvalContextErrorNote: "Close Task does not merge code, so it stays available.",
   approvalActionLabel: "Approval Action",
   approvalActionAccessibilityLabel: "Approval action",
   mergeMethodLabel: "Merge Method",
@@ -76,16 +85,10 @@ export const TASK_APPROVAL_COPY = {
   pullRequestTitleLabel: "Pull Request Title",
   pullRequestDescriptionLabel: "Pull Request Description",
   generatePullRequestNotice:
-    "OpenDucktor will ask you to choose a Builder session to fork, then start PR generation in the shared session-start flow.",
+    "OpenDucktor asks you to choose a Builder session to fork. That session then creates or updates the pull request.",
   openExistingPullRequest: "Open existing pull request",
   cancel: "Cancel",
-  missingWorktreeTitle: "Builder worktree not found",
-  missingWorktreeDescription:
-    "OpenDucktor could not load the latest builder worktree for this task. Normal direct merge and pull request approval options are unavailable without that workspace.",
   recoveryFailedTitle: "Recovery action failed",
-  nextStepChoiceTitle: "Choose the next step",
-  nextStepChoiceDescription:
-    "Complete task closes the review and moves this task to Done. Reset implementation opens the existing reset workflow so you can send the task back for more work.",
   resetImplementation: "Reset Implementation",
   completionFailedTitle: "Direct merge completion failed",
   localMergeReadyTitle: "Local merge ready",
@@ -97,14 +100,20 @@ export const TASK_APPROVAL_COPY = {
 
 /** The approval modes that the provider supports. A mode that cannot run now is disabled. */
 export const taskApprovalModeOptions = (
-  model: Pick<TaskApprovalApprovalModalModel, "pullRequestSupported" | "pullRequestAvailable">,
+  model: Pick<
+    TaskApprovalApprovalModalModel,
+    "pullRequestSupported" | "pullRequestAvailable" | "approvalContextError"
+  >,
 ): Array<{ value: TaskApprovalMode; label: string; disabled: boolean }> =>
   TASK_APPROVAL_MODE_OPTIONS.filter(
     (option) => option.value !== "pull_request" || model.pullRequestSupported,
   ).map((option) => ({
     value: option.value,
     label: option.label,
-    disabled: option.value === "pull_request" && !model.pullRequestAvailable,
+    // Direct Merge and Pull Request need the approval context. Close Task does not.
+    disabled:
+      (option.value !== "close_task" && model.approvalContextError !== null) ||
+      (option.value === "pull_request" && !model.pullRequestAvailable),
   }));
 
 export const taskApprovalPullRequestUnavailableMessage = (reason: string): string =>
@@ -112,8 +121,8 @@ export const taskApprovalPullRequestUnavailableMessage = (reason: string): strin
 
 export const taskApprovalUncommittedChangesMessage = (uncommittedFileCount: number): string =>
   uncommittedFileCount === 1
-    ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
-    : `The builder worktree has ${uncommittedFileCount} uncommitted files. Commit or discard them before approving this task.`;
+    ? "The builder worktree has 1 uncommitted file. Commit or discard it before you merge."
+    : `The builder worktree has ${uncommittedFileCount} uncommitted files. Commit or discard them before you merge.`;
 
 export const taskApprovalSquashCommitHint = (
   targetBranch: GitTargetBranch | null,
@@ -124,8 +133,26 @@ export const taskApprovalSquashCommitHint = (
   after: ".",
 });
 
-/** Why the approval cannot submit now, and the label of its confirm control. */
-export const getTaskApprovalSubmitState = (model: TaskApprovalApprovalModalModel) => {
+/**
+ * Why the approval cannot submit now, and the label of its confirm control. `isPreparing` is true
+ * while a read of the approval still runs.
+ */
+export const getTaskApprovalSubmitState = (
+  model: TaskApprovalApprovalModalModel,
+  impact: TaskApprovalImpact,
+  isPreparing: boolean,
+) => {
+  if (model.mode === "close_task") {
+    return {
+      hasManualPullRequestValidationError: false,
+      hasSquashCommitMessageSubmitError: false,
+      showSquashCommitMessageValidationError: false,
+      // Uncommitted changes do not block a close. Its confirmation shows them.
+      confirmDisabled:
+        isPreparing || model.isSubmitting || isCloseBlocked(impact.close, model.removeWorktree),
+      confirmLabel: taskCloseConfirmLabel(model.isSubmitting),
+    };
+  }
   const hasManualPullRequestValidationError =
     model.mode === "pull_request" &&
     model.pullRequestAvailable &&
@@ -151,9 +178,12 @@ export const getTaskApprovalSubmitState = (model: TaskApprovalApprovalModalModel
     hasSquashCommitMessageSubmitError,
     showSquashCommitMessageValidationError,
     confirmDisabled:
-      model.isLoading ||
+      isPreparing ||
       model.isSubmitting ||
       model.hasUncommittedChanges ||
+      model.approvalContextError !== null ||
+      // A direct merge closes the task. A pull request does not, so it needs no cleanup impact.
+      (model.mode === "direct_merge" && isCloseBlocked(impact.worktree, model.removeWorktree)) ||
       (model.mode === "pull_request" && !model.pullRequestAvailable) ||
       hasManualPullRequestValidationError ||
       hasSquashCommitMessageSubmitError,
@@ -167,8 +197,23 @@ export const getTaskApprovalSubmitState = (model: TaskApprovalApprovalModalModel
   };
 };
 
-export const missingBuilderWorktreeConfirmLabel = (isSubmitting: boolean): string =>
-  isSubmitting ? "Completing Task" : "Complete Task";
+/** Whether Close Task of the missing builder worktree stage cannot run now. */
+export const missingBuilderWorktreeConfirmDisabled = (
+  model: Pick<TaskApprovalMissingBuilderWorktreeModalModel, "isSubmitting" | "removeWorktree">,
+  impact: TaskCloseImpact,
+  isPreparing: boolean,
+): boolean => isPreparing || model.isSubmitting || isCloseBlocked(impact, model.removeWorktree);
+
+/** Whether the completion of a recorded direct merge cannot run now. */
+export const directMergeCompletionConfirmDisabled = (
+  model: TaskApprovalCompletionModalModel,
+  impact: TaskWorktreeImpact,
+  isPreparing: boolean,
+): boolean =>
+  isPreparing ||
+  model.isSubmitting ||
+  getDirectMergeCompletionContextError(model) !== null ||
+  isCloseBlocked(impact, model.removeWorktree);
 
 /** Why the direct merge cannot complete from this context, or null when it can. */
 export const getDirectMergeCompletionContextError = (
@@ -199,12 +244,10 @@ export const taskApprovalCompletionNextStepText = (
     ? {
         before: "Push ",
         code: canonicalTargetBranch(model.publishTarget),
-        after:
-          " to publish the merged target branch, then move the task to Done and clean up the builder workspace.",
+        after: " to publish the merged target branch, then move the task to Done.",
       }
     : {
-        before:
-          "Move the task to Done and clean up the builder workspace. The merge is already applied locally on ",
+        before: "Move the task to Done. The merge is already applied locally on ",
         code: model.targetBranch?.branch ?? "",
         after: ".",
       };
@@ -227,4 +270,4 @@ export const directMergeCompletionStageDescription = (
 ): string =>
   model.publishTarget
     ? "Finish later to keep the task in Human Review while the local merge stays ready to publish."
-    : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
+    : "Finish later to keep the task in Human Review until you are ready to close it.";

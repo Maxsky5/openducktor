@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { GitCommitMode } from "@openducktor/frontend-core/git/contracts";
 import { isApplePlatform } from "@/lib/device-platform";
+import { plural } from "@openducktor/frontend-core/lib/plural";
 import { cn } from "@/lib/utils";
 import {
   clearSubmittedCommitMessage,
@@ -23,8 +24,6 @@ export type CommitComposerProps = {
   commitError: string | null;
   commit: ((mode: GitCommitMode, message: string) => Promise<boolean>) | null;
 };
-
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** The announced status of a running commit, by mode. */
 const PENDING_STATUS = {

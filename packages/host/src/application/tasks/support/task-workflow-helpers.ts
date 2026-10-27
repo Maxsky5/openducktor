@@ -178,10 +178,18 @@ export const loadDefaultMergeMethod = (
 ): Effect.Effect<
   GlobalGitConfig["defaultMergeMethod"],
   SettingsConfigError | HostValidationError
-> =>
+> => loadGlobalGitConfig(settingsConfig).pipe(Effect.map((git) => git.defaultMergeMethod));
+/** The global setting that a task close follows when the task has no override. */
+export const loadRemoveWorktreeOnClose = (
+  settingsConfig: SettingsConfigPort,
+): Effect.Effect<boolean, SettingsConfigError | HostValidationError> =>
+  loadGlobalGitConfig(settingsConfig).pipe(Effect.map((git) => git.removeWorktreeOnClose));
+const loadGlobalGitConfig = (
+  settingsConfig: SettingsConfigPort,
+): Effect.Effect<GlobalGitConfig, SettingsConfigError | HostValidationError> =>
   Effect.gen(function* () {
     const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-    return config.git.defaultMergeMethod;
+    return config.git;
   });
 export const buildCompletionWorktreePath = (
   settingsConfig: SettingsConfigPort,

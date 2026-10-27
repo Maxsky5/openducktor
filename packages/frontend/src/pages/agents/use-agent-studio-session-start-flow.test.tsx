@@ -739,6 +739,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       try {
         await harness.run((state) => {
           state.handleQuickAction({
+            kind: "session_start",
             id: "quick:planner_initial",
             role: "planner",
             launchActionId: "planner_initial",

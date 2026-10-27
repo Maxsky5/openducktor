@@ -1,5 +1,6 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { noMergeDetection } from "./sync/task-sync-service.test-support";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -21,6 +22,7 @@ const taskCard = (): TaskCard => ({
   status: "open",
   priority: 2,
   issueType: "task",
+  removeWorktreeOnClose: null,
   availableActions: [],
   labels: [],
   artifactSummary: {
@@ -271,6 +273,7 @@ describe("createEventPublishingTaskService", () => {
       });
       const taskSyncService = createTaskSyncService({
         taskService: base,
+        mergeDetection: noMergeDetection,
         taskEventStream: {
           publish: () => {
             throw new Error("Unexpected event");
@@ -303,6 +306,7 @@ describe("createEventPublishingTaskService", () => {
             repoPath: "/repo",
             taskId: "task-1",
             input: {
+              removeWorktree: true,
               mergeMethod: "merge_commit",
               expected: {
                 taskStatus: "human_review",
@@ -443,6 +447,7 @@ describe("createEventPublishingTaskService", () => {
           .linkMergedPullRequest({
             repoPath: "/repo",
             taskId: "task-1",
+            removeWorktree: true,
             pullRequest: {
               providerId: "pr-1",
               number: 1,
@@ -485,6 +490,7 @@ describe("createEventPublishingTaskService", () => {
             repoPath: "/repo",
             taskId: "task-1",
             input: {
+              removeWorktree: true,
               mergeMethod: "merge_commit",
               expected: {
                 taskStatus: "human_review",

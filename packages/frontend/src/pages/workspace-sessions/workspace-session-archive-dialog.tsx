@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Archive, FolderGit2, LoaderCircle } from "lucide-react";
-import { useId, useState, type ReactElement, type ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { SwitchCard } from "@/components/ui/switch-card";
 import { useMinimumLoading } from "@/lib/use-minimum-loading";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
@@ -70,7 +69,6 @@ export function WorkspaceSessionArchiveDialog({ record, ...props }: Props): Reac
 
 function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactElement {
   const [wantsWorktreeRemoval, setWantsWorktreeRemoval] = useState(true);
-  const switchId = useId();
   const preview = useQuery({
     ...workspaceSessionArchivePreviewQueryOptions(workspaceId, record.id),
     enabled: props.open,
@@ -109,24 +107,18 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
           {ARCHIVE_CHAT_TEXT.checkingWorktree}
         </div>
       ) : (
-        <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
-          <div className="flex items-center gap-3">
-            <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <Label htmlFor={switchId} className="flex-1 cursor-pointer leading-5">
-              {ARCHIVE_CHAT_TEXT.removeWorktree}
-            </Label>
-            <Switch
-              id={switchId}
-              checked={removeWorktree}
-              onCheckedChange={setWantsWorktreeRemoval}
-              disabled={props.isArchiving || sharedNotice !== null || taskNotice !== null}
-            />
-          </div>
+        <SwitchCard
+          icon={FolderGit2}
+          label={ARCHIVE_CHAT_TEXT.removeWorktree}
+          checked={removeWorktree}
+          onCheckedChange={setWantsWorktreeRemoval}
+          disabled={props.isArchiving || sharedNotice !== null || taskNotice !== null}
+        >
           {sharedNotice && <p className="text-sm text-muted-foreground">{sharedNotice}</p>}
           {taskNotice && <p className="text-sm text-muted-foreground">{taskNotice}</p>}
           <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
           <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
-        </div>
+        </SwitchCard>
       )}
     </ArchiveDialog>
   );

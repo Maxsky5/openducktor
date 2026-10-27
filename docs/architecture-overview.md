@@ -214,7 +214,7 @@ Workflow notifications use these committed transitions. A `snapshot_required` re
 For a human action:
 
 1. The user selects an action from `availableActions`.
-2. The frontend calls a host method such as `taskTransition`, `humanApprove`, or `buildCompleted`.
+2. The frontend calls a host method such as `taskTransition`, `taskClose`, or `buildCompleted`.
 3. The shell maps the method to a host command.
 4. The host decides the workflow event of the action.
 5. The task store writes status, fields, or artifacts.

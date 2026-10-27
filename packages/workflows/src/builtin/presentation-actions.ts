@@ -75,6 +75,11 @@ type ResolveTaskCardActionsOptions = {
   activeSessionRole?: BuiltinRoleId;
   historicalSessionRoles?: readonly BuiltinRoleId[];
   surface?: "agent_studio_quick_actions";
+  /**
+   * An available action that leads the actions. It also shows where the surface hides it
+   * otherwise, as Close Task for a merged task on a Kanban card.
+   */
+  leadingAction?: TaskWorkflowAction;
 };
 
 type TaskActionLabelOptions = {
@@ -87,9 +92,10 @@ export const resolveTaskCardActions = (
 ): TaskCardActionState => {
   const enabled = filterEnabledActions(task, options);
   const input = builtinTaskInput(task);
-  // With an active session, its view action and the other session views lead.
-  const orderedEnabled =
-    options.hasActiveSession && options.activeSessionRole
+  const orderedEnabled = options.leadingAction
+    ? builtinWorkflow.orderActions(input, enabled, [options.leadingAction])
+    : // With an active session, its view action and the other session views lead.
+      options.hasActiveSession && options.activeSessionRole
       ? builtinWorkflow.orderActions(input, enabled, [
           viewActionForRole(options.activeSessionRole),
           ...SESSION_VIEW_ACTIONS,
@@ -126,7 +132,7 @@ export const taskActionLabel = (
 
 const BUILD_START_LABEL = BUILTIN_ACTIONS.find((action) => action.id === "build_start")?.label;
 
-const DETAIL_ONLY_WORKFLOW_ACTIONS = new Set<TaskWorkflowAction>(["close_task"]);
+const DETAIL_ONLY_WORKFLOW_ACTIONS = new Set<TaskWorkflowAction>(["close_task", "remove_worktree"]);
 
 const allowsIncludedAction = (
   action: TaskWorkflowAction,
@@ -171,6 +177,14 @@ const filterEnabledActions = (
 
   if (!includeSet) {
     enabled = enabled.filter((action) => !DETAIL_ONLY_WORKFLOW_ACTIONS.has(action));
+  }
+  const { leadingAction } = options;
+  if (
+    leadingAction !== undefined &&
+    task.availableActions.includes(leadingAction) &&
+    !enabled.includes(leadingAction)
+  ) {
+    enabled.push(leadingAction);
   }
 
   if (options.hasActiveSession) {

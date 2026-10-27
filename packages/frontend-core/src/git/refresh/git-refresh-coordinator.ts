@@ -11,7 +11,8 @@ export const SCHEDULED_FETCH_COOLDOWN_MS = 5 * 60 * 1000;
 export type GitRefreshComparison = {
   /** Fetches with one key share one run and one cooldown. */
   fetchKey: string;
-  fetch: () => Promise<void>;
+  /** Without `force`, the host skips a remote that it fetched in the last 5 minutes. */
+  fetch: (force: boolean) => Promise<void>;
   /** Checks the target again. True means the target changed, so its new reads start by themselves. */
   check: () => Promise<boolean>;
 };
@@ -66,6 +67,7 @@ type GitRefreshDeps = {
 };
 
 type ManualRun = { key: string; promise: Promise<void> | null; state: ManualRefreshState };
+type FetchRun = { force: boolean; promise: Promise<void> };
 /** A manual run has no visit, so a return to its context continues it. */
 type RefreshRun = { manual: ManualRun | null; visit: number | null };
 type WaitDecision = "use" | "wait" | "end";
@@ -91,7 +93,7 @@ export class GitRefreshCoordinator {
   readonly #waiters = new Set<(view: GitRefreshView | null) => void>();
   readonly #listeners = new Set<() => void>();
   readonly #manualRuns = new Map<string, ManualRun>();
-  readonly #fetches = new Map<string, Promise<void>>();
+  readonly #fetches = new Map<string, FetchRun>();
   readonly #fetchedAt = new Map<string, number>();
 
   constructor(deps: GitRefreshDeps) {
@@ -298,31 +300,32 @@ export class GitRefreshCoordinator {
     return Promise.all([readLocal(), steps.readComparison(historyFailure)]).then(() => undefined);
   }
 
-  /** A manual fetch always runs. A scheduled fetch waits for its cooldown. */
+  /** A manual fetch always runs and forces the host fetch. A scheduled fetch waits for its cooldown. */
   async #fetch(comparison: GitRefreshComparison, mode: GitDiffRefreshMode): Promise<void> {
     if (mode === "soft") return;
+    const force = mode === "hard";
     const { fetchKey } = comparison;
     const fetchedAt = this.#fetchedAt.get(fetchKey);
     if (
-      mode === "scheduled" &&
+      !force &&
       fetchedAt !== undefined &&
       this.#deps.now() - fetchedAt < SCHEDULED_FETCH_COOLDOWN_MS
     )
       return;
-    let pending = this.#fetches.get(fetchKey);
-    if (!pending) {
-      pending = this.#runFetch(comparison);
-      this.#fetches.set(fetchKey, pending);
-    }
-    await pending;
+    const pending = this.#fetches.get(fetchKey);
+    // The host can skip a fetch that is not forced, so a manual Refresh does not join one.
+    if (pending && (pending.force || !force)) return pending.promise;
+    await this.#runFetch(comparison, force);
   }
 
-  async #runFetch({ fetchKey, fetch }: GitRefreshComparison): Promise<void> {
+  async #runFetch({ fetchKey, fetch }: GitRefreshComparison, force: boolean): Promise<void> {
+    const run: FetchRun = { force, promise: fetch(force) };
+    this.#fetches.set(fetchKey, run);
     try {
-      await fetch();
+      await run.promise;
       this.#fetchedAt.set(fetchKey, this.#deps.now());
     } finally {
-      this.#fetches.delete(fetchKey);
+      if (this.#fetches.get(fetchKey) === run) this.#fetches.delete(fetchKey);
     }
   }
 

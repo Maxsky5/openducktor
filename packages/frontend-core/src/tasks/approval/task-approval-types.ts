@@ -1,7 +1,7 @@
 import type { GitPublicationPreview, GitTargetBranch } from "@openducktor/contracts";
 import type { GitConflict, GitConflictAction } from "../../git/contracts";
 
-export type TaskApprovalMode = "direct_merge" | "pull_request";
+export type TaskApprovalMode = "direct_merge" | "pull_request" | "close_task";
 export type PullRequestDraftMode = "manual" | "generate_ai";
 export type TaskApprovalOpenOptions = {
   mode?: TaskApprovalMode;
@@ -12,10 +12,14 @@ export type TaskApprovalOpenOptions = {
 type TaskApprovalModalBase = {
   open: boolean;
   taskId: string;
+  taskTitle: string;
   isSubmitting: boolean;
   errorMessage: string | null;
   /** True when the connection lost the result of the last submit. The host may have run it. */
   errorOutcomeUnknown: boolean;
+  /** The cleanup choice of the close. Null while its default value loads. */
+  removeWorktree: boolean | null;
+  onRemoveWorktreeChange: (removeWorktree: boolean) => void;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -28,6 +32,8 @@ export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
   pullRequestSupported: boolean;
   pullRequestAvailable: boolean;
   pullRequestUnavailableReason: string | null;
+  /** The approval context read failed, so only Close Task is available. */
+  approvalContextError: string | null;
   hasUncommittedChanges: boolean;
   uncommittedFileCount: number;
   pullRequestUrl: string | null;
@@ -48,7 +54,7 @@ export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
 
 export type TaskApprovalMissingBuilderWorktreeModalModel = TaskApprovalModalBase & {
   stage: "missing_builder_worktree";
-  onCompleteMissingBuilderWorktree: () => void;
+  onCloseMissingBuilderWorktree: () => void;
   onResetMissingBuilderWorktree: () => void;
 };
 
