@@ -59,8 +59,6 @@ type UseTaskSessionStartFlowArgs = {
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   openTaskView: OpenTaskView;
-  /** Shows the retry of a first message that did not reach the started session. */
-  onPostStartMessageFailure: (result: SessionStartWorkflowResult) => void;
   workspaceRepoPath: string | null;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   onBackgroundTransfer?: (attemptId: string) => void;
@@ -140,7 +138,6 @@ export function useTaskSessionStartFlow({
   tasks,
   sessions,
   openTaskView,
-  onPostStartMessageFailure,
   workspaceRepoPath,
   runSessionStartWorkflow,
   onBackgroundTransfer,
@@ -222,8 +219,6 @@ export function useTaskSessionStartFlow({
             startInBackground: runInBackground,
             isCurrent: isCurrentContext,
             tasks,
-            feedback,
-            onPostStartMessageFailure,
             runSessionStartWorkflow,
             openStartedSession: (request, session) => {
               const attempt = startupAttempts.getAttempt(startupAttemptId);
@@ -241,9 +236,7 @@ export function useTaskSessionStartFlow({
       );
     },
     [
-      feedback,
       isCurrentContext,
-      onPostStartMessageFailure,
       queryClient,
       openStartedSession,
       runSessionStartWorkflow,

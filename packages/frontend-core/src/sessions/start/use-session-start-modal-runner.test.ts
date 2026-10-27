@@ -17,8 +17,6 @@ import {
   useSessionStartModalRunner,
 } from "./use-session-start-modal-runner";
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
-import { startKanbanSessionFlow } from "../../tasks/workflow/kanban-session-start-actions";
-import type { RunSessionStartWorkflow } from "./session-start-orchestration";
 import { observeStartupPreparation } from "../startup/startup-prepared-handoff";
 
 const REQUEST_CONTEXT = {
@@ -1041,42 +1039,22 @@ test.each(["submit", "continue"] as const)(
     const connection = createTestClientConnection({ feedback });
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    const opened = mock(() => {});
     const onBackgroundTransfer = mock((attemptId: string) => {
       expect(connection.startupAttempts.getAttempt(attemptId)?.presentation).toBe("notification");
-    });
-    const workflow = mock(async (input: Parameters<RunSessionStartWorkflow>[0]) => {
-      await (input.request.taskId === "TASK-1" ? first.promise : second.promise);
-      return {
-        externalSessionId: `native-${input.request.taskId}`,
-        runtimeKind: "codex" as const,
-        workingDirectory: "/repo/worktree",
-        postStartActionError: null,
-      };
     });
     const execute = mock(
       async ({
         request,
-        decision,
-        runInBackground,
-        startupAttemptId,
       }: Parameters<
         Parameters<ReturnType<typeof useSessionStartModalRunner>["runSessionStartRequest"]>[1]
       >[0]) => {
-        return startKanbanSessionFlow({
-          workspaceId: "workspace",
-          request,
-          decision,
-          startInBackground: runInBackground,
-          tasks: [],
-          feedback: connection.feedback,
-          onPostStartMessageFailure: () => {},
-          runSessionStartWorkflow: workflow,
-          openStartedSession: () => {
-            if (connection.startupAttempts.getAttempt(startupAttemptId)?.presentation === "dialog")
-              opened();
-          },
-        });
+        await (request.taskId === "TASK-1" ? first.promise : second.promise);
+        return {
+          externalSessionId: `native-${request.taskId}`,
+          runtimeKind: "codex" as const,
+          workingDirectory: "/repo/worktree",
+          postStartActionError: null,
+        };
       },
     );
     const harness = createHookHarness(
@@ -1121,8 +1099,8 @@ test.each(["submit", "continue"] as const)(
       sourceSessionOptionValue: null,
       runInBackground: true,
     } as const;
-    let resultA!: Promise<Awaited<ReturnType<typeof startKanbanSessionFlow>> | undefined>;
-    let resultB!: Promise<Awaited<ReturnType<typeof startKanbanSessionFlow>> | undefined>;
+    let resultA!: Promise<Awaited<ReturnType<typeof execute>> | undefined>;
+    let resultB!: Promise<Awaited<ReturnType<typeof execute>> | undefined>;
     let firstSettled = false;
     await harness.mount();
     try {
@@ -1165,7 +1143,7 @@ test.each(["submit", "continue"] as const)(
       await harness.run((runner) => {
         void runner.sessionStartModal?.onConfirm({ ...input, runInBackground: false });
       });
-      expect(workflow).toHaveBeenCalledTimes(2);
+      expect(execute).toHaveBeenCalledTimes(2);
       const secondRequestId = harness.getLatest().sessionStartModal?.requestId;
       expect(harness.getLatest().isSessionStarting).toBe(true);
       expect(
@@ -1196,7 +1174,6 @@ test.each(["submit", "continue"] as const)(
         [execute.mock.calls[0]![0].startupAttemptId],
         [execute.mock.calls[1]![0].startupAttemptId],
       ]);
-      expect(opened).not.toHaveBeenCalled();
       expect(feedback.shownOf("error")).toEqual([]);
     } finally {
       first.resolve();

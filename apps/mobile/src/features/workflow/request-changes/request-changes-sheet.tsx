@@ -14,7 +14,6 @@ import { EmptyState, LoadingState } from "@/ui/states";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
-import { MessageRetryNotices } from "../start-session/message-retry-notice";
 import { RepoSettingsFailure } from "../start-session/repo-settings-failure";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
@@ -46,7 +45,7 @@ function RequestChangesContent({
   taskId: string;
 }): ReactElement {
   const { flow, navigation, tasks, settings, branchesFailure, backgroundAttemptId } =
-    useTaskStartFlow(workspace, taskId);
+    useTaskStartFlow(workspace);
   const confirmDiscard = useConfirmDiscard();
   const task = tasks.find((entry) => entry.id === taskId) ?? null;
   const feedback = flow.humanReviewFeedbackModal;
@@ -89,7 +88,7 @@ function RequestChangesContent({
     );
   }
   if (start?.open) {
-    return <SessionStartSheet model={start} taskId={task.id} branchesFailure={branchesFailure} />;
+    return <SessionStartSheet model={start} branchesFailure={branchesFailure} />;
   }
   if (settings.error && !triggered) {
     return (
@@ -127,7 +126,6 @@ function RequestChangesContent({
           />
         }
       >
-        <MessageRetryNotices taskId={task.id} />
         <FormBody>
           <View style={styles.lead}>
             <FormLead text={COPY.description} />

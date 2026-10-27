@@ -85,10 +85,7 @@ function StartSessionContent({
   taskId: string;
   request: StartRequest;
 }): ReactElement {
-  const { flow, navigation, tasks, settings, branchesFailure } = useTaskStartFlow(
-    workspace,
-    taskId,
-  );
+  const { flow, navigation, tasks, settings, branchesFailure } = useTaskStartFlow(workspace);
   const { feedback } = useFeedbackStore();
   const task = tasks.find((entry) => entry.id === taskId) ?? null;
   const modal = flow.sessionStartModal;
@@ -136,7 +133,6 @@ function StartSessionContent({
   return (
     <SessionStartSheet
       model={modal}
-      taskId={task.id}
       branchesFailure={branchesFailure}
       onClose={choicesClose.close}
       onEdit={choicesClose.markEdited}

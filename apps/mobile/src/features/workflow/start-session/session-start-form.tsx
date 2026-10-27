@@ -15,7 +15,7 @@ import {
   useSessionStartKickoffDraft,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
-import { type ReactElement, type ReactNode, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
@@ -164,14 +164,11 @@ const modelLoadingLabel = (model: SessionStartModalModel): string | null => {
 export function SessionStartForm({
   model: shown,
   branchesFailure,
-  notices,
   onEdit = NO_EDIT_REPORT,
 }: {
   model: SessionStartModalModel;
   /** The failed branch list read, which the target branch choice needs. */
   branchesFailure: BranchesFailure | null;
-  /** Notices above the choices, such as a first message that did not reach its session. */
-  notices?: ReactNode;
   /** Runs when the user changes a choice. */
   onEdit?: (() => void) | undefined;
 }): ReactElement {
@@ -240,7 +237,6 @@ export function SessionStartForm({
         />
       }
     >
-      {notices}
       <StartNotices model={model} branchesFailure={choosesTargetBranch ? branchesFailure : null} />
       <FormBody>
         <FormLead text={model.description} />

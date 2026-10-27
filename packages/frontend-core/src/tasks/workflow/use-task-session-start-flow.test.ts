@@ -14,6 +14,8 @@ import {
   createTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
+import { observeStartupPreparation } from "../../sessions/startup/startup-prepared-handoff";
 import { type OpenTaskView, useTaskSessionStartFlow } from "./use-task-session-start-flow";
 
 type Args = Parameters<typeof useTaskSessionStartFlow>[0];
@@ -43,7 +45,6 @@ const createArgs = (overrides: Partial<Args> = {}): Args => ({
   tasks: [createTaskCardFixture({}, { id: "TASK-1", status: "in_progress" }) satisfies TaskCard],
   sessions: [],
   openTaskView: mock<OpenTaskView>(() => {}),
-  onPostStartMessageFailure: () => {},
   workspaceRepoPath: "/repo",
   runSessionStartWorkflow: mock<RunSessionStartWorkflow>(async () => {
     throw new Error("The test starts no session.");
@@ -157,91 +158,121 @@ describe("useTaskSessionStartFlow", () => {
     }
   });
 
-  test("reports a background transfer while Request Changes feedback awaits the launch", async () => {
-    const pending = Promise.withResolvers<void>();
-    const session = builderSession("builder-1", "2026-02-22T10:00:00.000Z");
-    const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(async () => {
-      await pending.promise;
-      return { ...session, postStartActionError: null };
-    });
-    const onBackgroundTransfer = mock((_attemptId: string) => {});
-    const openTaskView = mock<OpenTaskView>(() => {});
-    const feedback = createFeedbackFake();
-    const connection = createTestClientConnection({
-      feedback,
-      client: {
-        workspaceGetRepoConfig: async () =>
-          repoConfigSchema.parse({
+  test.each(["submit", "continue"] as const)(
+    "a background %s keeps Request Changes feedback pending and never opens the session",
+    async (transfer) => {
+      const pending = Promise.withResolvers<void>();
+      const session = builderSession("builder-1", "2026-02-22T10:00:00.000Z");
+      const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(async (input) => {
+        const id = input.startupAttemptId;
+        if (!id) throw new Error("The launch must name its startup attempt.");
+        await observeStartupPreparation(connection.queryClient, "/repo", id);
+        await pending.promise;
+        await connection.startupAttempts.operation(id, async (context) => ({
+          startupProgress: live.prepared({
+            context,
             workspaceId: "workspace-1",
-            workspaceName: "Workspace",
             repoPath: "/repo",
-            agentStudioState: { openTaskIds: [] },
+            scope: { kind: "task", taskId: "TASK-1", role: "build" },
+            ownership: {
+              state: "saved",
+              target: {
+                kind: "task",
+                record: { ...session, role: "build", selectedModel: null },
+                runtimeSession: { ...session, status: "idle" },
+              },
+            },
           }),
-      },
-    });
-    const harness = createRuntimeHookHarness(
-      useTaskSessionStartFlow,
-      createArgs({
-        sessions: [session],
-        runSessionStartWorkflow,
-        openTaskView,
-        onBackgroundTransfer,
-      }),
-      {
-        connection,
-        runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
-          availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-          loadRepoRuntimeCatalog: async () => ({}),
+        }));
+        connection.startupAttempts.setInstruction(id, { state: "accepted" });
+        await connection.startupAttempts.complete(id);
+        return { ...session, postStartActionError: null };
+      });
+      const onBackgroundTransfer = mock((_attemptId: string) => {});
+      const openTaskView = mock<OpenTaskView>(() => {});
+      const feedback = createFeedbackFake();
+      const connection = createTestClientConnection({
+        feedback,
+        client: {
+          workspaceGetRepoConfig: async () =>
+            repoConfigSchema.parse({
+              workspaceId: "workspace-1",
+              workspaceName: "Workspace",
+              repoPath: "/repo",
+              agentStudioState: { openTaskIds: [] },
+            }),
+        },
+      });
+      const live = createStartupLiveSourceFake(connection.queryClient);
+      const harness = createRuntimeHookHarness(
+        useTaskSessionStartFlow,
+        createArgs({
+          sessions: [session],
+          runSessionStartWorkflow,
+          openTaskView,
+          onBackgroundTransfer,
         }),
-      },
-    );
-    let feedbackSubmission!: Promise<void>;
-    let feedbackSettled = false;
-    await harness.mount();
-    try {
-      await harness.run((flow) => flow.onHumanRequestChanges("TASK-1"));
-      await harness.run((flow) => {
-        flow.humanReviewFeedbackModal?.onMessageChange("Rename the export button.");
-      });
-      await harness.run((flow) => {
-        feedbackSubmission = flow.humanReviewFeedbackModal!.onConfirm();
-        void feedbackSubmission.then(() => {
-          feedbackSettled = true;
+        {
+          connection,
+          runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+            availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+            loadRepoRuntimeCatalog: async () => ({}),
+          }),
+        },
+      );
+      let feedbackSubmission!: Promise<void>;
+      let feedbackSettled = false;
+      await harness.mount();
+      try {
+        await harness.run((flow) => flow.onHumanRequestChanges("TASK-1"));
+        await harness.run((flow) => {
+          flow.humanReviewFeedbackModal?.onMessageChange("Rename the export button.");
         });
-      });
-      await harness.waitFor((flow) => Boolean(flow.sessionStartModal?.kickoffPrompt));
-      await harness.run((flow) => {
-        const start = flow.sessionStartModal!;
-        void start.onConfirm({
-          startMode: "reuse",
-          sourceSessionOptionValue: start.existingSessionOptions[0]!.value,
-          runInBackground: true,
+        await harness.run((flow) => {
+          feedbackSubmission = flow.humanReviewFeedbackModal!.onConfirm();
+          void feedbackSubmission.then(() => {
+            feedbackSettled = true;
+          });
         });
-      });
+        await harness.waitFor((flow) => Boolean(flow.sessionStartModal?.kickoffPrompt));
+        await harness.run((flow) => {
+          const start = flow.sessionStartModal!;
+          void start.onConfirm({
+            startMode: "reuse",
+            sourceSessionOptionValue: start.existingSessionOptions[0]!.value,
+            runInBackground: transfer === "submit",
+          });
+        });
+        if (transfer === "continue")
+          await harness.run((flow) => {
+            flow.sessionStartModal?.onContinueInBackground();
+          });
 
-      expect(feedback.shownOf("error")).toEqual([]);
-      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
-      const launch = runSessionStartWorkflow.mock.calls[0]![0];
-      const attemptId = launch.startupAttemptId;
-      if (!attemptId) throw new Error("The launch must name its startup attempt.");
-      expect(onBackgroundTransfer.mock.calls).toEqual([[attemptId]]);
-      expect(connection.startupAttempts.getAttempt(attemptId)?.presentation).toBe("notification");
-      expect(harness.getLatest().sessionStartModal).toBeNull();
-      expect(harness.getLatest().humanReviewFeedbackModal).toMatchObject({
-        message: "Rename the export button.",
-        isSubmitting: true,
-      });
-      expect(feedbackSettled).toBe(false);
-      expect(openTaskView).not.toHaveBeenCalled();
+        expect(feedback.shownOf("error")).toEqual([]);
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
+        const launch = runSessionStartWorkflow.mock.calls[0]![0];
+        const attemptId = launch.startupAttemptId;
+        if (!attemptId) throw new Error("The launch must name its startup attempt.");
+        expect(onBackgroundTransfer.mock.calls).toEqual([[attemptId]]);
+        expect(connection.startupAttempts.getAttempt(attemptId)?.presentation).toBe("notification");
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+        expect(harness.getLatest().humanReviewFeedbackModal).toMatchObject({
+          message: "Rename the export button.",
+          isSubmitting: true,
+        });
+        expect(feedbackSettled).toBe(false);
+        expect(openTaskView).not.toHaveBeenCalled();
 
-      await harness.run(() => pending.resolve());
-      await feedbackSubmission;
-      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
-      expect(openTaskView).not.toHaveBeenCalled();
-    } finally {
-      pending.resolve();
-      await harness.unmount();
-      await connection.dispose();
-    }
-  });
+        await harness.run(() => pending.resolve());
+        await feedbackSubmission;
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
+        expect(connection.startupAttempts.isReadyForHandoff(attemptId)).toBe(true);
+        expect(openTaskView).not.toHaveBeenCalled();
+      } finally {
+        pending.resolve();
+        await harness.unmount();
+        await connection.dispose();
+      }
+    },
+  );
 });

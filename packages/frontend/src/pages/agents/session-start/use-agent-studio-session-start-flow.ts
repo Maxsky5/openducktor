@@ -6,7 +6,6 @@ import {
   builtinRoleId,
 } from "@openducktor/workflows";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
-import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSessionStartKickoffResolver } from "@openducktor/frontend-core/sessions/start/session-start-kickoff";
@@ -192,7 +191,6 @@ export function useAgentStudioSessionStartFlow({
           request,
           decision,
           task: request.taskId === taskId ? selectedTask : null,
-          onPostStartMessageFailure: showSessionStartMessageRecovery,
         };
 
         const workflow = await runWorkflow(workflowInput);

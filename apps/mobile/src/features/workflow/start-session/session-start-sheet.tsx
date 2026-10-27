@@ -5,19 +5,16 @@ import type { ReactElement } from "react";
 import { StartupTrace } from "@/features/session-startup/startup-trace";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import type { BranchesFailure } from "../use-workspace-repo-settings";
-import { MessageRetryNotices } from "./message-retry-notice";
 import { SessionStartForm } from "./session-start-form";
 
 /** The same guarded start step serves quick actions, approvals, and review feedback. */
 export function SessionStartSheet({
   model,
-  taskId,
   branchesFailure,
   onClose,
   onEdit,
 }: {
   model: SessionStartModalModel;
-  taskId: string;
   branchesFailure: BranchesFailure | null;
   onClose?: (() => void) | undefined;
   onEdit?: (() => void) | undefined;
@@ -37,12 +34,7 @@ export function SessionStartSheet({
           onContinueInBackground={model.onContinueInBackground}
         />
       ) : (
-        <SessionStartForm
-          model={model}
-          branchesFailure={branchesFailure}
-          notices={<MessageRetryNotices taskId={taskId} />}
-          onEdit={onEdit}
-        />
+        <SessionStartForm model={model} branchesFailure={branchesFailure} onEdit={onEdit} />
       )}
     </GroupedSheet>
   );

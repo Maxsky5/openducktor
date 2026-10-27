@@ -46,7 +46,7 @@ function ApproveTaskContent({
 }): ReactElement {
   const { feedback } = useClientConnection();
   const { flow, navigation, tasks, sessions, settings, branchesFailure, gitProvider } =
-    useTaskStartFlow(workspace, taskId);
+    useTaskStartFlow(workspace);
   const { refreshTasks, closeTask, resetTaskImplementation } = useRequiredContext(
     TasksStateContext,
     "ApproveTaskContent",
@@ -141,7 +141,7 @@ function ApproveTaskContent({
     );
   }
   if (start?.open) {
-    return <SessionStartSheet model={start} taskId={task.id} branchesFailure={branchesFailure} />;
+    return <SessionStartSheet model={start} branchesFailure={branchesFailure} />;
   }
   if (resetImplementationModal) {
     // The confirmation opens above the sheet; the sheet keeps its frame below it.

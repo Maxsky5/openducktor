@@ -81,6 +81,8 @@ export function WorkspaceSessionForkDialog({
   });
   const starting = pending || startupIsPending(attempt);
   const worktreeError = workspaceSessionValidationError(failure);
+  const formError = worktreeError ? null : failure;
+  const { name: folderName, directory } = forkSourceFolder(record);
   const input = workspaceSessionForkInput({
     workspaceId: workspace.workspaceId,
     record,
@@ -153,163 +155,133 @@ export function WorkspaceSessionForkDialog({
             onEditChoices={editChoices}
           />
         ) : (
-          <WorkspaceSessionForkForm
-            workspace={workspace}
-            record={record}
-            form={{
-              destination,
-              setDestination,
-              worktree,
-              changeWorktree,
-              pending,
-              failure,
-              worktreeError,
-              disabledReason,
-              canSubmit: input !== null,
-              submit,
-              onClose: close,
+          <form
+            className="flex min-h-0 flex-col"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit();
             }}
-          />
+          >
+            <fieldset disabled={pending} className="contents">
+              <DialogBody className="flex flex-col gap-4 px-6 py-4">
+                <WorkspaceSessionWorkLocationField
+                  value={destination}
+                  onValueChange={setDestination}
+                  disabled={pending}
+                  ariaLabel={FORK_CHAT_TEXT.locationLabel}
+                  options={[
+                    {
+                      value: "same_folder",
+                      label: FORK_CHAT_TEXT.sameFolder,
+                      description: FORK_CHAT_TEXT.sameFolderDescription,
+                      icon: Folder,
+                    },
+                    {
+                      value: "new_worktree",
+                      label: FORK_CHAT_TEXT.newWorktree,
+                      description: FORK_CHAT_TEXT.newWorktreeDescription,
+                      icon: GitBranch,
+                    },
+                  ]}
+                />
+                <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {FORK_CHAT_TEXT.sourceFolder}
+                  </p>
+                  <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                      <Folder aria-hidden="true" className="size-4 shrink-0" />
+                      <span className="min-w-0 break-words">{folderName}</span>
+                    </p>
+                    {record.executionTarget.kind === "local_worktree" &&
+                    record.executionTarget.branchName ? (
+                      <Badge
+                        variant="outline"
+                        className="max-w-full gap-1.5 self-start font-mono font-normal"
+                      >
+                        <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
+                        <span className="sr-only">Source branch: </span>
+                        <span className="min-w-0 break-words">
+                          {record.executionTarget.branchName}
+                        </span>
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 break-words font-mono text-xs leading-relaxed text-muted-foreground dark:text-foreground/80">
+                    {directory}
+                  </p>
+                </div>
+                {destination === "new_worktree" ? (
+                  <div className="flex flex-col gap-3">
+                    <WorktreeNameField
+                      value={worktree}
+                      onChange={changeWorktree}
+                      disabled={pending}
+                      error={worktreeError}
+                    />
+                    <NewWorktreeBranchFields
+                      workspace={workspace}
+                      value={worktree}
+                      onChange={changeWorktree}
+                      disabled={pending}
+                      error={worktreeError}
+                      alwaysExpanded
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {FORK_CHAT_TEXT.uncommittedChanges}
+                    </p>
+                  </div>
+                ) : null}
+              </DialogBody>
+              <ForkFooter
+                pending={pending}
+                error={formError}
+                disabledReason={disabledReason}
+                canSubmit={input !== null}
+                onClose={close}
+              />
+            </fieldset>
+          </form>
         )}
       </DialogContent>
     </Dialog>
   );
 }
 
-type WorkspaceSessionForkFormModel = {
-  destination: WorkspaceSessionForkDestination;
-  setDestination: (value: WorkspaceSessionForkDestination) => void;
-  worktree: WorkspaceSessionWorktreeInput;
-  changeWorktree: (value: WorkspaceSessionWorktreeInput) => void;
+function ForkFooter({
+  pending,
+  error,
+  disabledReason,
+  canSubmit,
+  onClose,
+}: {
   pending: boolean;
-  failure: Error | null;
-  worktreeError: ReturnType<typeof workspaceSessionValidationError>;
+  error: Error | null;
   disabledReason: string | null;
   canSubmit: boolean;
-  submit: () => void;
   onClose: () => void;
-};
-
-function WorkspaceSessionForkForm({
-  workspace,
-  record,
-  form,
-}: {
-  workspace: ActiveWorkspace;
-  record: WorkspaceSession;
-  form: WorkspaceSessionForkFormModel;
 }): ReactElement {
-  const {
-    destination,
-    setDestination,
-    worktree,
-    changeWorktree,
-    pending,
-    failure,
-    worktreeError,
-    disabledReason,
-    canSubmit,
-    submit,
-    onClose,
-  } = form;
-  const { name: folderName, directory } = forkSourceFolder(record);
   return (
-    <form
-      className="flex min-h-0 flex-col"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <fieldset disabled={pending} className="contents">
-        <DialogBody className="flex flex-col gap-4 px-6 py-4">
-          <WorkspaceSessionWorkLocationField
-            value={destination}
-            onValueChange={setDestination}
-            disabled={pending}
-            ariaLabel={FORK_CHAT_TEXT.locationLabel}
-            options={[
-              {
-                value: "same_folder",
-                label: FORK_CHAT_TEXT.sameFolder,
-                description: FORK_CHAT_TEXT.sameFolderDescription,
-                icon: Folder,
-              },
-              {
-                value: "new_worktree",
-                label: FORK_CHAT_TEXT.newWorktree,
-                description: FORK_CHAT_TEXT.newWorktreeDescription,
-                icon: GitBranch,
-              },
-            ]}
-          />
-          <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              {FORK_CHAT_TEXT.sourceFolder}
-            </p>
-            <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                <Folder aria-hidden="true" className="size-4 shrink-0" />
-                <span className="min-w-0 break-words">{folderName}</span>
-              </p>
-              {record.executionTarget.kind === "local_worktree" &&
-              record.executionTarget.branchName ? (
-                <Badge
-                  variant="outline"
-                  className="max-w-full gap-1.5 self-start font-mono font-normal"
-                >
-                  <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span className="sr-only">Source branch: </span>
-                  <span className="min-w-0 break-words">{record.executionTarget.branchName}</span>
-                </Badge>
-              ) : null}
-            </div>
-            <p className="mt-2 break-words font-mono text-xs leading-relaxed text-muted-foreground dark:text-foreground/80">
-              {directory}
-            </p>
-          </div>
-          {destination === "new_worktree" ? (
-            <div className="flex flex-col gap-3">
-              <WorktreeNameField
-                value={worktree}
-                onChange={changeWorktree}
-                disabled={pending}
-                error={worktreeError}
-              />
-              <NewWorktreeBranchFields
-                workspace={workspace}
-                value={worktree}
-                onChange={changeWorktree}
-                disabled={pending}
-                error={worktreeError}
-                alwaysExpanded
-              />
-              <p className="text-sm text-muted-foreground">{FORK_CHAT_TEXT.uncommittedChanges}</p>
-            </div>
-          ) : null}
-        </DialogBody>
-        <DialogFooter className="mt-0 flex-col border-t border-border px-6 py-4">
-          {failure && !worktreeError ? (
-            <p role="alert" className="break-words text-sm text-destructive">
-              {failure.message}
-            </p>
-          ) : null}
-          {disabledReason ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {disabledReason}
-            </p>
-          ) : null}
-          <div className="flex justify-between gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending || disabledReason !== null || !canSubmit}>
-              {pending ? <LoaderCircle className="animate-spin" /> : null}
-              {pending ? FORK_CHAT_TEXT.confirming : FORK_CHAT_TEXT.confirm}
-            </Button>
-          </div>
-        </DialogFooter>
-      </fieldset>
-    </form>
+    <DialogFooter className="mt-0 flex-col border-t border-border px-6 py-4">
+      {error ? (
+        <p role="alert" className="break-words text-sm text-destructive">
+          {error.message}
+        </p>
+      ) : null}
+      {disabledReason ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {disabledReason}
+        </p>
+      ) : null}
+      <div className="flex justify-between gap-2">
+        <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={pending || disabledReason !== null || !canSubmit}>
+          {pending ? <LoaderCircle className="animate-spin" /> : null}
+          {pending ? FORK_CHAT_TEXT.confirming : FORK_CHAT_TEXT.confirm}
+        </Button>
+      </div>
+    </DialogFooter>
   );
 }

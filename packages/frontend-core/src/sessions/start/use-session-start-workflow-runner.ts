@@ -77,8 +77,7 @@ export function useSessionStartWorkflowRunner({
         repoPath,
         sendAgentMessage,
         notifications,
-        startupFeedback: true,
-        createLaunchAttemptId: () => id,
+        launchAttemptId: id,
         client: {
           agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, async (request) => {
             launchRequest = request;
@@ -90,18 +89,6 @@ export function useSessionStartWorkflowRunner({
               host.agentSessionWorkflowLaunch({ ...request, startup }),
             );
             if (outcome.acceptedMessage) startupAttempts.setInstruction(id, { state: "accepted" });
-            if (outcome.session)
-              startupAttempts.setNavigationTarget(id, {
-                kind: "task_session",
-                workspaceId,
-                taskId: input.request.taskId,
-                role: input.request.role,
-                identity: {
-                  externalSessionId: outcome.session.externalSessionId,
-                  runtimeKind: outcome.session.runtimeKind,
-                  workingDirectory: outcome.session.workingDirectory,
-                },
-              });
             // A display failure must not undo the host outcome or permit a message resend.
             try {
               projectWorkflowLaunch(store, queryClient, outcome);

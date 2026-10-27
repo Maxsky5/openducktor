@@ -23,7 +23,6 @@ import { observeStartupPreparation } from "./startup/startup-prepared-handoff";
 import type { StartupPresentation } from "./startup/startup-attempt-store";
 import { installStartupSessionRepair } from "./startup/repair-startup-session";
 import { errorMessage } from "../lib/errors";
-import { builtinRoleId } from "@openducktor/workflows";
 
 type ForkStartupOptions = {
   onAttempt?: (id: string) => void;
@@ -63,13 +62,6 @@ export const forkTaskSession = (
         attempts.setSaved(id, {
           state: "saved",
           target: { kind: "task", record: result.record, runtimeSession: result.runtimeSession },
-        });
-        attempts.setNavigationTarget(id, {
-          kind: "task_session",
-          workspaceId: options.workspaceId,
-          taskId: input.sessionScope.taskId,
-          role: builtinRoleId(input.sessionScope.role),
-          identity: result.runtimeSession,
         });
         try {
           const taskId = input.sessionScope.taskId;

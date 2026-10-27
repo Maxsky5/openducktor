@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import type { NavigateFunction } from "react-router";
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
-import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import {
   type OpenTaskView,
   type UseTaskSessionStartFlowResult,
@@ -10,12 +9,12 @@ import {
 
 type UseKanbanSessionStartFlowArgs = Omit<
   Parameters<typeof useTaskSessionStartFlow>[0],
-  "openTaskView" | "onPostStartMessageFailure"
+  "openTaskView"
 > & {
   navigate: NavigateFunction;
 };
 
-/** The task session start flow with desktop routes and the desktop first-message retry. */
+/** The task session start flow with desktop routes. */
 export function useKanbanSessionStartFlow({
   navigate,
   ...args
@@ -43,6 +42,5 @@ export function useKanbanSessionStartFlow({
   return useTaskSessionStartFlow({
     ...args,
     openTaskView,
-    onPostStartMessageFailure: showSessionStartMessageRecovery,
   });
 }

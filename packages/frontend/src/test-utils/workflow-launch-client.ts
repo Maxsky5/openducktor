@@ -30,7 +30,7 @@ type FixtureArgs = {
   startAgentSession: (input: FakeWorkflowStartInput) => Promise<AgentSessionIdentity>;
   sendAgentMessage?: SendAgentMessage;
   notifications?: Parameters<typeof createRunner>[0]["notifications"];
-  createLaunchAttemptId?: () => string;
+  launchAttemptId?: string;
   onRequest?: (request: WorkflowLaunchRequest) => void;
 };
 
@@ -119,8 +119,8 @@ export const createSessionStartWorkflowRunner = (args: FixtureArgs): RunSessionS
     client: createWorkflowLaunchClient(args),
     sendAgentMessage: async (session, parts, options) =>
       (await args.sendAgentMessage?.(session, parts, options)) ?? null,
+    launchAttemptId: args.launchAttemptId ?? "launch-fake",
   };
   if (args.notifications) runnerArgs.notifications = args.notifications;
-  if (args.createLaunchAttemptId) runnerArgs.createLaunchAttemptId = args.createLaunchAttemptId;
   return createRunner(runnerArgs);
 };

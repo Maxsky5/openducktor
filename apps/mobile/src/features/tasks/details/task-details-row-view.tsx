@@ -4,7 +4,6 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { HeldOutcomesSection } from "@/features/workflow/autopilot/held-outcomes-section";
 import { MergedPullRequestNotice } from "@/features/workflow/pull-requests/merged-pull-request-notice";
-import { MessageRetryNotices } from "@/features/workflow/start-session/message-retry-notice";
 import { DocumentRowView } from "../documents/document-row-view";
 import type { CollapsedDetailsSections, DetailsRow } from "./task-details-rows";
 import { TaskMetadataSection } from "./task-details-section";
@@ -41,7 +40,6 @@ export function TaskDetailsRowView({
       return (
         <View style={styles.notices}>
           <MergedPullRequestNotice taskId={task.id} />
-          <MessageRetryNotices taskId={task.id} />
           <HeldOutcomesSection workspaceId={workspaceId} taskId={task.id} />
         </View>
       );

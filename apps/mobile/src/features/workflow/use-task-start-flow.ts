@@ -7,8 +7,6 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
-import { sessionStartMessageRetry } from "@openducktor/frontend-core/sessions/start/session-start-message-retry";
-import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import { useSessionStartWorkflowRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-workflow-runner";
 import {
   type OpenTaskView,
@@ -16,7 +14,6 @@ import {
 } from "@openducktor/frontend-core/tasks/workflow/use-task-session-start-flow";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigation } from "expo-router";
-import { reportMessageRetry } from "./start-session/message-retry-store";
 import { showNoSession } from "./task-action-routing";
 import { useModelFavorites } from "@/features/model-picker/use-model-favorites";
 import { useSheetNavigation } from "./use-sheet-navigation";
@@ -26,7 +23,7 @@ import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/u
 import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
 
-export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
+export function useTaskStartFlow(workspace: WorkspaceRecord) {
   const connection = useClientConnection();
   const [backgroundAttemptId, setBackgroundAttemptId] = useState<string | null>(null);
   const { tasks } = useRequiredContext(TasksStateContext, "useTaskStartFlow");
@@ -76,13 +73,6 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
     },
     [connection, navigation, routeNavigation, visibleHandoff],
   );
-  const onPostStartMessageFailure = useCallback(
-    (result: SessionStartWorkflowResult) => {
-      const retry = sessionStartMessageRetry(result);
-      if (retry) reportMessageRetry(connection, taskId, retry);
-    },
-    [connection, taskId],
-  );
   const flow = useTaskSessionStartFlow({
     activeWorkspaceId: workspaceId,
     branches,
@@ -91,7 +81,6 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
     tasks,
     sessions,
     openTaskView,
-    onPostStartMessageFailure,
     workspaceRepoPath: repoPath,
     runSessionStartWorkflow,
     onBackgroundTransfer: setBackgroundAttemptId,

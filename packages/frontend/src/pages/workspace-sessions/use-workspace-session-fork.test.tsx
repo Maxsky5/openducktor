@@ -10,6 +10,7 @@ import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/ag
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { forkWorkspaceSession } from "@openducktor/frontend-core/sessions/session-forks";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
 import { WorkspaceSessionForkDialog } from "./workspace-session-fork-dialog";
 import { useWorkspaceSessionFork } from "./use-workspace-session-fork";
 
@@ -40,6 +41,7 @@ test("keeps historical fork buttons idle for record updates and publishes change
   const connection = createTestClientConnection({
     client: { workspaceSessionFork: () => completion.promise },
   });
+  const live = createStartupLiveSourceFake(connection.queryClient);
   const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const point = { messageId: "reply" };
   let commits = 0;
@@ -131,6 +133,7 @@ test("keeps historical fork buttons idle for record updates and publishes change
       await pendingRequest;
     }
     view.unmount();
+    live.dispose();
     connection.queryClient.clear();
   }
 });

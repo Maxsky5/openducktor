@@ -24,7 +24,7 @@ import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-con
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { registerStartupLiveSource } from "@openducktor/frontend-core/sessions/startup/startup-prepared-handoff";
+import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
 import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
@@ -50,7 +50,6 @@ function renderCreation(
     repoPath: "/repo",
   });
   let savedRecord: WorkspaceSession | null = null;
-  const liveListeners = new Set<(envelope: AgentSessionLiveEnvelope) => void>();
   const catalog: AgentModelCatalog = {
     runtime: OPENCODE_RUNTIME_DESCRIPTOR,
     models: [
@@ -187,61 +186,33 @@ function renderCreation(
       workspaceSessionStart: async (input) => {
         if (!savedRecord || !input.startup) throw new Error("No saved session to prepare.");
         const session = { ...savedRecord, externalSessionId: "prepared-session" };
-        const ref = {
-          repoPath: "/repo",
+        const runtimeSession = {
           runtimeKind: session.runtimeKind,
           workingDirectory: session.executionTarget.workingDirectory,
           externalSessionId: session.externalSessionId,
+          startedAt: "2026-10-26T00:00:00.000Z",
+          status: "idle" as const,
         };
-        const startedAt = "2026-10-26T00:00:00.000Z";
-        const runtimeSession = { ...ref, startedAt, status: "idle" as const };
-        for (const listener of liveListeners)
-          listener({
-            type: "session_upsert",
-            sequence: 1,
-            session: {
-              ref,
-              activity: "idle",
-              title: "Prepared session",
-              startedAt,
-              pendingApprovals: [],
-              pendingQuestions: [],
-              contextUsage: null,
-            },
-          });
         return {
           session,
           runtimeSession,
-          startupProgress: {
+          startupProgress: live.prepared({
             context: input.startup,
-            hostInstanceId: "host",
-            revision: 1,
             workspaceId: input.workspaceId,
             repoPath: "/repo",
             scope: { kind: "workspace" },
-            phase: "completed",
             ownership: {
               state: "saved",
               target: { kind: "workspace", record: session, runtimeSession },
             },
-            prepared: { ref, runtimeId: "runtime", liveStateSequence: 1 },
-            steps: [],
-          },
+          }),
         };
       },
       ...clientOverrides,
     },
   });
   const queryClient = connection.queryClient;
-  const releaseLiveSource = registerStartupLiveSource(queryClient, {
-    observeWorkspace: () => () => {},
-    observeAgentSessionLive: async (_input, listener) => {
-      liveListeners.add(listener);
-      return () => {
-        liveListeners.delete(listener);
-      };
-    },
-  });
+  const live = createStartupLiveSourceFake(queryClient);
   function Creation() {
     const [open, setOpen] = useState(true);
     const location = useLocation();
@@ -297,12 +268,10 @@ function renderCreation(
     ...view,
     connection,
     queryClient,
-    publishLive: (envelope: AgentSessionLiveEnvelope) => {
-      for (const listener of liveListeners) listener(envelope);
-    },
+    publishLive: (envelope: AgentSessionLiveEnvelope) => live.publish("/repo", envelope),
     unmount: () => {
       view.unmount();
-      releaseLiveSource();
+      live.dispose();
     },
   };
 }

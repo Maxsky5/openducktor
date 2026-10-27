@@ -251,15 +251,13 @@ export const createStartupAttemptStore = (
       );
     },
     begin(input: {
-      id?: string;
       origin: StartupAttempt["origin"];
       label: string;
       presentation: StartupPresentation;
       instructionRequired?: boolean;
     }): string {
       if (disposed) throw new Error("The startup connection has been released.");
-      const id = input.id ?? crypto.randomUUID();
-      if (entries.has(id)) throw new Error("This session start is already registered.");
+      const id = crypto.randomUUID();
       entries.set(id, {
         attempt: {
           id,
@@ -345,7 +343,6 @@ export const createStartupAttemptStore = (
         throw cause;
       }
     },
-    accept,
     setSaved(id: string, ownership: Extract<StartupOwnership, { state: "saved" }>) {
       const entry = entries.get(id);
       if (entry) entry.savedOperationIndex = entry.operationIds.length - 1;
@@ -394,9 +391,6 @@ export const createStartupAttemptStore = (
     },
     setInstruction(id: string, instruction: StartupInstruction) {
       update(id, (attempt) => ({ ...attempt, instruction }));
-    },
-    setNavigationTarget(id: string, navigationTarget: SessionNavigationTarget) {
-      update(id, (attempt) => ({ ...attempt, navigationTarget }));
     },
     fail(id: string, message: string, confirmed = true) {
       update(id, (attempt) => ({

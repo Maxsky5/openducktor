@@ -33,6 +33,35 @@ const createdRef: AgentSessionLiveRef = {
 };
 const builderScope = { kind: "workflow" as const, taskId: "task", role: "build" as const };
 
+type StartupTrackerDependencies = Parameters<typeof createNodeSessionStartupTracker>[0];
+
+const launchTracked = (
+  h: Awaited<ReturnType<typeof createLaunchHarness>>,
+  request: WorkflowLaunchRequest,
+  overrides: {
+    taskWorkflows?: StartupTrackerDependencies["taskWorkflows"];
+    finalize?: StartupTrackerDependencies["finalize"];
+    probeSessionStatus?: StartupTrackerDependencies["runtime"]["probeSessionStatus"];
+  } = {},
+) => {
+  const tracker = createNodeSessionStartupTracker({
+    hostInstanceId: "host",
+    eventBus: undefined,
+    taskWorkflows: overrides.taskWorkflows ?? builtinTaskWorkflows,
+    settings: {
+      getRepoConfig: () => Effect.succeed(h.config),
+      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
+    },
+    finalize: overrides.finalize ?? h.runtime.finalizeStartupPreparation,
+    runtime: {
+      probeSessionStatus:
+        overrides.probeSessionStatus ??
+        (() => Effect.succeed({ supported: true, hasLiveSession: false })),
+    },
+  });
+  return tracker("agent_session_workflow_launch", request, h.service.launch(request));
+};
+
 test("startup reports saved ownership, native preparation and accepted instruction from the host worker", async () => {
   const h = await createLaunchHarness("codex");
   const snapshots: StartupOperationSnapshot[] = [];
@@ -91,70 +120,18 @@ test("startup reports saved ownership, native preparation and accepted instructi
   );
 });
 
-test("a failed tracked launch retains its saved session and unsent instruction without another preparation", async () => {
-  const h = await createLaunchHarness("codex");
-  h.setPublishFailure();
-  const tracker = createNodeSessionStartupTracker({
-    hostInstanceId: "host",
-    eventBus: undefined,
-    taskWorkflows: builtinTaskWorkflows,
-    settings: {
-      getRepoConfig: () => Effect.succeed(h.config),
-      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
-    },
-    finalize: () => Effect.die(new Error("A failed launch must not prepare again")),
-    runtime: {
-      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
-    },
-  });
-  const request = {
-    ...requestFor("codex"),
-    startup: { startupAttemptId: "attempt", operationId: "operation" },
-  };
-  const result = await Effect.runPromise(
-    tracker("agent_session_workflow_launch", request, h.service.launch(request)),
-  );
-  expect(result).toMatchObject({
-    status: "failed",
-    session: { externalSessionId: "session-1" },
-    failure: { message: expect.stringContaining("Ownership publication failed") },
-    unsentInstruction: [{ kind: "text", text: expect.stringContaining("first instruction") }],
-    startupProgress: {
-      phase: "failed",
-      ownership: {
-        state: "saved",
-        target: { kind: "task", record: { externalSessionId: "session-1" } },
-      },
-    },
-  });
-  expect(result.startupProgress?.prepared).toBeUndefined();
-  expect(h.records).toHaveLength(1);
-  expect(h.sends).toHaveLength(0);
-});
-
 test("startup keeps a new task checkout when native Stop is acknowledged but remains unconfirmed", async () => {
   const h = await createLaunchHarness("codex");
   h.setWorktreeExists(false);
   h.setSaveFailure();
-  const tracker = createNodeSessionStartupTracker({
-    hostInstanceId: "host",
-    eventBus: undefined,
-    taskWorkflows: builtinTaskWorkflows,
-    settings: {
-      getRepoConfig: () => Effect.succeed(h.config),
-      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
-    },
-    finalize: h.runtime.finalizeStartupPreparation,
-    runtime: {
-      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: true }),
-    },
-  });
   const request = {
     ...requestFor("codex"),
     startup: { startupAttemptId: "attempt", operationId: "operation" },
   };
   const result = await Effect.runPromise(
-    tracker("agent_session_workflow_launch", request, h.service.launch(request)),
+    launchTracked(h, request, {
+      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: true }),
+    }),
   );
   expect(result.status).toBe("failed");
   expect(result.failure?.message).toContain("did not confirm that session session-1 stopped");
@@ -181,26 +158,11 @@ test("startup retains confirmed resource removal after task rollback settles", a
   const h = await createLaunchHarness("codex");
   h.setWorktreeExists(false);
   h.setSaveFailure();
-  const tracker = createNodeSessionStartupTracker({
-    hostInstanceId: "host",
-    eventBus: undefined,
-    taskWorkflows: builtinTaskWorkflows,
-    settings: {
-      getRepoConfig: () => Effect.succeed(h.config),
-      getRepoConfigByRepoPath: () => Effect.succeed(h.config),
-    },
-    finalize: h.runtime.finalizeStartupPreparation,
-    runtime: {
-      probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
-    },
-  });
   const request = {
     ...requestFor("codex"),
     startup: { startupAttemptId: "attempt", operationId: "operation" },
   };
-  const result = await Effect.runPromise(
-    tracker("agent_session_workflow_launch", request, h.service.launch(request)),
-  );
+  const result = await Effect.runPromise(launchTracked(h, request));
   expect(result).toMatchObject({
     status: "failed",
     startupProgress: {
@@ -228,22 +190,6 @@ test.each(["write_start", "unknown_action"])(
       taskWorkflows: reviewTaskWorkflows,
       task: { issueType: "article", status: "backlog" },
     });
-    const tracker = createNodeSessionStartupTracker({
-      hostInstanceId: "host",
-      eventBus: undefined,
-      taskWorkflows: {
-        ...reviewTaskWorkflows,
-        forNewTask: builtinTaskWorkflows.forNewTask,
-      },
-      settings: {
-        getRepoConfig: () => Effect.succeed(h.config),
-        getRepoConfigByRepoPath: () => Effect.succeed(h.config),
-      },
-      finalize: h.runtime.finalizeStartupPreparation,
-      runtime: {
-        probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
-      },
-    });
     const request: WorkflowLaunchRequest = {
       ...requestFor("codex"),
       policy: {
@@ -253,10 +199,14 @@ test.each(["write_start", "unknown_action"])(
       },
       startup: { startupAttemptId: "attempt", operationId: "operation" },
     };
+    const launch = launchTracked(h, request, {
+      taskWorkflows: {
+        ...reviewTaskWorkflows,
+        forNewTask: builtinTaskWorkflows.forNewTask,
+      },
+    });
     if (actionId === "unknown_action") {
-      const result = await Effect.runPromise(
-        Effect.result(tracker("agent_session_workflow_launch", request, h.service.launch(request))),
-      );
+      const result = await Effect.runPromise(Effect.result(launch));
       expect(result).toMatchObject({
         _tag: "Failure",
         failure: {
@@ -267,9 +217,7 @@ test.each(["write_start", "unknown_action"])(
       });
       return;
     }
-    const result = await Effect.runPromise(
-      tracker("agent_session_workflow_launch", request, h.service.launch(request)),
-    );
+    const result = await Effect.runPromise(launch);
     expect(result).toMatchObject({
       status: "completed",
       role: "writer",
@@ -1257,13 +1205,29 @@ test("a publication failure after ownership save returns the saved session and t
     },
   ];
   const result = await Effect.runPromise(
-    h.service.launch({ ...requestFor("codex"), instruction: { kind: "message", parts } }),
+    launchTracked(
+      h,
+      {
+        ...requestFor("codex"),
+        startup: { startupAttemptId: "attempt", operationId: "operation" },
+        instruction: { kind: "message", parts },
+      },
+      { finalize: () => Effect.die(new Error("A failed launch must not prepare again")) },
+    ),
   );
   expect(result).toMatchObject({
     status: "failed",
     session: { externalSessionId: "session-1" },
     failure: { message: "Ownership publication failed" },
+    startupProgress: {
+      phase: "failed",
+      ownership: {
+        state: "saved",
+        target: { kind: "task", record: { externalSessionId: "session-1" } },
+      },
+    },
   });
+  expect(result.startupProgress?.prepared).toBeUndefined();
   expect(result.unsentInstruction).toEqual(parts);
   expect(h.records).toHaveLength(1);
   expect(h.stops).toHaveLength(0);

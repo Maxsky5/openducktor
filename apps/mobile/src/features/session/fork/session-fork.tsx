@@ -57,15 +57,15 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
   const focused = useIsFocused();
   const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
   const startupAttempt = useStartupAttempt(startupAttemptId);
-  const attempts = useRef(new Set<string>());
   const inlineOrigin = useRef<{ attemptId: string; sessionKey: string | null } | null>(null);
   useEffect(() => {
-    if (!focused) for (const id of attempts.current) startupAttempts.continueInBackground(id);
+    if (!focused && inlineOrigin.current)
+      startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
   }, [focused, startupAttempts]);
   useEffect(() => {
-    const registered = attempts.current;
     return () => {
-      for (const id of registered) startupAttempts.continueInBackground(id);
+      if (inlineOrigin.current)
+        startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
     };
   }, [startupAttempts]);
   const pending = useSessionForkRequests(queryClient);
@@ -145,9 +145,8 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
             presentation: "inline",
             onAttempt: (id) => {
               submittedAttemptId = id;
-              for (const previous of attempts.current)
-                startupAttempts.continueInBackground(previous);
-              attempts.current.add(id);
+              if (inlineOrigin.current)
+                startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
               inlineOrigin.current = { attemptId: id, sessionKey: startedIn };
               setStartupAttemptId(id);
             },

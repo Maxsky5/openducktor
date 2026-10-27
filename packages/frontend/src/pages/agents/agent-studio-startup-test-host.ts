@@ -1,8 +1,4 @@
-import {
-  repoConfigSchema,
-  type AgentSessionLiveEnvelope,
-  type StartupOperationSnapshot,
-} from "@openducktor/contracts";
+import { repoConfigSchema, type StartupOperationSnapshot } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -12,7 +8,7 @@ import {
   AgentOperationsContext,
   AgentSessionsContext,
 } from "@openducktor/frontend-core/sessions/session-contexts";
-import { registerStartupLiveSource } from "@openducktor/frontend-core/sessions/startup/startup-prepared-handoff";
+import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
 import { createWorkflowLaunchClient } from "@/test-utils/workflow-launch-client";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -25,12 +21,6 @@ export function createAgentStudioStartupTestHost(
   holdPreparedPublication = false,
   client: Partial<HostClient> = {},
 ) {
-  const listeners = new Set<(event: AgentSessionLiveEnvelope) => void>();
-  let sequence = 0;
-  const preparedEvents: AgentSessionLiveEnvelope[] = [];
-  const publishPrepared = () => {
-    for (const event of preparedEvents.splice(0)) for (const listener of listeners) listener(event);
-  };
   const connection = createTestClientConnection({
     feedback: sonnerFeedback,
     scheduleTask: () => () => {},
@@ -54,42 +44,16 @@ export function createAgentStudioStartupTestHost(
         const result =
           await createWorkflowLaunchClient(workflow()).agentSessionWorkflowLaunch(request);
         const session = result.session;
-        const ref = session
-          ? {
-              repoPath: request.repoPath,
-              runtimeKind: session.runtimeKind,
-              workingDirectory: session.workingDirectory,
-              externalSessionId: session.externalSessionId,
-            }
-          : null;
-        if (session && ref) {
-          sequence += 1;
-          const envelope: AgentSessionLiveEnvelope = {
-            type: "session_upsert",
-            sequence,
-            session: {
-              ref,
-              activity: "idle",
-              title: "Started session",
-              startedAt: session.startedAt,
-              pendingApprovals: [],
-              pendingQuestions: [],
-              contextUsage: null,
-            },
-          };
-          preparedEvents.push(envelope);
-          if (!holdPreparedPublication) publishPrepared();
-        }
-        const startupProgress: StartupOperationSnapshot = {
+        const operation = {
           context: request.startup,
-          hostInstanceId: "host",
-          revision: 1,
           workspaceId: request.workspaceId,
           repoPath: request.repoPath,
-          scope: { kind: "task", taskId: request.taskId, role: result.role },
-          phase: result.status === "completed" ? "completed" : "failed",
-          ownership: session
-            ? {
+          scope: { kind: "task" as const, taskId: request.taskId, role: result.role },
+        };
+        const startupProgress: StartupOperationSnapshot = session
+          ? live.prepared({
+              ...operation,
+              ownership: {
                 state: "saved",
                 target: {
                   kind: "task",
@@ -103,44 +67,43 @@ export function createAgentStudioStartupTestHost(
                     selectedModel: result.model ?? null,
                   },
                 },
-              }
-            : { state: "not_saved" },
-          steps: [
-            {
-              id: result.unsentInstruction ? "instruction" : "prepare",
-              label: "Prepare session",
-              state: result.status === "completed" ? "completed" : "failed",
-              details: [],
-              ...(result.failure && {
-                failure: {
-                  stage: "prepare",
-                  code: "startup_failed",
-                  message: result.failure.message,
-                  nextAction: "Inspect the saved session.",
-                },
-              }),
-            },
-          ],
-          ...(ref && { prepared: { ref, runtimeId: "runtime", liveStateSequence: sequence } }),
-          ...(request.instruction.kind !== "none" && {
-            instruction: {
-              state: result.acceptedMessage ? "accepted" : "not_sent",
-            },
-          }),
-        };
+              },
+            })
+          : {
+              ...operation,
+              hostInstanceId: "host",
+              revision: 1,
+              phase: "failed",
+              ownership: { state: "not_saved" },
+              steps: [],
+            };
+        startupProgress.phase = result.status === "completed" ? "completed" : "failed";
+        startupProgress.steps = [
+          {
+            id: result.unsentInstruction ? "instruction" : "prepare",
+            label: "Prepare session",
+            state: result.status === "completed" ? "completed" : "failed",
+            details: [],
+            ...(result.failure && {
+              failure: {
+                stage: "prepare",
+                code: "startup_failed",
+                message: result.failure.message,
+                nextAction: "Inspect the saved session.",
+              },
+            }),
+          },
+        ];
+        if (request.instruction.kind !== "none")
+          startupProgress.instruction = {
+            state: result.acceptedMessage ? "accepted" : "not_sent",
+          };
         return { ...result, startupProgress };
       },
     },
   });
-  const releaseLiveSource = registerStartupLiveSource(connection.queryClient, {
-    observeWorkspace: () => () => {},
-    observeAgentSessionLive: async ({ repoPath }, listener) => {
-      listeners.add(listener);
-      listener({ type: "snapshot", repoPath, sequence, sessions: [], messageQueues: [] });
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+  const live = createStartupLiveSourceFake(connection.queryClient, {
+    holdPreparedPublication,
   });
   const sessions = createAgentSessionsStore("/repo");
   const operations = createAgentOperationsFixture({
@@ -156,9 +119,9 @@ export function createAgentStudioStartupTestHost(
   return {
     connection,
     Providers,
-    publishPrepared,
+    publishPrepared: live.publishPrepared,
     dispose: async () => {
-      releaseLiveSource();
+      live.dispose();
       await connection.dispose();
     },
   };

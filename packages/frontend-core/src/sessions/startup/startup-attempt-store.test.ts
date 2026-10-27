@@ -204,7 +204,7 @@ test("only startup coverage loss marks outstanding work unconfirmed and host rep
 });
 
 test("retains typed partial ownership after a lost event and never downgrades a saved record", async () => {
-  const { store, id, admit } = harness();
+  const { store, id, admit, event } = harness();
   const record = { ...savedRecord(), externalSessionId: null };
   let createContext!: StartupOperationContext;
   const command = store.operation(id, async (context) => {
@@ -241,12 +241,13 @@ test("retains typed partial ownership after a lost event and never downgrades a 
       ownership: { state: "saved", target: { kind: "workspace", record: preparedRecord } },
     }),
   }));
-  store.accept(
-    progress(createContext, 3, {
+  await event({
+    channel: "openducktor://session-startup-progress",
+    payload: progress(createContext, 3, {
       phase: "completed",
       ownership: { state: "saved", target: { kind: "workspace", record } },
     }),
-  );
+  });
   expect(store.getAttempt(id)?.ownership).toEqual({
     state: "saved",
     target: { kind: "workspace", record: preparedRecord },
@@ -276,7 +277,11 @@ test("client completion waits for one owned adoption and automatic handoff requi
   const prepared = Promise.withResolvers<void>();
   let current = true;
   const adopt = mock(() => prepared.promise);
-  const { store, id, admit } = harness({ adopt, isCurrent: () => current, release: () => {} });
+  const { store, id, admit, event } = harness({
+    adopt,
+    isCurrent: () => current,
+    release: () => {},
+  });
   try {
     let context!: StartupOperationContext;
     const command = store.operation(id, async (captured) => {
@@ -288,7 +293,10 @@ test("client completion waits for one owned adoption and automatic handoff requi
     const completion = store.complete(id);
     expect(store.isReadyForHandoff(id)).toBe(false);
     store.setWarning(id, "Session updates could not sync.");
-    store.accept(preparedProgress(context, 2));
+    await event({
+      channel: "openducktor://session-startup-progress",
+      payload: preparedProgress(context, 2),
+    });
     expect(adopt).toHaveBeenCalledTimes(1);
     prepared.resolve();
     await completion;
@@ -334,7 +342,7 @@ test("an older adoption failure cannot settle or invalidate a newer operation", 
 });
 
 test("late action results stay in their old operation without changing a running repair", async () => {
-  const { store, id, admit } = harness();
+  const { store, id, admit, event } = harness();
   try {
     let oldContext!: StartupOperationContext;
     const failed = store.operation(id, async (context) => {
@@ -377,7 +385,7 @@ test("late action results stay in their old operation without changing a running
         },
       },
     ];
-    store.accept(old);
+    await event({ channel: "openducktor://session-startup-progress", payload: old });
     const current = store.getAttempt(id);
     expect(current?.status).toMatchObject({ phase: "running", confirmation: "current" });
     expect(current?.prepared?.liveStateSequence).toBe(2);
