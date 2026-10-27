@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { act, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, waitFor, within } from "@testing-library/react";
 import { type PropsWithChildren, useEffect, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import type { StartupScope, WorkspaceSession } from "@openducktor/contracts";
@@ -21,7 +21,7 @@ import {
 } from "@/components/layout/workspace-preview-transition-guard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StartupDialogProgress } from "./session-startup-dialog-progress";
-import { StartupNotifications } from "./session-startup-stack";
+import { AppToaster, StartupNotifications } from "./session-startup-stack";
 import { useOpenStartupSession } from "./use-open-startup-session";
 
 test.each([
@@ -170,6 +170,7 @@ test.each([
             {location.pathname}
             {location.search}
           </output>
+          <AppToaster />
           <StartupNotifications />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent>
@@ -218,16 +219,18 @@ test.each([
       expect(closed).toHaveBeenCalledTimes(1);
       if (phase === "ready") {
         expect(connection.startupAttempts.getAttempt(id)).toBeNull();
-        expect(view.queryByRole("region", { name: "Session startup notifications" })).toBeNull();
+        const notifications = within(view.getByRole("region", { name: /^Notifications/ }));
+        expect(
+          notifications.queryByText(
+            kind === "workspace" ? "origin · Workspace chat" : "origin · saved-task",
+          ),
+        ).toBeNull();
       } else {
         const retained = connection.startupAttempts.getAttempt(id);
         expect(retained).toMatchObject({ id, presentation: "notification", status: { phase } });
         expect(retained?.operations).toEqual(original?.operations);
         if (kind === "task") expect(retained?.instruction?.state).toBe("not_sent");
-        expect(
-          await view.findByRole("region", { name: "Session startup notifications" }),
-        ).toBeDefined();
-        fireEvent.click(await view.findByRole("button", { name: "View progress" }));
+        expect(await view.findByRole("region", { name: /^Notifications/ })).toBeDefined();
         await view.findByRole("list", { name: "Session startup steps" });
         expect(view.getByText("Create worktree")).toBeDefined();
         expect(retry).not.toHaveBeenCalled();

@@ -58,14 +58,15 @@ function StartupStack(): ReactElement | null {
   const visible = attempts.filter((attempt) => attempt.presentation === "notification");
   if (hidden || covered || visible.length === 0) return null;
   const top = insets.top + 70 + toastStackHeight + (toastStackHeight > 0 ? theme.space.sm : 0);
+  const bottom = insets.bottom + 80;
   return (
     <View
       pointerEvents="box-none"
       style={[
         styles.host,
         {
-          top,
-          maxHeight: Math.max(0, height - top - insets.bottom - 80),
+          bottom,
+          maxHeight: Math.max(0, height - top - bottom),
         },
       ]}
     >

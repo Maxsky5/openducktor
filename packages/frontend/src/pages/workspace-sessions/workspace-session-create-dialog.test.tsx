@@ -37,7 +37,7 @@ import {
   createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
+import { AppToaster, StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 
 function renderCreation(
@@ -239,6 +239,7 @@ function renderCreation(
           {location.pathname}
           {location.search}
         </output>
+        <AppToaster />
         <StartupNotifications />
         {open ? (
           <WorkspaceSessionCreateDialog
@@ -378,9 +379,7 @@ test("opening a saved failed current-checkout creation retains feedback and sess
       status: { phase: "failed" },
       operations: original.operations,
     });
-    expect(
-      await view.findByRole("region", { name: "Session startup notifications" }),
-    ).toBeDefined();
+    expect(await view.findByRole("region", { name: /^Notifications/ })).toBeDefined();
     expect(view.queryByRole("button", { name: "View progress" })).toBeNull();
     expect(view.queryByText(/\d+\/\d+ steps/)).toBeNull();
     fireEvent.click(await view.findByRole("button", { name: "Details" }));

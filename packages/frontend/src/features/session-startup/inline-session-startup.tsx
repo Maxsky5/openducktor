@@ -137,7 +137,7 @@ function InlineTrace({ attempt }: { attempt: StartupAttempt }): ReactElement {
   const connection = useClientConnection();
   const presentation = startupPresentation(connection, attempt.id);
   const [expanded, setExpanded] = useState(
-    () => presentation.detailsOpen || presentation.expandedSteps.size > 0,
+    () => presentation.detailsOpen ?? presentation.expandedSteps.size > 0,
   );
   const pending = startupIsPending(attempt);
   const activity = startupActivity(attempt);

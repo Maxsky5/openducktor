@@ -1,7 +1,7 @@
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 
 export type StartupPresentation = {
-  detailsOpen: boolean;
+  detailsOpen: boolean | undefined;
   expandedSteps: Set<string>;
   scrollTop: number;
   inspection: ReturnType<typeof createStartupInspection>;
@@ -25,7 +25,7 @@ export const startupPresentation = (
   let presentation = attempts.get(attemptId);
   if (!presentation) {
     presentation = {
-      detailsOpen: false,
+      detailsOpen: undefined,
       expandedSteps: new Set(),
       scrollTop: 0,
       inspection: createStartupInspection(),

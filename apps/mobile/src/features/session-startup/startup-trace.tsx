@@ -73,8 +73,9 @@ export function StartupTrace({
   const compact = expectedPresentation !== "dialog";
   const rows = attempt ? startupTraceRows(attempt) : [];
   const traceAvailable = rows.length > 0;
+  const progressKey = expectedPresentation === "notification" ? "progress-collapsed" : "progress";
   const progressOpen =
-    traceAvailable && (!compact || traceState.expanded[attemptId]?.has("progress") === true);
+    traceAvailable && startupProgressExpanded(expectedPresentation, traceState.expanded[attemptId]);
   const [progressViewed, setProgressViewed] = useState(progressOpen);
   useAnnounce(startupAnnouncement(attempt, expectedPresentation));
   if (!attempt || attempt.presentation !== expectedPresentation) return null;
@@ -115,13 +116,22 @@ export function StartupTrace({
           compact && traceAvailable
             ? () => {
                 setProgressViewed(true);
-                traceState.toggle(attemptId, "progress");
+                traceState.toggle(attemptId, progressKey);
               }
             : undefined
         }
       />
     </View>
   );
+}
+
+function startupProgressExpanded(
+  presentation: StartupPresentation,
+  expanded: ReadonlySet<string> | undefined,
+): boolean {
+  if (presentation === "dialog") return true;
+  if (presentation === "notification") return expanded?.has("progress-collapsed") !== true;
+  return expanded?.has("progress") === true;
 }
 
 function hasConfirmedReadyState(attempt: StartupAttempt): boolean {

@@ -1,5 +1,5 @@
-import { Check, LoaderCircle, OctagonAlert } from "lucide-react";
-import { type CSSProperties, type ReactElement, useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, LoaderCircle, OctagonAlert } from "lucide-react";
+import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
@@ -22,17 +22,36 @@ import {
   startupTitle,
 } from "./startup-summary";
 
-const startupToasterStyle: CSSProperties & Record<`--${string}`, string> = {
-  "--width": "min(24rem, calc(100vw - 2rem))",
+// Modal forms and sheets must keep control of their footer buttons.
+const toasterStyle: CSSProperties = { zIndex: 40 };
+
+const startupToasterStyle: CSSProperties = {
+  ...toasterStyle,
+  // Bottom toasts grow upward. A reversed scroll origin keeps older cards reachable.
+  display: "flex",
+  flexDirection: "column-reverse",
   height: "calc(100dvh - 2rem)",
   maxHeight: "calc(100dvh - 2rem)",
   overflowY: "auto",
   pointerEvents: "none",
 };
 
+export function AppToaster(): ReactElement {
+  const attempts = useStartupAttempts();
+  const startupVisible = attempts.some((attempt) => attempt.presentation === "notification");
+  return (
+    <Toaster
+      offset={16}
+      mobileOffset={16}
+      visibleToasts={startupVisible ? Infinity : 5}
+      style={startupVisible ? startupToasterStyle : toasterStyle}
+      className="overscroll-contain [&>[data-sonner-toast]]:pointer-events-auto"
+    />
+  );
+}
+
 export function StartupNotifications(): ReactElement | null {
   const connection = useClientConnection();
-  const toasterId = useId();
   const { startupAttempts } = connection;
   const attempts = useStartupAttempts();
   useEffect(
@@ -52,42 +71,19 @@ export function StartupNotifications(): ReactElement | null {
   if (!notifications.length) return null;
   return (
     <>
-      <Toaster
-        id={toasterId}
-        customAriaLabel="Session startup notifications"
-        position="top-right"
-        offset={16}
-        mobileOffset={16}
-        expand
-        visibleToasts={notifications.length}
-        hotkey={[]}
-        style={startupToasterStyle}
-        className="overscroll-contain [&>[data-sonner-toast]]:pointer-events-auto"
-      />
       {notifications.map((attempt) => (
-        <StartupNotice key={attempt.id} attempt={attempt} toasterId={toasterId} />
+        <StartupNotice key={attempt.id} attempt={attempt} />
       ))}
     </>
   );
 }
 
-function StartupNotice({
-  attempt,
-  toasterId,
-}: {
-  attempt: StartupAttempt;
-  toasterId: string;
-}): null {
+function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
   const connection = useClientConnection();
   const { openSession, openError } = useOpenStartupSession(attempt);
-  const [expanded, setExpanded] = useState(() => {
-    const presentation = startupPresentation(connection, attempt.id);
-    return (
-      presentation.detailsOpen ||
-      presentation.expandedSteps.size > 0 ||
-      presentation.inspection.getSnapshot()
-    );
-  });
+  const [detailsOpen, setDetailsOpen] = useState(
+    () => startupPresentation(connection, attempt.id).detailsOpen,
+  );
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
   const [contentHeight, setContentHeight] = useState(0);
   const measuredHeight = useRef(0);
@@ -115,6 +111,7 @@ function StartupNotice({
     const issue = startupIssue(attempt);
     const progress = startupProgress(attempt);
     const hasTrace = progress.total > 0;
+    const expanded = detailsOpen ?? hasTrace;
     const canInspect =
       hasTrace || attempt.ownership.state === "saved" || startupFailureRows(attempt).length > 0;
     let progressLabel = "View progress";
@@ -130,52 +127,76 @@ function StartupNotice({
       );
     else if (attempt.status.phase === "ready" && !issue)
       icon = <Check aria-hidden="true" className="size-4 text-success-icon" />;
-    toast(startupTitle(attempt), {
-      id: toastId,
-      toasterId,
-      duration: Infinity,
-      dismissible: !pending,
-      closeButton: !pending,
-      icon,
-      onDismiss: () => connection.startupAttempts.dismiss(attempt.id),
-      classNames: {
-        toast: "!items-start",
-        content: "w-full",
-      },
-      description: (
-        <div ref={setContentElement} className="flex min-w-0 flex-col gap-2">
-          <p className="break-words">{startupOrigin(attempt)}</p>
-          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            {activity ? <span>{activity}</span> : null}
-            {progress.total > 0 ? (
-              <span className="shrink-0 tabular-nums">
-                {progress.completed}/{progress.total} steps
-              </span>
-            ) : null}
-          </p>
-          {!expanded && attempt.status.confirmation === "unconfirmed" ? (
-            <p className="text-warning-surface-foreground">
-              Startup is not confirmed. Inspect the session before you try again.
-            </p>
+    const toggleDetails = () => {
+      const next = !expanded;
+      startupPresentation(connection, attempt.id).detailsOpen = next;
+      setDetailsOpen(next);
+    };
+    toast(
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span>{startupTitle(attempt)}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {hasTrace && (pending || !expanded) ? (
+            <span className="text-xs font-normal text-muted-foreground tabular-nums">
+              {progress.completed}/{progress.total}
+              <span className="sr-only"> steps complete</span>
+            </span>
           ) : null}
-          {!expanded && issue ? (
-            <p role="alert" className="break-words text-destructive">
-              {issue}
-            </p>
-          ) : null}
-          {expanded && canInspect ? (
-            <div
-              className={hasTrace ? "max-h-52 min-h-0 overflow-hidden" : "max-h-52 overflow-y-auto"}
+          {canInspect ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-6"
+              aria-label={progressLabel}
+              title={progressLabel}
+              aria-expanded={expanded}
+              onClick={toggleDetails}
             >
-              <StartupTrace
-                attempt={attempt}
-                onOpen={openSession}
-                showHeader={false}
-                className={hasTrace ? "max-h-52" : ""}
-              />
-            </div>
+              {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+            </Button>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+        </div>
+      </div>,
+      {
+        id: toastId,
+        duration: Infinity,
+        dismissible: !pending,
+        closeButton: !pending,
+        icon,
+        onDismiss: () => connection.startupAttempts.dismiss(attempt.id),
+        classNames: {
+          toast: "!items-start",
+          content: "w-full",
+        },
+        description: (
+          <div ref={setContentElement} className="flex min-w-0 flex-col gap-2">
+            <p className="break-words">{startupOrigin(attempt)}</p>
+            {activity && (!expanded || !hasTrace) ? <p>{activity}</p> : null}
+            {!expanded && attempt.status.confirmation === "unconfirmed" ? (
+              <p className="text-warning-surface-foreground">
+                Startup is not confirmed. Inspect the session before you try again.
+              </p>
+            ) : null}
+            {!expanded && issue ? (
+              <p role="alert" className="break-words text-destructive">
+                {issue}
+              </p>
+            ) : null}
+            {expanded && canInspect ? (
+              <div
+                className={
+                  hasTrace ? "max-h-52 min-h-0 overflow-hidden" : "max-h-52 overflow-y-auto"
+                }
+              >
+                <StartupTrace
+                  attempt={attempt}
+                  onOpen={openSession}
+                  showHeader={false}
+                  className={hasTrace ? "max-h-52" : ""}
+                />
+              </div>
+            ) : null}
             {!expanded && canOpenStartupSession(attempt) ? (
               <Button
                 type="button"
@@ -186,33 +207,16 @@ function StartupNotice({
                 Open session
               </Button>
             ) : null}
-            {canInspect ? (
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                aria-expanded={expanded}
-                onClick={() =>
-                  setExpanded((currentExpanded) => {
-                    const next = !currentExpanded;
-                    startupPresentation(connection, attempt.id).detailsOpen = next;
-                    return next;
-                  })
-                }
-              >
-                {progressLabel}
-              </Button>
+            {!expanded ? <StartupRecoveryActions attempt={attempt} /> : null}
+            {openError ? (
+              <p role="alert" className="break-words text-destructive">
+                {openError}
+              </p>
             ) : null}
           </div>
-          {!expanded ? <StartupRecoveryActions attempt={attempt} /> : null}
-          {openError ? (
-            <p role="alert" className="break-words text-destructive">
-              {openError}
-            </p>
-          ) : null}
-        </div>
-      ),
-    });
-  }, [attempt, connection, contentHeight, expanded, openError, openSession, toastId, toasterId]);
+        ),
+      },
+    );
+  }, [attempt, connection, contentHeight, detailsOpen, openError, openSession, toastId]);
   return null;
 }

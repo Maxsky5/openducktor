@@ -1,5 +1,13 @@
 import type { StartupStep } from "@openducktor/contracts";
-import { Check, Circle, CircleDashed, LoaderCircle, Minus, OctagonAlert } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  Circle,
+  CircleDashed,
+  LoaderCircle,
+  Minus,
+  OctagonAlert,
+} from "lucide-react";
 import {
   lazy,
   type ReactElement,
@@ -72,19 +80,29 @@ export function StartupTrace({
 }): ReactElement {
   const connection = useClientConnection();
   const presentation = startupPresentation(connection, attempt.id);
+  const inspect = useSyncExternalStore(
+    presentation.inspection.subscribe,
+    presentation.inspection.getSnapshot,
+    presentation.inspection.getSnapshot,
+  );
   const scroll = useRef<HTMLElement>(null);
+  const savedDetails = useRef<HTMLDivElement>(null);
+  const revealSavedDetails = useRef(false);
   const rows = startupTraceRows(attempt);
   const failures = rows.length === 0 ? startupFailureRows(attempt) : [];
   const progress = startupProgress(attempt);
-  const repeatedError = [...rows, ...failures].some(
-    ({ step }) =>
-      step.failure &&
-      (attempt.error === step.failure.message ||
-        attempt.error === `${step.failure.message} ${step.failure.nextAction}`),
-  );
+  const repeatedError = stepsShowError(attempt.error, [...rows, ...failures]);
   useLayoutEffect(() => {
     if (scroll.current) scroll.current.scrollTop = presentation.scrollTop;
   }, [presentation]);
+  useLayoutEffect(() => {
+    if (!inspect || !revealSavedDetails.current) return;
+    revealSavedDetails.current = false;
+    const frame = requestAnimationFrame(() =>
+      savedDetails.current?.scrollIntoView({ block: "start" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [inspect]);
   return (
     <div
       className={cn("flex min-h-0 min-w-0 flex-col gap-3", className)}
@@ -158,19 +176,53 @@ export function StartupTrace({
             <StartupStepDetails step={step} expanded presentation={presentation} />
           </div>
         ))}
-        {attempt.instruction?.state === "queued" ? (
-          <p className="text-xs text-muted-foreground">The initial instruction is queued.</p>
+        <StartupInstructionStatus instruction={attempt.instruction} />
+        {inspect ? (
+          <div ref={savedDetails}>
+            <StartupSavedSessionDetails attempt={attempt} />
+          </div>
         ) : null}
-        {attempt.instruction?.state === "unknown" ? (
-          <p className="text-xs text-warning-surface-foreground">
-            Instruction delivery is unconfirmed. Inspect the session before sending again.
-          </p>
-        ) : null}
-        <StartupSavedSession attempt={attempt} presentation={presentation} onOpen={onOpen} />
         <StartupRecoveryActions attempt={attempt} />
       </section>
+      <StartupSavedSession
+        attempt={attempt}
+        inspect={inspect}
+        onInspect={() => {
+          revealSavedDetails.current = !inspect;
+          presentation.inspection.toggle();
+        }}
+        onOpen={onOpen}
+      />
     </div>
   );
+}
+
+function stepsShowError(
+  error: StartupAttempt["error"],
+  rows: readonly { step: StartupStep }[],
+): boolean {
+  return rows.some(
+    ({ step }) =>
+      step.failure &&
+      (error === step.failure.message ||
+        error === `${step.failure.message} ${step.failure.nextAction}`),
+  );
+}
+
+function StartupInstructionStatus({
+  instruction,
+}: {
+  instruction: StartupAttempt["instruction"];
+}): ReactElement | null {
+  if (instruction?.state === "queued")
+    return <p className="text-xs text-muted-foreground">The initial instruction is queued.</p>;
+  if (instruction?.state === "unknown")
+    return (
+      <p className="text-xs text-warning-surface-foreground">
+        Instruction delivery is unconfirmed. Inspect the session before sending again.
+      </p>
+    );
+  return null;
 }
 
 function StartupStatus({ attempt }: { attempt: StartupAttempt }): ReactElement {
@@ -401,63 +453,57 @@ function StartupActionDetails({
 
 function StartupSavedSession({
   attempt,
-  presentation,
+  inspect,
+  onInspect,
   onOpen,
 }: {
   attempt: StartupAttempt;
-  presentation: StartupPresentation;
+  inspect: boolean;
+  onInspect: () => void;
   onOpen?: (() => void) | undefined;
 }): ReactElement | null {
-  const inspect = useSyncExternalStore(
-    presentation.inspection.subscribe,
-    presentation.inspection.getSnapshot,
-    presentation.inspection.getSnapshot,
-  );
-  const ownership = attempt.ownership;
-  if (ownership.state !== "saved") return null;
-  const saved = ownership.target;
+  if (attempt.ownership.state !== "saved") return null;
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-xs text-muted-foreground"
-          onClick={presentation.inspection.toggle}
-          aria-expanded={inspect}
-        >
-          Inspect saved session
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 text-xs text-muted-foreground"
+        onClick={onInspect}
+        aria-expanded={inspect}
+        aria-label="Inspect saved session"
+      >
+        Session details
+      </Button>
+      {onOpen && canOpenStartupSession(attempt) ? (
+        <Button type="button" size="sm" variant="default" onClick={onOpen}>
+          Open session
+          <ArrowUpRight aria-hidden="true" />
         </Button>
-        {onOpen && canOpenStartupSession(attempt) ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-7 px-2 text-xs"
-            onClick={onOpen}
-          >
-            Open session
-          </Button>
-        ) : null}
-      </div>
-      {inspect ? (
-        <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md border border-border bg-muted p-3 text-xs">
-          <dt>Session</dt>
-          <dd className="break-all font-mono">
-            {saved.kind === "task" ? saved.record.externalSessionId : saved.record.id}
-          </dd>
-          <dt>Runtime</dt>
-          <dd className="break-words">{saved.record.runtimeKind}</dd>
-          <dt>Directory</dt>
-          <dd className="break-all font-mono">
-            {saved.kind === "task"
-              ? saved.record.workingDirectory
-              : saved.record.executionTarget.workingDirectory}
-          </dd>
-        </dl>
       ) : null}
     </div>
+  );
+}
+
+function StartupSavedSessionDetails({ attempt }: { attempt: StartupAttempt }): ReactElement | null {
+  if (attempt.ownership.state !== "saved") return null;
+  const saved = attempt.ownership.target;
+  return (
+    <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 rounded-md border border-border bg-muted p-3 text-xs">
+      <dt>Session</dt>
+      <dd className="break-all font-mono">
+        {saved.kind === "task" ? saved.record.externalSessionId : saved.record.id}
+      </dd>
+      <dt>Runtime</dt>
+      <dd className="break-words">{saved.record.runtimeKind}</dd>
+      <dt>Directory</dt>
+      <dd className="break-all font-mono">
+        {saved.kind === "task"
+          ? saved.record.workingDirectory
+          : saved.record.executionTarget.workingDirectory}
+      </dd>
+    </dl>
   );
 }
 
