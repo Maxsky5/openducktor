@@ -7,7 +7,7 @@ import { gitPanelColors } from "./review-colors";
 import { lineCountAccessibilityLabel } from "./review-presentation";
 
 /**
- * The added and removed line counts of a file, such as "+12 -3", in the desktop mono counts. A
+ * The added and removed line counts, such as "+12 -3", in the desktop mono counts. A
  * zero count does not show, as on desktop.
  */
 export const LineCounts = memo(function LineCounts({

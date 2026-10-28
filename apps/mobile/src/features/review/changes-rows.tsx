@@ -90,7 +90,7 @@ export const GroupEmpty = memo(function GroupEmpty({ text }: { text: string }): 
 
 type DirectoryRowData = Extract<ChangesRow, { kind: "directory" }>;
 
-/** A tree directory row: a chevron and the joined directory names. A tap opens or closes it. */
+/** A tree directory row with its file and line totals. A tap opens or closes it. */
 export const DirectoryRow = memo(function DirectoryRow({
   row,
   onToggle,
@@ -99,12 +99,13 @@ export const DirectoryRow = memo(function DirectoryRow({
   onToggle: (directoryKey: string) => void;
 }): ReactElement {
   const theme = useAppTheme();
+  const fileCountLabel = `${row.fileCount} changed ${row.fileCount === 1 ? "file" : "files"}`;
   return (
     <Touchable
       feedback="highlight"
       onPress={() => onToggle(row.directoryKey)}
       accessibilityRole="button"
-      accessibilityLabel={`Folder ${row.path}`}
+      accessibilityLabel={`Folder ${row.path}, ${fileCountLabel}, ${lineCountAccessibilityLabel(row.additions, row.deletions)}`}
       accessibilityState={{ expanded: row.open }}
       style={[styles.directory, { paddingLeft: ROW_START + row.depth * DEPTH_INDENT }]}
     >
@@ -116,6 +117,12 @@ export const DirectoryRow = memo(function DirectoryRow({
       <Text variant="subhead" numberOfLines={1} ellipsizeMode="middle" style={styles.directoryName}>
         {row.name}
       </Text>
+      <View style={styles.directoryCount}>
+        <Text variant="caption2" tabular style={styles.directoryCountText}>
+          {row.fileCount}
+        </Text>
+      </View>
+      <LineCounts additions={row.additions} deletions={row.deletions} />
     </Touchable>
   );
 });
@@ -276,6 +283,13 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomColor: theme.colors.diffDivider,
   },
   directoryName: { flex: 1, minWidth: 0, color: theme.desktop.foreground },
+  directoryCount: {
+    paddingHorizontal: 6,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.desktop.muted,
+    alignItems: "center",
+  },
+  directoryCountText: { fontSize: 11, color: theme.desktop.foreground },
   fileBox: {
     borderBottomWidth: theme.hairline,
     borderBottomColor: theme.colors.diffDivider,
