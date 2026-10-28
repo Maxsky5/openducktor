@@ -15,12 +15,15 @@ import type { StartupOutputReading } from "./startup-output-reading";
 export function StartupPresentationProvider({ children }: PropsWithChildren): ReactElement {
   const [expanded, setExpanded] = useState<Record<string, ReadonlySet<string>>>({});
   const scroll = useRef(new Map<string, number>());
+  const notificationPresented = useRef(new Set<string>());
   const readings = useRef(new Map<string, Map<string, StartupOutputReading>>());
   const sheetClosers = useRef(new Map<string, () => void>());
   const attempts = useStartupAttempts();
   useEffect(() => {
     const retained = new Set(attempts.map((attempt) => attempt.id));
     for (const id of scroll.current.keys()) if (!retained.has(id)) scroll.current.delete(id);
+    for (const id of notificationPresented.current)
+      if (!retained.has(id)) notificationPresented.current.delete(id);
     for (const id of readings.current.keys()) if (!retained.has(id)) readings.current.delete(id);
     for (const id of sheetClosers.current.keys())
       if (!retained.has(id)) sheetClosers.current.delete(id);
@@ -57,6 +60,7 @@ export function StartupPresentationProvider({ children }: PropsWithChildren): Re
     () => ({
       expanded,
       scroll: scroll.current,
+      notificationPresented: notificationPresented.current,
       toggle,
       outputReading,
       sheetClosers: sheetClosers.current,

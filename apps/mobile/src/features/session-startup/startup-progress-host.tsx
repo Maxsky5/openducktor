@@ -1,7 +1,15 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { type ReactElement, use, useEffect, useSyncExternalStore } from "react";
+import { type ReactElement, use, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Platform, ScrollView, useWindowDimensions, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  LayoutAnimationConfig,
+  ReduceMotion,
+  useReducedMotion,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
 import { StyleSheet } from "react-native-unistyles";
@@ -9,9 +17,21 @@ import { useStore } from "zustand";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import { appStateVisibility } from "@/composition/app-visibility";
 import { toastsCoveredBy, toastWindowOf } from "@/feedback/feedback-store";
-import { StartupPresentationContext } from "./startup-presentation-context";
+import { StartupPresentationContext, useStartupPresentation } from "./startup-presentation-context";
 import { StartupTrace } from "./startup-trace";
 import { useAppTheme } from "@/theme/app-theme-context";
+import { motion } from "@/theme/tokens";
+
+const CARD_ENTERING = FadeInDown.duration(motion.base)
+  .easing(motion.easeOutCurve)
+  .withInitialValues({ transform: [{ translateY: 8 }] })
+  .reduceMotion(ReduceMotion.System);
+const CARD_ENTERING_REDUCED = FadeIn.duration(motion.fast)
+  .easing(motion.easeOutCurve)
+  .reduceMotion(ReduceMotion.Never);
+const CARD_EXITING = FadeOut.duration(motion.fast)
+  .easing(motion.easeOutCurve)
+  .reduceMotion(ReduceMotion.Never);
 
 /** Startup feedback has its own retention and count, while it shares native window placement. */
 export function StartupProgressHost(): ReactElement | null {
@@ -39,6 +59,8 @@ export function ModalStartupProgressHost(): ReactElement | null {
 }
 
 function StartupStack(): ReactElement | null {
+  // Keep the viewport open while the last native card finishes its exit.
+  const lastSize = useRef({ viewport: 0, content: 0 });
   const attempts = useStartupAttempts();
   const { startupAttempts } = useClientConnection();
   const hidden = useSyncExternalStore(
@@ -56,35 +78,62 @@ function StartupStack(): ReactElement | null {
     if (!hidden) startupAttempts.expireSuccess();
   }, [hidden, startupAttempts]);
   const visible = attempts.filter((attempt) => attempt.presentation === "notification");
-  if (hidden || covered || visible.length === 0) return null;
+  const empty = visible.length === 0;
+  if (hidden || covered) return null;
   const top = insets.top + 70 + toastStackHeight + (toastStackHeight > 0 ? theme.space.sm : 0);
   const bottom = insets.bottom + 80;
   return (
-    <View
-      pointerEvents="box-none"
-      style={[
-        styles.host,
-        {
-          bottom,
-          maxHeight: Math.max(0, height - top - bottom),
-        },
-      ]}
-    >
-      <ScrollView
-        style={styles.stack}
-        contentContainerStyle={styles.content}
-        nestedScrollEnabled
-        keyboardShouldPersistTaps="handled"
+    <LayoutAnimationConfig skipExiting>
+      <View
+        collapsable={false}
+        pointerEvents={empty ? "none" : "box-none"}
+        style={[
+          styles.host,
+          {
+            bottom,
+            maxHeight: Math.max(0, height - top - bottom),
+          },
+        ]}
       >
-        {/* Keep native output pages attached while the user's manual starts update card heights. */}
-        {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
-        {visible.map((attempt) => (
-          <View key={attempt.id} style={styles.card}>
-            <StartupTrace attemptId={attempt.id} presentation="notification" />
-          </View>
-        ))}
-      </ScrollView>
-    </View>
+        <ScrollView
+          style={[styles.stack, empty && { height: lastSize.current.viewport }]}
+          contentContainerStyle={[styles.content, empty && { minHeight: lastSize.current.content }]}
+          onLayout={(event) => {
+            if (!empty) lastSize.current.viewport = event.nativeEvent.layout.height;
+          }}
+          onContentSizeChange={(_width, contentHeight) => {
+            if (!empty) lastSize.current.content = contentHeight;
+          }}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Keep native output pages attached while the user's manual starts update card heights. */}
+          {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
+          {visible.map((attempt) => (
+            <StartupCard key={attempt.id} attemptId={attempt.id} />
+          ))}
+        </ScrollView>
+      </View>
+    </LayoutAnimationConfig>
+  );
+}
+
+function StartupCard({ attemptId }: { attemptId: string }): ReactElement {
+  const { notificationPresented } = useStartupPresentation();
+  const reducedMotion = useReducedMotion();
+  const [firstPresentation] = useState(() => !notificationPresented.has(attemptId));
+  useEffect(() => {
+    notificationPresented.add(attemptId);
+  }, [attemptId, notificationPresented]);
+  const entering = reducedMotion ? CARD_ENTERING_REDUCED : CARD_ENTERING;
+  return (
+    <Animated.View
+      {...(firstPresentation ? { entering } : {})}
+      exiting={CARD_EXITING}
+      style={styles.card}
+    >
+      <StartupTrace attemptId={attemptId} presentation="notification" />
+    </Animated.View>
   );
 }
 

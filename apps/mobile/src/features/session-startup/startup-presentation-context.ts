@@ -4,6 +4,7 @@ import type { StartupOutputReading } from "./startup-output-reading";
 type StartupTraceState = {
   expanded: Readonly<Record<string, ReadonlySet<string>>>;
   scroll: Map<string, number>;
+  notificationPresented: Set<string>;
   toggle(attemptId: string, stepId: string): void;
   outputReading(attemptId: string, terminalId: string): StartupOutputReading;
   sheetClosers: Map<string, () => void>;
