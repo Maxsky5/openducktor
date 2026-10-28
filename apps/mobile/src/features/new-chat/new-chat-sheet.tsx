@@ -15,7 +15,7 @@ import {
   useWorkspaceSessionCreateDefaults,
 } from "@openducktor/frontend-core/workspace-sessions/create/use-workspace-session-create";
 import { useNavigation, usePreventRemove, useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useRef } from "react";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
 import { useCommandGate } from "@/host-session/active-session-context";
@@ -212,13 +212,15 @@ const openCreated = ({
 const useClose = (edited: boolean, running: boolean) => {
   const router = useRouter();
   const confirmDiscard = useConfirmDiscard();
+  const [closing, setClosing] = useState(false);
   const closed = useRef(false);
-  const allowRemoval = usePreventRemove(edited || running, () => {
+  const allowRemoval = usePreventRemove(!closing && (edited || running), () => {
     if (!running) requestClose();
   });
   const close = useCallback(() => {
     if (closed.current) return;
     closed.current = true;
+    setClosing(true);
     allowRemoval();
     router.back();
   }, [allowRemoval, router]);

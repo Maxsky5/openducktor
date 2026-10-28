@@ -224,11 +224,15 @@ const useForkChatCommand = (
     pendingRequests.has(sessionForkRequestKey(workspace.repoPath, source, { messageId }));
   const showProgress = startupShowsProgress(attempt);
   const running = pending || startupIsPending(attempt) || (attemptId !== null && !showProgress);
-  const allowRemoval = usePreventRemove(running, () => {});
+  const [closing, setClosing] = useState(false);
+  const allowRemoval = usePreventRemove(!closing && running, () => {});
   const closed = useRef(false);
   const close = useCallback(() => {
     if (closed.current) return;
     closed.current = true;
+    // Expo Router needs the guard off until its queued Back action runs.
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+    setClosing(true);
     allowRemoval();
     router.back();
   }, [allowRemoval, router]);
