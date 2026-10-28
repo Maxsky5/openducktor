@@ -53,6 +53,7 @@ type AttemptEntry = {
   adoption: Promise<boolean> | null;
   warning: string | undefined;
   savedOperationIndex: number;
+  instructionRetryOwned: boolean;
 };
 
 export type StartupAttemptStore = ReturnType<typeof createStartupAttemptStore>;
@@ -125,13 +126,18 @@ export const createStartupAttemptStore = (
     const final = progress.context.operationId === entry.finalOperationId;
     const latestOperation = progress.context.operationId === entry.operationIds.at(-1);
     let phase: StartupAttemptStatus["phase"] = entry.attempt.status.phase;
-    if (latestOperation && progress.phase !== "completed") phase = progress.phase;
-    else if (latestOperation && phase === "submitting" && progress.phase === "completed")
-      phase = "running";
+    // The explicit message retry owns its status across later launch-action results.
+    if (!entry.instructionRetryOwned) {
+      if (latestOperation && progress.phase !== "completed") phase = progress.phase;
+      else if (latestOperation && phase === "submitting" && progress.phase === "completed")
+        phase = "running";
+    }
     const failure = progress.steps.find((step) => step.state === "failed")?.failure;
     const navigationTarget = startupNavigationTarget(entry.attempt, ownership);
     const instruction =
-      entry.attempt.instruction && ["accepted", "queued"].includes(entry.attempt.instruction.state)
+      entry.instructionRetryOwned ||
+      (entry.attempt.instruction &&
+        ["accepted", "queued"].includes(entry.attempt.instruction.state))
         ? entry.attempt.instruction
         : (progress.instruction ?? entry.attempt.instruction);
     update(entry.attempt.id, (attempt) => ({
@@ -141,12 +147,15 @@ export const createStartupAttemptStore = (
       status: {
         ...attempt.status,
         phase,
-        confirmation: final ? "current" : attempt.status.confirmation,
+        confirmation:
+          final && !entry.instructionRetryOwned ? "current" : attempt.status.confirmation,
       },
       ...(latestOperation && progress.prepared && { prepared: progress.prepared }),
       ...(navigationTarget && { navigationTarget }),
       ...(instruction && { instruction }),
-      ...(latestOperation && failure && { error: `${failure.message} ${failure.nextAction}` }),
+      ...(!entry.instructionRetryOwned &&
+        latestOperation &&
+        failure && { error: `${failure.message} ${failure.nextAction}` }),
     }));
     if (final && ownership.state === "saved" && progress.prepared) {
       entry.adoption ??= preparation.adopt(progress).then(
@@ -275,6 +284,7 @@ export const createStartupAttemptStore = (
         adoption: null,
         warning: undefined,
         savedOperationIndex: -1,
+        instructionRetryOwned: false,
       });
       publish();
       return id;
@@ -293,6 +303,7 @@ export const createStartupAttemptStore = (
       entry.completedOperationId = null;
       entry.adoption = null;
       entry.warning = undefined;
+      entry.instructionRetryOwned = false;
       entry.operationIds.push(context.operationId);
       if (final) entry.finalOperationId = context.operationId;
       update(id, (attempt) => {
@@ -391,6 +402,27 @@ export const createStartupAttemptStore = (
     },
     setInstruction(id: string, instruction: StartupInstruction) {
       update(id, (attempt) => ({ ...attempt, instruction }));
+    },
+    beginInstructionRetry(id: string): boolean {
+      const entry = entries.get(id);
+      if (!entry) return false;
+      const { attempt } = entry;
+      if (
+        attempt.status.phase !== "failed" ||
+        attempt.status.confirmation !== "current" ||
+        attempt.instruction?.state !== "not_sent"
+      )
+        return false;
+      entry.instructionRetryOwned = true;
+      update(id, (current) => {
+        const { error: _error, recoveryActions: _actions, ...rest } = current;
+        return {
+          ...rest,
+          instruction: { state: "submitting" },
+          status: { ...current.status, phase: "submitting" },
+        };
+      });
+      return true;
     },
     fail(id: string, message: string, confirmed = true) {
       update(id, (attempt) => ({

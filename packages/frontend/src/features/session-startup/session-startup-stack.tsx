@@ -10,7 +10,8 @@ import {
   startupIsPending,
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { Button } from "@/components/ui/button";
-import { notificationClassNames, notificationOpenLabel, Toaster } from "@/components/ui/sonner";
+import { NotificationOpenLabel, Toaster } from "@/components/ui/sonner";
+import { notificationClassNames } from "@/lib/sonner-feedback";
 import { StartupRecoveryActions, StartupTrace } from "./session-startup-trace";
 import { useOpenStartupSession } from "./use-open-startup-session";
 import { retainStartupPresentations, startupPresentation } from "./startup-presentation";
@@ -169,7 +170,7 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
         classNames: notificationClassNames,
         action: canOpenStartupSession(attempt)
           ? {
-              label: notificationOpenLabel,
+              label: <NotificationOpenLabel />,
               onClick: (event) => {
                 event.preventDefault();
                 void openSession();

@@ -43,19 +43,13 @@ export function installWorkflowStartupRecovery({
         kind: "retry_message",
         label: "Retry message",
         run: async () => {
-          const current = attempts.getAttempt(id);
-          if (
-            !current ||
-            current.status.phase !== "failed" ||
-            current.status.confirmation !== "current"
-          )
-            return;
+          if (!attempts.beginInstructionRetry(id)) return;
           let receipt;
+          let failure: string | undefined;
           try {
             receipt = await retryInstruction();
           } catch (cause) {
-            attempts.fail(id, errorMessage(cause));
-            return;
+            failure = errorMessage(cause);
           }
           if (receipt && receipt.outcome !== "uncertain") {
             attempts.setInstruction(
@@ -74,12 +68,26 @@ export function installWorkflowStartupRecovery({
               attempts.setWarning(id, receipt.postAcceptanceFailure);
             await attempts.complete(id);
           } else if (receipt?.outcome === "uncertain") {
+            attempts.setInstruction(id, { state: "unknown", submissionId: receipt.submissionId });
             attempts.setRecoveryActions(id, []);
             attempts.fail(
               id,
               "Message delivery is unconfirmed. Inspect the session before sending again.",
               false,
             );
+          } else {
+            attempts.setInstruction(id, { state: "not_sent" });
+            attempts.fail(
+              id,
+              failure ?? "The session is prepared. The first instruction has not been sent.",
+            );
+            installWorkflowStartupRecovery({
+              queryClient,
+              sessions,
+              id,
+              request,
+              retryInstruction,
+            });
           }
         },
       },

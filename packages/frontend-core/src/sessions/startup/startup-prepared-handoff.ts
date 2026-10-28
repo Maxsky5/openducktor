@@ -80,7 +80,14 @@ export async function observeStartupPreparation(
   const existing = owner.attempts.get(startupAttemptId);
   const attempt = existing ?? { repoPath, epoch: 0, runtimes: new Map<RuntimeKind, number>() };
   if (!existing) owner.attempts.set(startupAttemptId, attempt);
-  await evidence.ready;
+  try {
+    await evidence.ready;
+  } catch (cause) {
+    evidence.closed = true;
+    if (owner.repositories.get(repoPath) === evidence) owner.repositories.delete(repoPath);
+    if (owner.attempts.get(startupAttemptId) === attempt) owner.attempts.delete(startupAttemptId);
+    throw cause;
+  }
   if (owner.released || evidence.closed || owner.attempts.get(startupAttemptId) !== attempt)
     throw new Error(
       "Session preparation is no longer observed. Inspect the saved session before starting it again.",

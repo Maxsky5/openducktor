@@ -4,11 +4,12 @@ import type {
   NotificationOccurrence,
 } from "@openducktor/contracts";
 import { play as playCuelume, type SoundName, unlock as unlockCuelume } from "cuelume";
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { NotificationCopy } from "@openducktor/frontend-core/notifications/notification-copy";
 import { notificationCueSounds } from "./notification-sound";
-import { notificationClassNames, notificationOpenLabel } from "@/components/ui/sonner";
+import { NotificationOpenLabel } from "@/components/ui/sonner";
+import { notificationClassNames } from "@/lib/sonner-feedback";
 
 type SonnerNotificationOptions = {
   id: string;
@@ -48,7 +49,7 @@ export const createSonnerNotificationAdapter = ({
       closeButton: true,
       classNames: notificationClassNames,
       action: {
-        label: notificationOpenLabel,
+        label: createElement(NotificationOpenLabel),
         onClick: () => {
           void navigate(occurrence.navigationTarget);
         },

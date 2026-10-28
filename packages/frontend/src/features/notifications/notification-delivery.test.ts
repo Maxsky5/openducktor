@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { NotificationOccurrence } from "@openducktor/contracts";
-import { ArrowUpRight } from "lucide-react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -69,18 +68,6 @@ describe("notification delivery adapters", () => {
         actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
       },
     });
-    expect(options?.action?.label).toMatchObject({
-      type: "span",
-      props: {
-        children: [
-          "Open",
-          expect.objectContaining({
-            type: ArrowUpRight,
-            props: expect.objectContaining({ "aria-hidden": true }),
-          }),
-        ],
-      },
-    });
     options?.action?.onClick();
     expect(navigate).toHaveBeenCalledWith(occurrence.navigationTarget);
   });
@@ -120,6 +107,7 @@ describe("notification delivery adapters", () => {
       const toastQueries = within(toastElement);
       const closeButton = toastQueries.getByRole("button", { name: "Close toast" });
       const openButton = toastQueries.getByRole("button", { name: "Open" });
+      expect(openButton.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
       const content = toastElement.querySelector("[data-content]");
       if (!content) {
         throw new Error("The agent notification content was not rendered");

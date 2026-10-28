@@ -9,19 +9,6 @@ const themeStyle: CSSProperties & Record<`--${string}`, string> = {
   "--normal-border": "var(--border)",
 };
 
-export const notificationClassNames = {
-  toast: "!flex-col !items-stretch",
-  content: "w-full",
-  actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
-};
-
-export const notificationOpenLabel = (
-  <span className="inline-flex items-center justify-center gap-2">
-    Open
-    <ArrowUpRight className="size-3.5" aria-hidden={true} />
-  </span>
-);
-
 export function Toaster({ style, ...props }: ToasterProps) {
   return (
     <DismissableLayerBranch>
@@ -56,5 +43,14 @@ export function Toaster({ style, ...props }: ToasterProps) {
         {...props}
       />
     </DismissableLayerBranch>
+  );
+}
+
+export function NotificationOpenLabel() {
+  return (
+    <span className="inline-flex items-center justify-center gap-2">
+      Open
+      <ArrowUpRight className="size-3.5" aria-hidden={true} />
+    </span>
   );
 }

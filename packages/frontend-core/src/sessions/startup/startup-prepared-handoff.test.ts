@@ -100,6 +100,61 @@ const runtimeStatus = (runtimeId: string, revision: number): HostStatusSnapshot 
   ],
 });
 
+test("a new submission can observe the repository after an initial connection failure", async () => {
+  const client = new QueryClient();
+  clients.push(client);
+  let observations = 0;
+  let stops = 0;
+  registerStartupLiveSource(client, {
+    observeWorkspace: () => () => {},
+    observeAgentSessionLive: async (_input, listener) => {
+      observations += 1;
+      if (observations === 1) throw new Error("Connection unavailable");
+      listener({ type: "session_upsert", sequence: 10, session: live });
+      return () => {
+        stops += 1;
+      };
+    },
+  });
+  await expect(observeStartupPreparation(client, "/repo", "failed-attempt")).rejects.toThrow(
+    "Connection unavailable",
+  );
+  expect(observations).toBe(1);
+  releaseStartupPreparationAttempt(client, "failed-attempt");
+  await observeStartupPreparation(client, "/repo", "attempt");
+  await adoptStartupPreparedHandoff(client, progress());
+  expect(observations).toBe(2);
+  expect(isStartupPreparedHandoffCurrent(client, "attempt", progress().prepared!)).toBe(true);
+  releaseStartupPreparations(client);
+  expect(stops).toBe(1);
+});
+
+test("an old observation failure preserves a replacement for the same repository", async () => {
+  const client = new QueryClient();
+  clients.push(client);
+  const firstReadiness = Promise.withResolvers<() => void>();
+  let observations = 0;
+  registerStartupLiveSource(client, {
+    observeWorkspace: () => () => {},
+    observeAgentSessionLive: async (_input, listener) => {
+      observations += 1;
+      if (observations === 1) return firstReadiness.promise;
+      listener({ type: "session_upsert", sequence: 10, session: live });
+      return () => {};
+    },
+  });
+  const failedObservation = observeStartupPreparation(client, "/repo", "failed-attempt").catch(
+    (cause: unknown) => cause,
+  );
+  retainStartupPreparationWorkspaces(client, []);
+  await observeStartupPreparation(client, "/repo", "attempt");
+  firstReadiness.reject(new Error("Connection unavailable"));
+  expect(await failedObservation).toMatchObject({ message: "Connection unavailable" });
+  await adoptStartupPreparedHandoff(client, progress());
+  expect(observations).toBe(2);
+  expect(isStartupPreparedHandoffCurrent(client, "attempt", progress().prepared!)).toBe(true);
+});
+
 test.each(["continuous", "gap", "removed", "runtime"] as const)(
   "a newer receipt for the same session preserves only valid attempts after %s coverage",
   async (change) => {

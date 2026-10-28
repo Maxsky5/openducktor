@@ -11,7 +11,11 @@ import type {
 import type { HostClient } from "@openducktor/host-client";
 import type { ClientConnection } from "../../connection/client-connection";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
-import { createTestClientConnection } from "../../test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "../../test-support/test-client-connection";
+import type { StartupProgressListener } from "../../connection/host-connection";
 import { createAgentSessionsStore } from "../agent-sessions-store";
 import { AgentOperationsContext, AgentSessionsContext } from "../session-contexts";
 import { taskWorktreeQueryOptions } from "../../queries/build-runtime";
@@ -25,6 +29,8 @@ import {
   registerStartupLiveSource,
   retainStartupPreparationWorkspaces,
 } from "../startup/startup-prepared-handoff";
+import { startupIsPending } from "../startup/startup-navigation";
+import { startupFailureRows } from "../startup/startup-trace";
 
 const createConnection = (client: Partial<HostClient>): ClientConnection => {
   const connection = createTestClientConnection({
@@ -365,89 +371,209 @@ test.each(["completed", "failed", "disconnected"] as const)(
   },
 );
 
-test("retries an unsent first message on the prepared saved session through agent operations", async () => {
-  const record = {
-    externalSessionId: "native",
-    runtimeKind: "codex" as const,
-    workingDirectory: "/repo/task-worktree",
-    startedAt: "2026-10-08T00:00:00Z",
-    role: "build" as const,
-    selectedModel: null,
-  };
-  const native = { ...record, status: "idle" as const };
-  const agentSessionWorkflowLaunch: HostClient["agentSessionWorkflowLaunch"] = mock(
-    async (request): Promise<WorkflowLaunchResult> => {
-      if (!request.startup) throw new Error("Missing startup context");
-      return {
-        workspaceId: request.workspaceId,
-        repoPath: request.repoPath,
-        taskId: request.taskId,
-        role: "build",
-        status: "failed",
-        startMode: "fresh",
-        session: native,
-        unsentInstruction: [{ kind: "text", text: "Continue" }],
-        failure: { message: "Runtime rejected the message", cleanupErrors: [] },
-        startupProgress: {
-          ...live.prepared({
-            ...workspace,
-            context: request.startup,
-            scope: { kind: "task", taskId: "task", role: "build" },
-            ownership: { state: "saved", target: { kind: "task", record, runtimeSession: native } },
-          }),
-          phase: "failed",
-          instruction: { state: "not_sent" },
-        },
-      };
-    },
-  );
-  const sendAgentMessage = mock(
-    async (
-      recipient: Parameters<AgentOperationsContextValue["sendAgentMessage"]>[0],
-      ..._args: [Parameters<AgentOperationsContextValue["sendAgentMessage"]>[1]]
-    ): Promise<AgentMessageSendReceipt> => ({
-      outcome: "acknowledged",
-      recipient,
-      submissionId: "retried-message",
-      postAcceptanceFailure: null,
-    }),
-  );
-  const connection = createConnection({ agentSessionWorkflowLaunch });
-  const live = createStartupLiveSourceFake(connection.queryClient);
-  const view = renderHook(() => useSessionStartWorkflowRunner(workspace), {
-    wrapper: createWrapper(connection, createAgentOperationsFixture({ sendAgentMessage })),
-  });
-  try {
-    await act(async () => {
-      const started = await view.result.current({
-        task: null,
-        request: {
-          taskId: "task",
+test.each(["acknowledged", "uncertain", "refused", "not_sent"] as const)(
+  "retains a busy saved-session message retry until it settles as %s",
+  async (outcome) => {
+    const record = {
+      externalSessionId: "native",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/task-worktree",
+      startedAt: "2026-10-08T00:00:00Z",
+      role: "build" as const,
+      selectedModel: null,
+    };
+    const native = { ...record, status: "idle" as const };
+    let publish: StartupProgressListener | undefined;
+    const agentSessionWorkflowLaunch: HostClient["agentSessionWorkflowLaunch"] = mock(
+      async (request): Promise<WorkflowLaunchResult> => {
+        if (!request.startup) throw new Error("Missing startup context");
+        const prepared = live.prepared({
+          ...workspace,
+          context: request.startup,
+          scope: { kind: "task", taskId: "task", role: "build" },
+          ownership: {
+            state: "saved",
+            target: { kind: "task", record, runtimeSession: native },
+          },
+        });
+        await publish?.({
+          channel: "openducktor://session-startup-progress",
+          payload: { ...prepared, phase: "running", instruction: { state: "submitting" } },
+        });
+        return {
+          workspaceId: request.workspaceId,
+          repoPath: request.repoPath,
+          taskId: request.taskId,
           role: "build",
-          launchActionId: "build_implementation_start",
-          postStartAction: "send_message",
-          message: "Continue",
-        },
-        decision: {
+          status: "failed",
           startMode: "fresh",
-          selectedModel: { runtimeKind: "codex", providerId: "provider", modelId: "model" },
+          session: native,
+          unsentInstruction: [{ kind: "text", text: "Continue" }],
+          failure: { message: "Runtime rejected the message", cleanupErrors: [] },
+          startupProgress: {
+            ...prepared,
+            revision: prepared.revision + 1,
+            phase: "failed",
+            instruction: { state: "not_sent" },
+          },
+        };
+      },
+    );
+    const sent = Promise.withResolvers<AgentMessageSendReceipt | null>();
+    const sendAgentMessage = mock(
+      async (
+        _recipient: Parameters<AgentOperationsContextValue["sendAgentMessage"]>[0],
+        ..._args: [Parameters<AgentOperationsContextValue["sendAgentMessage"]>[1]]
+      ): Promise<AgentMessageSendReceipt | null> => sent.promise,
+    );
+    const connection = createTestClientConnection({
+      host: createTestHostConnection({
+        client: { agentSessionWorkflowLaunch },
+        subscribeStartupProgress: async (listener) => {
+          publish = listener;
+          return () => {};
         },
+      }),
+    });
+    const live = createStartupLiveSourceFake(connection.queryClient);
+    const view = renderHook(() => useSessionStartWorkflowRunner(workspace), {
+      wrapper: createWrapper(connection, createAgentOperationsFixture({ sendAgentMessage })),
+    });
+    let retry: void | Promise<void> = undefined;
+    try {
+      await act(async () => {
+        const started = await view.result.current({
+          task: null,
+          request: {
+            taskId: "task",
+            role: "build",
+            launchActionId: "build_implementation_start",
+            postStartAction: "send_message",
+            message: "Continue",
+          },
+          decision: {
+            startMode: "fresh",
+            selectedModel: { runtimeKind: "codex", providerId: "provider", modelId: "model" },
+          },
+        });
+        expect(started.postStartActionError?.message).toBe("Runtime rejected the message");
       });
-      expect(started.postStartActionError?.message).toBe("Runtime rejected the message");
-    });
-    const attempt = connection.startupAttempts.getSnapshot()[0]!;
-    expect(attempt.recoveryActions?.[0]?.kind).toBe("retry_message");
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-    await act(async () => {
-      await attempt.recoveryActions?.[0]?.run();
-    });
-    expect(agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage.mock.calls[0]?.[0]).toMatchObject({ externalSessionId: "native" });
-    expect(sendAgentMessage.mock.calls[0]?.[1]).toEqual([{ kind: "text", text: "Continue" }]);
-    expect(connection.startupAttempts.isReadyForHandoff(attempt.id)).toBe(true);
-  } finally {
-    view.unmount();
-    await connection.dispose();
-  }
-});
+      const attempt = connection.startupAttempts.getSnapshot()[0]!;
+      expect(attempt.status).toEqual({ phase: "failed", confirmation: "current" });
+      expect(attempt.instruction?.state).toBe("not_sent");
+      expect(attempt.recoveryActions?.[0]?.kind).toBe("retry_message");
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      const retryMessage = attempt.recoveryActions![0]!.run;
+      await act(async () => {
+        retry = retryMessage();
+        await retryMessage();
+      });
+      const operation = attempt.operations[0];
+      if (!publish || !operation) throw new Error("Missing initial startup progress");
+      const result = { type: "exited" as const, exitCode: 0, signal: null, outputTail: ["Ready"] };
+      const progress = {
+        ...operation,
+        revision: operation.revision + 1,
+        steps: [
+          {
+            id: "setup",
+            label: "Run setup",
+            state: "completed" as const,
+            details: [],
+            action: {
+              actionId: "setup",
+              command: "bun install",
+              waitBeforeAgentStart: false,
+              result,
+            },
+          },
+        ],
+      };
+      await act(async () => {
+        await publish!({
+          channel: "openducktor://session-startup-progress",
+          payload: progress,
+        });
+      });
+      const pending = connection.startupAttempts.getAttempt(attempt.id);
+      expect(pending?.status).toEqual({ phase: "submitting", confirmation: "current" });
+      expect(startupIsPending(pending)).toBe(true);
+      expect(pending?.recoveryActions).toBeUndefined();
+      expect(pending?.instruction?.state).toBe("submitting");
+      expect(pending?.ownership).toEqual(attempt.ownership);
+      expect(pending?.prepared).toEqual(attempt.prepared);
+      expect(pending?.operations).toHaveLength(1);
+      expect(pending?.operations[0]?.context).toEqual(operation.context);
+      expect(pending?.operations[0]?.steps[0]?.action?.result).toEqual(result);
+      connection.startupAttempts.dismiss(attempt.id);
+      expect(connection.startupAttempts.getAttempt(attempt.id)).toBe(pending);
+      expect(agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage.mock.calls[0]?.[0]).toMatchObject({ externalSessionId: "native" });
+      expect(sendAgentMessage.mock.calls[0]?.[1]).toEqual([{ kind: "text", text: "Continue" }]);
+      await act(async () => {
+        if (outcome === "refused") sent.reject(new Error("Message refused"));
+        else if (outcome === "not_sent") sent.resolve(null);
+        else if (outcome === "uncertain")
+          sent.resolve({ outcome, recipient: native, submissionId: "retried-message" });
+        else
+          sent.resolve({
+            outcome,
+            recipient: native,
+            submissionId: "retried-message",
+            postAcceptanceFailure: null,
+          });
+        await retry;
+      });
+      const beforeLateResult = connection.startupAttempts.getAttempt(attempt.id)!;
+      const failure = {
+        stage: "setup",
+        code: "exit",
+        message: "Setup failed",
+        nextAction: "Inspect setup.",
+      };
+      await act(async () => {
+        await publish!({
+          channel: "openducktor://session-startup-progress",
+          payload: {
+            ...progress,
+            revision: progress.revision + 1,
+            steps: progress.steps.map((step) => ({
+              ...step,
+              state: "failed",
+              failure,
+              action: { ...step.action, result: { ...result, exitCode: 1 } },
+            })),
+          },
+        });
+      });
+      const settled = connection.startupAttempts.getAttempt(attempt.id);
+      expect(settled?.operations[0]?.revision).toBe(progress.revision + 1);
+      expect(settled?.error).toBe(beforeLateResult.error);
+      expect(settled?.recoveryActions).toEqual(beforeLateResult.recoveryActions);
+      expect(settled?.status.successExpiresAt).toBe(beforeLateResult.status.successExpiresAt);
+      expect(startupFailureRows(settled!).map(({ step }) => step.failure)).toEqual([failure]);
+      if (outcome === "refused" || outcome === "not_sent") {
+        expect(settled?.status).toEqual({ phase: "failed", confirmation: "current" });
+        expect(settled?.instruction?.state).toBe("not_sent");
+        expect(settled?.recoveryActions?.map((action) => action.kind)).toEqual(["retry_message"]);
+        expect(startupIsPending(settled)).toBe(false);
+        await act(async () => {
+          await settled?.recoveryActions?.[0]?.run();
+        });
+        expect(sendAgentMessage).toHaveBeenCalledTimes(2);
+        expect(agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
+      } else if (outcome === "uncertain") {
+        expect(settled?.status).toEqual({ phase: "failed", confirmation: "unconfirmed" });
+        expect(settled?.instruction?.state).toBe("unknown");
+        expect(settled?.recoveryActions).toEqual([]);
+        expect(connection.startupAttempts.isReadyForHandoff(attempt.id)).toBe(false);
+      } else expect(connection.startupAttempts.isReadyForHandoff(attempt.id)).toBe(true);
+    } finally {
+      sent.resolve(null);
+      await retry;
+      view.unmount();
+      await connection.dispose();
+    }
+  },
+);
