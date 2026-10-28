@@ -95,7 +95,16 @@ describe("task completion publication recovery", () => {
       { command: "git" },
     );
     const git = (directory: string, ...args: string[]) =>
-      Effect.runPromise(runner(directory, args));
+      Effect.runPromise(
+        runner(directory, [
+          "-c",
+          "user.name=Publication test",
+          "-c",
+          "user.email=publication@example.invalid",
+          ...args,
+        ]),
+      );
+    const appliedMerge: DirectMergeRecord = { ...merge, method: "squash" };
     let failTracking = true;
     let trackingUpdates = 0;
     let pushes = 0;
@@ -116,20 +125,14 @@ describe("task completion publication recovery", () => {
     try {
       await git(root, "init", "--initial-branch=main", repoPath);
       await git(root, "init", "--bare", remotePath);
-      await git(repoPath, "config", "user.name", "Publication test");
-      await git(repoPath, "config", "user.email", "publication@example.invalid");
-      await writeFile(path.join(repoPath, "base.txt"), "base\n");
-      await git(repoPath, "add", "base.txt");
-      await git(repoPath, "commit", "-m", "Base");
+      await git(repoPath, "commit", "--allow-empty", "-m", "Base");
       await git(repoPath, "remote", "add", "origin", remotePath);
       await git(repoPath, "push", "origin", "main");
       const baseOid = (await git(repoPath, "rev-parse", "refs/remotes/origin/main")).stdout.trim();
-      await git(repoPath, "checkout", "-b", merge.sourceBranch);
+      // Recovery starts after the squash commit was applied to the target branch.
       await writeFile(path.join(repoPath, "change.txt"), "task change\n");
       await git(repoPath, "add", "change.txt");
-      await git(repoPath, "commit", "-m", "Task change");
-      await git(repoPath, "checkout", "main");
-      await git(repoPath, "merge", "--no-ff", "-m", "Merge task", merge.sourceBranch);
+      await git(repoPath, "commit", "-m", "Merge task");
       const publication = await Effect.runPromise(
         adapter.readPublicationTarget({
           repoPath,
@@ -152,7 +155,7 @@ describe("task completion publication recovery", () => {
             {
               ...input,
               publicationConsent: {
-                expectedMerge: merge,
+                expectedMerge: appliedMerge,
                 expectedPublication: {
                   sourceOid: publication.sourceOid,
                   remote: publication.remote,
@@ -164,7 +167,7 @@ describe("task completion publication recovery", () => {
                 },
               },
             },
-            merge,
+            appliedMerge,
             state,
           ),
         ),
@@ -178,13 +181,13 @@ describe("task completion publication recovery", () => {
         baseOid,
       );
       const retry = await Effect.runPromise(
-        Effect.result(completeTaskPublication(adapter, input, merge, state)),
+        Effect.result(completeTaskPublication(adapter, input, appliedMerge, state)),
       );
       expect(retry._tag).toBe("Failure");
       expect(trackingUpdates).toBe(2);
       expect(pushes).toBe(1);
       failTracking = false;
-      await Effect.runPromise(completeTaskPublication(adapter, input, merge, state));
+      await Effect.runPromise(completeTaskPublication(adapter, input, appliedMerge, state));
       expect((await git(repoPath, "rev-parse", "refs/remotes/origin/main")).stdout.trim()).toBe(
         publication.sourceOid,
       );
@@ -193,7 +196,7 @@ describe("task completion publication recovery", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-    // Real repositories, a merge, a push, and recovery reads can exceed 5 seconds on Windows CI.
+    // Real repositories, a push, and recovery reads can exceed 5 seconds on Windows CI.
   }, 15_000);
 
   test("requires bound consent before any remote write", async () => {
