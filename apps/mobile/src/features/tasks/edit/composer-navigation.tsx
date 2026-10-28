@@ -157,6 +157,7 @@ export function EditSectionSwitcher({
   const unsaved = { details: false, spec: unsavedSpec, plan: unsavedPlan };
   return (
     <View
+      collapsable={false}
       style={[styles.segments, disabled && styles.segmentsDisabled]}
       accessibilityRole="radiogroup"
       accessibilityLabel="Edit section"

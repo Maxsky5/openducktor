@@ -251,6 +251,7 @@ export function SegmentedControl<Value extends string>({
   };
   return (
     <View
+      collapsable={false}
       style={[styles.segments, disabled && styles.segmentsDisabled]}
       accessibilityRole="radiogroup"
       accessibilityLabel={label}
