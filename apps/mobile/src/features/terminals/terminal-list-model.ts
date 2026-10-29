@@ -81,11 +81,19 @@ export const tabExitNotice = (tab: TerminalTab) =>
     ? terminalExitNotice(tab.summary.exit.exitCode, tab.summary.exit.signal)
     : null;
 
-const toTerminalRow = (tab: TerminalTab, closing: boolean, runsCommand: boolean): TerminalRow => {
+const toTerminalRow = (
+  tab: TerminalTab,
+  closing: boolean,
+  runsCommand: boolean,
+  activityStatus: TerminalSessionsModel["activityStatus"],
+): TerminalRow => {
   const exit = tabExitNotice(tab);
   const live = tab.requestState === "ready" && tab.summary.lifecycle === "running" && !closing;
   const activeCommand = live && runsCommand;
-  const stateLabel = live && !activeCommand ? "Idle" : terminalTabLifecycleText(tab);
+  let stateLabel = terminalTabLifecycleText(tab);
+  if (live && !activeCommand) {
+    stateLabel = activityStatus === "ready" ? "Idle" : "Activity unknown";
+  }
   return {
     tabId: tab.tabId,
     terminalId: tab.terminalId,
@@ -105,13 +113,17 @@ const toTerminalRow = (tab: TerminalTab, closing: boolean, runsCommand: boolean)
 
 /** The rows of the Terminals view, in host order with new starts last. */
 export const buildTerminalRows = (
-  model: Pick<TerminalSessionsModel, "tabs" | "closingTabIds" | "runningCommandTerminalIds">,
+  model: Pick<
+    TerminalSessionsModel,
+    "tabs" | "closingTabIds" | "runningCommandTerminalIds" | "activityStatus"
+  >,
 ): TerminalRow[] =>
   model.tabs.map((tab) =>
     toTerminalRow(
       tab,
       model.closingTabIds.has(tab.tabId),
       tab.terminalId !== null && model.runningCommandTerminalIds.has(tab.terminalId),
+      model.activityStatus,
     ),
   );
 

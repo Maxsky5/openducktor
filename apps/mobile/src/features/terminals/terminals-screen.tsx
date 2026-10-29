@@ -170,10 +170,17 @@ function TerminalList({
   const gate = useCommandGate();
   const theme = useAppTheme();
   const endSpace = useScreenEndSpace(theme.space.xxxl);
-  const { tabs, closingTabIds, runningCommandTerminalIds, onRetryCreate, scopeKey } = model;
+  const {
+    tabs,
+    closingTabIds,
+    runningCommandTerminalIds,
+    activityStatus,
+    onRetryCreate,
+    scopeKey,
+  } = model;
   const rows = useMemo(
-    () => buildTerminalRows({ tabs, closingTabIds, runningCommandTerminalIds }),
-    [closingTabIds, runningCommandTerminalIds, tabs],
+    () => buildTerminalRows({ tabs, closingTabIds, runningCommandTerminalIds, activityStatus }),
+    [activityStatus, closingTabIds, runningCommandTerminalIds, tabs],
   );
   const closeTab = useCallback(
     (tabId: string) => {

@@ -1,6 +1,12 @@
 import "../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoAction, TerminalListResponse, TerminalSummary } from "@openducktor/contracts";
+import {
+  encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
+  type RepoAction,
+  type TerminalListResponse,
+  type TerminalSummary,
+} from "@openducktor/contracts";
 import {
   createHostClient,
   type HostClient,
@@ -17,6 +23,31 @@ import { useTerminals, type TerminalDependencies, type TerminalScope } from "./u
 type StartedTerminal = { tabId: string | null };
 
 describe("useTerminals", () => {
+  test("reports activity readiness even when an empty snapshot keeps the command set empty", async () => {
+    const view = renderModel(async () => ({ hostInstanceId: "host-1", terminals: [] }));
+    try {
+      await waitFor(() => expect(view.result.current.controller).not.toBeNull());
+      const [onFrame, onStateChange] = await view.transport;
+      expect(view.result.current.activityStatus).toBe("loading");
+      act(() => {
+        for (const type of ["activity_snapshot_start", "activity_snapshot_end"] as const) {
+          onFrame(
+            encodeTerminalProtocolFrame({
+              message: { version: TERMINAL_PROTOCOL_VERSION, type },
+              payload: new Uint8Array(),
+            }),
+          );
+        }
+      });
+      expect(view.result.current.activityStatus).toBe("ready");
+      expect(view.result.current.runningCommandTerminalIds.size).toBe(0);
+      act(() => onStateChange("disconnected"));
+      expect(view.result.current.activityStatus).toBe("unavailable");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reports synced tabs only after they include the latest host list", async () => {
     const discovery = Promise.withResolvers<TerminalListResponse>();
     const view = renderModel(mock(() => discovery.promise));
@@ -591,6 +622,8 @@ function renderModel(
     retryScope: () => {},
   },
 ) {
+  const transport =
+    Promise.withResolvers<Parameters<TerminalDependencies["terminalBridge"]["connect"]>>();
   const unavailable = createUnavailableHost();
   const terminalCreate = mock(unavailable.client.terminalCreate);
   const terminalRunAction = mock(unavailable.client.terminalRunAction);
@@ -604,7 +637,8 @@ function renderModel(
       terminalRunAction,
     },
     terminalBridge: {
-      connect: async (_onFrame, onStateChange) => {
+      connect: async (onFrame, onStateChange, onFailure) => {
+        transport.resolve([onFrame, onStateChange, onFailure]);
         onStateChange("connected");
         return { send: async () => undefined, close: () => undefined };
       },
@@ -628,7 +662,7 @@ function renderModel(
       ),
     },
   );
-  return { ...view, terminalCreate, terminalRunAction };
+  return { ...view, terminalCreate, terminalRunAction, transport: transport.promise };
 }
 
 function testAction(overrides: Partial<RepoAction> = {}): RepoAction {
