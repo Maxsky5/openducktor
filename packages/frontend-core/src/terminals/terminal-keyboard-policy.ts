@@ -153,10 +153,14 @@ export const createTerminalKeyEventHandler = ({
   };
 };
 
-/** The keys of a touch key row. The DOM key names keep the host shortcuts of this policy. */
+/** The touch row keys. ShiftTab means Shift+Tab; the other names follow DOM key names. */
 export type TerminalTouchKey =
   | "Escape"
   | "Tab"
+  | "ShiftTab"
+  | "Enter"
+  | "Backspace"
+  | "Delete"
   | "ArrowUp"
   | "ArrowDown"
   | "ArrowLeft"
@@ -199,8 +203,14 @@ export const encodeTerminalTouchKey = (
   const altPrefix = modifiers.alt ? ESCAPE : "";
   if (key === "Escape") return new TextEncoder().encode(`${altPrefix}${ESCAPE}`);
   if (key === "Tab") return new TextEncoder().encode(`${altPrefix}\t`);
-  const final = ARROW_FINAL[key];
+  if (key === "ShiftTab") return new TextEncoder().encode(`${ESCAPE}[Z`);
+  if (key === "Enter") return new TextEncoder().encode(`${altPrefix}\r`);
+  if (key === "Backspace")
+    return new TextEncoder().encode(`${altPrefix}${modifiers.ctrl ? "\b" : "\u007f"}`);
   const parameter = 1 + (modifiers.alt ? 2 : 0) + (modifiers.ctrl ? 4 : 0);
+  if (key === "Delete")
+    return new TextEncoder().encode(`${ESCAPE}[3${parameter > 1 ? `;${parameter}` : ""}~`);
+  const final = ARROW_FINAL[key];
   if (parameter > 1) return new TextEncoder().encode(`${ESCAPE}[1;${parameter}${final}`);
   return new TextEncoder().encode(`${ESCAPE}${applicationCursorKeys ? "O" : "["}${final}`);
 };
