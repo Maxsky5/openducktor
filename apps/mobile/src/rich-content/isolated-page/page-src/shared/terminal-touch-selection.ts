@@ -162,12 +162,9 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
           };
     const grid = geometry();
     if (grid === null) return;
-    const direction =
-      point.clientY < grid.rect.top
-        ? -1
-        : point.clientY >= grid.rect.top + grid.rect.height
-          ? 1
-          : 0;
+    let direction = 0;
+    if (point.clientY < grid.rect.top) direction = -1;
+    else if (point.clientY >= grid.rect.top + grid.rect.height) direction = 1;
     if (direction !== 0) current.scrollLines(direction);
     const index = indexAt(point, drag !== null);
     if (index === null) return;

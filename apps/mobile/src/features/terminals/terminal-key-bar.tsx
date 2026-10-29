@@ -77,6 +77,17 @@ const ARROWS: ReadonlyArray<{ key: TerminalTouchKey; icon: IconName; label: stri
   { key: "ArrowRight", icon: "arrow-right", label: "Right arrow" },
 ];
 
+const EDITING_KEYS: ReadonlyArray<{
+  key: TerminalTouchKey;
+  label: string;
+  accessibilityLabel: string;
+}> = [
+  { key: "ShiftTab", label: "⇧ tab", accessibilityLabel: "Shift plus Tab" },
+  { key: "Backspace", label: "⌫", accessibilityLabel: "Backspace" },
+  { key: "Delete", label: "del", accessibilityLabel: "Delete" },
+  { key: "Enter", label: "↵", accessibilityLabel: "Enter" },
+];
+
 export type TerminalKeyBarProps = {
   /** False for an exited or lost terminal and while host commands are closed. */
   inputEnabled: boolean;
@@ -186,30 +197,15 @@ export function TerminalKeyBar({
               ))}
             </View>
             <View style={styles.group}>
-              <KeyButton
-                label="⇧ tab"
-                accessibilityLabel="Shift plus Tab"
-                disabled={disabled}
-                onPress={() => onKey("ShiftTab")}
-              />
-              <KeyButton
-                label="⌫"
-                accessibilityLabel="Backspace"
-                disabled={disabled}
-                onPress={() => onKey("Backspace")}
-              />
-              <KeyButton
-                label="del"
-                accessibilityLabel="Delete"
-                disabled={disabled}
-                onPress={() => onKey("Delete")}
-              />
-              <KeyButton
-                label="↵"
-                accessibilityLabel="Enter"
-                disabled={disabled}
-                onPress={() => onKey("Enter")}
-              />
+              {EDITING_KEYS.map((editingKey) => (
+                <KeyButton
+                  key={editingKey.key}
+                  label={editingKey.label}
+                  accessibilityLabel={editingKey.accessibilityLabel}
+                  disabled={disabled}
+                  onPress={() => onKey(editingKey.key)}
+                />
+              ))}
             </View>
           </ScrollView>
           {moreKeys ? <View pointerEvents="none" style={styles.edgeFade} /> : null}
