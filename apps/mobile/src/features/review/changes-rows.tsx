@@ -90,7 +90,6 @@ export const GroupEmpty = memo(function GroupEmpty({ text }: { text: string }): 
 
 type DirectoryRowData = Extract<ChangesRow, { kind: "directory" }>;
 
-/** A tree directory row with its file and line totals. A tap opens or closes it. */
 export const DirectoryRow = memo(function DirectoryRow({
   row,
   onToggle,

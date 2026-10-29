@@ -414,19 +414,21 @@ describe("changes rows", () => {
     expect(
       treeRows(new Set([directoryKey("target", "packages/app/src/lib")])).map(describeRow),
     ).toEqual(["v packages/app/src/", "  > lib/", "  A.ts", "  b.ts", "  logo.png", "README.md"]);
-    const parentKey = directoryKey("target", "packages/app/src");
-    for (const closed of [
-      new Set<string>(),
-      new Set([directoryKey("target", "packages/app/src/lib")]),
-      new Set([parentKey]),
+    const parentTotals = { path: "packages/app/src", fileCount: 4, additions: 7, deletions: 4 };
+    const nestedTotals = { path: "packages/app/src/lib", fileCount: 1, additions: 5, deletions: 0 };
+    for (const { closed, expectedDirectories } of [
+      { closed: new Set<string>(), expectedDirectories: [parentTotals, nestedTotals] },
+      {
+        closed: new Set([directoryKey("target", "packages/app/src/lib")]),
+        expectedDirectories: [parentTotals, nestedTotals],
+      },
+      {
+        closed: new Set([directoryKey("target", "packages/app/src")]),
+        expectedDirectories: [parentTotals],
+      },
     ]) {
       const directories = treeRows(closed).filter((row) => row.kind === "directory");
-      expect(directories).toMatchObject([
-        { path: "packages/app/src", fileCount: 4, additions: 7, deletions: 4 },
-        ...(closed.has(parentKey)
-          ? []
-          : [{ path: "packages/app/src/lib", fileCount: 1, additions: 5, deletions: 0 }]),
-      ]);
+      expect(directories).toMatchObject(expectedDirectories);
     }
   });
 

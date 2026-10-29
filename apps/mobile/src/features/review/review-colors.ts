@@ -1,6 +1,5 @@
 import type { AppTheme } from "@/theme/tokens";
 
-/** The Git panel colors of the current scheme. */
 export const gitPanelColors = (theme: AppTheme) => {
   const light = theme.scheme === "light";
   return {
