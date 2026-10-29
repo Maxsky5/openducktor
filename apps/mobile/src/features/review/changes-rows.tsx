@@ -118,7 +118,7 @@ export const DirectoryRow = memo(function DirectoryRow({
         {row.name}
       </Text>
       <View style={styles.directoryCount}>
-        <Text variant="caption2" tabular style={styles.directoryCountText}>
+        <Text variant="caption2" weight="medium" tabular style={styles.directoryCountText}>
           {row.fileCount}
         </Text>
       </View>
@@ -282,14 +282,17 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomWidth: theme.hairline,
     borderBottomColor: theme.colors.diffDivider,
   },
-  directoryName: { flex: 1, minWidth: 0, color: theme.desktop.foreground },
+  directoryName: { flexShrink: 1, minWidth: 0, color: theme.desktop.foreground },
   directoryCount: {
+    minWidth: 18,
+    marginRight: "auto",
     paddingHorizontal: 6,
+    paddingVertical: 1,
     borderRadius: theme.radius.pill,
-    backgroundColor: theme.desktop.muted,
+    backgroundColor: theme.colors.fillStrong,
     alignItems: "center",
   },
-  directoryCountText: { fontSize: 11, color: theme.desktop.foreground },
+  directoryCountText: { fontSize: 11, color: theme.colors.secondaryLabel },
   fileBox: {
     borderBottomWidth: theme.hairline,
     borderBottomColor: theme.colors.diffDivider,
