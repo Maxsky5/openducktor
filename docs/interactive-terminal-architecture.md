@@ -190,7 +190,7 @@ The terminal view uses the shared xterm binding. The binding measures the visibl
 
 The mobile terminal list shows `Idle` for an open shell with no active command and `Running` when the live activity stream reports a command. The host lifecycle stays unchanged. Starting, closing, failed, lost, and exited terminals keep their lifecycle labels.
 
-Long-press output to select a word. Drag either handle to adjust the range across lines. Drag past the top or bottom edge to scroll through retained output. Selection uses xterm buffer cells, so wide and combined characters keep their correct positions. A short drag scrolls without starting a selection.
+Long-press output to select a word. Drag either handle to adjust the range across lines. Drag past the top or bottom edge to scroll through retained output. Selection uses xterm buffer cells, so wide and combined characters keep their correct positions. A short drag scrolls without starting a selection. The gesture follows selected output when old scrollback rows are removed. If the anchor line leaves the buffer, the gesture ends and clears the selection.
 
 The editing row scrolls and includes Esc, Tab, sticky Ctrl and Alt, arrows, Shift+Tab, Backspace, Delete, and Enter. The row below it keeps Select all, Copy, Clear selection, Paste, and the keyboard control visible. Selection controls keep the same space when a selection starts or ends, so the controls do not resize the terminal. They remain available for retained output when terminal input is disabled. Copy uses the app clipboard helper, and Paste keeps the iOS system paste control.
 
