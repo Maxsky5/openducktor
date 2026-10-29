@@ -55,9 +55,24 @@ const model = (tabs: TerminalTab[], closing: string[] = [], running: string[] = 
   tabs,
   closingTabIds: new Set(closing),
   runningCommandTerminalIds: new Set(running),
+  activityStatus: "ready" as const,
 });
 
 describe("buildTerminalRows", () => {
+  test.each(["loading", "unavailable"] as const)(
+    "does not call an absent command idle while activity is %s",
+    (activityStatus) => {
+      const rows = buildTerminalRows({
+        ...model([ready(), ready({ terminalId: "t-2" })], [], ["t-2"]),
+        activityStatus,
+      });
+      expect(rows.map(({ stateLabel, runsCommand }) => ({ stateLabel, runsCommand }))).toEqual([
+        { stateLabel: "Activity unknown", runsCommand: false },
+        { stateLabel: "Running", runsCommand: true },
+      ]);
+    },
+  );
+
   test("shows the title, who started each terminal, and its state as text", () => {
     const rows = buildTerminalRows(
       model(
