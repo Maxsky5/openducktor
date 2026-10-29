@@ -5,7 +5,7 @@ import type {
   XtermTouch,
   XtermTouchEvent,
 } from "@xterm/xterm/lib/xterm.mjs";
-import { pageDocument, pageRoot } from "./page-runtime";
+import { pageDocument } from "./page-runtime";
 
 const LONG_PRESS_MS = 450;
 const TOUCH_SLOP_PX = 10;
@@ -32,7 +32,6 @@ type TouchTerminal = Pick<
 export const installTerminalTouchSelection = (current: TouchTerminal): void => {
   const element = current.element;
   if (element === undefined) throw new Error("The terminal has no page element.");
-  const root = pageRoot();
   let pressTimer: number | null = null;
   let scrollTimer: number | null = null;
   let scrollRow = 0;
@@ -98,10 +97,12 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     start: pageDocument.createElement("div"),
     end: pageDocument.createElement("div"),
   };
+  const isHandleTouch = (event: XtermTouchEvent): boolean =>
+    event.target === handles.start || event.target === handles.end;
   const updateHandles = (): void => {
     const selected = range();
     const grid = geometry();
-    const bounds = root.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
     for (const edge of ["start", "end"] as const) {
       const handle = handles[edge];
       if (selected === null || grid === null) {
@@ -247,7 +248,7 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     );
     handle.addEventListener("touchend", finish, CAPTURE_TOUCH);
     handle.addEventListener("touchcancel", finish, CAPTURE_TOUCH);
-    root.append(handle);
+    element.append(handle);
   }
   current.onSelectionChange(updateHandles);
   current.onScroll(updateHandles);
@@ -256,6 +257,7 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
   element.addEventListener(
     "touchstart",
     (event) => {
+      if (isHandleTouch(event)) return;
       stopGesture();
       const touch = event.touches[0];
       if (event.touches.length !== 1 || touch === undefined) return;
@@ -281,6 +283,7 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
   element.addEventListener(
     "touchmove",
     (event) => {
+      if (isHandleTouch(event)) return;
       const touch = event.touches[0];
       if (event.touches.length !== 1 || touch === undefined) {
         finish(event);
@@ -305,8 +308,15 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     },
     CAPTURE_TOUCH,
   );
-  element.addEventListener("touchend", finish, CAPTURE_TOUCH);
-  element.addEventListener("touchcancel", finish, CAPTURE_TOUCH);
+  for (const type of ["touchend", "touchcancel"] as const) {
+    element.addEventListener(
+      type,
+      (event) => {
+        if (!isHandleTouch(event)) finish(event);
+      },
+      CAPTURE_TOUCH,
+    );
+  }
   // xterm's desktop menu focuses its text field. On mobile this opens the keyboard and refits away the selection.
   element.addEventListener(
     "contextmenu",

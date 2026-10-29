@@ -23,6 +23,7 @@ const openTerminal = async (text: string) => {
   const screen = parent.querySelector(".xterm-screen");
   const element = terminal.element;
   if (!screen || !element) throw new Error("The terminal did not open.");
+  element.getBoundingClientRect = () => new DOMRect(0, 0, 200, 80);
   screen.getBoundingClientRect = () => new DOMRect(0, 0, 200, 80);
   installTerminalTouchSelection(terminal);
   return { terminal, element, parent };
@@ -75,6 +76,28 @@ test("a short drag cancels a long press and does not also tap the terminal", asy
   expect(touch(element, "touchend", 2).defaultPrevented).toBe(false);
   expect(terminal.hasSelection()).toBe(false);
 });
+
+test.each(["start", "end"] as const)(
+  "a mouse press on the %s handle clears the old selection",
+  async (edge) => {
+    const { terminal, parent } = await openTerminal("hello world");
+    terminal.select(2, 0, 2);
+    const handle = parent.querySelector(`[data-edge="${edge}"]`);
+    if (!handle) throw new Error("The selection handle is missing.");
+    handle.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        detail: 1,
+        clientX: 25,
+        clientY: 10,
+      }),
+    );
+    document.dispatchEvent(new MouseEvent("mouseup", { button: 0 }));
+    expect(terminal.hasSelection()).toBe(false);
+  },
+);
 
 test("keeps handles after a finger lifts and adjusts either end across lines without input", async () => {
   const { terminal, parent } = await openTerminal("hello world\r\nsecond line");

@@ -51,6 +51,7 @@ export type PageElement = {
 };
 
 type PageTouchEvent = {
+  readonly target: object | null;
   readonly touches: ArrayLike<{ readonly clientX: number; readonly clientY: number }>;
   preventDefault(): void;
   stopPropagation(): void;

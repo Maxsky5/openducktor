@@ -19,6 +19,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   };
   export type XtermTouch = { readonly clientX: number; readonly clientY: number };
   export type XtermTouchEvent = {
+    readonly target: object | null;
     readonly touches: ArrayLike<XtermTouch>;
     preventDefault(): void;
     stopPropagation(): void;
@@ -26,6 +27,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   /** The page DOM element members that the page reads. */
   export type XtermPageElement = {
     readonly style: { setProperty(name: string, value: string): void };
+    append(...nodes: Array<object | string>): void;
     getBoundingClientRect(): XtermRect;
     querySelector(selector: string): XtermPageElement | null;
     addEventListener(

@@ -38,7 +38,7 @@ body {
   height: 100%;
 }
 
-/* Handles stay outside xterm so its input and scrolling handlers do not take their touches. */
+/* Handle touch listeners stop propagation; mouse input bubbles to xterm. */
 .terminal-selection-handle {
   position: absolute;
   z-index: 5;
