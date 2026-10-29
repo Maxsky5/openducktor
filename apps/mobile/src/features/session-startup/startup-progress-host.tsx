@@ -1,6 +1,6 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { type ReactElement, use, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactElement, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Platform, ScrollView, useWindowDimensions, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -16,8 +16,8 @@ import { StyleSheet } from "react-native-unistyles";
 import { useStore } from "zustand";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import { appStateVisibility } from "@/composition/app-visibility";
-import { toastsCoveredBy, toastWindowOf } from "@/feedback/feedback-store";
-import { StartupPresentationContext, useStartupPresentation } from "./startup-presentation-context";
+import { startupCoveredBy, toastWindowOf } from "@/feedback/feedback-store";
+import { useStartupPresentation } from "./startup-presentation-context";
 import { StartupTrace } from "./startup-trace";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { motion } from "@/theme/tokens";
@@ -52,12 +52,6 @@ export function StartupProgressHost(): ReactElement | null {
   return inRoot ? <StartupStack /> : null;
 }
 
-/** The newest Android modal owns progress while its separate window covers the route tree. */
-export function ModalStartupProgressHost(): ReactElement | null {
-  const presentation = use(StartupPresentationContext);
-  return presentation ? <StartupStack /> : null;
-}
-
 function StartupStack(): ReactElement | null {
   // Keep the viewport open while the last native card finishes its exit.
   const lastSize = useRef({ viewport: 0, content: 0 });
@@ -69,7 +63,7 @@ function StartupStack(): ReactElement | null {
     appStateVisibility.isHidden,
   );
   const feedback = useFeedbackStore();
-  const covered = useStore(feedback.store, toastsCoveredBy);
+  const covered = useStore(feedback.store, startupCoveredBy);
   const toastStackHeight = useStore(feedback.store, (state) => state.toastStackHeight);
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();

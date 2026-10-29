@@ -6,7 +6,7 @@ import {
   useLayoutEffect,
   useState,
 } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -33,8 +33,8 @@ type FormFooterProps = {
 
 /**
  * The footer of a workflow form, as the desktop dialog footer: a top rule, the reason why the
- * primary action is disabled, then Cancel and the primary action side by side. In a sheet, Cancel
- * is the close control of the sheet, so the sheet header shows only its title. The forms show in
+ * primary action is disabled, then the actions in a row when they fit. In a sheet, Cancel is the
+ * close control, so the sheet header shows only its title. The forms show in
  * full sheets, which the keyboard does not resize on iOS or Android, so the footer moves up with
  * the keyboard. A low window, such as a phone in landscape, puts the reason and the actions in one
  * row, so the fields keep the height. `onHeight` reports the footer height, so the content can
@@ -103,6 +103,7 @@ function StackedFooterBar({
   bottom,
   onHeight,
 }: FooterBarProps): ReactElement {
+  const { fontScale } = useWindowDimensions();
   return (
     <View
       style={[styles.bar, { paddingBottom: bottom }]}
@@ -120,8 +121,8 @@ function StackedFooterBar({
       ) : null}
       {inSheet && secondary ? <View style={styles.actions}>{secondary}</View> : null}
       <View style={styles.actions}>
-        {cancel ? <View style={styles.action}>{cancel}</View> : secondary}
-        {primary ? <View style={styles.action}>{primary}</View> : null}
+        {cancel ? <View style={styles.action(fontScale)}>{cancel}</View> : secondary}
+        {primary ? <View style={styles.action(fontScale)}>{primary}</View> : null}
       </View>
     </View>
   );
@@ -206,9 +207,8 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.desktop.popover,
   },
   note: { textAlign: "center" },
-  actions: { flexDirection: "row", gap: theme.space.sm },
-  // Cancel and the primary action share the row in equal halves.
-  action: { flex: 1 },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm },
+  action: (fontScale: number) => ({ flexGrow: 1, flexShrink: 1, flexBasis: 144 * fontScale }),
   compactBar: { flexDirection: "row", alignItems: "center", paddingTop: theme.space.sm },
   compactNote: { flex: 1, minWidth: 0 },
   compactAction: { width: 184, flexGrow: 1 },

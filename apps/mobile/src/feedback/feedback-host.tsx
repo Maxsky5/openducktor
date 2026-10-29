@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useEffect, useId, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useId, useLayoutEffect, useState } from "react";
 import { AccessibilityInfo, Platform, ScrollView, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -23,7 +23,6 @@ import { Icon, type IconName } from "@/ui/icon";
 import { haptics } from "@/ui/haptics";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
-import { ModalStartupProgressHost } from "@/features/session-startup/startup-progress-host";
 import {
   type FeedbackMessage,
   type FeedbackStore,
@@ -264,12 +263,7 @@ function AndroidModalToasts(): ReactElement | null {
   const shown = useStore(feedback.store, (state) => toastWindowOf(state) === id);
   // A closing modal slides out with its window while the root shows its toasts at once. A toast
   // that faded out in that window read as a second toast, so the toasts of a modal do not fade.
-  return shown ? (
-    <>
-      <ToastStack feedback={feedback} exits={false} />
-      <ModalStartupProgressHost />
-    </>
-  ) : null;
+  return shown ? <ToastStack feedback={feedback} exits={false} /> : null;
 }
 
 /**
@@ -278,6 +272,8 @@ function AndroidModalToasts(): ReactElement | null {
  * the toasts. iOS shows them in a window overlay above every modal, so this renders nothing there.
  */
 export function ModalFeedbackHost(): ReactElement | null {
+  const feedback = useFeedbackStore();
+  useLayoutEffect(() => feedback.coverStartup(), [feedback]);
   return Platform.OS === "ios" ? null : <AndroidModalToasts />;
 }
 

@@ -25,10 +25,14 @@ export type FeedbackState = {
   /** Layout shared by the two in-app feedback stacks. These values stay in memory. */
   toastStackHeight: number;
   startupVisible: boolean;
+  startupCovers: number;
 };
 
 /** Whether an open menu hides the toasts. */
 export const toastsCoveredBy = (state: FeedbackState): boolean => state.menus > 0;
+
+export const startupCoveredBy = (state: FeedbackState): boolean =>
+  toastsCoveredBy(state) || state.startupCovers > 0;
 
 /** The window that shows the toasts: the newest open window, or `null` for the root view. */
 export const toastWindowOf = (state: FeedbackState): string | null => state.windows.at(-1) ?? null;
@@ -48,6 +52,7 @@ export const createFeedbackStore = () => {
     menus: 0,
     toastStackHeight: 0,
     startupVisible: false,
+    startupCovers: 0,
   }));
   let nextId = 1;
   // The messages that a window showed. A toast that moves to another window, as when a sheet
@@ -101,6 +106,16 @@ export const createFeedbackStore = () => {
       store.setState(({ menus }) => ({ menus: menus - 1 }));
     };
   };
+  /** Startup cards can fill a sheet, so sheets hide them while short feedback stays visible. */
+  const coverStartup = (): (() => void) => {
+    store.setState(({ startupCovers }) => ({ startupCovers: startupCovers + 1 }));
+    let closed = false;
+    return () => {
+      if (closed) return;
+      closed = true;
+      store.setState(({ startupCovers }) => ({ startupCovers: startupCovers - 1 }));
+    };
+  };
   /** A window showed the toast of message `id`. */
   const markPresented = (id: string) => {
     if (store.getState().messages.some((entry) => entry.id === id)) presented.add(id);
@@ -120,6 +135,7 @@ export const createFeedbackStore = () => {
     dismiss,
     openWindow,
     openMenu,
+    coverStartup,
     markPresented,
     wasPresented,
     setToastStackHeight,

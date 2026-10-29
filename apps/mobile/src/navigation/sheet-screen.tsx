@@ -1,10 +1,12 @@
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router/react-navigation";
 import {
   type ComponentRef,
   type PropsWithChildren,
   type ReactElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +14,7 @@ import {
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
+import { useFeedbackStore } from "@/app-shell/app-services";
 import { IconButton } from "@/ui/icon-button";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
@@ -83,6 +86,9 @@ export function SheetScreen({
   children,
 }: SheetScreenProps): ReactElement {
   const router = useRouter();
+  const focused = useIsFocused();
+  const feedback = useFeedbackStore();
+  useLayoutEffect(() => (focused ? feedback.coverStartup() : undefined), [feedback, focused]);
   // The close control calls the latest handler, so the screen options change only when the
   // header shows something new. Each new options object renders the whole navigator again.
   const closeHandler = useRef(onClose);
