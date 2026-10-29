@@ -186,6 +186,14 @@ Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An in
 
 The terminal view uses the shared xterm binding. The binding measures the visible container and calls `Terminal.resize` only when the grid changes. It rejects a collapsed container or the fit add-on's minimum 2-by-1 grid. It does not clear the renderer before each resize. Resize scheduling coalesces changes and permits at most one reflow per 100 ms during a continuous drag. Interactive input flushes the pending fit and host resize first. Theme changes update colors without a grid resize.
 
+### Mobile terminal controls
+
+The mobile terminal list shows `Idle` for an open shell with no active command and `Running` when the live activity stream reports a command. The host lifecycle stays unchanged. Starting, closing, failed, lost, and exited terminals keep their lifecycle labels.
+
+Long-press output to select a word. Drag either handle to adjust the range across lines. Drag past the top or bottom edge to scroll through retained output. Selection uses xterm buffer cells, so wide and combined characters keep their correct positions. A short drag scrolls without starting a selection.
+
+The editing row scrolls and includes Esc, Tab, sticky Ctrl and Alt, arrows, Shift+Tab, Backspace, Delete, and Enter. The row below it keeps Select all, Copy, Clear selection, Paste, and the keyboard control visible. Selection controls keep the same space when a selection starts or ends, so the controls do not resize the terminal. They remain available for retained output when terminal input is disabled. Copy uses the app clipboard helper, and Paste keeps the iOS system paste control.
+
 ## Limits and security
 
 The host applies the same terminal limits to shells and command terminals per task, per Workspace Session, and per host. Pending terminals count through admission until activation. A limit error shows the used capacity and limit and tells the user to close a terminal. A command that exceeds the limit does not run. The host also limits input bytes, grid size, replay bytes, unacknowledged output, and retained exited sessions. Each operation uses an opaque terminal ID. Workspace activity checks include live Workspace Session terminals in the matching repository.

@@ -26,6 +26,7 @@ body {
 
 /* xterm.js stays hidden until it parsed the attachment snapshot. */
 #root {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -35,4 +36,51 @@ body {
 
 #root .xterm {
   height: 100%;
+}
+
+/* Handles stay outside xterm so its input and scrolling handlers do not take their touches. */
+.terminal-selection-handle {
+  position: absolute;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  transform: translate(-50%, -10px);
+}
+
+.terminal-selection-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 21px;
+  width: 2px;
+  height: 22px;
+  background: var(--terminal-selection-handle);
+}
+
+.terminal-selection-handle::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 15px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--terminal-selection-handle);
+}
+
+.terminal-selection-handle[data-edge="start"] {
+  transform: translate(-50%, -34px);
+}
+
+.terminal-selection-handle[data-edge="start"]::before {
+  top: 7px;
+  height: 27px;
+}
+
+.terminal-selection-handle[data-edge="start"]::after {
+  top: 0;
 }

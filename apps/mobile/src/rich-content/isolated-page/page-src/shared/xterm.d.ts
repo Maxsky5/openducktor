@@ -133,8 +133,10 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
     input(data: string, wasUserInput?: boolean): void;
     hasSelection(): boolean;
     getSelection(): string;
+    getSelectionPosition(): XtermCellRange | undefined;
     select(column: number, row: number, length: number): void;
     selectAll(): void;
+    scrollLines(amount: number): void;
     clearSelection(): void;
     attachCustomKeyEventHandler(handler: (event: XtermKeyboardEvent) => boolean): void;
     registerLinkProvider(provider: {

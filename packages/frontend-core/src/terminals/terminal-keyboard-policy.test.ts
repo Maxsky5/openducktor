@@ -19,6 +19,16 @@ describe("encodeTerminalTouchKey", () => {
     expect(text(encodeTerminalTouchKey("Tab", ALT, "darwin", false))).toBe("\u001b\t");
   });
 
+  test("sends editing keys and preserves host word deletion shortcuts", () => {
+    expect(text(encodeTerminalTouchKey("Enter", NONE, "linux", false))).toBe("\r");
+    expect(text(encodeTerminalTouchKey("Backspace", NONE, "darwin", false))).toBe("\u007f");
+    expect(text(encodeTerminalTouchKey("Backspace", CTRL, "linux", false))).toBe("\u0017");
+    expect(text(encodeTerminalTouchKey("Delete", NONE, "win32", false))).toBe("\u001b[3~");
+    expect(text(encodeTerminalTouchKey("Delete", CTRL, "linux", false))).toBe("\u001bd");
+    expect(text(encodeTerminalTouchKey("Delete", ALT, null, false))).toBe("\u001b[3;3~");
+    expect(text(encodeTerminalTouchKey("ShiftTab", NONE, "darwin", false))).toBe("\u001b[Z");
+  });
+
   test("follows the cursor key mode of the terminal application", () => {
     expect(text(encodeTerminalTouchKey("ArrowUp", NONE, "linux", false))).toBe("\u001b[A");
     expect(text(encodeTerminalTouchKey("ArrowDown", NONE, "linux", false))).toBe("\u001b[B");

@@ -233,6 +233,8 @@ export const TerminalView = memo(function TerminalView({
   }, [feedback, pasteText]);
   // The page answers with the selected text, which goes to `copy`.
   const copySelection = useCallback(() => post({ type: "terminal_copy_selection" }), [post]);
+  const selectAll = useCallback(() => post({ type: "terminal_select_all" }), [post]);
+  const clearSelection = useCallback(() => post({ type: "terminal_clear_selection" }), [post]);
   const toggleKeyboard = useCallback(() => {
     if (!pageReady) return;
     if (keyboardVisible) {
@@ -315,13 +317,16 @@ export const TerminalView = memo(function TerminalView({
       <TerminalKeyBar
         inputEnabled={inputEnabled && pageReady}
         modifiers={modifiers}
-        canCopy={state.hasSelection}
+        canCopy={state.hasSelection && pageReady}
+        canSelect={state.hydrated && pageReady}
         keyboardVisible={keyboardVisible}
         onKey={sendKey}
         onToggleModifier={(modifier) => dispatchModifiers({ type: "toggled", modifier })}
         onPaste={paste}
         onPasteText={pasteText}
         onCopy={copySelection}
+        onSelectAll={selectAll}
+        onClearSelection={clearSelection}
         onToggleKeyboard={toggleKeyboard}
       />
     </KeyboardInsetView>
