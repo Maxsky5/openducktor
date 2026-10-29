@@ -1,16 +1,13 @@
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { canOpenStartupSession } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import type { ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/ui/button";
 import { Text } from "@/ui/text";
 import { useStartupPresentation } from "./startup-presentation-context";
-import { useOpenStartupSession } from "./use-open-startup-session";
 
 export function StartupSavedSession({ attempt }: { attempt: StartupAttempt }): ReactElement | null {
   const presentation = useStartupPresentation();
-  const openSession = useOpenStartupSession();
   const attemptId = attempt.id;
   const inspectOpen = presentation.expanded[attemptId]?.has("saved-record") === true;
   if (attempt.ownership.state !== "saved") return null;
@@ -44,13 +41,6 @@ export function StartupSavedSession({ attempt }: { attempt: StartupAttempt }): R
           </Text>
         </View>
       ) : null}
-      <Button
-        label="Open session"
-        variant="outline"
-        size="sm"
-        onPress={() => openSession(attemptId)}
-        disabled={!canOpenStartupSession(attempt)}
-      />
     </View>
   );
 }

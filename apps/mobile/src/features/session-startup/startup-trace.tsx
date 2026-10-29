@@ -8,14 +8,18 @@ import {
   type StartupPresentation,
   type StartupAttempt,
 } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import { type ReactElement, useState } from "react";
 import { ScrollView, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { useAppTheme } from "@/theme/app-theme-context";
+import { withAlpha } from "@/theme/color-alpha";
 import type { ThemeColorName } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
+import { Touchable } from "@/ui/touchable";
 import { useAnnounce } from "@/ui/use-announce";
 import { StartupStepDetails, StartupStepRow } from "./startup-step-row";
 import { useStartupPresentation } from "./startup-presentation-context";
@@ -60,12 +64,14 @@ export function StartupTrace({
   onEditChoices,
   onRepairSavedSession,
   presentation: expectedPresentation = "dialog",
+  detailsMaxHeight,
 }: {
   attemptId: string;
   onContinueInBackground?: (() => void) | undefined;
   onEditChoices?: (() => void) | undefined;
   onRepairSavedSession?: (() => void) | undefined;
   presentation?: StartupPresentation;
+  detailsMaxHeight?: number;
 }): ReactElement | null {
   const attempt = useStartupAttempt(attemptId);
   const { startupAttempts } = useClientConnection();
@@ -85,9 +91,21 @@ export function StartupTrace({
     hasConfirmedReadyState(attempt)
   )
     return null;
+  const toggleProgress =
+    compact && traceAvailable
+      ? () => {
+          setProgressViewed(true);
+          traceState.toggle(attemptId, progressKey);
+        }
+      : undefined;
   return (
     <View style={[styles.root, compact ? styles.compact : styles.full]}>
-      <StartupTraceHeader attempt={attempt} compact={compact} />
+      <StartupTraceHeader
+        attempt={attempt}
+        compact={compact}
+        progressExpanded={progressOpen}
+        onToggleProgress={toggleProgress}
+      />
       <StartupTraceSummary
         attempt={attempt}
         rows={rows}
@@ -96,14 +114,21 @@ export function StartupTrace({
       />
       {traceAvailable ? (
         <StartupTraceDetails
+          key={attemptId}
           attempt={attempt}
           rows={rows}
           compact={compact}
           mounted={progressOpen || progressViewed}
           visible={progressOpen}
+          maxHeight={detailsMaxHeight}
         />
       ) : (
-        <StartupStatusDetails attempt={attempt} compact={compact} />
+        <StartupStatusDetails
+          key={attemptId}
+          attempt={attempt}
+          compact={compact}
+          maxHeight={detailsMaxHeight}
+        />
       )}
       <StartupInstructionNotice instruction={attempt.instruction} />
       <StartupAttemptActions
@@ -112,14 +137,7 @@ export function StartupTrace({
         onEditChoices={onEditChoices}
         onRepairSavedSession={onRepairSavedSession}
         progressExpanded={progressOpen}
-        onToggleProgress={
-          compact && traceAvailable
-            ? () => {
-                setProgressViewed(true);
-                traceState.toggle(attemptId, progressKey);
-              }
-            : undefined
-        }
+        onToggleProgress={toggleProgress}
       />
     </View>
   );
@@ -152,10 +170,15 @@ function hasConfirmedReadyState(attempt: StartupAttempt): boolean {
 function StartupTraceHeader({
   attempt,
   compact,
+  progressExpanded,
+  onToggleProgress,
 }: {
   attempt: StartupAttempt;
   compact: boolean;
+  progressExpanded: boolean;
+  onToggleProgress: (() => void) | undefined;
 }): ReactElement {
+  const theme = useAppTheme();
   const phase = attempt.status.phase;
   const current = attempt.status.confirmation === "current";
   const workspace = attempt.origin.workspaceId.split(/[\\/]/).filter(Boolean).at(-1);
@@ -166,12 +189,19 @@ function StartupTraceHeader({
   const origin = `${workspace}${scope}`;
   return (
     <View style={styles.header}>
-      <View style={styles.heading}>
+      <View
+        style={[
+          styles.phaseIcon,
+          { backgroundColor: withAlpha(theme.colors[PHASE_COLORS[phase]], 0.12) },
+        ]}
+      >
         {phase === "submitting" || phase === "running" || phase === "settling" ? (
           <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
         ) : (
           <Icon name={PHASE_ICONS[phase]} size={16} color={PHASE_COLORS[phase]} />
         )}
+      </View>
+      <View style={styles.heading}>
         <Text
           variant="headline"
           accessibilityRole={compact ? "header" : "text"}
@@ -180,20 +210,71 @@ function StartupTraceHeader({
         >
           {PHASE_LABELS[phase]}
         </Text>
-      </View>
-      <Text
-        variant="caption1"
-        tone="secondary"
-        numberOfLines={1}
-        accessibilityLabel={`${attempt.origin.workspaceId}${scope}`}
-        selectable
-      >
-        {origin}
-      </Text>
-      {!current ? (
-        <Text variant="footnote" tone="amber">
-          Outcome unconfirmed. Inspect the session before you send again.
+        <Text
+          variant="caption1"
+          tone="secondary"
+          numberOfLines={1}
+          accessibilityLabel={`${attempt.origin.workspaceId}${scope}`}
+          selectable
+        >
+          {origin}
         </Text>
+        {!current ? (
+          <Text variant="footnote" tone="amber">
+            Outcome unconfirmed. Inspect the session before you send again.
+          </Text>
+        ) : null}
+      </View>
+      <StartupNotificationControls
+        attempt={attempt}
+        progressExpanded={progressExpanded}
+        onToggleProgress={onToggleProgress}
+      />
+    </View>
+  );
+}
+
+function StartupNotificationControls({
+  attempt,
+  progressExpanded,
+  onToggleProgress,
+}: {
+  attempt: StartupAttempt;
+  progressExpanded: boolean;
+  onToggleProgress: (() => void) | undefined;
+}): ReactElement | null {
+  const { startupAttempts } = useClientConnection();
+  if (attempt.presentation !== "notification") return null;
+  const settled = !startupIsPending(attempt);
+  if (!onToggleProgress && !settled) return null;
+  return (
+    <View style={styles.headerActions}>
+      {onToggleProgress ? (
+        <Touchable
+          feedback="opacity"
+          onPress={onToggleProgress}
+          accessibilityRole="button"
+          accessibilityLabel={progressExpanded ? "Hide startup progress" : "Show startup progress"}
+          accessibilityState={{ expanded: progressExpanded }}
+          style={styles.headerAction}
+        >
+          <Icon
+            name={progressExpanded ? "chevron-up" : "chevron-down"}
+            size={16}
+            color="secondaryLabel"
+          />
+        </Touchable>
+      ) : null}
+      {settled ? (
+        <Touchable
+          feedback="opacity"
+          onPress={() => startupAttempts.dismiss(attempt.id)}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss startup notification"
+          style={styles.headerAction}
+        >
+          <Icon name="x" size={16} color="secondaryLabel" />
+        </Touchable>
       ) : null}
     </View>
   );
@@ -222,7 +303,7 @@ function StartupTraceSummary({
     steps.findLast((step) => step.state === "running" || step.state === "waiting") ?? failedStep;
   return (
     <>
-      {activeStep ? (
+      {activeStep && !progressOpen ? (
         <Text
           variant="footnote"
           tone={activeStep === failedStep ? "red" : "secondary"}
@@ -246,15 +327,21 @@ function StartupTraceDetails({
   compact,
   mounted,
   visible,
+  maxHeight,
 }: {
   attempt: StartupAttempt;
   rows: readonly StartupTraceRow[];
   compact: boolean;
   mounted: boolean;
   visible: boolean;
+  maxHeight: number | undefined;
 }): ReactElement | null {
   const traceState = useStartupPresentation();
   const { height } = useWindowDimensions();
+  const [initialOffset] = useState(() => ({
+    x: 0,
+    y: traceState.scroll.get(attempt.id) ?? 0,
+  }));
   if (!mounted) return null;
   const attemptId = attempt.id;
   return (
@@ -264,11 +351,17 @@ function StartupTraceDetails({
       importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
     >
       <ScrollView
-        style={[styles.scroll, { maxHeight: compact ? 240 : Math.min(360, height * 0.5) }]}
+        style={[
+          styles.scroll,
+          { maxHeight: maxHeight ?? (compact ? 240 : Math.min(360, height * 0.5)) },
+        ]}
         contentContainerStyle={styles.steps}
         nestedScrollEnabled
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
         keyboardShouldPersistTaps="handled"
-        contentOffset={{ x: 0, y: traceState.scroll.get(attemptId) ?? 0 }}
+        contentOffset={initialOffset}
         onScroll={(event) => traceState.scroll.set(attemptId, event.nativeEvent.contentOffset.y)}
         scrollEventThrottle={100}
       >
@@ -298,19 +391,35 @@ function StartupTraceDetails({
 function StartupStatusDetails({
   attempt,
   compact,
+  maxHeight,
 }: {
   attempt: StartupAttempt;
   compact: boolean;
+  maxHeight: number | undefined;
 }): ReactElement | null {
   const { height } = useWindowDimensions();
+  const traceState = useStartupPresentation();
+  const [initialOffset] = useState(() => ({
+    x: 0,
+    y: traceState.scroll.get(attempt.id) ?? 0,
+  }));
   const failures = startupFailureRows(attempt);
   if (!attempt.error && failures.length === 0 && attempt.ownership.state !== "saved") return null;
   return (
     <ScrollView
-      style={[styles.scroll, { maxHeight: compact ? 240 : Math.min(360, height * 0.5) }]}
+      style={[
+        styles.scroll,
+        { maxHeight: maxHeight ?? (compact ? 240 : Math.min(360, height * 0.5)) },
+      ]}
       contentContainerStyle={styles.statusDetails}
       nestedScrollEnabled
+      bounces={false}
+      alwaysBounceVertical={false}
+      overScrollMode="never"
       keyboardShouldPersistTaps="handled"
+      contentOffset={initialOffset}
+      onScroll={(event) => traceState.scroll.set(attempt.id, event.nativeEvent.contentOffset.y)}
+      scrollEventThrottle={100}
     >
       {attempt.error ? (
         <Text variant="footnote" tone="red" selectable>
@@ -361,15 +470,29 @@ function startupAnnouncement(
 
 const styles = StyleSheet.create((theme) => ({
   activeIcon: { color: theme.colors.tint },
-  root: { gap: theme.space.sm, flexShrink: 1 },
+  root: { gap: theme.space.sm, flexShrink: 1, minHeight: 0 },
   full: { maxHeight: "100%", padding: theme.layout.screenPadding },
   compact: { padding: theme.space.md },
-  header: { gap: theme.space.xxs },
-  heading: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
-  title: { flex: 1, minWidth: 0 },
-  progress: { flexShrink: 1 },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.md, flexShrink: 0 },
+  phaseIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heading: { flex: 1, minWidth: 0, gap: theme.space.xxs },
+  headerActions: { flexDirection: "row", flexShrink: 0 },
+  headerAction: {
+    minWidth: theme.touchTarget,
+    minHeight: theme.touchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  title: { minWidth: 0 },
+  progress: { flexShrink: 1, minHeight: 0 },
   hiddenProgress: { display: "none" },
-  scroll: { flexGrow: 0, flexShrink: 1 },
+  scroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   steps: { paddingBottom: theme.space.xs },
   statusDetails: { gap: theme.space.sm },
   failure: { gap: theme.space.xs },

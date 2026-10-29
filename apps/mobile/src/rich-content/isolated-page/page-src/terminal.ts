@@ -208,7 +208,7 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
   opening = false;
   if (latestConfiguration !== null) applyConfiguration(created, latestConfiguration);
   installLinks(created);
-  installTouchSelection(created);
+  installTouch(created);
   created.onData((data) => {
     if (pasting || (!heldModifiers.ctrl && !heldModifiers.alt)) {
       sendInput(data);
@@ -274,13 +274,15 @@ const installLinks = (current: Terminal): void => {
 };
 
 /**
- * Touch selection: a long press selects the word under the finger, and moving the finger then
- * extends the selection. A short drag still scrolls the terminal.
+ * A long press selects text. A short drag scrolls xterm's rows, since its scrollbar has no
+ * touch handler.
  */
-const installTouchSelection = (current: Terminal): void => {
+const installTouch = (current: Terminal): void => {
   let timer: number | null = null;
   let start: XtermTouch | null = null;
   let anchor: number | null = null;
+  let scrollRow = 0;
+  let scrolling = false;
 
   const cellIndex = (touch: XtermTouch): number | null => {
     const screen = screenRoot.querySelector(".xterm-screen");
@@ -326,9 +328,12 @@ const installTouchSelection = (current: Terminal): void => {
     (event) => {
       cancelPress();
       anchor = null;
+      start = null;
+      scrolling = false;
       const touch = event.touches[0];
       if (event.touches.length !== 1 || touch === undefined) return;
       start = { clientX: touch.clientX, clientY: touch.clientY };
+      scrollRow = current.buffer.active.viewportY;
       timer = setTimeout(() => {
         timer = null;
         if (start === null) return;
@@ -344,12 +349,18 @@ const installTouchSelection = (current: Terminal): void => {
       const touch = event.touches[0];
       if (touch === undefined) return;
       if (anchor === null) {
-        if (
-          start !== null &&
-          Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY) > TOUCH_SLOP_PX
-        ) {
-          cancelPress();
-        }
+        if (start === null) return;
+        const distance = Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY);
+        if (!scrolling && distance <= TOUCH_SLOP_PX) return;
+        scrolling = true;
+        cancelPress();
+        const screen = screenRoot.querySelector(".xterm-screen");
+        if (screen === null) return;
+        const rowHeight = screen.getBoundingClientRect().height / current.rows;
+        if (rowHeight <= 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        current.scrollToLine(scrollRow + Math.round((start.clientY - touch.clientY) / rowHeight));
         return;
       }
       // While a selection grows, the finger does not scroll the terminal.
@@ -363,9 +374,10 @@ const installTouchSelection = (current: Terminal): void => {
   const endPress = (event: XtermTouchEvent): void => {
     cancelPress();
     start = null;
-    if (anchor === null) return;
+    if (anchor === null && !scrolling) return;
     anchor = null;
-    // A long press does not also tap the terminal.
+    scrolling = false;
+    // A drag or long press does not also tap the terminal.
     event.preventDefault();
   };
   terminalElement.addEventListener("touchend", endPress, capture);

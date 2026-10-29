@@ -82,6 +82,7 @@ function StartupStack(): ReactElement | null {
   if (hidden || covered) return null;
   const top = insets.top + 70 + toastStackHeight + (toastStackHeight > 0 ? theme.space.sm : 0);
   const bottom = insets.bottom + 80;
+  const maxHeight = Math.max(0, height - top - bottom);
   return (
     <LayoutAnimationConfig skipExiting>
       <View
@@ -91,7 +92,7 @@ function StartupStack(): ReactElement | null {
           styles.host,
           {
             bottom,
-            maxHeight: Math.max(0, height - top - bottom),
+            maxHeight,
           },
         ]}
       >
@@ -105,12 +106,19 @@ function StartupStack(): ReactElement | null {
             if (!empty) lastSize.current.content = contentHeight;
           }}
           nestedScrollEnabled
+          bounces={false}
+          alwaysBounceVertical={false}
+          overScrollMode="never"
           keyboardShouldPersistTaps="handled"
         >
           {/* Keep native output pages attached while the user's manual starts update card heights. */}
           {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
           {visible.map((attempt) => (
-            <StartupCard key={attempt.id} attemptId={attempt.id} />
+            <StartupCard
+              key={attempt.id}
+              attemptId={attempt.id}
+              detailsMaxHeight={maxHeight * 0.45}
+            />
           ))}
         </ScrollView>
       </View>
@@ -118,7 +126,13 @@ function StartupStack(): ReactElement | null {
   );
 }
 
-function StartupCard({ attemptId }: { attemptId: string }): ReactElement {
+function StartupCard({
+  attemptId,
+  detailsMaxHeight,
+}: {
+  attemptId: string;
+  detailsMaxHeight: number;
+}): ReactElement {
   const { notificationPresented } = useStartupPresentation();
   const reducedMotion = useReducedMotion();
   const [firstPresentation] = useState(() => !notificationPresented.has(attemptId));
@@ -132,7 +146,11 @@ function StartupCard({ attemptId }: { attemptId: string }): ReactElement {
       exiting={CARD_EXITING}
       style={styles.card}
     >
-      <StartupTrace attemptId={attemptId} presentation="notification" />
+      <StartupTrace
+        attemptId={attemptId}
+        presentation="notification"
+        detailsMaxHeight={detailsMaxHeight}
+      />
     </Animated.View>
   );
 }

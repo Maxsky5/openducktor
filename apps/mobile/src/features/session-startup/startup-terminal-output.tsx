@@ -38,6 +38,7 @@ export function StartupTerminalOutput({
   const [generation, setGeneration] = useState(0);
   const reading = useStartupPresentation().outputReading(attemptId, terminalId);
   const [outputText, setOutputText] = useState(reading.text);
+  const [initialTextOffset] = useState(() => ({ x: 0, y: reading.textOffset }));
   const { copyText } = useClipboardCopy();
   const session = useMemo(
     () =>
@@ -118,7 +119,10 @@ export function StartupTerminalOutput({
         <ScrollView
           style={styles.textOutput}
           nestedScrollEnabled
-          contentOffset={{ x: 0, y: reading.textOffset }}
+          bounces={false}
+          alwaysBounceVertical={false}
+          overScrollMode="never"
+          contentOffset={initialTextOffset}
           onScroll={(event) => {
             reading.textOffset = event.nativeEvent.contentOffset.y;
           }}
@@ -144,6 +148,7 @@ export function StartupTerminalOutput({
               setNotice(message);
             }}
             onRestart={restart}
+            scrollEnabled
             style={styles.page}
           />
         ) : null}

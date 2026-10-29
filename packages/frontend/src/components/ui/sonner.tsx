@@ -23,8 +23,8 @@ export function Toaster({ style, ...props }: ToasterProps) {
           classNames: {
             toast:
               "group border border-border bg-card/95 text-foreground shadow-xl shadow-foreground/10 backdrop-blur",
-            content: "gap-1.5 pr-7",
-            title: "text-sm font-semibold",
+            content: "gap-1.5",
+            title: "pr-7 text-sm font-semibold",
             // Sonner sets this color outside Tailwind's CSS layer.
             description: "whitespace-pre-wrap break-words text-xs !text-muted-foreground",
             icon: "text-muted-foreground",

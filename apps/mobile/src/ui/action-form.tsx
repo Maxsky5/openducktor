@@ -211,5 +211,5 @@ const styles = StyleSheet.create((theme) => ({
   action: { flex: 1 },
   compactBar: { flexDirection: "row", alignItems: "center", paddingTop: theme.space.sm },
   compactNote: { flex: 1, minWidth: 0 },
-  compactAction: { width: 184 },
+  compactAction: { width: 184, flexGrow: 1 },
 }));

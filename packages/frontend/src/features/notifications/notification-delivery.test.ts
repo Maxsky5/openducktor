@@ -114,7 +114,6 @@ describe("notification delivery adapters", () => {
       }
 
       expect(closeButton.className).toContain("opacity-100");
-      expect(content.className).toContain("pr-7");
       expect(toastElement.className).toContain("!flex-col");
       expect(openButton.className).toContain("!w-full");
       expect(openButton.className).toContain("!bg-primary");

@@ -19,6 +19,7 @@ import { type ReactElement, useMemo, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
+import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { OptionPickerSheet } from "@/ui/option-picker-sheet";
 import { BranchPickerSheet } from "@/features/branches/branch-picker-sheet";
@@ -26,6 +27,8 @@ import { EffortField, ModelField, SpeedField } from "@/features/model-picker/mod
 import { modelSummary } from "@/features/model-picker/model-field-model";
 import { motion } from "@/theme/tokens";
 import { Button } from "@/ui/button";
+import { Icon } from "@/ui/icon";
+import { Touchable } from "@/ui/touchable";
 import { SegmentedControl, SwitchRow, TextField } from "@/ui/fields";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
@@ -304,25 +307,30 @@ function SessionStartBackgroundButton({
   onConfirm: () => void;
 }): ReactElement {
   const submitted = model.phase.kind === "progress";
+  const label = submitted
+    ? "Continue in background"
+    : (model.backgroundConfirmLabel ?? "Run in background");
+  const blocked = useCommandBlocked(!submitted, label);
+  const inactive = !submitted && (disabled || blocked);
+  const hint = submitted
+    ? "Keeps the session start running and closes this sheet."
+    : "Starts the session and keeps this screen.";
   return (
-    <Button
-      label={
-        submitted
-          ? "Continue in Background"
-          : titleCase(model.backgroundConfirmLabel ?? "Run in background")
-      }
-      variant="gray"
-      size="lg"
-      command={!submitted}
-      disabled={!submitted && disabled}
-      accessibilityHint={
-        submitted
-          ? "Keeps the session start running and closes this sheet."
-          : "Starts the session and keeps this screen."
-      }
+    <Touchable
+      feedback="opacity"
+      disabled={inactive}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={blocked ? "Available when the host connection is live." : hint}
       onPress={submitted ? model.onContinueInBackground : onConfirm}
-      fill
-    />
+      containerStyle={styles.backgroundActionContainer}
+      style={styles.backgroundAction}
+    >
+      <Icon name="layers" size={16} color="secondaryLabel" />
+      <Text variant="subhead" weight="medium" tone="secondary" style={styles.backgroundLabel}>
+        {label}
+      </Text>
+    </Touchable>
   );
 }
 
@@ -487,6 +495,17 @@ function KickoffPromptField({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  backgroundActionContainer: { flexGrow: 1, flexShrink: 1 },
+  backgroundAction: {
+    minHeight: theme.touchTarget,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: theme.space.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.space.sm,
+  },
+  backgroundLabel: { flexShrink: 1 },
   notices: {
     gap: theme.space.sm,
     paddingHorizontal: theme.layout.screenPadding,

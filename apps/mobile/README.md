@@ -98,9 +98,9 @@ flowchart TD
 
 ### Session startup
 
-- Task and workspace startup use the connection's in-memory attempt owner. Each native trace shows the host's steps, failures, cleanup, and saved session. The app saves no startup history.
+- Task and workspace startup use the connection's in-memory attempt owner. A newly created worktree shows setup steps. Starts in the current checkout or an existing worktree keep the disabled form and a loading submit button. Failures keep their cause and recovery actions. The app saves no startup history.
 - A foreground start keeps its guarded full sheet until preparation ends. Task starts can move the same trace to the startup overlay with Continue in background. Background task submission closes its sheet at once and never changes the current screen on completion. Workspace starts stay in their sheets.
-- The startup overlay uses the feedback window placement, with its own retention and count. Success expires after 10 elapsed seconds, including hidden time. Failed and canceled starts stay until dismissal or explicit recovery.
+- The startup overlay sits above the bottom tab bar and keeps every active start available. Open and recovery actions stay outside the scrolling details. On a short screen, the stack scrolls to keep every card and action reachable. Success expires after 10 elapsed seconds, including hidden time. Failed and canceled starts stay until dismissal or explicit recovery.
 - Hiding the app keeps the existing connection lifecycle and the user's startup choice. Foreground handoff waits until the app is visible. A lost result stays unconfirmed and never sends a replacement launch.
 - Action details show a separate read-only terminal page. It sends no input or resize. Read output as text takes a static accessible snapshot without announcing each output chunk. The action terminal keeps its initial command result after startup feedback expires.
 
