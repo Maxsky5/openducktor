@@ -377,7 +377,7 @@ describe("changes rows", () => {
     ]);
   });
 
-  test("shows a tree with joined directories, directories first, and closed directories", () => {
+  test("keeps directory totals for nested, joined, and closed directories", () => {
     const tree = diffData({
       scopeStatesByScope: {
         uncommitted: createEmptyScopeState(),
@@ -385,14 +385,15 @@ describe("changes rows", () => {
           ...createEmptyScopeState(),
           fileDiffs: [
             diff("packages/app/src/b.ts"),
-            diff("packages/app/src/lib/c.ts"),
+            { ...diff("packages/app/src/lib/c.ts"), additions: 5, deletions: 0 },
             diff("README.md"),
-            diff("packages/app/src/A.ts"),
+            { ...diff("packages/app/src/A.ts"), additions: 0, deletions: 3 },
+            { ...diff("packages/app/src/logo.png"), additions: 0, deletions: 0 },
           ],
         },
       },
     });
-    const treeRows = (closed: ReadonlySet<string>): string[] =>
+    const treeRows = (closed: ReadonlySet<string>): ChangesRow[] =>
       buildChangesRows({
         items: buildChangesItems(tree, "target"),
         viewMode: "tree",
@@ -400,21 +401,74 @@ describe("changes rows", () => {
         collapsedGroups: new Set(),
         closedDirectories: closed,
         diffBody: bodyOf,
-      }).map(describeRow);
-    expect(treeRows(new Set())).toEqual([
+      });
+    expect(treeRows(new Set()).map(describeRow)).toEqual([
       "v packages/app/src/",
       "  v lib/",
       "    c.ts",
       "  A.ts",
       "  b.ts",
+      "  logo.png",
       "README.md",
     ]);
-    expect(treeRows(new Set([directoryKey("target", "packages/app/src/lib")]))).toEqual([
-      "v packages/app/src/",
-      "  > lib/",
-      "  A.ts",
-      "  b.ts",
-      "README.md",
+    expect(
+      treeRows(new Set([directoryKey("target", "packages/app/src/lib")])).map(describeRow),
+    ).toEqual(["v packages/app/src/", "  > lib/", "  A.ts", "  b.ts", "  logo.png", "README.md"]);
+    const parentTotals = { path: "packages/app/src", fileCount: 4, additions: 7, deletions: 4 };
+    const nestedTotals = { path: "packages/app/src/lib", fileCount: 1, additions: 5, deletions: 0 };
+    for (const { closed, expectedDirectories } of [
+      { closed: new Set<string>(), expectedDirectories: [parentTotals, nestedTotals] },
+      {
+        closed: new Set([directoryKey("target", "packages/app/src/lib")]),
+        expectedDirectories: [parentTotals, nestedTotals],
+      },
+      {
+        closed: new Set([directoryKey("target", "packages/app/src")]),
+        expectedDirectories: [parentTotals],
+      },
+    ]) {
+      const directories = treeRows(closed).filter((row) => row.kind === "directory");
+      expect(directories).toMatchObject(expectedDirectories);
+    }
+  });
+
+  test("keeps directory totals separate for each local change group", () => {
+    const data = diffData();
+    const local = localChanges();
+    data.scopeStatesByScope.uncommitted.localChanges = {
+      ...local,
+      staged: {
+        ...local.staged,
+        fileDiffs: [{ ...diff("src/a.ts"), additions: 7, deletions: 4 }],
+      },
+    };
+    const rows = buildChangesRows({
+      items: buildChangesItems(data, "uncommitted"),
+      viewMode: "tree",
+      expandedFiles: new Set(),
+      collapsedGroups: new Set(),
+      closedDirectories: new Set(),
+      diffBody: bodyOf,
+    });
+    expect(rows.filter((row) => row.kind === "directory")).toMatchObject([
+      {
+        directoryKey: directoryKey("conflicted", "src"),
+        fileCount: 1,
+        additions: 2,
+        deletions: 1,
+      },
+      {
+        directoryKey: directoryKey("unstaged", "src"),
+        fileCount: 2,
+        additions: 4,
+        deletions: 2,
+      },
+      {
+        directoryKey: directoryKey("staged", "src"),
+        fileCount: 1,
+        additions: 7,
+        deletions: 4,
+      },
     ]);
   });
 });

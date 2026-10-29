@@ -1,15 +1,14 @@
 import type { AppTheme } from "@/theme/tokens";
 
-/** The Git panel colors of the current scheme, as the desktop `text-*-600 dark:text-*-400`. */
 export const gitPanelColors = (theme: AppTheme) => {
   const light = theme.scheme === "light";
   return {
     /** Modified and submodule file icons. */
     modified: light ? theme.palette.blue600 : theme.palette.blue400,
-    /** Added file icons and added line counts of a file row. */
-    added: light ? theme.palette.green600 : theme.palette.green400,
-    /** Deleted file icons and removed line counts of a file row. */
-    deleted: light ? theme.palette.red600 : theme.palette.red400,
+    /** Added file icons and line counts. */
+    added: light ? theme.palette.green800 : theme.palette.green400,
+    /** Deleted file icons and removed line counts. */
+    deleted: light ? theme.palette.red700 : theme.palette.red400,
     /** The line totals of the list header, as `text-green-500` and `text-red-500`. */
     totalAdded: theme.palette.green500,
     totalDeleted: theme.palette.red500,

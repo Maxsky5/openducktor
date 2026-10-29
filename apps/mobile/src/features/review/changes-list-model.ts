@@ -30,6 +30,10 @@ export type ChangesRow =
       name: string;
       depth: number;
       open: boolean;
+      /** Totals include files in nested and closed directories. */
+      fileCount: number;
+      additions: number;
+      deletions: number;
     }
   | {
       kind: "file";
@@ -55,6 +59,9 @@ type TreeDirectory = {
   nameStart: number;
   directories: Map<string, TreeDirectory>;
   files: ChangedFileItem[];
+  fileCount: number;
+  additions: number;
+  deletions: number;
 };
 
 const draftDirectory = (path: string, nameStart: number): TreeDirectory => ({
@@ -62,6 +69,9 @@ const draftDirectory = (path: string, nameStart: number): TreeDirectory => ({
   nameStart,
   directories: new Map(),
   files: [],
+  fileCount: 0,
+  additions: 0,
+  deletions: 0,
 });
 
 const compareNames = (left: string, right: string): number => {
@@ -83,6 +93,9 @@ const buildTree = (files: readonly ChangedFileItem[]): TreeDirectory => {
         child = draftDirectory(file.path.slice(0, slash), start);
         directory.directories.set(segment, child);
       }
+      child.fileCount += 1;
+      child.additions += file.additions;
+      child.deletions += file.deletions;
       directory = child;
       start = slash + 1;
       slash = file.path.indexOf("/", start);
@@ -132,6 +145,9 @@ const visitTree = (directory: TreeDirectory, depth: number, visit: Visit): void 
       name,
       depth,
       open,
+      fileCount: last.fileCount,
+      additions: last.additions,
+      deletions: last.deletions,
     });
     if (open) visitTree(last, depth + 1, visit);
   }
