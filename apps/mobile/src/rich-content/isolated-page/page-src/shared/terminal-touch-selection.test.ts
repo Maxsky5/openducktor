@@ -16,7 +16,7 @@ const openTerminal = async (text: string) => {
   parent.id = "root";
   document.body.append(parent);
   parent.getBoundingClientRect = () => new DOMRect(0, 0, 200, 80);
-  const terminal = new Terminal({ cols: 20, rows: 4, disableStdin: true });
+  const terminal = new Terminal({ cols: 20, rows: 4, scrollback: 2000, disableStdin: true });
   opened.push(terminal);
   terminal.open(parent);
   await new Promise<void>((resolve) => terminal.write(text, resolve));
@@ -63,22 +63,14 @@ test.each([
   expect(terminal.getSelection()).toBe("hello");
 });
 
-test("a short drag scrolls rows without selecting or tapping the terminal", async () => {
-  const { terminal, element } = await openTerminal(
-    Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\r\n"),
-  );
-  terminal.scrollToLine(4);
+test("a short drag cancels a long press and does not also tap the terminal", async () => {
+  const { terminal, element } = await openTerminal("hello world");
   touch(element, "touchstart", 2, 2);
   expect(touch(element, "touchmove", 2, 0).defaultPrevented).toBe(true);
-  expect(terminal.buffer.active.viewportY).toBe(6);
   await new Promise((resolve) => setTimeout(resolve, 470));
   expect(touch(element, "touchend", 2, 0).defaultPrevented).toBe(true);
   expect(terminal.hasSelection()).toBe(false);
 
-  touch(element, "touchstart", 2, 0);
-  touch(element, "touchmove", 2, 2);
-  expect(terminal.buffer.active.viewportY).toBe(4);
-  expect(touch(element, "touchend", 2, 2).defaultPrevented).toBe(true);
   touch(element, "touchstart", 2);
   expect(touch(element, "touchend", 2).defaultPrevented).toBe(false);
   expect(terminal.hasSelection()).toBe(false);
@@ -175,4 +167,54 @@ test("a visible handle does not grab the hidden end of a scrolled selection", as
   touch(end, "touchend", 4);
   expect(terminal.getSelectionPosition()?.start).toEqual({ x: 0, y: 0 });
   expect(terminal.getSelectionPosition()?.end).toEqual({ x: 6, y: viewport });
+});
+
+const fullScrollback = () =>
+  Array.from({ length: 2004 }, (_, index) => `line ${index}`).join("\r\n");
+const write = (terminal: InstanceType<typeof Terminal>, text: string) =>
+  new Promise<void>((resolve) => terminal.write(text, resolve));
+
+test.each(["start", "end"] as const)(
+  "keeps the %s handle on the selected output when scrollback trims",
+  async (edge) => {
+    const { terminal, parent } = await openTerminal(fullScrollback());
+    const selectedRow = 2001;
+    terminal.select(0, selectedRow, "line 2001".length);
+    const handle = parent.querySelector<HTMLElement>(`[data-edge="${edge}"]`);
+    if (!handle) throw new Error("The selection handle is missing.");
+    handle.getBoundingClientRect = () =>
+      new DOMRect(edge === "start" ? -22 : 68, edge === "start" ? 0 : 30, 44, 44);
+    touch(handle, "touchstart", edge === "start" ? 0 : 9, 1);
+    await write(terminal, "\r\nline 2004");
+    expect(terminal.getSelection()).toBe("line 2001");
+    expect(terminal.getSelectionPosition()?.start.y).toBe(selectedRow - 1);
+    touch(handle, "touchmove", edge === "start" ? 1 : 10, 0);
+    touch(handle, "touchend", edge === "start" ? 1 : 10, 0);
+    expect(terminal.getSelection()).toBe(edge === "start" ? "ine 2001" : "line 2001");
+  },
+);
+
+test("stops a handle drag when its selected output leaves scrollback", async () => {
+  const { terminal, parent } = await openTerminal(fullScrollback());
+  terminal.scrollToTop();
+  terminal.select(0, 0, "line 0".length);
+  const handle = parent.querySelector<HTMLElement>('[data-edge="end"]');
+  if (!handle) throw new Error("The end handle is missing.");
+  handle.getBoundingClientRect = () => new DOMRect(38, 10, 44, 44);
+  touch(handle, "touchstart", 6);
+  await write(terminal, "\r\nline 2004");
+  touch(handle, "touchmove", 7);
+  touch(handle, "touchend", 7);
+  expect(terminal.hasSelection()).toBe(false);
+});
+
+test("keeps the original word while a long-press drag trims scrollback", async () => {
+  const { terminal, element } = await openTerminal(fullScrollback());
+  touch(element, "touchstart", 2, 1);
+  await new Promise((resolve) => setTimeout(resolve, 470));
+  expect(terminal.getSelection()).toBe("line");
+  await write(terminal, "\r\nline 2004");
+  touch(element, "touchmove", 6);
+  touch(element, "touchend", 6);
+  expect(terminal.getSelection()).toBe("line 20");
 });

@@ -6,6 +6,10 @@
 declare module "@xterm/xterm/lib/xterm.mjs" {
   export type XtermDisposable = { dispose(): void };
   export type XtermEvent<Value> = (listener: (value: Value) => void) => XtermDisposable;
+  export type XtermMarker = XtermDisposable & {
+    readonly line: number;
+    readonly onDispose: XtermEvent<void>;
+  };
 
   export type XtermRect = {
     readonly left: number;
@@ -66,6 +70,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   };
   export type XtermBuffer = {
     readonly baseY: number;
+    readonly cursorY: number;
     readonly viewportY: number;
     readonly length: number;
     getLine(row: number): XtermBufferLine | undefined;
@@ -137,6 +142,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
     select(column: number, row: number, length: number): void;
     selectAll(): void;
     scrollLines(amount: number): void;
+    registerMarker(cursorYOffset: number): XtermMarker;
     clearSelection(): void;
     attachCustomKeyEventHandler(handler: (event: XtermKeyboardEvent) => boolean): void;
     registerLinkProvider(provider: {

@@ -1,4 +1,10 @@
-import type { Terminal, XtermTouch, XtermTouchEvent } from "@xterm/xterm/lib/xterm.mjs";
+import type {
+  Terminal,
+  XtermDisposable,
+  XtermMarker,
+  XtermTouch,
+  XtermTouchEvent,
+} from "@xterm/xterm/lib/xterm.mjs";
 import { pageDocument, pageRoot } from "./page-runtime";
 
 const LONG_PRESS_MS = 450;
@@ -18,6 +24,8 @@ type TouchTerminal = Pick<
   | "onResize"
   | "scrollLines"
   | "scrollToLine"
+  | "registerMarker"
+  | "clearSelection"
 >;
 
 /** Long-press word selection and touch handles over xterm's public selection API. */
@@ -30,8 +38,10 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
   let scrollRow = 0;
   let scrolling = false;
   let start: XtermTouch | null = null;
-  let anchor: SelectionRange | null = null;
-  let drag: { edge: keyof SelectionRange; fixed: number; offset: XtermTouch } | null = null;
+  let anchor: { startColumn: number; endColumn: number } | null = null;
+  let anchorLine: XtermMarker | null = null;
+  let anchorLineListener: XtermDisposable | null = null;
+  let drag: { edge: keyof SelectionRange; offset: XtermTouch } | null = null;
 
   const geometry = () => {
     const rect = element.querySelector(".xterm-screen")?.getBoundingClientRect();
@@ -116,8 +126,33 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     if (pressTimer !== null) clearTimeout(pressTimer);
     pressTimer = null;
   };
+  const stopGesture = (): void => {
+    cancelPress();
+    cancelScroll();
+    start = null;
+    scrolling = false;
+    anchor = null;
+    drag = null;
+    anchorLineListener?.dispose();
+    anchorLineListener = null;
+    anchorLine?.dispose();
+    anchorLine = null;
+  };
+  const trackAnchorLine = (row: number): void => {
+    const buffer = current.buffer.active;
+    anchorLine = current.registerMarker(row - buffer.baseY - buffer.cursorY);
+    anchorLineListener = anchorLine.onDispose(() => {
+      stopGesture();
+      current.clearSelection();
+    });
+  };
   const move = (touch: XtermTouch): void => {
     cancelScroll();
+    const selected = range();
+    if (selected === null) {
+      stopGesture();
+      return;
+    }
     const point =
       drag === null
         ? touch
@@ -139,25 +174,24 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     if (drag !== null) {
       select(
         drag.edge === "start"
-          ? { start: Math.min(index, drag.fixed - 1), end: drag.fixed }
-          : { start: drag.fixed, end: Math.max(index, drag.fixed + 1) },
+          ? { start: Math.min(index, selected.end - 1), end: selected.end }
+          : { start: selected.start, end: Math.max(index, selected.start + 1) },
       );
-    } else if (anchor !== null) {
-      select({ start: Math.min(anchor.start, index), end: Math.max(anchor.end, index + 1) });
+    } else if (anchor !== null && anchorLine !== null) {
+      const rowStart = anchorLine.line * current.cols;
+      select({
+        start: Math.min(rowStart + anchor.startColumn, index),
+        end: Math.max(rowStart + anchor.endColumn, index + 1),
+      });
     }
     if (direction !== 0) scrollTimer = setTimeout(() => move(touch), 60);
   };
   const finish = (event: XtermTouchEvent): void => {
-    cancelPress();
-    cancelScroll();
-    start = null;
     if (anchor !== null || drag !== null || scrolling) {
       event.preventDefault();
       event.stopPropagation();
     }
-    scrolling = false;
-    anchor = null;
-    drag = null;
+    stopGesture();
   };
 
   for (const edge of ["start", "end"] as const) {
@@ -187,9 +221,12 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
         const index = nearest === "end" ? selected.end - 1 : selected.start;
         const column = (index % current.cols) + (nearest === "end" ? 1 : 0);
         const row = Math.floor(index / current.cols) - current.buffer.active.viewportY;
+        stopGesture();
+        trackAnchorLine(
+          Math.floor((nearest === "start" ? selected.end - 1 : selected.start) / current.cols),
+        );
         drag = {
           edge: nearest,
-          fixed: nearest === "start" ? selected.end : selected.start,
           offset: {
             clientX: touch.clientX - (grid.rect.left + column * grid.width),
             clientY: touch.clientY - (grid.rect.top + (row + 0.5) * grid.height),
@@ -222,10 +259,7 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
   element.addEventListener(
     "touchstart",
     (event) => {
-      cancelPress();
-      anchor = null;
-      start = null;
-      scrolling = false;
+      stopGesture();
       const touch = event.touches[0];
       if (event.touches.length !== 1 || touch === undefined) return;
       start = { clientX: touch.clientX, clientY: touch.clientY };
@@ -235,8 +269,14 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
         if (start === null) return;
         const index = indexAt(start, false);
         if (index === null) return;
-        anchor = wordAt(index);
-        select(anchor);
+        const word = wordAt(index);
+        const row = Math.floor(word.start / current.cols);
+        trackAnchorLine(row);
+        anchor = {
+          startColumn: word.start - row * current.cols,
+          endColumn: word.end - row * current.cols,
+        };
+        select(word);
       }, LONG_PRESS_MS);
     },
     CAPTURE_TOUCH,
