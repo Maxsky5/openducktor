@@ -31,6 +31,7 @@ import { createHostClient, HostInvokeError, type HostClient } from "../index";
 import {
   readBytes,
   RemoteConnectionError,
+  RemoteReplyTooLargeError,
   remoteError,
   type RemoteTransport,
   type RemoteHttpResponse,
@@ -539,10 +540,7 @@ export const createRemoteHostClient = (
           if (read && cause.failure.code === "connection_expired") continue;
           throw cause;
         }
-        // This client refused a reply that is too large. The connection is sound, and the same
-        // read gets the same reply again, so only this command fails.
-        if (cause instanceof RemoteConnectionError && cause.failure.code === "consumer_overflow")
-          throw cause;
+        if (cause instanceof RemoteReplyTooLargeError) throw cause;
         lost(current, cause);
         if (read) {
           if (Date.now() < deadline) continue;

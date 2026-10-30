@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { RemoteConnectionError } from "@openducktor/host-client/remote";
-import { isOutcomeUnknown } from "./command-outcome";
+import { RemoteConnectionError, RemoteReplyTooLargeError } from "@openducktor/host-client/remote";
+import { isConnectionFailure, isOutcomeUnknown } from "./command-outcome";
 
 describe("isOutcomeUnknown", () => {
   test("is true only for a lost command result", () => {
@@ -17,5 +17,18 @@ describe("isOutcomeUnknown", () => {
     expect(isOutcomeUnknown(lost)).toBe(true);
     expect(isOutcomeUnknown(refused)).toBe(false);
     expect(isOutcomeUnknown(new Error("Task not found."))).toBe(false);
+  });
+});
+
+describe("isConnectionFailure", () => {
+  test("is false for a reply that is too large, because the connection is sound", () => {
+    const lost = new RemoteConnectionError({
+      code: "transport_failure",
+      message: "The socket closed.",
+      nextAction: "Reconnect.",
+    });
+    expect(isConnectionFailure(lost)).toBe(true);
+    expect(isConnectionFailure(new RemoteReplyTooLargeError())).toBe(false);
+    expect(isConnectionFailure(new Error("Task not found."))).toBe(false);
   });
 });

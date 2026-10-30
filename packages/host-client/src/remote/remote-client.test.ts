@@ -14,6 +14,7 @@ import {
   createRemoteHostClient,
   readSse,
   RemoteConnectionError,
+  RemoteReplyTooLargeError,
   remoteError,
   type RemoteTransport,
   type RemoteHttpResponse,
@@ -1371,9 +1372,9 @@ test("a reply over the size limit fails its read and keeps the connection", asyn
   );
   try {
     await remote.connect();
-    await expect(remote.client.customAgentRoleList()).rejects.toMatchObject({
-      failure: { code: "consumer_overflow" },
-    });
+    await expect(remote.client.customAgentRoleList()).rejects.toBeInstanceOf(
+      RemoteReplyTooLargeError,
+    );
     expect(reads).toBe(1);
     expect(released).toBe(true);
     expect(remote.readState().status).toBe("connected");

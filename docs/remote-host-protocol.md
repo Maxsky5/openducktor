@@ -245,7 +245,7 @@ Report only the evidence the platform supplies.
 
 ## Reply size and compact history
 
-The remote client reads a command reply of up to 32 MiB and an event of up to 4 MiB. A larger command reply fails only that command with `consumer_overflow`. The connection stays connected, and the client does not send the read again. A larger event ends the event stream, because the client cannot skip an event without a gap.
+The remote client reads a command reply of up to 32 MiB and an event of up to 4 MiB. A larger command reply fails only that command with `RemoteReplyTooLargeError`, which has the code `consumer_overflow`. The connection stays connected, and the client does not send the read again. Reconnect recovery treats this error as an error of its read, not as a lost connection, so the read's view shows it. A larger event ends the event stream, because the client cannot skip an event without a gap.
 
 Session history grows with each tool call, so remote clients ask for compact history. With `toolDetails: "on_demand"`, `agent_runtime_load_session_history` cuts each string longer than 1 KiB in the `input`, `metadata`, `output`, and `resultContent` of a completed or failed tool part to its first 1 KiB. The host sets `detailsOmitted: true` on each part that it cut. Row summaries read only the first characters, so they stay correct.
 
