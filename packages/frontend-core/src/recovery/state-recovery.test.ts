@@ -93,7 +93,7 @@ test("a host error of one read leaves the recovery to that read's view", async (
 
 test("a reply that is too large leaves the recovery to that read's view", async () => {
   const queryClient = new QueryClient();
-  const stop = observeFailing(queryClient, new RemoteReplyTooLargeError());
+  const stop = observeFailing(queryClient, new RemoteReplyTooLargeError(32 * 1024 * 1024));
   try {
     await expect(synchronizeConnectionState(queryClient, [], true)).resolves.toBeUndefined();
     expect(queryClient.getQueryState(["failing"])?.status).toBe("error");

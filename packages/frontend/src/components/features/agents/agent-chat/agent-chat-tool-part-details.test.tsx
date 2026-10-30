@@ -8,8 +8,10 @@ import { enableReactActEnvironment } from "@openducktor/frontend-core/test-suppo
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { AgentOperationsContextValue } from "@openducktor/frontend-core/types/session-slices";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
+import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 
 enableReactActEnvironment();
 
@@ -37,7 +39,10 @@ const fullCall: AgentToolPart = {
   output: "first characters and the rest of the log",
 };
 
-const renderCall = (readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"]) =>
+const renderTool = (
+  readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"],
+  tool: ReactElement,
+) =>
   render(
     <QueryProvider connection={createTestClientConnection()}>
       <AgentOperationsContext value={createAgentOperationsFixture({ readSessionToolPart })}>
@@ -50,20 +55,28 @@ const renderCall = (readSessionToolPart: AgentOperationsContextValue["readSessio
             sessionScope: { kind: "repository" },
           }}
         >
-          <RegularToolMessage
-            meta={cutCall}
-            messageContent="Tool bash completed"
-            messageTimestamp="2026-10-30T08:00:00.000Z"
-            timeLabel="08:00"
-            displayName="Bash"
-          />
+          {tool}
         </ToolPartSessionContext>
       </AgentOperationsContext>
     </QueryProvider>,
   );
 
-const openDetails = (container: HTMLElement): void => {
-  const details = container.querySelector("details");
+const renderCall = (readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"]) =>
+  renderTool(
+    readSessionToolPart,
+    <RegularToolMessage
+      meta={cutCall}
+      messageContent="Tool bash completed"
+      messageTimestamp="2026-10-30T08:00:00.000Z"
+      timeLabel="08:00"
+      displayName="Bash"
+    />,
+  );
+
+const openDetails = (container: HTMLElement, label?: string): void => {
+  const details = [...container.querySelectorAll("details")].find(
+    (element) => label === undefined || element.querySelector("summary")?.textContent === label,
+  );
   if (!details) throw new Error("The tool row has no details.");
   details.open = true;
   fireEvent(details, new Event("toggle"));
@@ -98,6 +111,43 @@ describe("RegularToolMessage with cut details", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(await screen.findByText("first characters and the rest of the log")).toBeTruthy();
+    } finally {
+      view.unmount();
+    }
+  });
+});
+
+describe("WorkflowToolMessage with cut details", () => {
+  test("keeps its Input and Output boxes and reads the full call when one opens", async () => {
+    const read = mock(async () => ({
+      ...fullCall,
+      tool: "odt_read_task_artifacts",
+      toolType: "workflow" as const,
+      input: { taskId: "task-1" },
+    }));
+    const view = renderTool(
+      read,
+      <WorkflowToolMessage
+        meta={{
+          ...cutCall,
+          tool: "odt_read_task_artifacts",
+          toolType: "workflow",
+          input: { taskId: "task-1" },
+        }}
+        messageTimestamp="2026-10-30T08:00:00.000Z"
+        timeLabel="08:00"
+        displayName="Read artifacts"
+      />,
+    );
+    try {
+      const labels = [...view.container.querySelectorAll("summary")].map(
+        (summary) => summary.textContent,
+      );
+      expect(labels).toEqual(["Input", "Output"]);
+      expect(read).not.toHaveBeenCalled();
+      openDetails(view.container, "Output");
+      expect(await screen.findByText("first characters and the rest of the log")).toBeTruthy();
+      expect(read).toHaveBeenCalledTimes(1);
     } finally {
       view.unmount();
     }

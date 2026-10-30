@@ -28,7 +28,7 @@ describe("isConnectionFailure", () => {
       nextAction: "Reconnect.",
     });
     expect(isConnectionFailure(lost)).toBe(true);
-    expect(isConnectionFailure(new RemoteReplyTooLargeError())).toBe(false);
+    expect(isConnectionFailure(new RemoteReplyTooLargeError(32 * 1024 * 1024))).toBe(false);
     expect(isConnectionFailure(new Error("Task not found."))).toBe(false);
   });
 });

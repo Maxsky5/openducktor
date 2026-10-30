@@ -137,19 +137,35 @@ export const ComputerUseRow = memo(function ComputerUseRow({
  * The JavaScript, Error, and Output sections of a call that has them. When compact history cut
  * the output, the sections read the full call from the host.
  */
-function ComputerUseSections({ meta: rowMeta }: { meta: ToolMeta }): ReactElement {
+function ComputerUseSections({ meta }: { meta: ToolMeta }): ReactElement {
+  return meta.detailsOmitted ? <CutComputerUseSections meta={meta} /> : <Sections meta={meta} />;
+}
+
+function CutComputerUseSections({ meta: rowMeta }: { meta: ToolMeta }): ReactElement {
   const { desktop } = useAppTheme();
   const { meta } = useToolPartDetails(rowMeta, true);
+  const cut = meta.detailsOmitted === true;
+  return (
+    <>
+      <Sections meta={meta} withOutput={!cut} />
+      {cut ? <ReadFullDetails meta={meta} color={desktop.foreground} /> : null}
+    </>
+  );
+}
+
+function Sections({
+  meta,
+  withOutput = true,
+}: {
+  meta: ToolMeta;
+  withOutput?: boolean;
+}): ReactElement {
   const { code, errorText, outputText } = useMemo(() => buildComputerUsePresentation(meta), [meta]);
   return (
     <>
       {code.length > 0 ? <Section label="JavaScript" text={code} /> : null}
       {errorText.length > 0 ? <Section label="Error" text={errorText} error /> : null}
-      {meta.detailsOmitted ? (
-        <ReadFullDetails meta={meta} color={desktop.foreground} />
-      ) : outputText.length > 0 ? (
-        <Section label="Output" text={outputText} />
-      ) : null}
+      {withOutput && outputText.length > 0 ? <Section label="Output" text={outputText} /> : null}
     </>
   );
 }

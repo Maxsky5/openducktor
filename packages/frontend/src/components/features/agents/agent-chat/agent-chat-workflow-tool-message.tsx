@@ -6,6 +6,7 @@ import {
   getToolLifecyclePhase,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
+  formatToolInput,
   readToolDetailAvailability,
   workflowToolStatusLabel,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -197,10 +198,46 @@ const WorkflowToolInputOutput = ({
 );
 
 /**
- * The input and output of a call that compact history cut. Opening the box reads the full call,
- * then shows its Input and Output boxes.
+ * The Input and Output boxes of a call that compact history cut. An open box reads the full call,
+ * then shows its part of it.
  */
-const CutWorkflowToolDetails = (props: WorkflowToolInputOutputProps): ReactElement => {
+const CutWorkflowToolDetails = ({
+  meta,
+  hasInput,
+  hasOutput,
+  sessionWorkingDirectory,
+}: WorkflowToolInputOutputProps): ReactElement => (
+  <>
+    {hasInput && meta.input ? (
+      <CutToolDetailsBox meta={meta} label="Input">
+        {(full) => (
+          <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+            {full.input ? formatToolInput(full.input, sessionWorkingDirectory) : ""}
+          </pre>
+        )}
+      </CutToolDetailsBox>
+    ) : null}
+    {meta.resultContent || (hasOutput && meta.output) ? (
+      <CutToolDetailsBox meta={meta} label="Output">
+        {(full) => (
+          <div className="space-y-2 text-[11px]">
+            <AgentToolResultContentView content={full.resultContent} output={full.output} />
+          </div>
+        )}
+      </CutToolDetailsBox>
+    ) : null}
+  </>
+);
+
+const CutToolDetailsBox = ({
+  meta,
+  label,
+  children,
+}: {
+  meta: ToolMeta;
+  label: "Input" | "Output";
+  children: (meta: ToolMeta) => ReactNode;
+}): ReactElement => {
   const [open, setOpen] = useState(false);
   return (
     <details
@@ -208,13 +245,11 @@ const CutWorkflowToolDetails = (props: WorkflowToolInputOutputProps): ReactEleme
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
-        Input and output
+        {label}
       </summary>
       {open ? (
-        <div className="space-y-2 px-2 pb-2">
-          <FullToolPartDetails meta={props.meta}>
-            {(full) => <WorkflowToolInputOutput {...props} meta={full} />}
-          </FullToolPartDetails>
+        <div className="px-2 pb-2">
+          <FullToolPartDetails meta={meta}>{children}</FullToolPartDetails>
         </div>
       ) : null}
     </details>

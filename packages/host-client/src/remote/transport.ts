@@ -32,11 +32,11 @@ export class RemoteConnectionError extends Error {
  * read that got the reply fails, and the same read gets the same reply again.
  */
 export class RemoteReplyTooLargeError extends RemoteConnectionError {
-  constructor() {
+  constructor(limit: number) {
     super({
       code: "consumer_overflow",
-      message: "Remote response exceeds the size limit.",
-      nextAction: "Request a smaller resource.",
+      message: `The host reply is larger than ${Math.round(limit / (1024 * 1024))} MiB, the limit of this app.`,
+      nextAction: "Open this item on the host computer.",
     });
     this.name = "RemoteReplyTooLargeError";
   }
@@ -80,7 +80,7 @@ export const readBytes = async (
   for await (const part of abortableBody(response.body, signal)) {
     signal.throwIfAborted();
     size += part.length;
-    if (size > limit) throw new RemoteReplyTooLargeError();
+    if (size > limit) throw new RemoteReplyTooLargeError(limit);
     parts.push(part);
   }
   signal.throwIfAborted();

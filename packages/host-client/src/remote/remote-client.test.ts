@@ -1372,9 +1372,15 @@ test("a reply over the size limit fails its read and keeps the connection", asyn
   );
   try {
     await remote.connect();
-    await expect(remote.client.customAgentRoleList()).rejects.toBeInstanceOf(
-      RemoteReplyTooLargeError,
-    );
+    const failure = remote.client.customAgentRoleList();
+    await expect(failure).rejects.toBeInstanceOf(RemoteReplyTooLargeError);
+    await expect(failure).rejects.toMatchObject({
+      failure: {
+        code: "consumer_overflow",
+        message: "The host reply is larger than 32 MiB, the limit of this app.",
+        nextAction: "Open this item on the host computer.",
+      },
+    });
     expect(reads).toBe(1);
     expect(released).toBe(true);
     expect(remote.readState().status).toBe("connected");
