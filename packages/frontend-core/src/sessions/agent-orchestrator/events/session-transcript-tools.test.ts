@@ -365,6 +365,80 @@ describe("agent-orchestrator session transcript events", () => {
     unsubscribe();
   });
 
+  test("keeps the cut-details flag only while values from compact history stay", async () => {
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        messages: [
+          {
+            id: "tool:tool-msg-1:bash-1",
+            role: "tool",
+            content: "Tool Bash completed",
+            timestamp: "2026-02-22T08:00:10.000Z",
+            meta: {
+              kind: "tool",
+              partId: "bash-1",
+              callId: "bash-1",
+              tool: "Bash",
+              toolType: "bash",
+              status: "completed",
+              input: { command: "cut" },
+              output: "cut",
+              detailsOmitted: true,
+            },
+          },
+        ],
+      }),
+    ]);
+    const unsubscribe = await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      eventBatchWindowMs: 0,
+      sessionsRef,
+      updateSession: createSessionUpdater(sessionsRef),
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+    const handleEvent = handlers[0];
+    if (!handleEvent) throw new Error("Expected session event handler to be registered");
+    const sendToolPart = (
+      fields: { input?: { command: string }; output?: string },
+      ordinal: number,
+    ) =>
+      handleEvent({
+        type: "assistant_part",
+        externalSessionId: "session-1",
+        timestamp: `2026-02-22T08:00:2${ordinal}.000Z`,
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-1",
+          partId: "bash-1",
+          callId: "bash-1",
+          tool: "Bash",
+          toolType: "bash",
+          status: "completed",
+          ...fields,
+        },
+      });
+    const toolMeta = () =>
+      getSessionMessages(sessionsRef).find((message) => message.meta?.kind === "tool")?.meta;
+
+    sendToolPart({ output: "full output" }, 0);
+    expect(toolMeta()).toMatchObject({ input: { command: "cut" }, detailsOmitted: true });
+    sendToolPart({ input: { command: "full command" }, output: "full output" }, 1);
+    expect(toolMeta()).toMatchObject({ input: { command: "full command" }, output: "full output" });
+    expect(toolMeta()).not.toHaveProperty("detailsOmitted");
+    unsubscribe();
+  });
+
   test("does not revive an idle session from a terminal tool update", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {

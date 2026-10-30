@@ -1344,6 +1344,45 @@ test("a read with a lost reply waits for the reconnect and runs again", async ()
   }
 });
 
+test("a reply over the size limit fails its read and keeps the connection", async () => {
+  const f = fixture();
+  const chunk = new Uint8Array(1024 * 1024);
+  let reads = 0;
+  let released = false;
+  f.setMutation(async () => {
+    reads += 1;
+    return {
+      status: 200,
+      headers: {},
+      body: (async function* () {
+        try {
+          for (let index = 0; index < 40; index += 1) yield chunk;
+        } finally {
+          released = true;
+        }
+      })(),
+    };
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await expect(remote.client.customAgentRoleList()).rejects.toMatchObject({
+      failure: { code: "consumer_overflow" },
+    });
+    expect(reads).toBe(1);
+    expect(released).toBe(true);
+    expect(remote.readState().status).toBe("connected");
+    expect(f.requests.filter((request) => request.endsWith("/connections"))).toHaveLength(1);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
 test("a mutation with a lost reply is not resent", async () => {
   const f = fixture();
   let sends = 0;

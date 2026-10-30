@@ -54,6 +54,9 @@ const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAg
   },
   loadSessionTodos: async () => [],
   loadSessionHistory: async () => [],
+  loadSessionToolPart: async () => {
+    throw new Error("Unexpected tool part read");
+  },
   ...overrides,
 });
 

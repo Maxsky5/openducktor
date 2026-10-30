@@ -10,6 +10,7 @@ import {
   toolResultContentEntries,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { memo, type ReactElement, useMemo } from "react";
 import { type StyleProp, View, type ViewStyle } from "react-native";
@@ -45,7 +46,10 @@ export const useCardDetailsColors = (): ToolDetailsColors => {
   // The parts of the theme stay the same objects until the theme changes, so the memo keys on them.
   return useMemo(
     () => ({
-      frame: { borderColor: theme.desktop.border, backgroundColor: theme.desktop.card },
+      frame: {
+        borderColor: theme.desktop.border,
+        backgroundColor: theme.desktop.card,
+      },
       text: theme.desktop.foreground,
       errorFrame: {
         borderColor: theme.desktop.destructiveBorder,
@@ -74,19 +78,7 @@ function FormattedText({ read, color }: { read: () => string; color: string }): 
   return <PreText text={read()} color={color} />;
 }
 
-/**
- * The desktop Input, Output, and Error boxes of a Tool Call. Each box opens on its own, and its
- * text builds only when it opens. The Error box opens at first when `errorOpen` is true.
- */
-export const ToolDetails = memo(function ToolDetails({
-  meta,
-  resetKey,
-  hasInput,
-  hasOutput,
-  hasError,
-  colors,
-  errorOpen = false,
-}: {
+type ToolDetailsProps = {
   meta: ToolMeta;
   resetKey: string;
   hasInput: boolean;
@@ -94,7 +86,33 @@ export const ToolDetails = memo(function ToolDetails({
   hasError: boolean;
   colors: ToolDetailsColors;
   errorOpen?: boolean;
-}): ReactElement {
+};
+
+/**
+ * The desktop Input, Output, and Error boxes of a Tool Call. Each box opens on its own, and its
+ * text builds only when it opens. The Error box opens at first when `errorOpen` is true. Compact
+ * history cuts long details: an open box reads the full call from the host, and every box then
+ * shows it. The error is never cut.
+ */
+export const ToolDetails = memo(function ToolDetails(props: ToolDetailsProps): ReactElement {
+  return props.meta.detailsOmitted ? <CutToolDetails {...props} /> : <ToolDetailBoxes {...props} />;
+});
+
+/** The boxes of a call that compact history cut. They show the full call once a box reads it. */
+function CutToolDetails({ meta, ...props }: ToolDetailsProps): ReactElement {
+  return <ToolDetailBoxes {...props} meta={useToolPartDetails(meta, false).meta} />;
+}
+
+function ToolDetailBoxes({
+  meta,
+  resetKey,
+  hasInput,
+  hasOutput,
+  hasError,
+  colors,
+  errorOpen = false,
+}: ToolDetailsProps): ReactElement {
+  const cut = meta.detailsOmitted === true;
   const output = useMemo(
     () => formatOnce(() => formatRawJsonLikeText(meta.output ?? "")),
     [meta.output],
@@ -114,9 +132,13 @@ export const ToolDetails = memo(function ToolDetails({
           resetKey={`${resetKey}:output`}
           frameStyle={colors.frame}
           textColor={colors.text}
-          copyText={meta.resultContent ? undefined : output}
+          copyText={cut || meta.resultContent ? undefined : output}
         >
-          <ToolOutput content={meta.resultContent} output={output} color={colors.text} />
+          {cut ? (
+            <ReadFullDetails meta={meta} color={colors.text} />
+          ) : (
+            <ToolOutput content={meta.resultContent} output={output} color={colors.text} />
+          )}
         </DetailsBox>
       ) : null}
       {hasError && meta.error ? (
@@ -133,7 +155,7 @@ export const ToolDetails = memo(function ToolDetails({
       ) : null}
     </>
   );
-});
+}
 
 function ToolInput({
   meta,
@@ -145,6 +167,7 @@ function ToolInput({
   colors: ToolDetailsColors;
 }): ReactElement {
   const { workingDirectory } = useTranscriptRows();
+  const cut = meta.detailsOmitted === true;
   // The box builds its content only while open, so the format runs on the first open.
   const text = useMemo(
     () => formatOnce(() => (meta.input ? formatToolInput(meta.input, workingDirectory) : "")),
@@ -156,10 +179,45 @@ function ToolInput({
       resetKey={`${resetKey}:input`}
       frameStyle={colors.frame}
       textColor={colors.text}
-      copyText={text}
+      copyText={cut ? undefined : text}
     >
-      <FormattedText read={text} color={colors.text} />
+      {cut ? (
+        <ReadFullDetails meta={meta} color={colors.text} />
+      ) : (
+        <FormattedText read={text} color={colors.text} />
+      )}
     </DetailsBox>
+  );
+}
+
+/**
+ * Reads the full details of a call that compact history cut, while its box shows. The boxes of
+ * the call show the full details when the read ends.
+ */
+export function ReadFullDetails({ meta, color }: { meta: ToolMeta; color: string }): ReactElement {
+  const { error, retry } = useToolPartDetails(meta, true);
+  if (error === null)
+    return (
+      <View style={styles.reading} accessible accessibilityLabel="Loading the full details">
+        <LoaderSpinner size={12} color={color} />
+        <Text style={[styles.fileText, { color }]}>Loading the full details</Text>
+      </View>
+    );
+  return (
+    <View style={styles.file}>
+      <Text selectable style={[styles.fileText, { color }]}>
+        {error}
+      </Text>
+      <Touchable
+        feedback="opacity"
+        onPress={retry}
+        accessibilityRole="button"
+        accessibilityLabel="Retry loading the full details"
+        style={styles.download}
+      >
+        <Text style={[styles.fileText, styles.downloadText, { color }]}>Retry</Text>
+      </Touchable>
+    </View>
   );
 }
 
@@ -254,7 +312,10 @@ function DownloadAttachment({
     setBusy(true);
     try {
       const saved = await ("base64" in content
-        ? files.writeBase64({ base64: content.base64, mediaType: content.mediaType })
+        ? files.writeBase64({
+            base64: content.base64,
+            mediaType: content.mediaType,
+          })
         : files.write(new TextEncoder().encode(content.text), content.mediaType));
       if (!(await shareDeviceFile(saved.uri, name, content.mediaType))) {
         feedback.show("warning", "Sharing is not available on this device.");
@@ -357,7 +418,13 @@ const styles = StyleSheet.create((theme) => ({
   file: { gap: theme.space.xs },
   fileText: { ...sansWeight("regular"), fontSize: 13, lineHeight: 18 },
   fileUri: { ...monoWeight("regular"), fontSize: 12, lineHeight: 17 },
-  download: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
+  download: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+  },
+  reading: { flexDirection: "row", alignItems: "center", gap: 6 },
   downloadText: { textDecorationLine: "underline" },
   questions: { paddingLeft: LINE_DETAILS_INSET, paddingRight: theme.space.xs },
   questionsFrame: {

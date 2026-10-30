@@ -53,6 +53,8 @@ export type AgentChatMessageMeta =
       metadata?: AgentToolData;
       startedAtMs?: number;
       endedAtMs?: number;
+      /** The host cut long details. `useToolPartDetails` reads the full part. */
+      detailsOmitted?: true;
       observedStartedAtMs?: number;
       observedEndedAtMs?: number;
       inputReadyAtMs?: number;

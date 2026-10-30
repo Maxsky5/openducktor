@@ -37,7 +37,11 @@ export function MobileAppStateProvider({ children }: PropsWithChildren): ReactEl
     [showReasoning],
   );
   const { agentEngine, runtimeCatalogOperations } = useMemo(
-    () => createAgentRuntimeServices(hostClient, queryClient),
+    // The phone is a remote client, so its history leaves out long tool details.
+    () =>
+      createAgentRuntimeServices(hostClient, queryClient, {
+        historyToolDetails: "on_demand",
+      }),
     [hostClient, queryClient],
   );
   return (

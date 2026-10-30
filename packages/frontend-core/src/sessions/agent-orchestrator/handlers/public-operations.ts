@@ -52,6 +52,7 @@ type CreatePublicOperationsArgs = {
     AgentEnginePort,
     | "loadSessionTodos"
     | "loadSessionHistory"
+    | "loadSessionToolPart"
     | "describeGeneratedImages"
     | "readGeneratedImage"
     | "beginGeneratedImageBatch"
@@ -94,6 +95,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> => agentEngine.loadSessionHistory(session),
+  readSessionToolPart: (input) => agentEngine.loadSessionToolPart(input),
   loadAgentSessionHistory,
   loadAgentSessionContext,
   sendAgentMessage: (

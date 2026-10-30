@@ -12,6 +12,7 @@ export const HOST_READ_COMMAND_NAMES = [
   "agent_runtime_load_session_diff",
   "agent_runtime_load_session_history",
   "agent_runtime_load_session_todos",
+  "agent_runtime_load_session_tool_part",
   "agent_runtime_preview_models",
   "agent_runtime_search_files",
   "agent_session_live_list",

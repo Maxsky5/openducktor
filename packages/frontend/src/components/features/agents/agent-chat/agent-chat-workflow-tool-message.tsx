@@ -1,5 +1,5 @@
 import { AgentToolResultContentView } from "./agent-tool-result-content";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   getToolDuration,
@@ -13,6 +13,7 @@ import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agen
 import { toolIcon } from "./agent-chat-tool-icon";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
 import { ToolJsonDetails } from "./agent-chat-tool-json-details";
+import { FullToolPartDetails } from "./agent-chat-tool-part-details";
 import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 
 const WORKFLOW_TOOL_APPEARANCE = {
@@ -122,31 +123,21 @@ export const WorkflowToolMessage = ({
       ) : null}
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
-          {hasInput && meta.input ? (
-            <ToolInputDetails
-              input={meta.input}
-              workingDirectory={sessionWorkingDirectory}
-              className="rounded border border-current/20 bg-card"
-              textClassName="text-current"
+          {meta.detailsOmitted && (hasInput || hasOutput) ? (
+            <CutWorkflowToolDetails
+              meta={meta}
+              hasInput={hasInput}
+              hasOutput={hasOutput}
+              sessionWorkingDirectory={sessionWorkingDirectory}
             />
-          ) : null}
-          {meta.resultContent ? (
-            <details className="rounded border border-current/20 bg-card">
-              <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
-                Output
-              </summary>
-              <div className="space-y-2 px-2 pb-2">
-                <AgentToolResultContentView content={meta.resultContent} />
-              </div>
-            </details>
-          ) : hasOutput && meta.output ? (
-            <ToolJsonDetails
-              label="Output"
-              value={meta.output}
-              className="rounded border border-current/20 bg-card"
-              titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+          ) : (
+            <WorkflowToolInputOutput
+              meta={meta}
+              hasInput={hasInput}
+              hasOutput={hasOutput}
+              sessionWorkingDirectory={sessionWorkingDirectory}
             />
-          ) : null}
+          )}
           {hasError && meta.error ? (
             <ToolJsonDetails
               label="Error"
@@ -159,5 +150,73 @@ export const WorkflowToolMessage = ({
         </div>
       )}
     </div>
+  );
+};
+
+type WorkflowToolInputOutputProps = {
+  meta: ToolMeta;
+  hasInput: boolean;
+  hasOutput: boolean;
+  sessionWorkingDirectory?: string | null | undefined;
+};
+
+/** The Input and Output boxes of a call. */
+const WorkflowToolInputOutput = ({
+  meta,
+  hasInput,
+  hasOutput,
+  sessionWorkingDirectory,
+}: WorkflowToolInputOutputProps): ReactElement => (
+  <>
+    {hasInput && meta.input ? (
+      <ToolInputDetails
+        input={meta.input}
+        workingDirectory={sessionWorkingDirectory}
+        className="rounded border border-current/20 bg-card"
+        textClassName="text-current"
+      />
+    ) : null}
+    {meta.resultContent ? (
+      <details className="rounded border border-current/20 bg-card">
+        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+          Output
+        </summary>
+        <div className="space-y-2 px-2 pb-2">
+          <AgentToolResultContentView content={meta.resultContent} />
+        </div>
+      </details>
+    ) : hasOutput && meta.output ? (
+      <ToolJsonDetails
+        label="Output"
+        value={meta.output}
+        className="rounded border border-current/20 bg-card"
+        titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+      />
+    ) : null}
+  </>
+);
+
+/**
+ * The input and output of a call that compact history cut. Opening the box reads the full call,
+ * then shows its Input and Output boxes.
+ */
+const CutWorkflowToolDetails = (props: WorkflowToolInputOutputProps): ReactElement => {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className="rounded border border-current/20 bg-card"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+        Input and output
+      </summary>
+      {open ? (
+        <div className="space-y-2 px-2 pb-2">
+          <FullToolPartDetails meta={props.meta}>
+            {(full) => <WorkflowToolInputOutput {...props} meta={full} />}
+          </FullToolPartDetails>
+        </div>
+      ) : null}
+    </details>
   );
 };

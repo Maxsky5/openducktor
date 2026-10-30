@@ -353,4 +353,46 @@ describe("agent runtime services", () => {
     }
     expect(calls).toHaveLength(18);
   });
+
+  test("asks for compact history on a remote connection and reads one full tool part", async () => {
+    const part = {
+      kind: "tool",
+      messageId: "message",
+      partId: "part",
+      callId: "call",
+      tool: "bash",
+      toolType: "bash",
+      status: "completed",
+      output: "full",
+    } as const;
+    const calls: { command: string; args: unknown }[] = [];
+    const client = createHostClient(async (command, args, schema) => {
+      calls.push({ command, args });
+      return schema.parse(command.endsWith("tool_part") ? part : []);
+    });
+    const ref = {
+      repoPath: "/remote/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/remote/repo/worktree",
+      externalSessionId: "native-session",
+    } as const;
+    const { agentEngine } = createAgentRuntimeServices(client, new QueryClient(), {
+      historyToolDetails: "on_demand",
+    });
+    await agentEngine.loadSessionHistory({ ...ref, limit: 5 });
+    expect(
+      await agentEngine.loadSessionToolPart({ ...ref, partId: "part", callId: "call" }),
+    ).toEqual(part);
+    expect(calls).toEqual([
+      {
+        command: "agent_runtime_load_session_history",
+        args: { input: { ...ref, limit: 5, toolDetails: "on_demand" } },
+      },
+      {
+        command: "agent_runtime_load_session_tool_part",
+        args: { input: { ...ref, partId: "part", callId: "call" } },
+      },
+    ]);
+  });
 });

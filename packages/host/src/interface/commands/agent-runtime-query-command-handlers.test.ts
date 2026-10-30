@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -191,4 +191,90 @@ test("exposes only the normalized query commands", () => {
       .map((contract) => contract.command)
       .sort(),
   );
+});
+
+describe("session history tool details", () => {
+  const ref = {
+    repoPath: "/remote/repo",
+    runtimeKind: "opencode",
+    runtimePolicy: { kind: "opencode" },
+    workingDirectory: "/remote/repo",
+    externalSessionId: "session",
+  } as const;
+  const output = "x".repeat(4096);
+  const part = {
+    kind: "tool",
+    messageId: "message",
+    partId: "part",
+    callId: "call",
+    tool: "bash",
+    toolType: "bash",
+    status: "completed",
+    output,
+  } as const;
+  const reads: unknown[] = [];
+  const historyHandlers = createAgentRuntimeQueryCommandHandlers(
+    {
+      ...unexpectedRuntimeQueries,
+      loadSessionHistory: (request) => {
+        reads.push(request);
+        return Effect.succeed([
+          {
+            messageId: "message",
+            role: "assistant",
+            timestamp: "2026-10-30T08:00:00.000Z",
+            text: "",
+            parts: [part],
+          },
+        ]);
+      },
+    },
+    () => Effect.succeed(previewCatalog),
+    { load: () => Effect.die("Unexpected Claude tool catalog read") },
+  );
+
+  test("cuts tool details only when the client asks for them on demand", async () => {
+    reads.length = 0;
+    const [full] = await Effect.runPromise(
+      historyHandlers.agent_runtime_load_session_history({ input: ref }),
+    );
+    expect(full?.parts).toEqual([part]);
+    const [compact] = await Effect.runPromise(
+      historyHandlers.agent_runtime_load_session_history({
+        input: { ...ref, toolDetails: "on_demand" },
+      }),
+    );
+    expect(compact?.parts).toEqual([
+      { ...part, output: output.slice(0, 1024), detailsOmitted: true },
+    ]);
+    expect(reads).toEqual([ref, ref]);
+  });
+
+  test("reads one full tool part and fails with an action when it is gone", async () => {
+    reads.length = 0;
+    expect(
+      await Effect.runPromise(
+        historyHandlers.agent_runtime_load_session_tool_part({
+          input: { ...ref, partId: "part", callId: "call" },
+        }),
+      ),
+    ).toEqual(part);
+    expect(reads).toEqual([ref]);
+    const error = await Effect.runPromise(
+      Effect.flip(
+        historyHandlers.agent_runtime_load_session_tool_part({
+          input: { ...ref, partId: "other", callId: "call" },
+        }),
+      ),
+    );
+    expect(hostInvokeFailureFromError(error)).toMatchObject({
+      kind: "runtime_query",
+      runtimeQueryFailure: {
+        code: "invalid_input",
+        operation: "agent_runtime_load_session_tool_part",
+        externalSessionId: "session",
+        detail: "The session history no longer has this tool call. Reload the session.",
+      },
+    });
+  });
 });

@@ -162,6 +162,9 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     },
     readSessionTodos: async () => [],
     readSessionHistory: async () => [],
+    readSessionToolPart: async () => {
+      throw new Error("Unexpected tool part read");
+    },
     loadAgentSessionHistory: async () => null,
     loadAgentSessionContext: async () => undefined,
     sendAgentMessage: async () => null,

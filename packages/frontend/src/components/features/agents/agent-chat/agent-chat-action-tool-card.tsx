@@ -4,6 +4,7 @@ import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
+import { FullToolPartDetails } from "./agent-chat-tool-part-details";
 import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
 import {
   getToolLifecyclePhase,
@@ -33,7 +34,8 @@ type ActionToolCardProps = {
   label: string;
   title: string;
   screenshots: ActionToolScreenshots;
-  sections: readonly ActionToolSection[];
+  /** The details of the call. Compact history can cut them, so the card reads the full call. */
+  sections: (meta: ToolMeta) => readonly ActionToolSection[];
 };
 
 /**
@@ -53,7 +55,7 @@ export const ActionToolCard = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
-  const shownSections = sections.filter((section) => section.text.length > 0);
+  const shownSections = shownActionToolSections(sections(meta));
 
   const summary = (
     <ActionToolSummary
@@ -92,9 +94,15 @@ export const ActionToolCard = ({
           </summary>
           {detailsOpen ? (
             <div className="mt-2 space-y-2">
-              {shownSections.map((section) => (
-                <ActionToolDetail key={section.label} section={section} />
-              ))}
+              {meta.detailsOmitted ? (
+                <FullToolPartDetails meta={meta}>
+                  {(full) => (
+                    <ActionToolDetails sections={shownActionToolSections(sections(full))} />
+                  )}
+                </FullToolPartDetails>
+              ) : (
+                <ActionToolDetails sections={shownSections} />
+              )}
             </div>
           ) : null}
         </details>
@@ -110,6 +118,22 @@ export const ActionToolCard = ({
     </div>
   );
 };
+
+const shownActionToolSections = (
+  sections: readonly ActionToolSection[],
+): readonly ActionToolSection[] => sections.filter((section) => section.text.length > 0);
+
+const ActionToolDetails = ({
+  sections,
+}: {
+  sections: readonly ActionToolSection[];
+}): ReactElement => (
+  <>
+    {sections.map((section) => (
+      <ActionToolDetail key={section.label} section={section} />
+    ))}
+  </>
+);
 
 /** The row of a card: the action, its Screenshot button, its timing, and the details cue. */
 const ActionToolSummary = ({

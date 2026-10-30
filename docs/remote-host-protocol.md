@@ -243,6 +243,23 @@ If an Electron command fails and its error log also fails, the remote response r
 An unreachable endpoint cannot explain whether the host stopped, remote access was disabled, or the network failed.
 Report only the evidence the platform supplies.
 
+## Reply size and compact history
+
+The remote client reads a command reply of up to 32 MiB and an event of up to 4 MiB. A larger command reply fails only that command with `consumer_overflow`. The connection stays connected, and the client does not send the read again. A larger event ends the event stream, because the client cannot skip an event without a gap.
+
+Session history grows with each tool call, so remote clients ask for compact history. With `toolDetails: "on_demand"`, `agent_runtime_load_session_history` cuts each string longer than 1 KiB in the `input`, `metadata`, `output`, and `resultContent` of a completed or failed tool part to its first 1 KiB. The host sets `detailsOmitted: true` on each part that it cut. Row summaries read only the first characters, so they stay correct.
+
+The host keeps these parts and fields whole:
+
+- Running and pending tool parts, because live events still update them.
+- Tool types `question`, `todo`, and `file_edit`, because their rows read all their data.
+- The outputs of `odt_search_tasks`, `odt_create_task`, `odt_update_task`, and `odt_set_task_artifact`, because their rows parse these outputs.
+- `error`, `preview`, `title`, file diffs, file content, and computer use data.
+
+When the user opens the details of a cut row, the client reads the full part with `agent_runtime_load_session_tool_part`. Its input is the policy-bound session reference with `partId` and `callId`. The host reads the full history and returns the matching part. A part that is no longer in the history fails with `invalid_input`.
+
+The mobile app always asks for compact history. Desktop and web clients ask for it only on a remote host. Local history stays complete.
+
 ## Portable client and recovery
 
 Remote browser task assets and staged previews use the current client's admission header. The browser bridge returns Blob data with the host's media type. TanStack Query shares each resource read while views use it, and removes inactive resource data with `gcTime: 0`. Each view creates its own Blob URL and revokes it when its source changes or the view closes. Closing the last view also cancels an unfinished resource read. These reads keep the existing asset and staged-file limits and access checks.

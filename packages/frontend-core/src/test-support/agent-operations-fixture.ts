@@ -14,6 +14,7 @@ export const createAgentOperationsFixture = (
   readGeneratedImage: unexpectedOperation("readGeneratedImage"),
   readSessionTodos: unexpectedOperation("readSessionTodos"),
   readSessionHistory: unexpectedOperation("readSessionHistory"),
+  readSessionToolPart: unexpectedOperation("readSessionToolPart"),
   loadAgentSessionHistory: unexpectedOperation("loadAgentSessionHistory"),
   loadAgentSessionContext: unexpectedOperation("loadAgentSessionContext"),
   sendAgentMessage: unexpectedOperation("sendAgentMessage"),

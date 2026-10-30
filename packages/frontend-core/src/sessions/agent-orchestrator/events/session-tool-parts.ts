@@ -78,6 +78,7 @@ const composeToolMessageMeta = (
   output: string | undefined,
   error: string | undefined,
   timingMeta: ToolTimingMeta,
+  detailsOmitted: boolean,
 ): ToolMeta => {
   const meta: ToolMeta = {
     kind: "tool",
@@ -137,6 +138,7 @@ const composeToolMessageMeta = (
   if (timingMeta.inputReadyAtMs !== undefined) {
     meta.inputReadyAtMs = timingMeta.inputReadyAtMs;
   }
+  if (detailsOmitted) meta.detailsOmitted = true;
   return meta;
 };
 
@@ -232,6 +234,8 @@ const composeToolPartSessionUpdate = ({
         resolvedOutput,
         resolvedError,
         timingMeta,
+        // An input or output that the event lacks stays from a compact history row, still cut.
+        existingToolMeta?.detailsOmitted === true && (input === undefined || output === undefined),
       ),
     }),
   };
