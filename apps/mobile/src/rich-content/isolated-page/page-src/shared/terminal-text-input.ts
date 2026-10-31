@@ -90,8 +90,9 @@ export const createTerminalTextInput = () => {
 
 type TextField = {
   value: string;
+  inputMode: string;
   addEventListener(type: "input", listener: (event: { readonly inputType: string }) => void): void;
-  addEventListener(type: "focus" | "select", listener: () => void): void;
+  addEventListener(type: "focus" | "blur" | "select", listener: () => void): void;
 };
 type CompositionTarget = {
   addEventListener(
@@ -130,6 +131,10 @@ export const installTerminalTextInput = <Event extends KeyEvent>(
     throw new Error("The terminal has no text field. Install the text input after open.");
   }
   const state = createTerminalTextInput();
+  field.inputMode = "none";
+  field.addEventListener("blur", () => {
+    field.inputMode = "none";
+  });
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type === "keydown") {
       const fromInputMethod = event.keyCode === INPUT_METHOD_KEY_CODE || event.isComposing;

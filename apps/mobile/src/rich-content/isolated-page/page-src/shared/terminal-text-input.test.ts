@@ -91,6 +91,16 @@ const inputMethodText = (field: Field, text: string) => {
 const timersRan = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 describe("the terminal page text input", () => {
+  test("output focus keeps the soft keyboard closed and blur ends keyboard input", () => {
+    const { field } = openTerminal();
+    expect(field.inputMode).toBe("none");
+    field.inputMode = "text";
+    field.blur();
+    expect(field.inputMode).toBe("none");
+    field.focus();
+    expect(field.inputMode).toBe("none");
+  });
+
   test("sends each soft keyboard character once, also when keys come faster than timers", async () => {
     const { field, sent } = openTerminal();
     for (const character of "echo auc") inputMethodText(field, character);

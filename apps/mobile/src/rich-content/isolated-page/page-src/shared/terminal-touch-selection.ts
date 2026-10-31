@@ -23,7 +23,6 @@ type TouchTerminal = Pick<
   | "onScroll"
   | "onResize"
   | "scrollLines"
-  | "scrollToLine"
   | "registerMarker"
   | "clearSelection"
 >;
@@ -34,8 +33,6 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
   if (element === undefined) throw new Error("The terminal has no page element.");
   let pressTimer: number | null = null;
   let scrollTimer: number | null = null;
-  let scrollRow = 0;
-  let scrolling = false;
   let start: XtermTouch | null = null;
   let anchor: { startColumn: number; endColumn: number } | null = null;
   let anchorLine: XtermMarker | null = null;
@@ -113,10 +110,16 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
       const row = Math.floor(index / current.cols) - current.buffer.active.viewportY;
       handle.style.setProperty("display", row >= 0 && row < current.rows ? "block" : "none");
       const column = (index % current.cols) + (edge === "end" ? 1 : 0);
-      handle.style.setProperty("left", `${grid.rect.left - bounds.left + column * grid.width}px`);
-      const top = grid.rect.top - bounds.top + (row + (edge === "end" ? 1 : 0)) * grid.height;
-      const visibleTop = edge === "start" ? Math.max(34, top) : Math.min(top, bounds.height - 34);
-      handle.style.setProperty("top", `${visibleTop}px`);
+      const x = grid.rect.left - bounds.left + column * grid.width;
+      const y = grid.rect.top - bounds.top + (row + (edge === "end" ? 1 : 0)) * grid.height;
+      const knobX = Math.max(24, Math.min(bounds.width - 24, x));
+      const knobY = Math.max(24, Math.min(bounds.height - 24, y + (edge === "start" ? -24 : 24)));
+      handle.style.setProperty("left", `${knobX - 24}px`);
+      handle.style.setProperty("top", `${knobY - 24}px`);
+      handle.style.setProperty("--stem-x", `${24 + x - knobX}px`);
+      handle.style.setProperty("--stem-y", `${24 + y - knobY}px`);
+      handle.style.setProperty("--stem-length", `${Math.hypot(knobX - x, knobY - y)}px`);
+      handle.style.setProperty("--stem-angle", `${Math.atan2(x - knobX, knobY - y)}rad`);
     }
   };
   const cancelScroll = (): void => {
@@ -131,7 +134,6 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     cancelPress();
     cancelScroll();
     start = null;
-    scrolling = false;
     anchor = null;
     drag = null;
     anchorLineListener?.dispose();
@@ -185,7 +187,7 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     if (direction !== 0) scrollTimer = setTimeout(() => move(touch), 60);
   };
   const finish = (event: XtermTouchEvent): void => {
-    if (anchor !== null || drag !== null || scrolling) {
+    if (anchor !== null || drag !== null) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -211,8 +213,8 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
           const rect = handles[candidate].getBoundingClientRect();
           if (rect.width === 0 || rect.height === 0) return Number.POSITIVE_INFINITY;
           return Math.hypot(
-            touch.clientX - rect.left - 22,
-            touch.clientY - rect.top - (candidate === "start" ? 7 : 23),
+            touch.clientX - rect.left - rect.width / 2,
+            touch.clientY - rect.top - rect.height / 2,
           );
         };
         const nearest = distance("start") < distance("end") ? "start" : "end";
@@ -262,7 +264,6 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
       const touch = event.touches[0];
       if (event.touches.length !== 1 || touch === undefined) return;
       start = { clientX: touch.clientX, clientY: touch.clientY };
-      scrollRow = current.buffer.active.viewportY;
       pressTimer = setTimeout(() => {
         pressTimer = null;
         if (start === null) return;
@@ -292,14 +293,8 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
       if (anchor === null) {
         if (start === null) return;
         const distance = Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY);
-        if (!scrolling && distance <= TOUCH_SLOP_PX) return;
-        scrolling = true;
+        if (distance <= TOUCH_SLOP_PX) return;
         cancelPress();
-        const grid = geometry();
-        if (grid === null) return;
-        event.preventDefault();
-        event.stopPropagation();
-        current.scrollToLine(scrollRow + Math.round((start.clientY - touch.clientY) / grid.height));
         return;
       }
       event.preventDefault();

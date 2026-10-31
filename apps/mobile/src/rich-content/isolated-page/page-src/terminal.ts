@@ -34,6 +34,7 @@ import {
 import { startPageChannel } from "./shared/page-runtime";
 import { installTerminalTextInput, type TerminalTextInput } from "./shared/terminal-text-input";
 import { installTerminalTouchSelection } from "./shared/terminal-touch-selection";
+import { installTerminalScroll } from "./shared/terminal-scroll";
 
 // The app type check has no DOM library, so the page declares the DOM members that it reads.
 type PageFontFace = { readonly family: string };
@@ -51,8 +52,8 @@ declare function cancelAnimationFrame(frameId: number): void;
 const FONT_FAMILY = '"IBM Plex Mono", Menlo, "Courier New", monospace';
 const LINE_HEIGHT = 1.35;
 const SCROLLBACK_ROWS = 2000;
-// The page keeps room for the xterm.js scroll bar, as the xterm.js fit add-on does.
-const SCROLL_BAR_WIDTH = 14;
+// The page keeps room for the touch scrollbar beside the grid.
+const SCROLL_BAR_WIDTH = 48;
 const PADDING = { x: 8, y: 4 };
 const MAX_GRID = { columns: 500, rows: 300 };
 const NO_MODIFIERS: TerminalKeyModifiers = { ctrl: false, alt: false };
@@ -202,6 +203,7 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
   opening = false;
   if (latestConfiguration !== null) applyConfiguration(created, latestConfiguration);
   installLinks(created);
+  installTerminalScroll(created, screenRoot);
   installTerminalTouchSelection(created);
   created.onData((data) => {
     if (pasting || (!heldModifiers.ctrl && !heldModifiers.alt)) {
@@ -399,9 +401,11 @@ function receive(message: TerminalPageInbound): void {
       return;
     }
     case "terminal_focus":
+      if (current.textarea) current.textarea.inputMode = "text";
       current.focus();
       return;
     case "terminal_blur":
+      if (current.textarea) current.textarea.inputMode = "none";
       current.blur();
       return;
   }
