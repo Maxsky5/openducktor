@@ -114,8 +114,12 @@ function TerminalStart({
   const retry = canRetryTerminalCreation(tab) && gate.open && model.startBlockedReason === null;
   return (
     <ErrorState
-      title="The Terminal Did Not Start"
-      message={tab.error ?? "The host did not start the terminal. Return to Terminals to check it."}
+      title={tab.outcomeUnknown ? "Terminal Start Not Confirmed" : "The Terminal Did Not Start"}
+      message={
+        tab.outcomeUnknown
+          ? `${tab.error ?? "The host did not confirm the start result."} Check the terminal list before you start another terminal or Action.`
+          : (tab.error ?? "The host did not start the terminal. Return to Terminals to check it.")
+      }
       onRetry={
         retry && scopeKey !== null
           ? () => onRetryCreate(scopeKey, tab.tabId, tab.actionId)
