@@ -34,7 +34,7 @@ flowchart TD
 | Features | `src/features/` | The Sessions list, chats, tasks, workflow, the session screen, composer, the model picker, review, files, terminals, settings, diagnostics |
 | Rich content | `src/rich-content/` | Markdown, code, diffs, images, isolated WebView pages |
 | UI kit and theme | `src/ui/`, `src/theme/` | Components, semantic colors, the type ramp, motion tokens, light and dark themes |
-| Native modules | `modules/` | `openducktor-network` (HTTP), `openducktor-keyboard` (hardware Enter), `openducktor-scroll` (Android scroll redraw) |
+| Native modules | `modules/` | `openducktor-network` (HTTP), `openducktor-keyboard` (hardware Enter) |
 | Config plugins | `plugins/` | Android network security, Android release signing, iOS release signing |
 
 ### Design system
@@ -184,7 +184,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 |---|---|
 | Navigation | `expo-router` (native stack, JavaScript tabs with the app tab bar in `src/navigation/tab-bar`), `react-native-screens`. The swipe back of `src/navigation/swipe-back-detector.tsx` reads a source module and the Fabric fields of `react-native-screens`, so `package.json` pins its exact version. Test the swipe back before you change it. |
 | Styles | `react-native-unistyles` v3 with `react-native-nitro-modules`. `AppSystemBars` in `src/ui/app-system-bars.tsx` sets the system bar icons: the React Native `StatusBar` for the status bar, because it also reaches open modals, and `react-native-edge-to-edge` for the Android navigation buttons. |
-| Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. It also adds `keepItemInPlace`, and it moves the kept item back in the render that applies new item layouts, so a transcript part that opens or closes moves no row in view. [`modules/openducktor-scroll`](modules/openducktor-scroll/README.md) makes Android draw that scroll in the same frame. |
+| Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. Remove the patch when a release has the guard. |
 | Motion and gestures | `react-native-reanimated` 4, `react-native-worklets`, `react-native-gesture-handler` |
 | Keyboard | `react-native-keyboard-controller`, `modules/openducktor-keyboard` |
 | Storage | `react-native-mmkv` v4. The app stores no credential. Use Expo SecureStore for a later sensitive value. |

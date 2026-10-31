@@ -51,7 +51,7 @@ const RowLayoutContext = createContext<(() => void) | null>(null);
 
 export const RowLayoutProvider = RowLayoutContext;
 
-/** Measures the list row again and keeps it in place, or null outside the transcript list. */
+/** Measures the list row again, or null outside the transcript list. */
 export const useRowLayout = (): (() => void) | null => use(RowLayoutContext);
 
 /**

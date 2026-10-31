@@ -332,9 +332,9 @@ describe("transcript follow", () => {
     ).toBe(tall);
   });
 
-  test("treats the space under the latest message as the bottom, and a fifth as the top", () => {
-    expect(isAtTranscriptBottom(15)).toBe(true);
-    expect(isAtTranscriptBottom(16)).toBe(false);
+  test("treats a tenth of the viewport as the bottom, and a fifth as the top", () => {
+    expect(isAtTranscriptBottom(60, 600)).toBe(true);
+    expect(isAtTranscriptBottom(61, 600)).toBe(false);
     expect(isNearTranscriptTop(120, 600)).toBe(true);
     expect(isNearTranscriptTop(121, 600)).toBe(false);
   });

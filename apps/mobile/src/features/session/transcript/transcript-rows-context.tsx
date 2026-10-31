@@ -49,11 +49,6 @@ export type TranscriptRowsContextValue = {
    * closes when the list detaches or unmounts the row.
    */
   openFullView: (view: TranscriptFullView) => void;
-  /**
-   * A part of the row with this key opens or closes. Call it before the change, so the list keeps
-   * the row in place through the change.
-   */
-  beforeRowResize: (key: string) => void;
 };
 
 const TranscriptRowsContext = createContext<TranscriptRowsContextValue | null>(null);
