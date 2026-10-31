@@ -31,7 +31,7 @@ const ready = (overrides: Partial<TerminalSummary> = {}): TerminalTab => {
   };
 };
 type PendingTab = Extract<TerminalTab, { outcomeUnknown: boolean }>;
-const pending = (overrides: Partial<PendingTab> = {}): TerminalTab => ({
+const pending = (overrides: Partial<PendingTab> = {}): PendingTab => ({
   tabId: "creating:1",
   terminalId: null,
   summary: null,
@@ -200,10 +200,33 @@ describe("terminalScreenStatus", () => {
     discoveryError: null,
   };
 
+  test.each(["creating", "creation_failed", "unsupported_runtime"] as const)(
+    "opens the pending tab while its request is %s",
+    (requestState) => {
+      const tab = pending({ requestState, error: requestState === "creating" ? null : "Failed." });
+      expect(terminalScreenStatus({ ...base, tabs: [tab] }, tab.tabId)).toEqual({
+        kind: "pending",
+        tab,
+      });
+    },
+  );
+
+  test("keeps an uncertain create failure on its pending screen", () => {
+    const tab = pending({
+      requestState: "creation_failed",
+      error: "The host did not confirm whether the terminal started.",
+      outcomeUnknown: true,
+    });
+    expect(terminalScreenStatus({ ...base, tabs: [tab], isLoading: true }, tab.tabId)).toEqual({
+      kind: "pending",
+      tab,
+    });
+  });
+
   test("finds a terminal and keeps a lost terminal lost", () => {
-    expect(terminalScreenStatus({ ...base, tabs: [ready()] }, "t-1").kind).toBe("ready");
-    expect(terminalScreenStatus({ ...base, tabs: [lost] }, "old").kind).toBe("lost");
-    expect(findTerminalTab([lost], "old")).toBe(lost);
+    expect(terminalScreenStatus({ ...base, tabs: [ready()] }, "tab:t-1").kind).toBe("ready");
+    expect(terminalScreenStatus({ ...base, tabs: [lost] }, "tab:old").kind).toBe("lost");
+    expect(findTerminalTab([lost], "tab:old")).toBe(lost);
   });
 
   test("waits for discovery, then reports a missing terminal or a discovery failure", () => {

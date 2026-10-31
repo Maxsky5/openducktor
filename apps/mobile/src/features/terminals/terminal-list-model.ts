@@ -135,32 +135,26 @@ export const terminalLimitText = (
   return `${open} of ${MAX_SCOPE_TERMINALS} terminals`;
 };
 
-/** The terminal tab of a host terminal ID, also after the terminal was lost. */
-export const findTerminalTab = (
-  tabs: readonly TerminalTab[],
-  terminalId: string,
-): TerminalTab | null =>
-  tabs.find(
-    (tab) =>
-      tab.terminalId === terminalId ||
-      (tab.requestState === "lost" && tab.sourceTerminalId === terminalId),
-  ) ?? null;
+/** The stable tab identity survives creation and a lost host terminal. */
+export const findTerminalTab = (tabs: readonly TerminalTab[], tabId: string): TerminalTab | null =>
+  tabs.find((tab) => tab.tabId === tabId) ?? null;
 
 export type TerminalScreenStatus =
   | { kind: "loading" }
   | { kind: "unavailable"; message: string }
   | { kind: "discovery_failed"; message: string }
   | { kind: "missing" }
+  | { kind: "pending"; tab: Exclude<TerminalTab, { requestState: "ready" | "lost" }> }
   | { kind: "lost"; tab: Extract<TerminalTab, { requestState: "lost" }> }
   | { kind: "ready"; tab: Extract<TerminalTab, { requestState: "ready" }> };
 
-/** What the Terminal screen shows for `terminalId`. */
+/** What the Terminal screen shows for `tabId`, including its pending host request. */
 export const terminalScreenStatus = (
   model: Pick<
     TerminalSessionsModel,
     "isAvailable" | "startBlockedReason" | "tabs" | "isSynced" | "isLoading" | "discoveryError"
   >,
-  terminalId: string,
+  tabId: string,
 ): TerminalScreenStatus => {
   if (!model.isAvailable) {
     return {
@@ -168,9 +162,10 @@ export const terminalScreenStatus = (
       message: model.startBlockedReason ?? "Terminals are unavailable.",
     };
   }
-  const tab = findTerminalTab(model.tabs, terminalId);
+  const tab = findTerminalTab(model.tabs, tabId);
   if (tab?.requestState === "ready") return { kind: "ready", tab };
   if (tab?.requestState === "lost") return { kind: "lost", tab };
+  if (tab) return { kind: "pending", tab };
   if (model.discoveryError !== null)
     return { kind: "discovery_failed", message: model.discoveryError };
   if (!model.isSynced || model.isLoading) return { kind: "loading" };

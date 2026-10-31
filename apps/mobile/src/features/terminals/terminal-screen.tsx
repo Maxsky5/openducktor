@@ -18,13 +18,13 @@ import { useTerminalClose } from "./use-terminal-close";
 
 /** One terminal of a task or chat, attached and ready for input. */
 export function TerminalScreen(): ReactElement {
-  const { terminalId } = useLocalSearchParams();
-  const id = Array.isArray(terminalId) ? terminalId[0] : terminalId;
+  const { tabId } = useLocalSearchParams();
+  const id = Array.isArray(tabId) ? tabId[0] : tabId;
   return (
     <WorkOwnerScreen title="Terminal" diffs={false}>
       {(owner) =>
         id ? (
-          <TerminalContent owner={owner} terminalId={id} />
+          <TerminalContent owner={owner} tabId={id} />
         ) : (
           <EmptyState
             icon="link-off"
@@ -37,13 +37,7 @@ export function TerminalScreen(): ReactElement {
   );
 }
 
-function TerminalContent({
-  owner,
-  terminalId,
-}: {
-  owner: WorkOwner;
-  terminalId: string;
-}): ReactElement {
+function TerminalContent({ owner, tabId }: { owner: WorkOwner; tabId: string }): ReactElement {
   const router = useRouter();
   const theme = useAppTheme();
   const model = useOwnerTerminals(owner);
@@ -51,7 +45,7 @@ function TerminalContent({
     if (router.canGoBack()) router.back();
   }, [router]);
   const { close, closeUnknown } = useTerminalClose(model, goBack);
-  const tab = findTerminalTab(model.tabs, terminalId);
+  const tab = findTerminalTab(model.tabs, tabId);
   const closing = tab !== null && model.closingTabIds.has(tab.tabId);
   // The close control of the desktop terminal tab. It turns into a spinner while the host closes.
   const { controller } = model;
@@ -110,7 +104,7 @@ function TerminalContent({
       ) : null}
       <TerminalPane
         model={model}
-        terminalId={terminalId}
+        tabId={tabId}
         onRemoveLost={(lost) => void close(lost)}
         onBack={goBack}
       />

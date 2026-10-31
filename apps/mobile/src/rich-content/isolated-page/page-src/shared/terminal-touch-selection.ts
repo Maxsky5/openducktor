@@ -98,14 +98,14 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     event.target === handles.start || event.target === handles.end;
   const updateHandles = (): void => {
     const selected = range();
-    const grid = geometry();
+    const grid = selected === null ? null : geometry();
+    if (selected === null || grid === null) {
+      for (const handle of Object.values(handles)) handle.style.setProperty("display", "none");
+      return;
+    }
     const bounds = element.getBoundingClientRect();
     for (const edge of ["start", "end"] as const) {
       const handle = handles[edge];
-      if (selected === null || grid === null) {
-        handle.style.setProperty("display", "none");
-        continue;
-      }
       const index = edge === "end" ? selected.end - 1 : selected.start;
       const row = Math.floor(index / current.cols) - current.buffer.active.viewportY;
       handle.style.setProperty("display", row >= 0 && row < current.rows ? "block" : "none");

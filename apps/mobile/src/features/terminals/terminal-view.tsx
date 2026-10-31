@@ -279,6 +279,7 @@ export const TerminalView = memo(function TerminalView({
               onRestart={restartPage}
               keyboardInput
               scrollEnabled
+              nestedScrollEnabled={state.hasSelection}
               style={styles.page}
             />
           ) : null}

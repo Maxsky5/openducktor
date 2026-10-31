@@ -52,8 +52,8 @@ declare function cancelAnimationFrame(frameId: number): void;
 const FONT_FAMILY = '"IBM Plex Mono", Menlo, "Courier New", monospace';
 const LINE_HEIGHT = 1.35;
 const SCROLLBACK_ROWS = 2000;
-// The page keeps room for the touch scrollbar beside the grid.
-const SCROLL_BAR_WIDTH = 48;
+// The width of xterm's existing scrollbar.
+const SCROLL_BAR_WIDTH = 14;
 const PADDING = { x: 8, y: 4 };
 const MAX_GRID = { columns: 500, rows: 300 };
 const NO_MODIFIERS: TerminalKeyModifiers = { ctrl: false, alt: false };

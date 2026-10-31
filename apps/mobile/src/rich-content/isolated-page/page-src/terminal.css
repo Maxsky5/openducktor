@@ -42,39 +42,20 @@ body {
 
 .terminal-scroll-viewport {
   position: absolute;
-  inset: 4px 56px 4px 8px;
+  inset: 4px 8px;
   overflow-x: hidden;
   overflow-y: scroll;
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
 
-.terminal-scroll-viewport::-webkit-scrollbar,
-#root .xterm-scrollable-element > .scrollbar {
+.terminal-scroll-viewport::-webkit-scrollbar {
   display: none;
 }
 
-.terminal-scrollbar {
-  position: absolute;
-  top: 4px;
-  right: 0;
-  bottom: 4px;
-  width: 48px;
+#root .xterm-scrollable-element > .scrollbar.vertical {
   touch-action: none;
-}
-
-.terminal-scrollbar-thumb {
-  position: absolute;
-  top: 0;
-  left: 20px;
-  width: 8px;
-  border-radius: 4px;
-  background: var(--terminal-selection-handle);
-  opacity: 0.4;
-}
-
-.terminal-scrollbar:active .terminal-scrollbar-thumb {
-  opacity: 0.8;
+  pointer-events: auto;
 }
 
 /* Handle touch listeners stop propagation; mouse input bubbles to xterm. */

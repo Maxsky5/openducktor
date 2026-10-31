@@ -2,7 +2,7 @@ import type { RepoAction } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import { Stack, useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
@@ -49,40 +49,29 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
   const wide = useWideLayout();
   const model = useOwnerTerminals(owner);
   const ownerParams = useMemo(() => toWorkOwnerParams(owner.ref), [owner.ref]);
-  const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
-  // A start opens its terminal once the host started it. The tab ID is never shown.
-  const openOnStartTabId = useRef<string | null>(null);
+  const [selectedTabId, setSelectedTabId] = useState<string | null>(null);
 
   const openTerminal = useCallback(
-    (terminalId: string) => {
-      if (wide) setSelectedTerminalId(terminalId);
-      else router.push(routes.terminal(ownerParams, terminalId));
+    (tabId: string) => {
+      if (wide) setSelectedTabId(tabId);
+      else router.push(routes.terminal(ownerParams, tabId));
     },
     [ownerParams, router, wide],
   );
-  useEffect(() => {
-    if (openOnStartTabId.current === null) return;
-    const started = model.tabs.find((tab) => tab.tabId === openOnStartTabId.current);
-    if (started?.requestState === "creating") return;
-    openOnStartTabId.current = null;
-    if (started?.requestState === "ready") openTerminal(started.terminalId);
-  }, [model.tabs, openTerminal]);
-
   const onClosed = useCallback(
     (tab: TerminalTab) => {
-      // A lost tab keeps the ID of its terminal in `sourceTerminalId`.
-      const closedId = tab.requestState === "lost" ? tab.sourceTerminalId : tab.terminalId;
-      if (closedId !== null && closedId === selectedTerminalId) setSelectedTerminalId(null);
+      if (tab.tabId === selectedTabId) setSelectedTabId(null);
     },
-    [selectedTerminalId],
+    [selectedTabId],
   );
   const { close, closeUnknown } = useTerminalClose(model, onClosed);
+  const { createTerminal } = model;
   const start = useCallback(
     (action?: RepoAction) => {
-      const tabId = model.createTerminal(action);
-      if (tabId !== null) openOnStartTabId.current = tabId;
+      const tabId = createTerminal(action);
+      if (tabId !== null) openTerminal(tabId);
     },
-    [model],
+    [createTerminal, openTerminal],
   );
   const gate = useCommandGate();
   const startBlocked = model.startBlockedReason;
@@ -111,7 +100,7 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
     <TerminalList
       owner={owner}
       model={model}
-      selectedTerminalId={wide ? selectedTerminalId : null}
+      selectedTabId={wide ? selectedTabId : null}
       pushesTerminal={!wide}
       closeUnknown={closeUnknown}
       onOpen={openTerminal}
@@ -126,7 +115,7 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
         <View style={styles.split}>
           <View style={styles.listPane}>{list}</View>
           <View style={styles.detailPane}>
-            {selectedTerminalId === null ? (
+            {selectedTabId === null ? (
               <EmptyState
                 icon="square-terminal"
                 title="No Terminal Selected"
@@ -135,7 +124,7 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
             ) : (
               <TerminalPane
                 model={model}
-                terminalId={selectedTerminalId}
+                tabId={selectedTabId}
                 onRemoveLost={(tab) => void close(tab)}
               />
             )}
@@ -151,7 +140,7 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
 function TerminalList({
   owner,
   model,
-  selectedTerminalId,
+  selectedTabId,
   pushesTerminal,
   closeUnknown,
   onOpen,
@@ -160,10 +149,10 @@ function TerminalList({
 }: {
   owner: WorkOwner;
   model: TerminalSessionsModel;
-  selectedTerminalId: string | null;
+  selectedTabId: string | null;
   pushesTerminal: boolean;
   closeUnknown: ReadonlyMap<string, string>;
-  onOpen: (terminalId: string) => void;
+  onOpen: (tabId: string) => void;
   onClose: (tab: TerminalTab) => Promise<void>;
   onStart: (action?: RepoAction) => void;
 }): ReactElement {
@@ -235,7 +224,7 @@ function TerminalList({
             key={row.tabId}
             row={row}
             first={index === 0}
-            selected={row.terminalId !== null && row.terminalId === selectedTerminalId}
+            selected={row.tabId === selectedTabId}
             disclosure={pushesTerminal}
             closeUnknownGuidance={closeUnknown.get(row.tabId) ?? null}
             startBlockedReason={model.startBlockedReason}

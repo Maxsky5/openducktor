@@ -29,7 +29,7 @@ export type TerminalRowProps = {
   closeUnknownGuidance: string | null;
   /** Why a start cannot run now, so Retry waits too. */
   startBlockedReason: string | null;
-  onOpen: (terminalId: string) => void;
+  onOpen: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onRetry: (tabId: string) => void;
 };
@@ -79,7 +79,7 @@ export const TerminalRow = memo(function TerminalRow({
         {closable && terminalId !== null ? (
           <Touchable
             feedback="highlight"
-            onPress={() => onOpen(terminalId)}
+            onPress={() => onOpen(row.tabId)}
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
             accessibilityHint="Opens the terminal."

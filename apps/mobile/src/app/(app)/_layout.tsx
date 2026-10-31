@@ -33,6 +33,7 @@ export default function AppLayout(): ReactElement {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="session" options={sessionRouteOptions} />
+        <Stack.Screen name="work/terminal" options={{ animation: "none" }} />
         <Stack.Screen name="workspace-switcher" options={sheetOptions("Workspaces")} />
         <Stack.Screen name="new-task" options={fullSheetOptions("New Task")} />
         <Stack.Screen name="edit-task" options={fullSheetOptions("Edit Task")} />
