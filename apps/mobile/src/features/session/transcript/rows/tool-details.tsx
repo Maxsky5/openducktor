@@ -10,9 +10,12 @@ import {
   toolResultContentEntries,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
+import {
+  ToolPartSessionContext,
+  useToolPartDetails,
+} from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { memo, type ReactElement, useMemo } from "react";
+import { memo, type ReactElement, useLayoutEffect, useMemo } from "react";
 import { type StyleProp, View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useFeedbackStore } from "@/app-shell/app-services";
@@ -26,6 +29,7 @@ import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
+import { useRowLayout } from "./disclosure";
 import { FileEditView } from "./file-edit-view";
 import { DetailsBox, LINE_DETAILS_INSET, PreText } from "./row-parts";
 
@@ -75,33 +79,11 @@ function FormattedText({ read, color }: { read: () => string; color: string }): 
   return <PreText text={read()} color={color} />;
 }
 
-type ToolDetailsProps = {
-  meta: ToolMeta;
-  resetKey: string;
-  hasInput: boolean;
-  hasOutput: boolean;
-  hasError: boolean;
-  colors: ToolDetailsColors;
-  errorOpen?: boolean;
-};
-
 /**
  * The desktop Input, Output, and Error boxes of a Tool Call. Each box opens on its own, and its
- * text builds only when it opens. The Error box opens at first when `errorOpen` is true. Compact
- * history cuts long details: an open box reads the full call from the host, and every box then
- * shows it. The error is never cut.
+ * text builds only when it opens. The Error box opens at first when `errorOpen` is true.
  */
-export const ToolDetails = memo(function ToolDetails(props: ToolDetailsProps): ReactElement {
-  return props.meta.detailsOmitted ? <CutToolDetails {...props} /> : <ToolDetailBoxes {...props} />;
-});
-
-/** The boxes of a call that compact history cut. They show the full call once a box reads it. */
-function CutToolDetails({ meta, ...props }: ToolDetailsProps): ReactElement {
-  const details = useToolPartDetails(meta, false);
-  return <ToolDetailBoxes {...props} meta={details.meta} />;
-}
-
-function ToolDetailBoxes({
+export const ToolDetails = memo(function ToolDetails({
   meta,
   resetKey,
   hasInput,
@@ -109,8 +91,15 @@ function ToolDetailBoxes({
   hasError,
   colors,
   errorOpen = false,
-}: ToolDetailsProps): ReactElement {
-  const cut = meta.detailsOmitted === true;
+}: {
+  meta: ToolMeta;
+  resetKey: string;
+  hasInput: boolean;
+  hasOutput: boolean;
+  hasError: boolean;
+  colors: ToolDetailsColors;
+  errorOpen?: boolean;
+}): ReactElement {
   const output = useMemo(
     () => formatOnce(() => formatRawJsonLikeText(meta.output ?? "")),
     [meta.output],
@@ -130,10 +119,18 @@ function ToolDetailBoxes({
           resetKey={`${resetKey}:output`}
           frameStyle={colors.frame}
           textColor={colors.text}
-          copyText={cut || meta.resultContent ? undefined : output}
+          copyText={meta.resultContent ? undefined : output}
         >
-          {cut ? (
-            <ReadFullDetails meta={meta} color={colors.text} />
+          {meta.detailsOmitted ? (
+            <FullDetails meta={meta} what="output" color={colors.text}>
+              {(full) => (
+                <ToolOutput
+                  content={full.resultContent}
+                  output={() => formatRawJsonLikeText(full.output ?? "")}
+                  color={colors.text}
+                />
+              )}
+            </FullDetails>
           ) : (
             <ToolOutput content={meta.resultContent} output={output} color={colors.text} />
           )}
@@ -153,7 +150,7 @@ function ToolDetailBoxes({
       ) : null}
     </>
   );
-}
+});
 
 function ToolInput({
   meta,
@@ -165,7 +162,6 @@ function ToolInput({
   colors: ToolDetailsColors;
 }): ReactElement {
   const { workingDirectory } = useTranscriptRows();
-  const cut = meta.detailsOmitted === true;
   // The box builds its content only while open, so the format runs on the first open.
   const text = useMemo(
     () => formatOnce(() => (meta.input ? formatToolInput(meta.input, workingDirectory) : "")),
@@ -177,10 +173,17 @@ function ToolInput({
       resetKey={`${resetKey}:input`}
       frameStyle={colors.frame}
       textColor={colors.text}
-      copyText={cut ? undefined : text}
+      copyText={text}
     >
-      {cut ? (
-        <ReadFullDetails meta={meta} color={colors.text} />
+      {meta.detailsOmitted ? (
+        <FullDetails meta={meta} what="input" color={colors.text}>
+          {(full) => (
+            <FormattedText
+              read={() => (full.input ? formatToolInput(full.input, workingDirectory) : "")}
+              color={colors.text}
+            />
+          )}
+        </FullDetails>
       ) : (
         <FormattedText read={text} color={colors.text} />
       )}
@@ -188,33 +191,63 @@ function ToolInput({
   );
 }
 
+type FullDetailsProps = {
+  meta: ToolMeta;
+  what: "input" | "output";
+  color: string;
+  children: (full: ToolMeta) => ReactElement;
+};
+
 /**
- * Reads the full details of a call that compact history cut, while its box shows. The boxes of
- * the call show the full details when the read ends.
+ * The body of an open box of a call whose long details compact history cut. It reads the full
+ * call from the host, shows a loader until then, and then shows `children` with the full call.
  */
-export function ReadFullDetails({ meta, color }: { meta: ToolMeta; color: string }): ReactElement {
-  const { error, retry } = useToolPartDetails(meta, true);
-  if (error === null)
+export function FullDetails(props: FullDetailsProps): ReactElement {
+  const { sessionRef, parentSession } = useTranscriptRows();
+  const sessionScope = parentSession.sessionScope ?? null;
+  const session = useMemo(() => ({ ...sessionRef, sessionScope }), [sessionRef, sessionScope]);
+  return (
+    <ToolPartSessionContext value={session}>
+      <FullDetailsBody {...props} />
+    </ToolPartSessionContext>
+  );
+}
+
+function FullDetailsBody({ meta, what, color, children }: FullDetailsProps): ReactElement {
+  const { meta: full, error, retry } = useToolPartDetails(meta, true);
+  const layoutRow = useRowLayout();
+  const loaded = !full.detailsOmitted;
+  // The list reuses the view of a row for other rows, so the flag resets for another call.
+  const [shown, setShown] = useRecyclingState(loaded, [meta.partId, meta.callId]);
+  // The full text is taller than the loader. As for a press, the list reads the row height before
+  // the change, so the row stays in place.
+  useLayoutEffect(() => {
+    if (!loaded || shown) return;
+    layoutRow?.();
+    setShown(true);
+  }, [layoutRow, loaded, setShown, shown]);
+  if (shown) return children(full);
+  if (error !== null)
     return (
-      <View style={styles.reading} accessible accessibilityLabel="Loading the full details">
-        <LoaderSpinner size={12} color={color} />
-        <Text style={[styles.fileText, { color }]}>Loading the full details</Text>
+      <View style={styles.file}>
+        <Text selectable style={[styles.fileText, { color }]}>
+          {error}
+        </Text>
+        <Touchable
+          feedback="opacity"
+          onPress={retry}
+          accessibilityRole="button"
+          accessibilityLabel={`Retry loading the full ${what}`}
+          style={styles.download}
+        >
+          <Text style={[styles.fileText, styles.downloadText, { color }]}>Retry</Text>
+        </Touchable>
       </View>
     );
   return (
-    <View style={styles.file}>
-      <Text selectable style={[styles.fileText, { color }]}>
-        {error}
-      </Text>
-      <Touchable
-        feedback="opacity"
-        onPress={retry}
-        accessibilityRole="button"
-        accessibilityLabel="Retry loading the full details"
-        style={styles.download}
-      >
-        <Text style={[styles.fileText, styles.downloadText, { color }]}>Retry</Text>
-      </Touchable>
+    <View style={styles.loading} accessible accessibilityLabel={`Loading the full ${what}`}>
+      <LoaderSpinner size={12} color={color} />
+      <Text style={[styles.fileText, { color }]}>{`Loading the full ${what}…`}</Text>
     </View>
   );
 }
@@ -414,8 +447,8 @@ const styles = StyleSheet.create((theme) => ({
   fileText: { ...sansWeight("regular"), fontSize: 13, lineHeight: 18 },
   fileUri: { ...monoWeight("regular"), fontSize: 12, lineHeight: 17 },
   download: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
-  reading: { flexDirection: "row", alignItems: "center", gap: 6 },
   downloadText: { textDecorationLine: "underline" },
+  loading: { flexDirection: "row", alignItems: "center", gap: 6 },
   questions: { paddingLeft: LINE_DETAILS_INSET, paddingRight: theme.space.xs },
   questionsFrame: {
     borderColor: theme.desktop.border,

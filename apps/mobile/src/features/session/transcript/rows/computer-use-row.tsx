@@ -5,7 +5,6 @@ import {
   readToolTiming,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { useRecyclingState } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { memo, type ReactElement, useCallback, useMemo } from "react";
@@ -20,7 +19,7 @@ import { useTranscriptRows } from "../transcript-rows-context";
 import { useRowVisible } from "../transcript-visibility";
 import { useDisclosure } from "./disclosure";
 import { DisclosureMarker, PreText, Reveal, ToolTiming } from "./row-parts";
-import { ReadFullDetails } from "./tool-details";
+import { FullDetails } from "./tool-details";
 
 /**
  * The desktop `ComputerUseToolMessage`: a card with the pointer icon, "Computer Use", the
@@ -42,7 +41,8 @@ export const ComputerUseRow = memo(function ComputerUseRow({
   const theme = useAppTheme();
   const { desktop } = theme;
   const presentation = useMemo(() => buildComputerUsePresentation(meta), [meta]);
-  const { actionTitle, isFailed, hasDetails, screenshots } = presentation;
+  const { actionTitle, isFailed, code, errorText, outputText, hasDetails, screenshots } =
+    presentation;
   const disclosure = useDisclosure(false, rowKey);
   const [screenshotsOpen, setScreenshotsOpen] = useRecyclingState(false, [rowKey]);
   const toggleScreenshots = useCallback(
@@ -114,7 +114,12 @@ export const ComputerUseRow = memo(function ComputerUseRow({
       ) : null}
       {hasDetails && disclosure.open ? (
         <Reveal animate={disclosure.pressed} style={styles.details}>
-          <ComputerUseSections meta={meta} />
+          <ComputerUseSections
+            meta={meta}
+            code={code}
+            errorText={errorText}
+            outputText={outputText}
+          />
         </Reveal>
       ) : null}
       {screenshotsOpen
@@ -135,37 +140,33 @@ export const ComputerUseRow = memo(function ComputerUseRow({
 
 /**
  * The JavaScript, Error, and Output sections of a call that has them. When compact history cut
- * the output, the sections read the full call from the host.
+ * the output, the Output section shows a loader until the full call arrives.
  */
-function ComputerUseSections({ meta }: { meta: ToolMeta }): ReactElement {
-  return meta.detailsOmitted ? <CutComputerUseSections meta={meta} /> : <Sections meta={meta} />;
-}
-
-function CutComputerUseSections({ meta: rowMeta }: { meta: ToolMeta }): ReactElement {
-  const { desktop } = useAppTheme();
-  const { meta } = useToolPartDetails(rowMeta, false);
-  const cut = meta.detailsOmitted === true;
-  return (
-    <>
-      <Sections meta={meta} withOutput={!cut} />
-      {cut ? <ReadFullDetails meta={meta} color={desktop.foreground} /> : null}
-    </>
-  );
-}
-
-function Sections({
+function ComputerUseSections({
   meta,
-  withOutput = true,
+  code,
+  errorText,
+  outputText,
 }: {
   meta: ToolMeta;
-  withOutput?: boolean;
+  code: string;
+  errorText: string;
+  outputText: string;
 }): ReactElement {
-  const { code, errorText, outputText } = useMemo(() => buildComputerUsePresentation(meta), [meta]);
+  const { desktop } = useAppTheme();
+  let output: ReactElement | null = null;
+  if (meta.detailsOmitted)
+    output = (
+      <FullDetails meta={meta} what="output" color={desktop.foreground}>
+        {(full) => <Section label="Output" text={buildComputerUsePresentation(full).outputText} />}
+      </FullDetails>
+    );
+  else if (outputText.length > 0) output = <Section label="Output" text={outputText} />;
   return (
     <>
       {code.length > 0 ? <Section label="JavaScript" text={code} /> : null}
       {errorText.length > 0 ? <Section label="Error" text={errorText} error /> : null}
-      {withOutput && outputText.length > 0 ? <Section label="Output" text={outputText} /> : null}
+      {output}
     </>
   );
 }

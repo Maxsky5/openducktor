@@ -51,6 +51,9 @@ const RowLayoutContext = createContext<(() => void) | null>(null);
 
 export const RowLayoutProvider = RowLayoutContext;
 
+/** Measures the list row again and keeps it in place, or null outside the transcript list. */
+export const useRowLayout = (): (() => void) | null => use(RowLayoutContext);
+
 /**
  * The open state of a part that the reader opens with a press, as a desktop `<details>`. The part
  * follows `defaultOpen` until the reader presses it, so a part that gets content later, such as a
