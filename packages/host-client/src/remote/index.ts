@@ -368,15 +368,15 @@ export const createRemoteHostClient = (
             "Update the host to implement its advertised remote contract.",
           );
         abort.signal.throwIfAborted();
+        // This client uses an optional capability only when it asked for it and the host has it.
+        const uses = (capability: string): boolean =>
+          hello.optionalCapabilities.includes(capability) &&
+          negotiatedProtocol.capabilities.includes(capability);
         // Three missed heartbeats mean that the network dropped the stream without closing it.
-        streamSilenceLimitMs = negotiatedProtocol.capabilities.includes(
-          REMOTE_STREAM_HEARTBEAT_CAPABILITY,
-        )
+        streamSilenceLimitMs = uses(REMOTE_STREAM_HEARTBEAT_CAPABILITY)
           ? 3 * REMOTE_STREAM_HEARTBEAT_INTERVAL_MS
           : null;
-        compactHistory = negotiatedProtocol.capabilities.includes(
-          REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
-        );
+        compactHistory = uses(REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY);
         state = { ...state, host: accepted.host };
         if (previousHostInstanceId !== accepted.host.hostInstanceId) {
           cursor = null;
@@ -550,16 +550,17 @@ export const createRemoteHostClient = (
           throw cause;
         }
         if (cause instanceof RemoteReplyTooLargeError) {
-          // The connection is sound. The host ran a mutation, so its outcome is unknown.
+          // The connection is sound, so only this command fails. A read gets the same reply again.
+          // The host ran a mutation, so its outcome is unknown.
           if (read) throw cause;
-          throw outcomeUnknown(command);
+          throw outcomeUnknown(command, "is larger than the limit of this app");
         }
         lost(current, cause);
         if (read) {
           if (Date.now() < deadline) continue;
           throw connectionError(cause);
         }
-        throw outcomeUnknown(command);
+        throw outcomeUnknown(command, "was lost");
       }
       // A result of another shape is a version mismatch, not a lost connection.
       const parsed = resultSchema.safeParse(payload);
@@ -894,10 +895,11 @@ const parsePayload = <Value>(schema: z.ZodType<Value>, text: string): Value => {
   }
 };
 class RemoteRefusalError extends RemoteConnectionError {}
-const outcomeUnknown = (command: string): RemoteConnectionError =>
+/** The host may have run `command`. `reason` says why this client has no result. */
+const outcomeUnknown = (command: string, reason: string): RemoteConnectionError =>
   remoteError(
     "outcome_unknown",
-    `The result of ${command} was lost.`,
+    `The result of ${command} ${reason}.`,
     "Read current host state to check the outcome. Do not resend the operation automatically.",
   );
 const LOAD_HISTORY_COMMAND = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionHistory.command;

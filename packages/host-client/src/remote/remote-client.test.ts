@@ -63,7 +63,17 @@ const live = (signal: AbortSignal, prefix: string): RemoteHttpResponse => ({
     });
   })(),
 });
-const fixture = () => {
+/** A host with the baseline capabilities and the optional `capabilities`. */
+const fixture = (capabilities: readonly string[] = []) => {
+  const host: RemoteHostDescriptor = {
+    ...descriptor,
+    protocols: [
+      {
+        version: REMOTE_PROTOCOL_VERSION,
+        capabilities: [...REMOTE_BASELINE_CAPABILITIES, ...capabilities],
+      },
+    ],
+  };
   let mutation: RemoteTransport["request"] | null = null;
   const requests: string[] = [];
   const boundary = { epoch: crypto.randomUUID(), sequence: 4 };
@@ -73,7 +83,7 @@ const fixture = () => {
       if (url.endsWith("/connections"))
         return json({
           status: "accepted",
-          host: descriptor,
+          host,
           connectionId: crypto.randomUUID(),
           protocolVersion: REMOTE_PROTOCOL_VERSION,
           missingOptionalCapabilities: [],
@@ -101,7 +111,7 @@ const fixture = () => {
         if (mutation) return mutation(method, url, headers, signal, body);
         return json(null);
       }
-      return json(descriptor);
+      return json(host);
     },
     openTerminal: async () => {
       throw new Error("No terminal requested in this fixture.");
@@ -116,6 +126,24 @@ const fixture = () => {
     },
   };
 };
+
+const helloWith = (...optionalCapabilities: string[]): RemoteClientHello => ({
+  ...hello,
+  optionalCapabilities,
+});
+/** A reply of 40 MiB, over the 32 MiB limit. `onRelease` runs when the client stops reading it. */
+const oversizedReply = (onRelease = () => {}): RemoteHttpResponse => ({
+  status: 200,
+  headers: {},
+  body: (async function* () {
+    const chunk = new Uint8Array(1024 * 1024);
+    try {
+      for (let index = 0; index < 40; index += 1) yield chunk;
+    } finally {
+      onRelease();
+    }
+  })(),
+});
 
 test("applies a finite synchronization barrier and canonicalizes manual addresses", async () => {
   const f = fixture();
@@ -1041,27 +1069,7 @@ test("an expired admission reconnects instead of refusing every later request", 
 });
 
 test("a silent event stream of a heartbeat host ends the connection", async () => {
-  const f = fixture();
-  const request = f.transport.request;
-  const heartbeatHost: RemoteHostDescriptor = {
-    ...descriptor,
-    protocols: [
-      {
-        version: REMOTE_PROTOCOL_VERSION,
-        capabilities: [...REMOTE_BASELINE_CAPABILITIES, REMOTE_STREAM_HEARTBEAT_CAPABILITY],
-      },
-    ],
-  };
-  f.transport.request = async (method, url, headers, signal, body) =>
-    url.endsWith("/connections")
-      ? json({
-          status: "accepted",
-          host: heartbeatHost,
-          connectionId: crypto.randomUUID(),
-          protocolVersion: REMOTE_PROTOCOL_VERSION,
-          missingOptionalCapabilities: [],
-        })
-      : request(method, url, headers, signal, body);
+  const f = fixture([REMOTE_STREAM_HEARTBEAT_CAPABILITY]);
   const silenceChecks: Array<() => void> = [];
   const originalTimer = globalThis.setTimeout;
   const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
@@ -1072,7 +1080,7 @@ test("a silent event stream of a heartbeat host ends the connection", async () =
   const states: Array<{ status: string; message: string | undefined }> = [];
   const remote = createRemoteHostClient(
     "https://host.example/remote",
-    hello,
+    helloWith(REMOTE_STREAM_HEARTBEAT_CAPABILITY),
     f.transport,
     async () => {},
   );
@@ -1095,27 +1103,7 @@ test("a silent event stream of a heartbeat host ends the connection", async () =
 });
 
 test("a silent task stream of a heartbeat host ends the connection", async () => {
-  const f = fixture();
-  const request = f.transport.request;
-  const heartbeatHost: RemoteHostDescriptor = {
-    ...descriptor,
-    protocols: [
-      {
-        version: REMOTE_PROTOCOL_VERSION,
-        capabilities: [...REMOTE_BASELINE_CAPABILITIES, REMOTE_STREAM_HEARTBEAT_CAPABILITY],
-      },
-    ],
-  };
-  f.transport.request = async (method, url, headers, signal, body) =>
-    url.endsWith("/connections")
-      ? json({
-          status: "accepted",
-          host: heartbeatHost,
-          connectionId: crypto.randomUUID(),
-          protocolVersion: REMOTE_PROTOCOL_VERSION,
-          missingOptionalCapabilities: [],
-        })
-      : request(method, url, headers, signal, body);
+  const f = fixture([REMOTE_STREAM_HEARTBEAT_CAPABILITY]);
   const silenceChecks: Array<() => void> = [];
   const originalTimer = globalThis.setTimeout;
   const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
@@ -1125,7 +1113,7 @@ test("a silent task stream of a heartbeat host ends the connection", async () =>
   const states: Array<{ status: string; message: string | undefined }> = [];
   const remote = createRemoteHostClient(
     "https://host.example/remote",
-    hello,
+    helloWith(REMOTE_STREAM_HEARTBEAT_CAPABILITY),
     f.transport,
     async () => {},
   );
@@ -1346,7 +1334,11 @@ test("a read with a lost reply waits for the reconnect and runs again", async ()
   }
 });
 
-test("a history read asks only a host with the capability for compact history", async () => {
+test.each([
+  ["the host and the client both have the capability", true, true, true],
+  ["the host has no capability", false, true, false],
+  ["the client did not ask for the capability", true, false, false],
+] as const)("compact history: %s", async (_name, hostHas, clientAsks, compact) => {
   const input = {
     repoPath: "/repo",
     runtimeKind: "opencode",
@@ -1354,76 +1346,36 @@ test("a history read asks only a host with the capability for compact history", 
     workingDirectory: "/repo",
     externalSessionId: "session",
   } as const;
-  for (const compact of [false, true]) {
-    const f = fixture();
-    const host = {
-      ...descriptor,
-      protocols: [
-        {
-          version: REMOTE_PROTOCOL_VERSION,
-          capabilities: [
-            ...REMOTE_BASELINE_CAPABILITIES,
-            ...(compact ? [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY] : []),
-          ],
-        },
-      ],
-    };
-    const bodies: unknown[] = [];
-    f.setMutation(async (_method, _url, _headers, _signal, body) => {
-      bodies.push(JSON.parse(body ?? "null"));
-      return json([]);
-    });
-    const transport: RemoteTransport = {
-      ...f.transport,
-      request: (method, url, headers, signal, body) => {
-        if (url === "https://host.example/remote") return Promise.resolve(json(host));
-        if (url.endsWith("/connections"))
-          return Promise.resolve(
-            json({
-              status: "accepted",
-              host,
-              connectionId: crypto.randomUUID(),
-              protocolVersion: REMOTE_PROTOCOL_VERSION,
-              missingOptionalCapabilities: [],
-            }),
-          );
-        return f.transport.request(method, url, headers, signal, body);
-      },
-    };
-    const remote = createRemoteHostClient(
-      "https://host.example/remote",
-      { ...hello, optionalCapabilities: [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY] },
-      transport,
-      async () => {},
-    );
-    try {
-      await remote.connect();
-      await remote.client.agentRuntimeLoadSessionHistory(input);
-      expect(bodies).toEqual([{ input: compact ? { ...input, toolDetails: "on_demand" } : input }]);
-    } finally {
-      await remote.disconnect();
-    }
+  const f = fixture(hostHas ? [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY] : []);
+  const bodies: unknown[] = [];
+  f.setMutation(async (_method, _url, _headers, _signal, body) => {
+    bodies.push(JSON.parse(body ?? "null"));
+    return json([]);
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    clientAsks ? helloWith(REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY) : hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await remote.client.agentRuntimeLoadSessionHistory(input);
+    expect(bodies).toEqual([{ input: compact ? { ...input, toolDetails: "on_demand" } : input }]);
+  } finally {
+    await remote.disconnect();
   }
 });
 
 test("a reply over the size limit fails its read and keeps the connection", async () => {
   const f = fixture();
-  const chunk = new Uint8Array(1024 * 1024);
   let reads = 0;
   let released = false;
   f.setMutation(async () => {
     reads += 1;
-    return {
-      status: 200,
-      headers: {},
-      body: (async function* () {
-        try {
-          for (let index = 0; index < 40; index += 1) yield chunk;
-        } finally {
-          released = true;
-        }
-      })(),
-    };
+    return oversizedReply(() => {
+      released = true;
+    });
   });
   const remote = createRemoteHostClient(
     "https://host.example/remote",
@@ -1453,17 +1405,10 @@ test("a reply over the size limit fails its read and keeps the connection", asyn
 
 test("a mutation with a reply over the size limit has an unknown outcome", async () => {
   const f = fixture();
-  const chunk = new Uint8Array(1024 * 1024);
   let sends = 0;
   f.setMutation(async () => {
     sends += 1;
-    return {
-      status: 200,
-      headers: {},
-      body: (async function* () {
-        for (let index = 0; index < 40; index += 1) yield chunk;
-      })(),
-    };
+    return oversizedReply();
   });
   const remote = createRemoteHostClient(
     "https://host.example/remote",
@@ -1474,7 +1419,10 @@ test("a mutation with a reply over the size limit has an unknown outcome", async
   try {
     await remote.connect();
     await expect(remote.client.setTheme("dark")).rejects.toMatchObject({
-      failure: { code: "outcome_unknown" },
+      failure: {
+        code: "outcome_unknown",
+        message: "The result of set_theme is larger than the limit of this app.",
+      },
     });
     expect(sends).toBe(1);
     expect(remote.readState().status).toBe("connected");
@@ -1677,26 +1625,10 @@ test("replacement and scoped gaps survive failed synchronization until reported"
 });
 
 test("a stream check needs heartbeat bytes after a pause", async () => {
-  const f = fixture();
+  const f = fixture([REMOTE_STREAM_HEARTBEAT_CAPABILITY]);
   const request = f.transport.request;
   let push: (text: string) => void = () => {};
   f.transport.request = async (method, url, headers, signal, body) => {
-    if (url.endsWith("/connections"))
-      return json({
-        status: "accepted",
-        host: {
-          ...descriptor,
-          protocols: [
-            {
-              version: REMOTE_PROTOCOL_VERSION,
-              capabilities: [...REMOTE_BASELINE_CAPABILITIES, REMOTE_STREAM_HEARTBEAT_CAPABILITY],
-            },
-          ],
-        },
-        connectionId: crypto.randomUUID(),
-        protocolVersion: REMOTE_PROTOCOL_VERSION,
-        missingOptionalCapabilities: [],
-      });
     if (!url.endsWith("/events")) return request(method, url, headers, signal, body);
     const chunks: string[] = [
       frame("replay-complete", { hostChanged: false, gaps: [] }) +
@@ -1739,7 +1671,7 @@ test("a stream check needs heartbeat bytes after a pause", async () => {
   });
   const remote = createRemoteHostClient(
     "https://host.example/remote",
-    hello,
+    helloWith(REMOTE_STREAM_HEARTBEAT_CAPABILITY),
     f.transport,
     async () => {},
   );

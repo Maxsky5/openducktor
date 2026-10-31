@@ -22,7 +22,7 @@ export const normalizeToolText = (value: string | undefined): string | undefined
 
 type ToolMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
 
-/** The chat message meta of a tool part from history or from a full tool part read. */
+/** The chat message meta of a tool part from history, a live event, or a full tool part read. */
 export const toToolMessageMeta = (part: AgentToolPart): ToolMessageMeta => {
   const input = normalizeToolInput(part.input);
   const output = normalizeToolText(part.output);

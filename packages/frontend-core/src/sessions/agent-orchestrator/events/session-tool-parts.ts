@@ -81,7 +81,6 @@ const composeToolPartSessionUpdate = ({
   current,
   prepareCurrent,
   part,
-  status,
   observedEventTimestampMs,
   input,
   output,
@@ -91,13 +90,13 @@ const composeToolPartSessionUpdate = ({
   current: AgentSessionState;
   prepareCurrent: PrepareCurrent;
   part: ToolPart;
-  status: ToolPartStatus;
   observedEventTimestampMs: number;
   input: ToolInput | undefined;
   output: string | undefined;
   error: string | undefined;
   timestamp: string;
 }): AgentSessionState => {
+  const { status } = part;
   const prepared = prepareCurrent(current);
   const fallbackMessageId = toToolMessageId(part);
   const messageId = resolveToolMessageId(
@@ -135,39 +134,28 @@ const composeToolPartSessionUpdate = ({
   if (part.endedAtMs === undefined && existingToolMeta?.endedAtMs !== undefined) {
     resolvedPart.endedAtMs = existingToolMeta.endedAtMs;
   }
+  delete resolvedPart.error;
+  if (resolvedInput) resolvedPart.input = resolvedInput;
+  if (resolvedOutput) resolvedPart.output = resolvedOutput;
+  if (resolvedError) resolvedPart.error = resolvedError;
+  // An input or output that the event lacks stays from a compact history row, still cut.
+  if (existingToolMeta?.detailsOmitted && (input === undefined || output === undefined))
+    resolvedPart.detailsOmitted = true;
   const timingMeta = composeToolTimingMeta(
     existingToolMeta,
     observedEventTimestampMs,
     status,
     resolvedInput,
   );
-  const metaPart: ToolPart = { ...resolvedPart, status };
-  delete metaPart.input;
-  delete metaPart.output;
-  delete metaPart.error;
-  if (resolvedInput) metaPart.input = resolvedInput;
-  if (resolvedOutput) metaPart.output = resolvedOutput;
-  if (resolvedError) metaPart.error = resolvedError;
-  // An input or output that the event lacks stays from a compact history row, still cut.
-  if (existingToolMeta?.detailsOmitted && (input === undefined || output === undefined))
-    metaPart.detailsOmitted = true;
-
-  const contentPart: ToolPart = { ...resolvedPart, status };
-  if (resolvedError !== undefined && resolvedError.length > 0) {
-    contentPart.error = resolvedError;
-  }
-  if (resolvedOutput !== undefined && resolvedOutput.length > 0) {
-    contentPart.output = resolvedOutput;
-  }
 
   return {
     ...prepared,
     messages: upsertSessionMessageByTimestamp(prepared, {
       id: messageId,
       role: "tool",
-      content: formatToolContent(contentPart),
+      content: formatToolContent(resolvedPart),
       timestamp: existing?.timestamp ?? timestamp,
-      meta: { ...toToolMessageMeta(metaPart), ...timingMeta },
+      meta: { ...toToolMessageMeta(resolvedPart), ...timingMeta },
     }),
   };
 };
@@ -182,7 +170,6 @@ export const handleToolPart = (
   const input = normalizeToolInput(part.input);
   const output = normalizeToolText(part.output);
   const error = normalizeToolText(part.error);
-  const resolvedStatus = part.status;
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   const activeSession = context.store.readSession(context.session.identity);
@@ -199,7 +186,6 @@ export const handleToolPart = (
       current,
       prepareCurrent,
       part,
-      status: resolvedStatus,
       observedEventTimestampMs,
       input,
       output,
