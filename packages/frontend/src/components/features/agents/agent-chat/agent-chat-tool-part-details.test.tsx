@@ -83,12 +83,13 @@ const openDetails = (container: HTMLElement, label?: string): void => {
 };
 
 describe("RegularToolMessage with cut details", () => {
-  test("reads the full call when the user opens its details", async () => {
+  test("reads the full call when the user opens its Output box", async () => {
     const read = mock(async () => fullCall);
     const view = renderCall(read);
     try {
-      expect(read).not.toHaveBeenCalled();
       openDetails(view.container);
+      expect(read).not.toHaveBeenCalled();
+      openDetails(view.container, "Output");
       expect(await screen.findByText("first characters and the rest of the log")).toBeTruthy();
       expect(read).toHaveBeenCalledTimes(1);
     } finally {
@@ -106,6 +107,7 @@ describe("RegularToolMessage with cut details", () => {
     const view = renderCall(read);
     try {
       openDetails(view.container);
+      openDetails(view.container, "Output");
       expect((await screen.findByRole("alert")).textContent).toContain(
         "The session history no longer has this tool call.",
       );

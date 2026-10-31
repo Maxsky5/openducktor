@@ -95,7 +95,12 @@ test("a reply that is too large leaves the recovery to that read's view", async 
   const queryClient = new QueryClient();
   const stop = observeFailing(queryClient, new RemoteReplyTooLargeError(32 * 1024 * 1024));
   try {
-    await expect(synchronizeConnectionState(queryClient, [], true)).resolves.toBeUndefined();
+    await expect(
+      synchronizeConnectionState(queryClient, [], true, {
+        hostChanged: false,
+        missedEventNames: [],
+      }),
+    ).resolves.toBeUndefined();
     expect(queryClient.getQueryState(["failing"])?.status).toBe("error");
   } finally {
     stop();

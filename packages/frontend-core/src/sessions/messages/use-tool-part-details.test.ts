@@ -70,12 +70,11 @@ describe("useToolPartDetails", () => {
   test("reads cut details only while the row asks for them", async () => {
     const read = mock(async () => fullPart);
     const view = renderDetails(read, { meta: cutMeta, read: false });
-    expect(view.result.current).toMatchObject({ meta: cutMeta, loading: false, error: null });
+    expect(view.result.current).toMatchObject({ meta: cutMeta, error: null });
     expect(read).not.toHaveBeenCalled();
 
     view.rerender({ meta: cutMeta, read: true });
-    expect(view.result.current.loading).toBe(true);
-    await waitFor(() => expect(view.result.current.loading).toBe(false));
+    await waitFor(() => expect(view.result.current.meta.output).toBe("full output"));
     expect(read).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
@@ -104,15 +103,6 @@ describe("useToolPartDetails", () => {
     view.unmount();
   });
 
-  test("never reads a whole row", () => {
-    const read = mock(async () => fullPart);
-    const { detailsOmitted: _cut, ...wholeMeta } = cutMeta;
-    const view = renderDetails(read, { meta: wholeMeta, read: true }, null);
-    expect(view.result.current).toMatchObject({ meta: wholeMeta, loading: false, error: null });
-    expect(read).not.toHaveBeenCalled();
-    view.unmount();
-  });
-
   test("reports a failed read and reads again on retry", async () => {
     let attempts = 0;
     const read = mock(async () => {
@@ -124,7 +114,6 @@ describe("useToolPartDetails", () => {
     await waitFor(() =>
       expect(view.result.current.error).toBe("The session history no longer has this tool call."),
     );
-    expect(view.result.current.loading).toBe(false);
     act(() => view.result.current.retry());
     await waitFor(() => expect(view.result.current.meta.output).toBe("full output"));
     expect(view.result.current.error).toBeNull();

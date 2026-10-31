@@ -143,7 +143,7 @@ function ComputerUseSections({ meta }: { meta: ToolMeta }): ReactElement {
 
 function CutComputerUseSections({ meta: rowMeta }: { meta: ToolMeta }): ReactElement {
   const { desktop } = useAppTheme();
-  const { meta } = useToolPartDetails(rowMeta, true);
+  const { meta } = useToolPartDetails(rowMeta, false);
   const cut = meta.detailsOmitted === true;
   return (
     <>

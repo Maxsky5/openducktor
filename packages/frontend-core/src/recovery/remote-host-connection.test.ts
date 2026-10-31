@@ -60,17 +60,41 @@ describe("createRemoteHostConnection", () => {
   });
 });
 
-describe("live sessions across a reconnect", () => {
-  const encoder = new TextEncoder();
-  const json = <Value>(value: Value): RemoteHttpResponse => ({
-    status: 200,
-    headers: {},
-    body: (async function* () {
-      yield encoder.encode(JSON.stringify(value));
-    })(),
+const encoder = new TextEncoder();
+const json = <Value>(value: Value): RemoteHttpResponse => ({
+  status: 200,
+  headers: {},
+  body: (async function* () {
+    yield encoder.encode(JSON.stringify(value));
+  })(),
+});
+const frame = <Data>(event: string, data: Data, id?: BrowserEventCursor) =>
+  `${id === undefined ? "" : `id: ${JSON.stringify(id)}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+const attached = frame("notification-frame", {
+  type: "attached",
+  cursor: { epoch: crypto.randomUUID(), sequence: 0 },
+  reason: "new",
+  health: [],
+});
+const descriptor = {
+  shell: "web",
+  appVersion: "host",
+  hostInstanceId: "instance-1",
+  accessPolicy: "network_reach",
+  protocols: [
+    { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
+  ],
+};
+const admission = () =>
+  json({
+    status: "accepted",
+    host: descriptor,
+    connectionId: crypto.randomUUID(),
+    protocolVersion: REMOTE_PROTOCOL_VERSION,
+    missingOptionalCapabilities: [],
   });
-  const frame = <Data>(event: string, data: Data, id?: BrowserEventCursor) =>
-    `${id === undefined ? "" : `id: ${JSON.stringify(id)}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+describe("live sessions across a reconnect", () => {
   const transcriptEvent = (messageId: string, sequence: number): AgentSessionLiveEnvelope => ({
     type: "transcript_event",
     sequence,
@@ -94,37 +118,14 @@ describe("live sessions across a reconnect", () => {
       { channel: "openducktor://agent-session-live-event", payload: envelope },
       { hostEpoch: "epoch-1", hostEventId, notificationCursor: null },
     );
-  const attached = frame("notification-frame", {
-    type: "attached",
-    cursor: { epoch: crypto.randomUUID(), sequence: 0 },
-    reason: "new",
-    health: [],
-  });
-
   /** A host whose event stream drops once. The second stream replays `replayed` with `gaps`. */
   const scriptedHost = (gaps: string[]) => {
     const streams: { push: (text: string) => void; drop: () => void }[] = [];
     let attaches = 0;
-    const descriptor = {
-      shell: "web",
-      appVersion: "host",
-      hostInstanceId: "instance-1",
-      accessPolicy: "network_reach",
-      protocols: [
-        { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-      ],
-    };
     const transport: RemoteTransport = {
       async request(_method, url, _headers, signal) {
         if (url === "https://host.test/remote") return json(descriptor);
-        if (url.endsWith("/connections"))
-          return json({
-            status: "accepted",
-            host: descriptor,
-            connectionId: crypto.randomUUID(),
-            protocolVersion: REMOTE_PROTOCOL_VERSION,
-            missingOptionalCapabilities: [],
-          });
+        if (url.endsWith("/connections")) return admission();
         if (url.endsWith("/events")) {
           const first = streams.length === 0;
           const queue: string[] = [
@@ -278,25 +279,6 @@ describe("live sessions across a reconnect", () => {
 
 describe("an oversized reply during recovery", () => {
   test("fails only its read, and the connection recovers", async () => {
-    const encoder = new TextEncoder();
-    const json = <Value>(value: Value): RemoteHttpResponse => ({
-      status: 200,
-      headers: {},
-      body: (async function* () {
-        yield encoder.encode(JSON.stringify(value));
-      })(),
-    });
-    const frame = <Data>(event: string, data: Data) =>
-      `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-    const descriptor = {
-      shell: "web",
-      appVersion: "host",
-      hostInstanceId: "instance-1",
-      accessPolicy: "network_reach",
-      protocols: [
-        { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-      ],
-    };
     const chunk = new Uint8Array(1024 * 1024);
     let admissions = 0;
     let reads = 0;
@@ -305,13 +287,7 @@ describe("an oversized reply during recovery", () => {
         if (url === "https://host.test/remote") return json(descriptor);
         if (url.endsWith("/connections")) {
           admissions += 1;
-          return json({
-            status: "accepted",
-            host: descriptor,
-            connectionId: crypto.randomUUID(),
-            protocolVersion: REMOTE_PROTOCOL_VERSION,
-            missingOptionalCapabilities: [],
-          });
+          return admission();
         }
         if (url.endsWith("/events"))
           return {
@@ -319,13 +295,7 @@ describe("an oversized reply during recovery", () => {
             headers: {},
             body: (async function* () {
               yield encoder.encode(
-                frame("replay-complete", { hostChanged: false, gaps: [] }) +
-                  frame("notification-frame", {
-                    type: "attached",
-                    cursor: { epoch: crypto.randomUUID(), sequence: 0 },
-                    reason: "new",
-                    health: [],
-                  }),
+                frame("replay-complete", { hostChanged: false, gaps: [] }) + attached,
               );
               await new Promise<never>((_resolve, reject) => {
                 signal.addEventListener("abort", () => reject(signal.reason), { once: true });

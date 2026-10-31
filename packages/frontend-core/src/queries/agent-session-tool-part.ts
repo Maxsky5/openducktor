@@ -1,17 +1,15 @@
 import type { AgentToolPart } from "@openducktor/contracts";
-import type { AgentSessionScope } from "@openducktor/core";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "../lib/working-directory";
-import type { AgentSessionIdentity } from "../types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "../types/session-slices";
-import { runtimeSessionHistoryRefQueryOptions } from "./agent-session-history";
-import { settingsSnapshotQueryOptions } from "./workspace";
+import {
+  type RuntimeSessionHistoryRefInput,
+  runtimeSessionHistoryRefQueryOptions,
+} from "./agent-session-history";
+import { loadSettingsSnapshotFromQuery } from "./workspace";
 
 /** The session of a transcript whose tool rows can read full tool parts. */
-export type ToolPartSession = AgentSessionIdentity & {
-  repoPath: string;
-  sessionScope: AgentSessionScope | null;
-};
+export type ToolPartSession = RuntimeSessionHistoryRefInput;
 
 /** Reads one full tool part of a compact history. The part does not change after it ends. */
 export const sessionToolPartQueryOptions = (
@@ -33,7 +31,7 @@ export const sessionToolPartQueryOptions = (
     queryFn: async () => {
       const ref = await queryClient.ensureQueryData(
         runtimeSessionHistoryRefQueryOptions(session, () =>
-          queryClient.ensureQueryData(settingsSnapshotQueryOptions()),
+          loadSettingsSnapshotFromQuery(queryClient),
         ),
       );
       return readSessionToolPart({ ...ref, partId, callId });

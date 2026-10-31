@@ -1,4 +1,3 @@
-import { AgentToolResultContentView } from "./agent-tool-result-content";
 import { type ReactElement, useState } from "react";
 import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
@@ -14,7 +13,7 @@ import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import { RegularToolSummary } from "./agent-chat-regular-tool-summary";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
-import { FullToolPartDetails } from "./agent-chat-tool-part-details";
+import { ToolOutputDetails } from "./agent-chat-tool-output-details";
 
 type RegularToolMessageProps = {
   meta: ToolMeta;
@@ -68,27 +67,23 @@ export const RegularToolMessage = ({
             {summaryRow}
           </summary>
           <div className="ml-5 mt-1 space-y-2">
-            {detailsOpen && meta.detailsOmitted ? (
-              <FullToolPartDetails meta={meta}>
-                {(full) => (
-                  <RegularToolInputOutput
-                    meta={full}
-                    hasInput={hasInput}
-                    hasOutput={hasOutput}
-                    sessionWorkingDirectory={sessionWorkingDirectory}
-                    visible
-                  />
-                )}
-              </FullToolPartDetails>
-            ) : (
-              <RegularToolInputOutput
+            {hasInput && meta.input ? (
+              <ToolInputDetails
                 meta={meta}
-                hasInput={hasInput}
-                hasOutput={hasOutput}
-                sessionWorkingDirectory={sessionWorkingDirectory}
+                workingDirectory={sessionWorkingDirectory}
+                className="rounded border border-border bg-card"
+                textClassName="text-foreground"
                 visible={detailsOpen}
               />
-            )}
+            ) : null}
+            {hasOutput ? (
+              <ToolOutputDetails
+                meta={meta}
+                className="rounded border border-border bg-card"
+                summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-foreground"
+                bodyClassName="space-y-2 px-2 pb-2 text-[11px] text-foreground"
+              />
+            ) : null}
             {hasError && meta.error ? (
               <details className="rounded border border-destructive-border bg-destructive-surface">
                 <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-destructive-muted">
@@ -138,40 +133,3 @@ export const RegularToolMessage = ({
     </div>
   );
 };
-
-/** The Input and Output boxes of a call. */
-const RegularToolInputOutput = ({
-  meta,
-  hasInput,
-  hasOutput,
-  sessionWorkingDirectory,
-  visible,
-}: {
-  meta: ToolMeta;
-  hasInput: boolean;
-  hasOutput: boolean;
-  sessionWorkingDirectory?: string | null | undefined;
-  visible: boolean;
-}): ReactElement => (
-  <>
-    {hasInput && meta.input ? (
-      <ToolInputDetails
-        input={meta.input}
-        workingDirectory={sessionWorkingDirectory}
-        className="rounded border border-border bg-card"
-        textClassName="text-foreground"
-        visible={visible}
-      />
-    ) : null}
-    {hasOutput ? (
-      <details className="rounded border border-border bg-card">
-        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
-          Output
-        </summary>
-        <div className="space-y-2 px-2 pb-2 text-[11px] text-foreground">
-          <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
-        </div>
-      </details>
-    ) : null}
-  </>
-);

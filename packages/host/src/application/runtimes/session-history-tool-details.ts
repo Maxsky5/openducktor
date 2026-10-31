@@ -1,12 +1,11 @@
 import {
   toClaudeOdtToolAliases,
-  toOpencodeOdtToolAliases,
+  toOpencodeExposedOdtToolIds,
   type AgentToolData,
   type AgentToolPart,
   type AgentToolResultContent,
-  type OdtToolName,
 } from "@openducktor/contracts";
-import { normalizeOdtToolName, type AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { JSONType } from "zod";
 
 /**
@@ -18,18 +17,12 @@ export const TOOL_DETAIL_PREVIEW_LENGTH = 1024;
 /** Their rows read the full input, output, and metadata. */
 const WHOLE_TOOL_TYPES = new Set<AgentToolPart["toolType"]>(["question", "todo", "file_edit"]);
 
-/** Their rows parse the output as JSON. */
-const WHOLE_OUTPUT_TOOLS = new Set<OdtToolName>([
-  "odt_search_tasks",
-  "odt_create_task",
-  "odt_update_task",
-  "odt_set_task_artifact",
-]);
-
-const odtToolAliases = (name: OdtToolName): string[] => [
-  ...toOpencodeOdtToolAliases(name),
-  ...toClaudeOdtToolAliases(name),
-];
+/** Their rows parse the output as JSON. The set holds each name as every runtime calls it. */
+const WHOLE_OUTPUT_TOOLS = new Set(
+  ["odt_search_tasks", "odt_create_task", "odt_update_task", "odt_set_task_artifact"].flatMap(
+    (name) => [...toOpencodeExposedOdtToolIds(name), ...toClaudeOdtToolAliases(name)],
+  ),
+);
 
 /**
  * Cuts the long strings of finished tool parts and marks each cut part with `detailsOmitted`. A
@@ -75,8 +68,7 @@ const compact = (part: AgentToolPart): AgentToolPart => {
   const result: AgentToolPart = { ...part };
   if (part.input) result.input = shortenData(part.input);
   if (part.metadata) result.metadata = shortenData(part.metadata);
-  const tool = normalizeOdtToolName(part.tool, odtToolAliases);
-  if (tool === null || !WHOLE_OUTPUT_TOOLS.has(tool)) {
+  if (!WHOLE_OUTPUT_TOOLS.has(part.tool.trim())) {
     if (part.output !== undefined) result.output = shorten(part.output);
     if (part.resultContent) result.resultContent = part.resultContent.map(shortenContent);
   }
