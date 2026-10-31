@@ -1,7 +1,8 @@
 import type { RepoAction } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useNavigation } from "expo-router";
+import { StackActions } from "expo-router/react-navigation";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -44,7 +45,7 @@ export function TerminalsScreen(): ReactElement {
 }
 
 function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   // Tablets and wide landscape show the terminal list and the selected terminal side by side.
   const wide = useWideLayout();
   const model = useOwnerTerminals(owner);
@@ -54,9 +55,15 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
   const openTerminal = useCallback(
     (tabId: string) => {
       if (wide) setSelectedTabId(tabId);
-      else router.push(routes.terminal(ownerParams, tabId));
+      else {
+        // The stack commits this push with the pending tab. URL routing waits for an effect,
+        // which can draw the changed terminal list before it opens the terminal.
+        navigation.dispatch(
+          StackActions.push("work/terminal", routes.terminal(ownerParams, tabId).params),
+        );
+      }
     },
-    [ownerParams, router, wide],
+    [navigation, ownerParams, wide],
   );
   const onClosed = useCallback(
     (tab: TerminalTab) => {
