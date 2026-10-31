@@ -83,7 +83,7 @@ function startupActionButtons(
       actions.push({
         label: "Continue in background",
         icon: "layers",
-        variant: "plain",
+        variant: "outline",
         onPress: onContinueInBackground,
       });
   } else {

@@ -25,7 +25,7 @@ import { OptionPickerSheet } from "@/ui/option-picker-sheet";
 import { BranchPickerSheet } from "@/features/branches/branch-picker-sheet";
 import { EffortField, ModelField, SpeedField } from "@/features/model-picker/model-field";
 import { modelSummary } from "@/features/model-picker/model-field-model";
-import { motion } from "@/theme/tokens";
+import { motion, radius } from "@/theme/tokens";
 import { Button } from "@/ui/button";
 import { Icon } from "@/ui/icon";
 import { Touchable } from "@/ui/touchable";
@@ -317,8 +317,9 @@ function SessionStartBackgroundButton({
     : "Starts the session and keeps this screen.";
   return (
     <Touchable
-      feedback="opacity"
+      feedback="scale"
       disabled={inactive}
+      radius={radius.lg}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={blocked ? "Available when the host connection is live." : hint}
@@ -326,8 +327,8 @@ function SessionStartBackgroundButton({
       containerStyle={styles.backgroundActionContainer}
       style={styles.backgroundAction}
     >
-      <Icon name="layers" size={16} color="secondaryLabel" />
-      <Text variant="subhead" weight="medium" tone="secondary" style={styles.backgroundLabel}>
+      <Icon name="layers" size={16} color="label" />
+      <Text variant="subhead" weight="medium" style={styles.backgroundLabel}>
         {label}
       </Text>
     </Touchable>
@@ -497,6 +498,9 @@ function KickoffPromptField({
 const styles = StyleSheet.create((theme) => ({
   backgroundActionContainer: { flexGrow: 1, flexShrink: 1 },
   backgroundAction: {
+    backgroundColor: theme.desktop.card,
+    borderColor: theme.desktop.input,
+    borderWidth: 1,
     minHeight: theme.touchTarget,
     paddingHorizontal: theme.space.md,
     paddingVertical: theme.space.sm,
