@@ -25,6 +25,13 @@ export const ToolInputDetails = ({
   visible = true,
 }: ToolInputDetailsProps): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
+  const renderInput = (shown: ToolMeta): ReactElement => (
+    <ToolInputText
+      input={shown.input}
+      workingDirectory={workingDirectory}
+      textClassName={textClassName}
+    />
+  );
   return (
     <details className={className} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
       <summary className={cn("cursor-pointer px-2 py-1 text-xs font-medium", textClassName)}>
@@ -33,21 +40,9 @@ export const ToolInputDetails = ({
       {isOpen && visible ? (
         <div className="px-2 pb-2">
           {meta.detailsOmitted ? (
-            <FullToolPartDetails meta={meta}>
-              {(full) => (
-                <ToolInputText
-                  input={full.input}
-                  workingDirectory={workingDirectory}
-                  textClassName={textClassName}
-                />
-              )}
-            </FullToolPartDetails>
+            <FullToolPartDetails meta={meta}>{renderInput}</FullToolPartDetails>
           ) : (
-            <ToolInputText
-              input={meta.input}
-              workingDirectory={workingDirectory}
-              textClassName={textClassName}
-            />
+            renderInput(meta)
           )}
         </div>
       ) : null}

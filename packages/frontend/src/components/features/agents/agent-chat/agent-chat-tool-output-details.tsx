@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { AgentToolResultContentView } from "./agent-tool-result-content";
 import { FullToolPartDetails } from "./agent-chat-tool-part-details";
@@ -19,20 +19,17 @@ export const ToolOutputDetails = ({
   bodyClassName: string;
 }): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
+  let body: ReactNode = null;
+  if (!meta.detailsOmitted) body = renderOutput(meta);
+  else if (isOpen) body = <FullToolPartDetails meta={meta}>{renderOutput}</FullToolPartDetails>;
   return (
     <details className={className} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
       <summary className={summaryClassName}>Output</summary>
-      <div className={bodyClassName}>
-        {!meta.detailsOmitted ? (
-          <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
-        ) : isOpen ? (
-          <FullToolPartDetails meta={meta}>
-            {(full) => (
-              <AgentToolResultContentView content={full.resultContent} output={full.output} />
-            )}
-          </FullToolPartDetails>
-        ) : null}
-      </div>
+      <div className={bodyClassName}>{body}</div>
     </details>
   );
 };
+
+const renderOutput = (meta: ToolMeta): ReactElement => (
+  <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
+);

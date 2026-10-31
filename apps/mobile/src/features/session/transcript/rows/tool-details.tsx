@@ -100,7 +100,8 @@ export const ToolDetails = memo(function ToolDetails(props: ToolDetailsProps): R
 
 /** The boxes of a call that compact history cut. They show the full call once a box reads it. */
 function CutToolDetails({ meta, ...props }: ToolDetailsProps): ReactElement {
-  return <ToolDetailBoxes {...props} meta={useToolPartDetails(meta, false).meta} />;
+  const details = useToolPartDetails(meta, false);
+  return <ToolDetailBoxes {...props} meta={details.meta} />;
 }
 
 function ToolDetailBoxes({
