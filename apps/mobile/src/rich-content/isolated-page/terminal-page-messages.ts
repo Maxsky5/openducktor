@@ -28,6 +28,10 @@ const platformSchema = z.enum(["darwin", "linux", "win32"]) satisfies z.ZodType<
 const touchKeySchema = z.enum([
   "Escape",
   "Tab",
+  "ShiftTab",
+  "Enter",
+  "Backspace",
+  "Delete",
   "ArrowUp",
   "ArrowDown",
   "ArrowLeft",
@@ -92,6 +96,8 @@ const terminalPageInboundSchema = z.discriminatedUnion("type", [
     row: sequenceSchema,
     follow: z.boolean(),
   }),
+  z.strictObject({ type: z.literal("terminal_select_all") }),
+  z.strictObject({ type: z.literal("terminal_clear_selection") }),
   z.strictObject({ type: z.literal("terminal_focus") }),
   z.strictObject({ type: z.literal("terminal_blur") }),
 ]);

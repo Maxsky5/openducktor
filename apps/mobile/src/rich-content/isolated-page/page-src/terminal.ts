@@ -23,12 +23,7 @@ import { createTerminalOutputSequencer } from "@openducktor/frontend-core/termin
 import { restoreTerminalPrecedingJoinState } from "@openducktor/frontend-core/terminals/terminal-rep-state";
 import { checkHttpUrl } from "@openducktor/frontend-core/terminals/terminal-url-policy";
 import { createLiveTerminalFitScheduler } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
-import {
-  Terminal,
-  type XtermPageElement,
-  type XtermTouch,
-  type XtermTouchEvent,
-} from "@xterm/xterm/lib/xterm.mjs";
+import { Terminal, type XtermPageElement } from "@xterm/xterm/lib/xterm.mjs";
 import { decodeBase64 } from "../terminal-bytes";
 import {
   MAX_TERMINAL_PAGE_TEXT_LENGTH,
@@ -38,6 +33,8 @@ import {
 } from "../terminal-page-messages";
 import { startPageChannel } from "./shared/page-runtime";
 import { installTerminalTextInput, type TerminalTextInput } from "./shared/terminal-text-input";
+import { installTerminalTouchSelection } from "./shared/terminal-touch-selection";
+import { installTerminalScroll } from "./shared/terminal-scroll";
 
 // The app type check has no DOM library, so the page declares the DOM members that it reads.
 type PageFontFace = { readonly family: string };
@@ -55,12 +52,10 @@ declare function cancelAnimationFrame(frameId: number): void;
 const FONT_FAMILY = '"IBM Plex Mono", Menlo, "Courier New", monospace';
 const LINE_HEIGHT = 1.35;
 const SCROLLBACK_ROWS = 2000;
-// The page keeps room for the xterm.js scroll bar, as the xterm.js fit add-on does.
-const SCROLL_BAR_WIDTH = 14;
+// The page keeps room for the touch scrollbar beside the grid.
+const SCROLL_BAR_WIDTH = 48;
 const PADDING = { x: 8, y: 4 };
 const MAX_GRID = { columns: 500, rows: 300 };
-const LONG_PRESS_MS = 450;
-const TOUCH_SLOP_PX = 10;
 const NO_MODIFIERS: TerminalKeyModifiers = { ctrl: false, alt: false };
 
 const root = document.getElementById("root");
@@ -208,7 +203,8 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
   opening = false;
   if (latestConfiguration !== null) applyConfiguration(created, latestConfiguration);
   installLinks(created);
-  installTouch(created);
+  installTerminalScroll(created, screenRoot);
+  installTerminalTouchSelection(created);
   created.onData((data) => {
     if (pasting || (!heldModifiers.ctrl && !heldModifiers.alt)) {
       sendInput(data);
@@ -273,129 +269,6 @@ const installLinks = (current: Terminal): void => {
   current.buffer.onBufferChange(reader.clear);
 };
 
-/**
- * A long press selects text. A short drag scrolls xterm's rows, since its scrollbar has no
- * touch handler.
- */
-const installTouch = (current: Terminal): void => {
-  let timer: number | null = null;
-  let start: XtermTouch | null = null;
-  let anchor: number | null = null;
-  let scrollRow = 0;
-  let scrolling = false;
-
-  const cellIndex = (touch: XtermTouch): number | null => {
-    const screen = screenRoot.querySelector(".xterm-screen");
-    if (screen === null) return null;
-    const rect = screen.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return null;
-    const column = Math.floor(((touch.clientX - rect.left) / rect.width) * current.cols);
-    const row = Math.floor(((touch.clientY - rect.top) / rect.height) * current.rows);
-    const clampedColumn = Math.min(current.cols - 1, Math.max(0, column));
-    const clampedRow = Math.min(current.rows - 1, Math.max(0, row));
-    return (current.buffer.active.viewportY + clampedRow) * current.cols + clampedColumn;
-  };
-  const selectWord = (index: number): void => {
-    const row = Math.floor(index / current.cols);
-    const column = index % current.cols;
-    const text = current.buffer.active.getLine(row)?.translateToString(false) ?? "";
-    const isWord = (character: string | undefined) =>
-      character !== undefined && /\S/u.test(character);
-    if (!isWord(text[column])) {
-      current.select(column, row, 1);
-      return;
-    }
-    let first = column;
-    let last = column;
-    while (first > 0 && isWord(text[first - 1])) first -= 1;
-    while (last < text.length - 1 && isWord(text[last + 1])) last += 1;
-    current.select(first, row, last - first + 1);
-  };
-  const selectRange = (from: number, to: number): void => {
-    const first = Math.min(from, to);
-    current.select(first % current.cols, Math.floor(first / current.cols), Math.abs(to - from) + 1);
-  };
-  const cancelPress = (): void => {
-    if (timer !== null) clearTimeout(timer);
-    timer = null;
-  };
-
-  const terminalElement = current.element;
-  if (terminalElement === undefined) throw new Error("The terminal has no page element.");
-  const capture = { capture: true, passive: false };
-  terminalElement.addEventListener(
-    "touchstart",
-    (event) => {
-      cancelPress();
-      anchor = null;
-      start = null;
-      scrolling = false;
-      const touch = event.touches[0];
-      if (event.touches.length !== 1 || touch === undefined) return;
-      start = { clientX: touch.clientX, clientY: touch.clientY };
-      scrollRow = current.buffer.active.viewportY;
-      timer = setTimeout(() => {
-        timer = null;
-        if (start === null) return;
-        anchor = cellIndex(start);
-        if (anchor !== null) selectWord(anchor);
-      }, LONG_PRESS_MS);
-    },
-    capture,
-  );
-  terminalElement.addEventListener(
-    "touchmove",
-    (event) => {
-      const touch = event.touches[0];
-      if (touch === undefined) return;
-      if (anchor === null) {
-        if (start === null) return;
-        const distance = Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY);
-        if (!scrolling && distance <= TOUCH_SLOP_PX) return;
-        scrolling = true;
-        cancelPress();
-        const screen = screenRoot.querySelector(".xterm-screen");
-        if (screen === null) return;
-        const rowHeight = screen.getBoundingClientRect().height / current.rows;
-        if (rowHeight <= 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        current.scrollToLine(scrollRow + Math.round((start.clientY - touch.clientY) / rowHeight));
-        return;
-      }
-      // While a selection grows, the finger does not scroll the terminal.
-      event.preventDefault();
-      event.stopPropagation();
-      const index = cellIndex(touch);
-      if (index !== null) selectRange(anchor, index);
-    },
-    capture,
-  );
-  const endPress = (event: XtermTouchEvent): void => {
-    cancelPress();
-    start = null;
-    if (anchor === null && !scrolling) return;
-    anchor = null;
-    scrolling = false;
-    // A drag or long press does not also tap the terminal.
-    event.preventDefault();
-  };
-  terminalElement.addEventListener("touchend", endPress, capture);
-  terminalElement.addEventListener("touchcancel", endPress, capture);
-  // A long press also opens the context menu. For a desktop right click, xterm.js then puts the
-  // selection into its text field, focuses the field, and selects the text there. On a phone that
-  // opens the keyboard, whose resize drops the selection, keeps the Android selection menu open, and
-  // puts text into the field that the shell never got.
-  terminalElement.addEventListener(
-    "contextmenu",
-    (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    capture,
-  );
-};
-
 const restore = (
   current: Terminal,
   message: Extract<TerminalPageInbound, { type: "terminal_restore" }>,
@@ -429,6 +302,7 @@ type ConfigureMessage = Extract<TerminalPageInbound, { type: "terminal_configure
 const applyConfiguration = (current: Terminal, message: ConfigureMessage): void => {
   current.options.theme = themeOf(message.colors);
   current.options.screenReaderMode = message.screenReaderMode ?? true;
+  screenRoot.style.setProperty("--terminal-selection-handle", message.colors.foreground);
   setInputEnabled(current, message.inputEnabled);
   if (current.options.fontSize !== message.fontSize) {
     current.options.fontSize = message.fontSize;
@@ -489,6 +363,13 @@ function receive(message: TerminalPageInbound): void {
       }
       textInput?.fieldReplaced();
       return;
+    case "terminal_select_all":
+      current.selectAll();
+      return;
+    case "terminal_clear_selection":
+      current.clearSelection();
+      document.getSelection()?.removeAllRanges();
+      return;
     case "terminal_copy_selection":
       copySelection(current.getSelection());
       // The copy ends the selection, as Copy in a selection menu does. A screen reader selection of
@@ -520,9 +401,11 @@ function receive(message: TerminalPageInbound): void {
       return;
     }
     case "terminal_focus":
+      if (current.textarea) current.textarea.inputMode = "text";
       current.focus();
       return;
     case "terminal_blur":
+      if (current.textarea) current.textarea.inputMode = "none";
       current.blur();
       return;
   }

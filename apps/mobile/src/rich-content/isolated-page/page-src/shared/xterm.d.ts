@@ -6,6 +6,10 @@
 declare module "@xterm/xterm/lib/xterm.mjs" {
   export type XtermDisposable = { dispose(): void };
   export type XtermEvent<Value> = (listener: (value: Value) => void) => XtermDisposable;
+  export type XtermMarker = XtermDisposable & {
+    readonly line: number;
+    readonly onDispose: XtermEvent<void>;
+  };
 
   export type XtermRect = {
     readonly left: number;
@@ -15,6 +19,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   };
   export type XtermTouch = { readonly clientX: number; readonly clientY: number };
   export type XtermTouchEvent = {
+    readonly target: object | null;
     readonly touches: ArrayLike<XtermTouch>;
     preventDefault(): void;
     stopPropagation(): void;
@@ -22,6 +27,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   /** The page DOM element members that the page reads. */
   export type XtermPageElement = {
     readonly style: { setProperty(name: string, value: string): void };
+    append(...nodes: Array<object | string>): void;
     getBoundingClientRect(): XtermRect;
     querySelector(selector: string): XtermPageElement | null;
     addEventListener(
@@ -38,11 +44,12 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   /** The hidden text field that takes keyboard and input method text. */
   export type XtermTextArea = {
     value: string;
+    inputMode: string;
     addEventListener(
       type: "input",
       listener: (event: { readonly inputType: string }) => void,
     ): void;
-    addEventListener(type: "focus" | "select", listener: () => void): void;
+    addEventListener(type: "focus" | "blur" | "select", listener: () => void): void;
   };
   export type XtermKeyboardEvent = {
     readonly altKey: boolean;
@@ -66,6 +73,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   };
   export type XtermBuffer = {
     readonly baseY: number;
+    readonly cursorY: number;
     readonly viewportY: number;
     readonly length: number;
     getLine(row: number): XtermBufferLine | undefined;
@@ -120,6 +128,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
     options: XtermOptions;
     readonly onData: XtermEvent<string>;
     readonly onResize: XtermEvent<{ cols: number; rows: number }>;
+    readonly onRender: XtermEvent<{ start: number; end: number }>;
     readonly onScroll: XtermEvent<number>;
     readonly onSelectionChange: XtermEvent<void>;
     readonly onWriteParsed: XtermEvent<void>;
@@ -133,8 +142,11 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
     input(data: string, wasUserInput?: boolean): void;
     hasSelection(): boolean;
     getSelection(): string;
+    getSelectionPosition(): XtermCellRange | undefined;
     select(column: number, row: number, length: number): void;
     selectAll(): void;
+    scrollLines(amount: number): void;
+    registerMarker(cursorYOffset: number): XtermMarker;
     clearSelection(): void;
     attachCustomKeyEventHandler(handler: (event: XtermKeyboardEvent) => boolean): void;
     registerLinkProvider(provider: {

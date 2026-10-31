@@ -13,6 +13,7 @@ export const createTerminalSessionsFixture = (
   startBlockedReason: null,
   tabs: [],
   closingTabIds: new Set(),
+  activityStatus: "ready",
   runningCommandTerminalIds: new Set(),
   isSynced: true,
   mountedTabs: [],

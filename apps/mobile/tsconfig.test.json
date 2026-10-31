@@ -13,6 +13,7 @@
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/test-support",
+    "src/rich-content/isolated-page/page-src/shared/xterm.d.ts",
     "scripts",
     "app.config.ts",
     "src/theme/unistyles.ts"

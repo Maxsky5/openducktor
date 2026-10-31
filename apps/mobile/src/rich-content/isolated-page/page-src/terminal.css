@@ -26,6 +26,7 @@ body {
 
 /* xterm.js stays hidden until it parsed the attachment snapshot. */
 #root {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -35,4 +36,78 @@ body {
 
 #root .xterm {
   height: 100%;
+  position: sticky;
+  top: 0;
+}
+
+.terminal-scroll-viewport {
+  position: absolute;
+  inset: 4px 56px 4px 8px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.terminal-scroll-viewport::-webkit-scrollbar,
+#root .xterm-scrollable-element > .scrollbar {
+  display: none;
+}
+
+.terminal-scrollbar {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  bottom: 4px;
+  width: 48px;
+  touch-action: none;
+}
+
+.terminal-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 8px;
+  border-radius: 4px;
+  background: var(--terminal-selection-handle);
+  opacity: 0.4;
+}
+
+.terminal-scrollbar:active .terminal-scrollbar-thumb {
+  opacity: 0.8;
+}
+
+/* Handle touch listeners stop propagation; mouse input bubbles to xterm. */
+.terminal-selection-handle {
+  position: absolute;
+  z-index: 5;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+}
+
+.terminal-selection-handle::before {
+  content: "";
+  position: absolute;
+  top: var(--stem-y);
+  left: var(--stem-x);
+  width: 2px;
+  height: var(--stem-length);
+  background: var(--terminal-selection-handle);
+  transform-origin: top center;
+  transform: rotate(var(--stem-angle));
+}
+
+.terminal-selection-handle::after {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--terminal-selection-handle);
 }

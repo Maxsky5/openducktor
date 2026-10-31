@@ -39,7 +39,6 @@ function KeyButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      hitSlop={KEY_HIT_SLOP}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={selected === undefined ? { disabled } : { disabled, selected }}
@@ -68,9 +67,8 @@ function KeyButton({
 const PASTE_CONTENT_TYPES: Clipboard.AcceptedContentType[] = ["plain-text"];
 
 /** The keys keep a compact look and a touch area of the platform minimum. */
-const KEY_HIT_SLOP = { top: 6, bottom: 6, left: 2, right: 2 };
-const KEY_MIN_WIDTH = 40;
-const KEY_HEIGHT = 36;
+const KEY_MIN_WIDTH = Platform.select({ ios: 44, default: 48 });
+const KEY_HEIGHT = KEY_MIN_WIDTH;
 
 const ARROWS: ReadonlyArray<{ key: TerminalTouchKey; icon: IconName; label: string }> = [
   { key: "ArrowLeft", icon: "arrow-left", label: "Left arrow" },
@@ -79,11 +77,23 @@ const ARROWS: ReadonlyArray<{ key: TerminalTouchKey; icon: IconName; label: stri
   { key: "ArrowRight", icon: "arrow-right", label: "Right arrow" },
 ];
 
+const EDITING_KEYS: ReadonlyArray<{
+  key: TerminalTouchKey;
+  label: string;
+  accessibilityLabel: string;
+}> = [
+  { key: "ShiftTab", label: "⇧ tab", accessibilityLabel: "Shift plus Tab" },
+  { key: "Backspace", label: "⌫", accessibilityLabel: "Backspace" },
+  { key: "Delete", label: "del", accessibilityLabel: "Delete" },
+  { key: "Enter", label: "↵", accessibilityLabel: "Enter" },
+];
+
 export type TerminalKeyBarProps = {
   /** False for an exited or lost terminal and while host commands are closed. */
   inputEnabled: boolean;
   modifiers: TerminalKeyModifiers;
   canCopy: boolean;
+  canSelect: boolean;
   keyboardVisible: boolean;
   onKey: (key: TerminalTouchKey) => void;
   onToggleModifier: (modifier: keyof TerminalKeyModifiers) => void;
@@ -92,24 +102,28 @@ export type TerminalKeyBarProps = {
   /** Pastes the text of the iOS paste control. */
   onPasteText: (text: string) => void;
   onCopy: () => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
   onToggleKeyboard: () => void;
 };
 
 /**
- * The touch key row above the keyboard: Esc, Tab, sticky Ctrl and Alt, the arrows, Paste, Copy,
- * and the keyboard toggle. A held modifier applies to the next key or typed character, and shows
- * as a light key, as the Shift key of the system keyboard does.
+ * Editing keys scroll above a fixed row of selection, clipboard, and keyboard controls.
+ * A held modifier applies to the next key or typed character.
  */
 export function TerminalKeyBar({
   inputEnabled,
   modifiers,
   canCopy,
+  canSelect,
   keyboardVisible,
   onKey,
   onToggleModifier,
   onPaste,
   onPasteText,
   onCopy,
+  onSelectAll,
+  onClearSelection,
   onToggleKeyboard,
 }: TerminalKeyBarProps): ReactElement {
   const theme = useAppTheme();
@@ -128,117 +142,153 @@ export function TerminalKeyBar({
   };
   return (
     <View style={styles.bar}>
-      <View style={styles.scroller}>
-        <ScrollView
-          horizontal
-          keyboardShouldPersistTaps="always"
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.keys}
-          onLayout={(event) => updateScroll({ viewport: event.nativeEvent.layout.width })}
-          onContentSizeChange={(width) => updateScroll({ content: width })}
-          onScroll={(event) => updateScroll({ offset: event.nativeEvent.contentOffset.x })}
-          scrollEventThrottle={32}
-          accessibilityRole="toolbar"
-          accessibilityLabel="Terminal keys"
-        >
-          <View style={styles.group}>
-            <KeyButton
-              label="esc"
-              accessibilityLabel="Escape"
-              disabled={disabled}
-              onPress={() => onKey("Escape")}
-            />
-            <KeyButton
-              label="tab"
-              accessibilityLabel="Tab"
-              disabled={disabled}
-              onPress={() => onKey("Tab")}
-            />
-            <KeyButton
-              label="ctrl"
-              accessibilityLabel="Control, applies to the next key"
-              selected={modifiers.ctrl}
-              disabled={disabled}
-              onPress={() => toggleModifier("ctrl")}
-            />
-            <KeyButton
-              label="alt"
-              accessibilityLabel="Alt, applies to the next key"
-              selected={modifiers.alt}
-              disabled={disabled}
-              onPress={() => toggleModifier("alt")}
-            />
-          </View>
-          <View style={styles.group}>
-            {ARROWS.map((arrow) => (
+      <View style={styles.keyRow}>
+        <View style={styles.scroller}>
+          <ScrollView
+            horizontal
+            keyboardShouldPersistTaps="always"
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.keys}
+            onLayout={(event) => updateScroll({ viewport: event.nativeEvent.layout.width })}
+            onContentSizeChange={(width) => updateScroll({ content: width })}
+            onScroll={(event) => updateScroll({ offset: event.nativeEvent.contentOffset.x })}
+            scrollEventThrottle={32}
+            accessibilityRole="toolbar"
+            accessibilityLabel="Terminal keys"
+          >
+            <View style={styles.group}>
               <KeyButton
-                key={arrow.key}
-                label={arrow.label}
-                accessibilityLabel={arrow.label}
-                icon={arrow.icon}
+                label="esc"
+                accessibilityLabel="Escape"
                 disabled={disabled}
-                onPress={() => onKey(arrow.key)}
+                onPress={() => onKey("Escape")}
               />
-            ))}
-          </View>
-          <View style={styles.group}>
-            {Clipboard.isPasteButtonAvailable && !disabled ? (
-              // iOS asks the user each time the app reads text that another app copied, and a
-              // denial reads as an empty clipboard. The system paste control reads it with no prompt.
-              <Clipboard.ClipboardPasteButton
-                acceptedContentTypes={PASTE_CONTENT_TYPES}
-                displayMode="iconOnly"
-                cornerStyle="small"
-                backgroundColor={theme.colors.terminalBorder}
-                foregroundColor={theme.colors.terminalForeground}
-                style={styles.pasteControl}
-                onPress={(data) => {
-                  if (data.type === "text") onPasteText(data.text);
-                }}
-              />
-            ) : (
               <KeyButton
-                label="Paste"
-                accessibilityLabel="Paste from the clipboard"
-                icon="clipboard-paste"
+                label="tab"
+                accessibilityLabel="Tab"
                 disabled={disabled}
-                onPress={onPaste}
+                onPress={() => onKey("Tab")}
               />
-            )}
-            <KeyButton
-              label="Copy"
-              accessibilityLabel="Copy the selected text"
-              icon="copy"
-              disabled={!canCopy}
-              onPress={onCopy}
-            />
-          </View>
-        </ScrollView>
-        {moreKeys ? <View pointerEvents="none" style={styles.edgeFade} /> : null}
+              <KeyButton
+                label="ctrl"
+                accessibilityLabel="Control, applies to the next key"
+                selected={modifiers.ctrl}
+                disabled={disabled}
+                onPress={() => toggleModifier("ctrl")}
+              />
+              <KeyButton
+                label="alt"
+                accessibilityLabel="Alt, applies to the next key"
+                selected={modifiers.alt}
+                disabled={disabled}
+                onPress={() => toggleModifier("alt")}
+              />
+            </View>
+            <View style={styles.group}>
+              {ARROWS.map((arrow) => (
+                <KeyButton
+                  key={arrow.key}
+                  label={arrow.label}
+                  accessibilityLabel={arrow.label}
+                  icon={arrow.icon}
+                  disabled={disabled}
+                  onPress={() => onKey(arrow.key)}
+                />
+              ))}
+            </View>
+            <View style={styles.group}>
+              {EDITING_KEYS.map((editingKey) => (
+                <KeyButton
+                  key={editingKey.key}
+                  label={editingKey.label}
+                  accessibilityLabel={editingKey.accessibilityLabel}
+                  disabled={disabled}
+                  onPress={() => onKey(editingKey.key)}
+                />
+              ))}
+            </View>
+          </ScrollView>
+          {moreKeys ? <View pointerEvents="none" style={styles.edgeFade} /> : null}
+        </View>
       </View>
-      <View style={styles.pinned}>
+      <View
+        style={styles.utilities}
+        accessibilityRole="toolbar"
+        accessibilityLabel="Terminal output and keyboard"
+      >
         <KeyButton
-          label={keyboardVisible ? "Hide keyboard" : "Show keyboard"}
-          accessibilityLabel={keyboardVisible ? "Hide the keyboard" : "Show the keyboard"}
-          icon={keyboardVisible ? "keyboard-off" : "keyboard"}
-          disabled={disabled && !keyboardVisible}
-          onPress={onToggleKeyboard}
+          label="Select all"
+          accessibilityLabel="Select all terminal output"
+          disabled={!canSelect}
+          onPress={onSelectAll}
         />
+        <KeyButton
+          label="Copy"
+          icon="copy"
+          accessibilityLabel="Copy the selected text"
+          disabled={!canCopy}
+          onPress={onCopy}
+        />
+        <KeyButton
+          label="Clear"
+          icon="x"
+          accessibilityLabel="Clear the selection"
+          disabled={!canCopy}
+          onPress={onClearSelection}
+        />
+        {Clipboard.isPasteButtonAvailable && !disabled ? (
+          // The iOS system control reads text without a paste permission prompt.
+          <Clipboard.ClipboardPasteButton
+            acceptedContentTypes={PASTE_CONTENT_TYPES}
+            displayMode="iconOnly"
+            cornerStyle="small"
+            backgroundColor={theme.colors.terminalBorder}
+            foregroundColor={theme.colors.terminalForeground}
+            style={styles.pasteControl}
+            onPress={(data) => {
+              if (data.type === "text") onPasteText(data.text);
+            }}
+          />
+        ) : (
+          <KeyButton
+            label="Paste"
+            accessibilityLabel="Paste from the clipboard"
+            icon="clipboard-paste"
+            disabled={disabled}
+            onPress={onPaste}
+          />
+        )}
+        <View style={styles.pinned}>
+          <KeyButton
+            label={keyboardVisible ? "Hide keyboard" : "Show keyboard"}
+            accessibilityLabel={keyboardVisible ? "Hide the keyboard" : "Show the keyboard"}
+            icon={keyboardVisible ? "keyboard-off" : "keyboard"}
+            disabled={disabled && !keyboardVisible}
+            onPress={onToggleKeyboard}
+          />
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  // The row reads as part of the terminal: the terminal surface with a terminal border on top.
+  // The rows read as part of the terminal: the terminal surface with a terminal border on top.
   bar: {
-    flexDirection: "row",
-    alignItems: "center",
     borderTopWidth: theme.hairline,
     borderTopColor: theme.colors.terminalBorder,
     backgroundColor: theme.colors.terminalSurface,
   },
-  // The key row takes the width that the pinned key leaves. It holds the scroll view and its fade.
+  keyRow: { flexDirection: "row", alignItems: "center" },
+  utilities: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.space.xs,
+    paddingHorizontal: theme.space.xs,
+    paddingBottom: theme.space.xs,
+  },
+  // The editing row scrolls within the available width.
   scroller: { flexGrow: 1, flexShrink: 1 },
   edgeFade: {
     position: "absolute",
@@ -257,7 +307,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 6,
   },
   group: { flexDirection: "row", alignItems: "center", gap: 6 },
-  pinned: { paddingLeft: theme.space.xs, paddingRight: theme.space.sm },
+  pinned: { marginLeft: "auto" },
   key: {
     minWidth: KEY_MIN_WIDTH,
     // A text key grows with a large text size, so its label does not clip.

@@ -38,6 +38,12 @@ describe("terminal page messages", () => {
       { type: "terminal_modifiers", ctrl: false, alt: true },
       { type: "terminal_paste", text: "ls -la\n" },
       { type: "terminal_copy_selection" },
+      { type: "terminal_select_all" },
+      { type: "terminal_clear_selection" },
+      { type: "terminal_key", key: "ShiftTab", ctrl: false, alt: false },
+      { type: "terminal_key", key: "Enter", ctrl: false, alt: false },
+      { type: "terminal_key", key: "Backspace", ctrl: false, alt: false },
+      { type: "terminal_key", key: "Delete", ctrl: false, alt: false },
       { type: "terminal_focus" },
     ];
     for (const message of messages) {

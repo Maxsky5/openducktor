@@ -1,7 +1,6 @@
 import type {
   AppPlatform,
   RepoAction,
-  TerminalActivity,
   TerminalCloseResponse,
   TerminalCreateResponse,
   TerminalLifecycle,
@@ -17,7 +16,11 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useHostClient } from "../connection/client-connection-react";
 import { platformQueryOptions } from "../queries/system";
 import { invalidateTerminalList, terminalListByFilterQueryOptions } from "../queries/terminals";
-import { terminalActivityOwnerKey } from "./terminal-activity-store";
+import {
+  EMPTY_TERMINAL_ACTIVITY,
+  terminalActivityOwnerKey,
+  type TerminalActivityState,
+} from "./terminal-activity-store";
 import { canRetryTerminalCreation, type TerminalTab } from "./terminal-presentation-state";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import type { TerminalBridge } from "./terminal-bridge";
@@ -53,6 +56,7 @@ export type TerminalSessionsModel = {
   /** All terminal tabs of the scope, also the tabs that are closing. */
   tabs: TerminalTab[];
   closingTabIds: ReadonlySet<string>;
+  activityStatus: TerminalActivityState["status"];
   /**
    * The terminals of the scope that run a command, from the live activity stream. The host asks
    * for a confirmation before it closes them.
@@ -77,27 +81,24 @@ export type TerminalSessionsModel = {
   onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
 };
 
-const NO_COMMANDS: readonly TerminalActivity[] = [];
-
-/** Watches the commands that the terminals of a scope run. */
-const useRunningCommandTerminalIds = (
+/** Watches the command snapshot and its readiness for this scope. */
+const useTerminalActivity = (
   controller: TerminalTransportController | null,
   scope: TerminalScope | null,
-): ReadonlySet<string> => {
+): TerminalActivityState => {
   const activityKey = scope ? terminalActivityOwnerKey(scope.context) : null;
   const subscribe = useCallback(
     (listener: () => void): (() => void) => controller?.subscribeActivity(listener) ?? (() => {}),
     [controller],
   );
-  const readCommands = useCallback(
-    (): readonly TerminalActivity[] =>
+  const readActivity = useCallback(
+    (): TerminalActivityState =>
       controller && activityKey !== null
-        ? controller.readActivity(activityKey).commands
-        : NO_COMMANDS,
+        ? controller.readActivity(activityKey)
+        : EMPTY_TERMINAL_ACTIVITY,
     [activityKey, controller],
   );
-  const commands = useSyncExternalStore(subscribe, readCommands, readCommands);
-  return useMemo(() => new Set(commands.map((command) => command.summary.terminalId)), [commands]);
+  return useSyncExternalStore(subscribe, readActivity, readActivity);
 };
 
 export const useTerminals = (
@@ -121,7 +122,11 @@ export const useTerminals = (
   const queryClient = useQueryClient();
   const { visibleState, readState, dispatch, cancelledCreates } = useTerminalPresentation(scopeKey);
   const { controller, transportError } = useTerminalTransport(terminalBridge);
-  const runningCommandTerminalIds = useRunningCommandTerminalIds(controller, scope);
+  const activity = useTerminalActivity(controller, scope);
+  const runningCommandTerminalIds = useMemo(
+    () => new Set(activity.commands.map((command) => command.summary.terminalId)),
+    [activity.commands],
+  );
   const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
   const terminalOptions = terminalListByFilterQueryOptions({
     filter: scope === null ? null : listFilter,
@@ -334,6 +339,7 @@ export const useTerminals = (
       startBlockedReason,
       tabs: visibleState.tabs,
       closingTabIds,
+      activityStatus: activity.status,
       runningCommandTerminalIds,
       isSynced,
       mountedTabs,
@@ -352,6 +358,7 @@ export const useTerminals = (
       onForgotten: forgetTerminal,
     }),
     [
+      activity.status,
       changeLifecycle,
       changeTitle,
       closeTerminal,

@@ -55,9 +55,24 @@ const model = (tabs: TerminalTab[], closing: string[] = [], running: string[] = 
   tabs,
   closingTabIds: new Set(closing),
   runningCommandTerminalIds: new Set(running),
+  activityStatus: "ready" as const,
 });
 
 describe("buildTerminalRows", () => {
+  test.each(["loading", "unavailable"] as const)(
+    "does not call an absent command idle while activity is %s",
+    (activityStatus) => {
+      const rows = buildTerminalRows({
+        ...model([ready(), ready({ terminalId: "t-2" })], [], ["t-2"]),
+        activityStatus,
+      });
+      expect(rows.map(({ stateLabel, runsCommand }) => ({ stateLabel, runsCommand }))).toEqual([
+        { stateLabel: "Activity unknown", runsCommand: false },
+        { stateLabel: "Running", runsCommand: true },
+      ]);
+    },
+  );
+
   test("shows the title, who started each terminal, and its state as text", () => {
     const rows = buildTerminalRows(
       model(
@@ -82,7 +97,7 @@ describe("buildTerminalRows", () => {
     expect(
       rows.map(({ title, stateLabel, stateTone }) => ({ title, stateLabel, stateTone })),
     ).toEqual([
-      { title: "zsh", stateLabel: "Running", stateTone: "running" },
+      { title: "zsh", stateLabel: "Idle", stateTone: "neutral" },
       { title: "Setup", stateLabel: "Running", stateTone: "running" },
       { title: "zsh", stateLabel: "Exited", stateTone: "neutral" },
     ]);
@@ -154,9 +169,18 @@ describe("buildTerminalRows", () => {
     ]);
   });
 
-  test("shows closing terminals as Closing", () => {
-    const [row] = buildTerminalRows(model([ready()], ["tab:t-1"]));
-    expect(row).toMatchObject({ stateLabel: "Closing", closing: true });
+  test("keeps lifecycle states when activity still names a closing or exited terminal", () => {
+    const rows = buildTerminalRows(
+      model(
+        [ready(), ready({ terminalId: "t-2", lifecycle: "exited" })],
+        ["tab:t-1"],
+        ["t-1", "t-2"],
+      ),
+    );
+    expect(rows.map(({ stateLabel, runsCommand }) => ({ stateLabel, runsCommand }))).toEqual([
+      { stateLabel: "Closing", runsCommand: false },
+      { stateLabel: "Exited", runsCommand: false },
+    ]);
   });
 });
 

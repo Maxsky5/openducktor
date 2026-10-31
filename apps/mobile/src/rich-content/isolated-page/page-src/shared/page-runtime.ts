@@ -43,6 +43,18 @@ export type PageElement = {
   cloneNode(deep: true): PageElement;
   getBoundingClientRect(): PageRect;
   addEventListener(type: "click", listener: (event: PageClickEvent) => void): void;
+  addEventListener(
+    type: "touchstart" | "touchmove" | "touchend" | "touchcancel",
+    listener: (event: PageTouchEvent) => void,
+    options: { capture: boolean; passive: boolean },
+  ): void;
+};
+
+type PageTouchEvent = {
+  readonly target: object | null;
+  readonly touches: ArrayLike<{ readonly clientX: number; readonly clientY: number }>;
+  preventDefault(): void;
+  stopPropagation(): void;
 };
 
 type PageClickEvent = { readonly target: PageElement | null; preventDefault(): void };

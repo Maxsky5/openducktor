@@ -1,6 +1,5 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import type { TerminalTouchKey } from "@openducktor/frontend-core/terminals/terminal-keyboard-policy";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { checkHttpUrl } from "@openducktor/frontend-core/terminals/terminal-url-policy";
@@ -46,8 +45,6 @@ import { INPUT_DELIVERY_UNKNOWN, type TerminalSessionState } from "./terminal-se
 import { NO_TOUCH_MODIFIERS, touchModifiersReducer } from "./touch-key-modifiers";
 import { useTerminalSession } from "./use-terminal-session";
 import { KeyboardInsetView } from "@/ui/keyboard-inset-view";
-import { terminalCommandResultLabel } from "./terminal-command-result-label";
-import type { TerminalCommandResult } from "@openducktor/contracts";
 
 /**
  * The terminal list members that one terminal view reads. The view takes them one by one, so a
@@ -171,6 +168,9 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     if (pageReady) post({ type: "terminal_modifiers", ...modifiers });
   }, [modifiers, pageReady, post]);
+  useEffect(() => {
+    if (pageReady && !keyboardVisible) post({ type: "terminal_blur" });
+  }, [keyboardVisible, pageReady, post]);
 
   const onPageReady = useCallback(() => setReadyPageKey(pageKey), [pageKey]);
   const onPageMessage = useCallback(
@@ -233,6 +233,8 @@ export const TerminalView = memo(function TerminalView({
   }, [feedback, pasteText]);
   // The page answers with the selected text, which goes to `copy`.
   const copySelection = useCallback(() => post({ type: "terminal_copy_selection" }), [post]);
+  const selectAll = useCallback(() => post({ type: "terminal_select_all" }), [post]);
+  const clearSelection = useCallback(() => post({ type: "terminal_clear_selection" }), [post]);
   const toggleKeyboard = useCallback(() => {
     if (!pageReady) return;
     if (keyboardVisible) {
@@ -276,6 +278,7 @@ export const TerminalView = memo(function TerminalView({
               onFailure={onPageFailure}
               onRestart={restartPage}
               keyboardInput
+              scrollEnabled
               style={styles.page}
             />
           ) : null}
@@ -304,7 +307,6 @@ export const TerminalView = memo(function TerminalView({
             </View>
           ) : null}
         </View>
-        <TerminalInitialCommandNotice result={tab.summary.initialCommandResult} />
         <TerminalBottomNotices
           state={state}
           exited={lifecycle === "exited"}
@@ -315,35 +317,21 @@ export const TerminalView = memo(function TerminalView({
       <TerminalKeyBar
         inputEnabled={inputEnabled && pageReady}
         modifiers={modifiers}
-        canCopy={state.hasSelection}
+        canCopy={state.hasSelection && pageReady}
+        canSelect={state.hydrated && pageReady}
         keyboardVisible={keyboardVisible}
         onKey={sendKey}
         onToggleModifier={(modifier) => dispatchModifiers({ type: "toggled", modifier })}
         onPaste={paste}
         onPasteText={pasteText}
         onCopy={copySelection}
+        onSelectAll={selectAll}
+        onClearSelection={clearSelection}
         onToggleKeyboard={toggleKeyboard}
       />
     </KeyboardInsetView>
   );
 });
-
-function TerminalInitialCommandNotice({
-  result,
-}: {
-  result: TerminalCommandResult | undefined;
-}): ReactElement | null {
-  if (!result) return null;
-  const successful = terminalCommandSucceeded(result);
-  return (
-    <TerminalNoticeStrip
-      tone={successful ? "muted" : "warning"}
-      edge="bottom"
-      title="Initial command result."
-      message={terminalCommandResultLabel(result)}
-    />
-  );
-}
 
 /** The notices above the terminal: unavailable shortcuts and paused input. */
 function TerminalTopNotices({
