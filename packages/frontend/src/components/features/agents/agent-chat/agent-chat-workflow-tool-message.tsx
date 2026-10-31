@@ -1,4 +1,3 @@
-import { AgentToolResultContentView } from "./agent-tool-result-content";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +12,7 @@ import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agen
 import { toolIcon } from "./agent-chat-tool-icon";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
 import { ToolJsonDetails } from "./agent-chat-tool-json-details";
+import { ToolOutputDetails } from "./agent-chat-tool-output-details";
 import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 
 const WORKFLOW_TOOL_APPEARANCE = {
@@ -124,27 +124,18 @@ export const WorkflowToolMessage = ({
         <div className="space-y-2">
           {hasInput && meta.input ? (
             <ToolInputDetails
-              input={meta.input}
+              meta={meta}
               workingDirectory={sessionWorkingDirectory}
               className="rounded border border-current/20 bg-card"
               textClassName="text-current"
             />
           ) : null}
-          {meta.resultContent ? (
-            <details className="rounded border border-current/20 bg-card">
-              <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
-                Output
-              </summary>
-              <div className="space-y-2 px-2 pb-2">
-                <AgentToolResultContentView content={meta.resultContent} />
-              </div>
-            </details>
-          ) : hasOutput && meta.output ? (
-            <ToolJsonDetails
-              label="Output"
-              value={meta.output}
+          {hasOutput ? (
+            <ToolOutputDetails
+              meta={meta}
               className="rounded border border-current/20 bg-card"
-              titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+              summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+              bodyClassName="space-y-2 px-2 pb-2 text-[11px]"
             />
           ) : null}
           {hasError && meta.error ? (

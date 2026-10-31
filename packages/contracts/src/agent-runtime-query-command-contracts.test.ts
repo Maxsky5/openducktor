@@ -5,6 +5,7 @@ import {
 } from "./agent-runtime-query-command-contracts";
 
 import { HOST_COMMAND_NAMES } from "./host-command-contracts";
+import { isHostReadCommand } from "./host-read-command-contracts";
 
 const ref = { repoPath: "/repo", workingDirectory: "/repo/task", externalSessionId: "native" };
 for (const runtimeKind of ["opencode", "claude", "codex"] as const) {
@@ -67,6 +68,39 @@ test("requires a positive history limit and preserves prompt context and diff an
       runtimeHistoryAnchor: "turn",
     }).runtimeHistoryAnchor,
   ).toBe("turn");
+});
+
+test("reads compact history and one full tool part as host reads", () => {
+  const input = { ...ref, runtimeKind: "opencode", runtimePolicy: { kind: "opencode" } };
+  const { loadSessionHistory, loadSessionToolPart } = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS;
+  expect(loadSessionHistory.inputSchema.parse({ ...input, toolDetails: "on_demand" })).toEqual({
+    ...input,
+    toolDetails: "on_demand",
+  });
+  expect(loadSessionHistory.inputSchema.safeParse({ ...input, toolDetails: "full" }).success).toBe(
+    false,
+  );
+  const partInput = { ...input, partId: "part", callId: "call" };
+  expect(loadSessionToolPart.inputSchema.parse(partInput)).toEqual(partInput);
+  expect(loadSessionToolPart.inputSchema.safeParse({ ...partInput, partId: " " }).success).toBe(
+    false,
+  );
+  expect(isHostReadCommand(loadSessionToolPart.command)).toBe(true);
+  const part = {
+    kind: "tool",
+    messageId: "message",
+    partId: "part",
+    callId: "call",
+    tool: "bash",
+    toolType: "bash",
+    status: "completed",
+    output: "first characters",
+    detailsOmitted: true,
+  };
+  expect(loadSessionToolPart.responseSchema.parse(part)).toEqual(part);
+  expect(
+    loadSessionToolPart.responseSchema.safeParse({ ...part, detailsOmitted: false }).success,
+  ).toBe(false);
 });
 
 test("retires native frontend query bridges", () => {

@@ -85,6 +85,7 @@ flowchart TD
 - For 5 seconds after a return, a failed attempt still shows as Reconnecting while the next attempts run, because a VPN or a Wi-Fi radio can need a few seconds after unlock. A permanent failure shows at once.
 - The connection banner shows Reconnecting and Restoring only after 800 ms, so a quick reconnect after unlock shows nothing. A failure shows at once.
 - A host read, such as the session history, waits for the reconnect and runs again. A session history that failed while the host was away loads again when the connection returns.
+- A command reply over 32 MiB fails only that command. The connection stays connected. A host with `history.tool_details.v1` sends compact session history: it cuts long tool details, and a tool row reads its full call when the user opens its Input, Output, or Error box. See [reply size and compact history](../../docs/remote-host-protocol.md#reply-size-and-compact-history).
 - One expo-network listener stays for the app process. The iOS module cannot restart its path monitor after its last listener goes.
 - Every control that sends a host command reads one command gate. The gate is open only while the connection state is `connected`. Draft editing stays available.
 - The app never resends a mutation, reply, message, or terminal input after an unknown outcome. It reads the current host state after the reconnect.

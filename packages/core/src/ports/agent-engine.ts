@@ -209,6 +209,9 @@ export type UpdateControlledAgentSessionModelInput = SessionRef &
 export type LoadAgentSessionHistoryInput =
   import("@openducktor/contracts").AgentRuntimeLoadSessionHistoryInput;
 
+export type LoadAgentSessionToolPartInput =
+  import("@openducktor/contracts").AgentRuntimeLoadSessionToolPartInput;
+
 export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
 export type LoadAgentRuntimeCatalogInput =
@@ -357,6 +360,13 @@ export interface AgentSessionHistoryPort {
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
 }
 
+/** Reads the full details of one tool part after a history read with `toolDetails: "on_demand"`. */
+export interface AgentSessionToolPartReadPort {
+  loadSessionToolPart(
+    input: LoadAgentSessionToolPartInput,
+  ): Promise<import("@openducktor/contracts").AgentToolPart>;
+}
+
 /** Runtime-library session controls and pure history reads. Live state uses AgentSessionLivePort. */
 export interface AgentSessionPort extends AgentRuntimeSessionControlPort, AgentSessionHistoryPort {}
 
@@ -385,4 +395,5 @@ export type AgentEnginePort = AgentGeneratedImageReadPort &
   AgentCatalogPort &
   AgentSessionControlPort &
   AgentSessionHistoryPort &
+  AgentSessionToolPartReadPort &
   AgentWorkspaceInspectionPort;

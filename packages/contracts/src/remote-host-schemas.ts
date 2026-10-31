@@ -15,6 +15,12 @@ export const REMOTE_BASELINE_CAPABILITIES = [
  * and lets the client see a silent stream.
  */
 export const REMOTE_STREAM_HEARTBEAT_CAPABILITY = "streams.heartbeat.v1";
+/**
+ * The optional capability of a host that reads `toolDetails: "on_demand"` in a session history
+ * read and serves `agent_runtime_load_session_tool_part`. A remote client asks for compact history
+ * only from such a host, because an older host rejects the unknown input field.
+ */
+export const REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY = "history.tool_details.v1";
 /** The host writes a heartbeat comment on each event stream at this interval. */
 export const REMOTE_STREAM_HEARTBEAT_INTERVAL_MS = 15_000;
 export const REMOTE_CONNECTION_HEADER = "x-openducktor-connection-id";

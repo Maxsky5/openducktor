@@ -1,4 +1,3 @@
-import { AgentToolResultContentView } from "./agent-tool-result-content";
 import { type ReactElement, useState } from "react";
 import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
@@ -14,6 +13,7 @@ import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import { RegularToolSummary } from "./agent-chat-regular-tool-summary";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
+import { ToolOutputDetails } from "./agent-chat-tool-output-details";
 
 type RegularToolMessageProps = {
   meta: ToolMeta;
@@ -69,7 +69,7 @@ export const RegularToolMessage = ({
           <div className="ml-5 mt-1 space-y-2">
             {hasInput && meta.input ? (
               <ToolInputDetails
-                input={meta.input}
+                meta={meta}
                 workingDirectory={sessionWorkingDirectory}
                 className="rounded border border-border bg-card"
                 textClassName="text-foreground"
@@ -77,14 +77,12 @@ export const RegularToolMessage = ({
               />
             ) : null}
             {hasOutput ? (
-              <details className="rounded border border-border bg-card">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
-                  Output
-                </summary>
-                <div className="space-y-2 px-2 pb-2 text-[11px] text-foreground">
-                  <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
-                </div>
-              </details>
+              <ToolOutputDetails
+                meta={meta}
+                className="rounded border border-border bg-card"
+                summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-foreground"
+                bodyClassName="space-y-2 px-2 pb-2 text-[11px] text-foreground"
+              />
             ) : null}
             {hasError && meta.error ? (
               <details className="rounded border border-destructive-border bg-destructive-surface">

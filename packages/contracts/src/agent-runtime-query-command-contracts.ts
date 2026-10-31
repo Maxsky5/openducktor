@@ -9,7 +9,7 @@ import {
   agentSessionHistorySchema,
   agentSessionTodosSchema,
 } from "./agent-engine-schemas";
-import { agentFileReferenceSchema } from "./agent-session-event-schemas";
+import { agentFileReferenceSchema, agentToolPartSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
@@ -99,6 +99,36 @@ export const agentRuntimeLoadSessionHistoryInputSchema = z.discriminatedUnion("r
 export type AgentRuntimeLoadSessionHistoryInput = z.infer<
   typeof agentRuntimeLoadSessionHistoryInputSchema
 >;
+const historyCommandFields = {
+  ...historyFields,
+  /**
+   * `on_demand` cuts long tool details and marks each cut part with `detailsOmitted`. A remote
+   * client sends it only to a host with `REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY`.
+   */
+  toolDetails: z.literal("on_demand").optional(),
+};
+/** The wire input of `agent_runtime_load_session_history`. Runtime adapters never see `toolDetails`. */
+export const agentRuntimeLoadSessionHistoryCommandInputSchema = z.discriminatedUnion(
+  "runtimeKind",
+  [
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[0] }).strict(),
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[1] }).strict(),
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[2] }).strict(),
+  ],
+);
+const toolPartFields = {
+  ...policyBoundSessionFields,
+  partId: z.string().trim().min(1),
+  callId: z.string(),
+};
+export const agentRuntimeLoadSessionToolPartInputSchema = z.discriminatedUnion("runtimeKind", [
+  z.object({ ...toolPartFields, ...runtimePolicyBindings[0] }).strict(),
+  z.object({ ...toolPartFields, ...runtimePolicyBindings[1] }).strict(),
+  z.object({ ...toolPartFields, ...runtimePolicyBindings[2] }).strict(),
+]);
+export type AgentRuntimeLoadSessionToolPartInput = z.infer<
+  typeof agentRuntimeLoadSessionToolPartInputSchema
+>;
 export const agentRuntimeLoadSessionDiffInputSchema = agentSessionLiveRefSchema.extend({
   runtimeHistoryAnchor: z.string().trim().min(1).optional(),
 });
@@ -138,8 +168,13 @@ export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
   },
   loadSessionHistory: {
     command: "agent_runtime_load_session_history",
-    inputSchema: agentRuntimeLoadSessionHistoryInputSchema,
+    inputSchema: agentRuntimeLoadSessionHistoryCommandInputSchema,
     responseSchema: agentSessionHistorySchema,
+  },
+  loadSessionToolPart: {
+    command: "agent_runtime_load_session_tool_part",
+    inputSchema: agentRuntimeLoadSessionToolPartInputSchema,
+    responseSchema: agentToolPartSchema,
   },
   loadSessionTodos: {
     command: "agent_runtime_load_session_todos",

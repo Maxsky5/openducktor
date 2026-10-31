@@ -1,4 +1,5 @@
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { ToolPartSessionContext } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   FlashList,
@@ -44,7 +45,7 @@ import type { RowStateStore } from "./transcript-row-state";
 import { messageRowKind, type PresentToolCall } from "./transcript-row-type";
 import { type TranscriptFullView, TranscriptRowsProvider } from "./transcript-rows-context";
 import { createVisibleRowsStore, rowKeysNearViewport } from "./transcript-visibility";
-import { useTranscriptRowsContext } from "./use-transcript-rows";
+import { useToolPartSession, useTranscriptRowsContext } from "./use-transcript-rows";
 
 export type TranscriptChatListProps = {
   kind: TranscriptListKind;
@@ -167,6 +168,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     openFullView,
     beforeRowResize,
   });
+  const toolPartSession = useToolPartSession();
   // Each row type has its own views, so a reused view renders a row of the same kind.
   const getItemType = useCallback(
     (item: TranscriptListItem): string =>
@@ -251,29 +253,31 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
     >
       <TranscriptRowsProvider value={context}>
-        <FlashList
-          ref={listRef}
-          data={items}
-          inverted={inverted}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          getItemType={getItemType}
-          onScroll={onScroll}
-          onContentSizeChange={onContentSizeChange}
-          onCommitLayoutEffect={onCommitLayoutEffect}
-          onViewableItemsChanged={onViewableItemsChanged}
-          onScrollEndDrag={onRestShown}
-          onMomentumScrollEnd={onRestShown}
-          // As on desktop, no scroll bar: the list measures rows as they come near.
-          showsVerticalScrollIndicator={false}
-          // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
-          // transcript, and Android gives their taps to the list below them too.
-          keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-          keyboardShouldPersistTaps="always"
-          accessibilityLabel="Transcript"
-          accessibilityActions={accessibilityActions}
-          onAccessibilityAction={onAccessibilityAction}
-        />
+        <ToolPartSessionContext value={toolPartSession}>
+          <FlashList
+            ref={listRef}
+            data={items}
+            inverted={inverted}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            getItemType={getItemType}
+            onScroll={onScroll}
+            onContentSizeChange={onContentSizeChange}
+            onCommitLayoutEffect={onCommitLayoutEffect}
+            onViewableItemsChanged={onViewableItemsChanged}
+            onScrollEndDrag={onRestShown}
+            onMomentumScrollEnd={onRestShown}
+            // As on desktop, no scroll bar: the list measures rows as they come near.
+            showsVerticalScrollIndicator={false}
+            // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
+            // transcript, and Android gives their taps to the list below them too.
+            keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+            keyboardShouldPersistTaps="always"
+            accessibilityLabel="Transcript"
+            accessibilityActions={accessibilityActions}
+            onAccessibilityAction={onAccessibilityAction}
+          />
+        </ToolPartSessionContext>
       </TranscriptRowsProvider>
     </View>
   );

@@ -1,5 +1,6 @@
-import type { AgentToolData } from "@openducktor/contracts";
+import type { AgentToolData, AgentToolPart } from "@openducktor/contracts";
 import { normalizeSessionErrorMessage } from "../../../lib/session-error-message";
+import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -17,6 +18,66 @@ export const normalizeToolInput = (input: AgentToolData | undefined): AgentToolD
 export const normalizeToolText = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
+};
+
+type ToolMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
+
+/** The chat message meta of a tool part from history, a live event, or a full tool part read. */
+export const toToolMessageMeta = (part: AgentToolPart): ToolMessageMeta => {
+  const input = normalizeToolInput(part.input);
+  const output = normalizeToolText(part.output);
+  const error = normalizeToolText(part.error);
+  const meta: ToolMessageMeta = {
+    kind: "tool",
+    partId: part.partId,
+    callId: part.callId,
+    tool: part.tool,
+    toolType: part.toolType,
+    status: part.status,
+  };
+  if (part.inputStreaming !== undefined) meta.inputStreaming = part.inputStreaming;
+  if (part.preview) {
+    meta.preview = part.preview;
+  }
+  if (part.title) {
+    meta.title = part.title;
+  }
+  if (part.displayLabel) {
+    meta.displayLabel = part.displayLabel;
+  }
+  if (input) {
+    meta.input = input;
+  }
+  if (output) {
+    meta.output = output;
+  }
+  if (error) {
+    meta.error = error;
+  }
+  if (part.resultContent) meta.resultContent = part.resultContent;
+  if (part.fileDiffs) {
+    meta.fileDiffs = part.fileDiffs;
+  }
+  if (part.fileContent) {
+    meta.fileContent = part.fileContent;
+  }
+  if (part.fileChanges) {
+    meta.fileChanges = part.fileChanges;
+  }
+  if (part.computerUse) {
+    meta.computerUse = part.computerUse;
+  }
+  if (part.metadata) {
+    meta.metadata = part.metadata;
+  }
+  if (part.startedAtMs !== undefined) {
+    meta.startedAtMs = part.startedAtMs;
+  }
+  if (part.endedAtMs !== undefined) {
+    meta.endedAtMs = part.endedAtMs;
+  }
+  if (part.detailsOmitted) meta.detailsOmitted = true;
+  return meta;
 };
 
 export const resolveToolMessageId = (

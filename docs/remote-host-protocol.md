@@ -158,6 +158,7 @@ An additive optional capability keeps the current protocol version.
 | Optional capability | Meaning |
 |---|---|
 | `streams.heartbeat.v1` | The host writes the SSE comment `: heartbeat` on `GET R/events` and on each task stream every 15 seconds. |
+| `history.tool_details.v1` | The host reads `toolDetails: "on_demand"` in a session history read and serves `agent_runtime_load_session_tool_part`. See [reply size and compact history](#reply-size-and-compact-history). |
 
 A network path, such as a NAT, a proxy, or the Android emulator, can drop an idle stream without closing it.
 The heartbeat keeps the path busy.
@@ -174,7 +175,7 @@ Negotiation sends this client hello:
   "appVersion": "mobile-release",
   "supportedProtocolVersions": [3],
   "requiredCapabilities": ["host.work.v1", "host.events.v1", "agent.live.v1", "terminal.v2", "work.resources.v1"],
-  "optionalCapabilities": ["streams.heartbeat.v1"]
+  "optionalCapabilities": ["streams.heartbeat.v1", "history.tool_details.v1"]
 }
 ```
 
@@ -242,6 +243,23 @@ Host command failures preserve `HostInvokeFailure`, including accepted and parti
 If an Electron command fails and its error log also fails, the remote response reports the logging failure and keeps the command outcome data.
 An unreachable endpoint cannot explain whether the host stopped, remote access was disabled, or the network failed.
 Report only the evidence the platform supplies.
+
+## Reply size and compact history
+
+The remote client reads a command reply of up to 32 MiB and an event of up to 4 MiB. A larger reply to a read fails only that read with `RemoteReplyTooLargeError`, which has the code `consumer_overflow`. A larger reply to a mutation fails with `outcome_unknown`, because the host ran the mutation. The connection stays connected, and the client sends neither command again. Reconnect recovery treats this error as an error of its read, not as a lost connection, so the read's view shows it. This does not apply to the recovery steps that must finish before the connection is ready, such as the live session attach and the task stream setup. An oversized reply in one of these steps still fails the connection attempt. A larger event ends the event stream, because the client cannot skip an event without a gap.
+
+Session history grows with each tool call, so remote clients ask for compact history. With `toolDetails: "on_demand"`, `agent_runtime_load_session_history` cuts each string longer than 1024 characters in the `input`, `metadata`, `output`, and `resultContent` of a completed or failed tool part to its first 1024 characters. The host sets `detailsOmitted: true` on each part that it cut. Most row summaries read only the first characters, so they do not change. A summary that shows the `message` or `result` field of a JSON output longer than 1024 characters shows the start of the raw output instead. The full output shows when the user opens the row.
+
+The host keeps these parts and fields whole:
+
+- Running and pending tool parts, because live events still update them.
+- Tool types `question`, `todo`, and `file_edit`, because their rows read all their data.
+- The outputs of `odt_search_tasks`, `odt_create_task`, `odt_update_task`, and `odt_set_task_artifact`, because their rows parse these outputs.
+- `error`, `preview`, `title`, file diffs, file content, and computer use data.
+
+When the user opens the details of a cut row, the client reads the full part with `agent_runtime_load_session_tool_part`. Its input is the policy-bound session reference with `partId` and `callId`. The host reads the full history and returns the matching part. A part that is no longer in the history fails with `invalid_input`.
+
+The remote client asks for compact history only from a host with `history.tool_details.v1`. It adds `toolDetails` to each history read when it sends the read on such an admission. An older host does not know the field, so the client reads full history from it. Local history stays complete.
 
 ## Portable client and recovery
 

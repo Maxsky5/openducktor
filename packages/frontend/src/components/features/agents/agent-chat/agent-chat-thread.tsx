@@ -1,4 +1,6 @@
 import { AgentChatForkActionsContext } from "./agent-chat-fork-context";
+import type { ToolPartSession } from "@openducktor/frontend-core/queries/agent-session-tool-part";
+import { ToolPartSessionContext } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
@@ -88,6 +90,11 @@ export function AgentChatThread({
         : null,
     [transcript.repoPath, imageRuntimeKind, imageWorkingDirectory, imageExternalSessionId],
   );
+  const toolPartSessionScope = transcriptTarget?.sessionScope ?? null;
+  const toolPartSession = useMemo<ToolPartSession | null>(
+    () => (imageSessionRef ? { ...imageSessionRef, sessionScope: toolPartSessionScope } : null),
+    [imageSessionRef, toolPartSessionScope],
+  );
   const {
     messagesContentRef,
     renderedTurns,
@@ -120,59 +127,61 @@ export function AgentChatThread({
   return (
     <AgentChatForkActionsContext.Provider value={model.forkActions ?? null}>
       <AgentChatImageSessionContext.Provider value={imageSessionRef}>
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <AgentChatTranscript
-            emptyState={transcriptEmptyState}
-            modelCatalog={modelCatalog}
-            isStarting={isStarting}
-            isSending={isSending}
-            isInteractionEnabled={isInteractionEnabled}
-            subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-            subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-            transcriptTarget={transcriptTarget}
-            runtimePresentation={runtimePresentation}
-            messagesContainerRef={messagesContainerRef}
-            messagesContentRef={messagesContentRef}
-            renderedTurns={renderedTurns}
-            transcriptNotice={renderedTranscriptNotice}
-            userMessageAnchors={userMessageAnchors}
-            navigation={navigation}
-          />
+        <ToolPartSessionContext value={toolPartSession}>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <AgentChatTranscript
+              emptyState={transcriptEmptyState}
+              modelCatalog={modelCatalog}
+              isStarting={isStarting}
+              isSending={isSending}
+              isInteractionEnabled={isInteractionEnabled}
+              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+              transcriptTarget={transcriptTarget}
+              runtimePresentation={runtimePresentation}
+              messagesContainerRef={messagesContainerRef}
+              messagesContentRef={messagesContentRef}
+              renderedTurns={renderedTurns}
+              transcriptNotice={renderedTranscriptNotice}
+              userMessageAnchors={userMessageAnchors}
+              navigation={navigation}
+            />
 
-          {hasBottomStack ? (
-            <div className="min-h-0 overflow-y-auto">
-              <AgentChatBottomStack
-                sessionKey={sessionKey}
-                collapseResetKey={collapseResetKey}
-                interruptedTurnResume={interruptedTurnResume}
-                resumeDisabled={!isInteractionEnabled || isSending || isStarting}
-                pendingQuestions={pendingQuestionRequests}
-                pendingApprovals={pendingApprovalRequests}
-                todos={todos}
-                canSubmitQuestionAnswers={canSubmitQuestionAnswers}
-                isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
-                onSubmitQuestionAnswers={onSubmitQuestionAnswers}
-                canReplyToApprovals={canReplyToApprovals}
-                runtimeSupportedApprovalReplyOutcomes={
-                  runtimePresentation.supportedApprovalReplyOutcomes
-                }
-                isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
-                approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
-                onReplyApproval={onReplyApproval}
-                sessionAuxiliaryError={sessionAuxiliaryError}
-                runtimeStatusMessage={runtimeStatusMessage}
-                todoPanelCollapsed={todoPanelCollapsed}
-                isSessionWorking={isSessionWorking}
-                sessionAccentColor={sessionAccentColor}
-                onToggleTodoPanel={onToggleTodoPanel}
-              />
-            </div>
-          ) : null}
-          {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
-          {session ? (
-            <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} />
-          ) : null}
-        </div>
+            {hasBottomStack ? (
+              <div className="min-h-0 overflow-y-auto">
+                <AgentChatBottomStack
+                  sessionKey={sessionKey}
+                  collapseResetKey={collapseResetKey}
+                  interruptedTurnResume={interruptedTurnResume}
+                  resumeDisabled={!isInteractionEnabled || isSending || isStarting}
+                  pendingQuestions={pendingQuestionRequests}
+                  pendingApprovals={pendingApprovalRequests}
+                  todos={todos}
+                  canSubmitQuestionAnswers={canSubmitQuestionAnswers}
+                  isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
+                  onSubmitQuestionAnswers={onSubmitQuestionAnswers}
+                  canReplyToApprovals={canReplyToApprovals}
+                  runtimeSupportedApprovalReplyOutcomes={
+                    runtimePresentation.supportedApprovalReplyOutcomes
+                  }
+                  isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
+                  approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
+                  onReplyApproval={onReplyApproval}
+                  sessionAuxiliaryError={sessionAuxiliaryError}
+                  runtimeStatusMessage={runtimeStatusMessage}
+                  todoPanelCollapsed={todoPanelCollapsed}
+                  isSessionWorking={isSessionWorking}
+                  sessionAccentColor={sessionAccentColor}
+                  onToggleTodoPanel={onToggleTodoPanel}
+                />
+              </div>
+            ) : null}
+            {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
+            {session ? (
+              <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} />
+            ) : null}
+          </div>
+        </ToolPartSessionContext>
       </AgentChatImageSessionContext.Provider>
       {model.forkDialog}
     </AgentChatForkActionsContext.Provider>

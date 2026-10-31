@@ -7,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { liveSessionStreamEventName } from "@openducktor/host-client";
 import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
+import { QueryObserver } from "@tanstack/react-query";
 import { createClientQueryClient } from "../connection/client-query-client";
 import { waitForExpectation } from "../test-support/wait-for-expectation";
 import { createRemoteHostConnection } from "./remote-host-connection";
@@ -59,17 +60,41 @@ describe("createRemoteHostConnection", () => {
   });
 });
 
-describe("live sessions across a reconnect", () => {
-  const encoder = new TextEncoder();
-  const json = <Value>(value: Value): RemoteHttpResponse => ({
-    status: 200,
-    headers: {},
-    body: (async function* () {
-      yield encoder.encode(JSON.stringify(value));
-    })(),
+const encoder = new TextEncoder();
+const json = <Value>(value: Value): RemoteHttpResponse => ({
+  status: 200,
+  headers: {},
+  body: (async function* () {
+    yield encoder.encode(JSON.stringify(value));
+  })(),
+});
+const frame = <Data>(event: string, data: Data, id?: BrowserEventCursor) =>
+  `${id === undefined ? "" : `id: ${JSON.stringify(id)}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+const attached = frame("notification-frame", {
+  type: "attached",
+  cursor: { epoch: crypto.randomUUID(), sequence: 0 },
+  reason: "new",
+  health: [],
+});
+const descriptor = {
+  shell: "web",
+  appVersion: "host",
+  hostInstanceId: "instance-1",
+  accessPolicy: "network_reach",
+  protocols: [
+    { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
+  ],
+};
+const admission = () =>
+  json({
+    status: "accepted",
+    host: descriptor,
+    connectionId: crypto.randomUUID(),
+    protocolVersion: REMOTE_PROTOCOL_VERSION,
+    missingOptionalCapabilities: [],
   });
-  const frame = <Data>(event: string, data: Data, id?: BrowserEventCursor) =>
-    `${id === undefined ? "" : `id: ${JSON.stringify(id)}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+describe("live sessions across a reconnect", () => {
   const transcriptEvent = (messageId: string, sequence: number): AgentSessionLiveEnvelope => ({
     type: "transcript_event",
     sequence,
@@ -93,37 +118,14 @@ describe("live sessions across a reconnect", () => {
       { channel: "openducktor://agent-session-live-event", payload: envelope },
       { hostEpoch: "epoch-1", hostEventId, notificationCursor: null },
     );
-  const attached = frame("notification-frame", {
-    type: "attached",
-    cursor: { epoch: crypto.randomUUID(), sequence: 0 },
-    reason: "new",
-    health: [],
-  });
-
   /** A host whose event stream drops once. The second stream replays `replayed` with `gaps`. */
   const scriptedHost = (gaps: string[]) => {
     const streams: { push: (text: string) => void; drop: () => void }[] = [];
     let attaches = 0;
-    const descriptor = {
-      shell: "web",
-      appVersion: "host",
-      hostInstanceId: "instance-1",
-      accessPolicy: "network_reach",
-      protocols: [
-        { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-      ],
-    };
     const transport: RemoteTransport = {
       async request(_method, url, _headers, signal) {
         if (url === "https://host.test/remote") return json(descriptor);
-        if (url.endsWith("/connections"))
-          return json({
-            status: "accepted",
-            host: descriptor,
-            connectionId: crypto.randomUUID(),
-            protocolVersion: REMOTE_PROTOCOL_VERSION,
-            missingOptionalCapabilities: [],
-          });
+        if (url.endsWith("/connections")) return admission();
         if (url.endsWith("/events")) {
           const first = streams.length === 0;
           const queue: string[] = [
@@ -271,6 +273,81 @@ describe("live sessions across a reconnect", () => {
       stop();
     } finally {
       await connection.remote.disconnect();
+    }
+  });
+});
+
+describe("an oversized reply during recovery", () => {
+  test("fails only its read, and the connection recovers", async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let admissions = 0;
+    let reads = 0;
+    const transport: RemoteTransport = {
+      async request(_method, url, _headers, signal) {
+        if (url === "https://host.test/remote") return json(descriptor);
+        if (url.endsWith("/connections")) {
+          admissions += 1;
+          return admission();
+        }
+        if (url.endsWith("/events"))
+          return {
+            status: 200,
+            headers: {},
+            body: (async function* () {
+              yield encoder.encode(
+                frame("replay-complete", { hostChanged: false, gaps: [] }) + attached,
+              );
+              await new Promise<never>((_resolve, reject) => {
+                signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+              });
+            })(),
+          };
+        if (url.endsWith("/invoke/custom_agent_role_list")) {
+          reads += 1;
+          if (reads === 1) return json([]);
+          return {
+            status: 200,
+            headers: {},
+            body: (async function* () {
+              for (let index = 0; index < 40; index += 1) yield chunk;
+            })(),
+          };
+        }
+        return json(null);
+      },
+      openTerminal: () => Promise.reject(new Error("No terminal in this test.")),
+    };
+    const queryClient = createClientQueryClient();
+    const connection = createRemoteHostConnection({
+      endpoint: "https://host.test/remote",
+      version: "mobile-release",
+      transport,
+      queryClient,
+    });
+    const stop = new QueryObserver(queryClient, {
+      queryKey: ["custom-agent-roles"],
+      queryFn: () => connection.client.customAgentRoleList(),
+      retry: false,
+      staleTime: Infinity,
+    }).subscribe(() => {});
+    try {
+      await connection.waitForAdmission();
+      await waitForExpectation(() =>
+        expect(queryClient.getQueryState(["custom-agent-roles"])?.status).toBe("success"),
+      );
+
+      await connection.remote.retry();
+
+      expect(connection.remote.readState()).toMatchObject({ status: "connected" });
+      expect(queryClient.getQueryState(["custom-agent-roles"])).toMatchObject({
+        status: "error",
+        error: { failure: { code: "consumer_overflow" } },
+      });
+      expect({ admissions, reads }).toEqual({ admissions: 2, reads: 2 });
+    } finally {
+      stop();
+      await connection.remote.disconnect();
+      queryClient.clear();
     }
   });
 });

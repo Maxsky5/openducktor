@@ -169,6 +169,40 @@ export const agentComputerUseSchema = z
   .strict();
 export type AgentComputerUse = z.infer<typeof agentComputerUseSchema>;
 
+export const agentToolPartSchema = z
+  .object({
+    kind: z.literal("tool"),
+    messageId: z.string(),
+    partId: z.string(),
+    callId: z.string(),
+    tool: z.string(),
+    toolType: agentToolTypeSchema,
+    status: z.enum(["pending", "running", "completed", "error"]),
+    /** The model is writing tool arguments. Tool execution has not started. */
+    inputStreaming: z.boolean().optional(),
+    preview: z.string().optional(),
+    title: z.string().optional(),
+    displayLabel: z.string().optional(),
+    input: agentToolDataSchema.optional(),
+    output: z.string().optional(),
+    resultContent: z.array(agentToolResultContentSchema).optional(),
+    error: z.string().optional(),
+    fileDiffs: z.array(fileDiffSchema.strict()).optional(),
+    fileContent: z.array(fileContentSchema.strict()).optional(),
+    fileChanges: z.array(fileDiffSchema.strict()).optional(),
+    computerUse: agentComputerUseSchema.optional(),
+    metadata: agentToolDataSchema.optional(),
+    startedAtMs: finiteNonNegativeNumberSchema.optional(),
+    endedAtMs: finiteNonNegativeNumberSchema.optional(),
+    /**
+     * The host cut long strings of `input`, `metadata`, `output`, or `resultContent` to their
+     * first characters. `agent_runtime_load_session_tool_part` reads the full part.
+     */
+    detailsOmitted: z.literal(true).optional(),
+  })
+  .strict();
+export type AgentToolPart = z.infer<typeof agentToolPartSchema>;
+
 const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
   agentImageGenerationPartSchema,
   z
@@ -190,33 +224,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       completed: z.boolean(),
     })
     .strict(),
-  z
-    .object({
-      kind: z.literal("tool"),
-      messageId: z.string(),
-      partId: z.string(),
-      callId: z.string(),
-      tool: z.string(),
-      toolType: agentToolTypeSchema,
-      status: z.enum(["pending", "running", "completed", "error"]),
-      /** The model is writing tool arguments. Tool execution has not started. */
-      inputStreaming: z.boolean().optional(),
-      preview: z.string().optional(),
-      title: z.string().optional(),
-      displayLabel: z.string().optional(),
-      input: agentToolDataSchema.optional(),
-      output: z.string().optional(),
-      resultContent: z.array(agentToolResultContentSchema).optional(),
-      error: z.string().optional(),
-      fileDiffs: z.array(fileDiffSchema.strict()).optional(),
-      fileContent: z.array(fileContentSchema.strict()).optional(),
-      fileChanges: z.array(fileDiffSchema.strict()).optional(),
-      computerUse: agentComputerUseSchema.optional(),
-      metadata: agentToolDataSchema.optional(),
-      startedAtMs: finiteNonNegativeNumberSchema.optional(),
-      endedAtMs: finiteNonNegativeNumberSchema.optional(),
-    })
-    .strict(),
+  agentToolPartSchema,
   z
     .object({
       kind: z.literal("step"),

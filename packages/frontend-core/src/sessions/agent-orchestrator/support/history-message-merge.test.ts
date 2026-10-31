@@ -745,6 +745,28 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
+  test("takes the cut-details flag of a terminal tool row from the loaded history", () => {
+    const toolRow = (fields: { output: string; detailsOmitted?: true }): AgentChatMessage => ({
+      id: "tool:assistant-1:call-1",
+      role: "tool",
+      content: "Tool bash completed",
+      timestamp: "2026-03-01T09:00:02.000Z",
+      meta: {
+        kind: "tool",
+        partId: "tool-part-1",
+        callId: "call-1",
+        tool: "bash",
+        toolType: "bash",
+        status: "completed",
+        ...fields,
+      },
+    });
+    const cut = toolRow({ output: "cut", detailsOmitted: true });
+    const full = toolRow({ output: "full output" });
+    expect(mergedMessages([full], [cut])[0]?.meta).toEqual(full.meta);
+    expect(mergedMessages([cut], [full])[0]?.meta).toEqual(cut.meta);
+  });
+
   test("canonicalizes a preserved terminal tool row that already learned its call id", () => {
     const merged = mergedMessages(
       [

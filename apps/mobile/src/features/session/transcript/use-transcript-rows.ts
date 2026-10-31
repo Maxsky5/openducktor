@@ -1,5 +1,6 @@
 import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useWorkspaceChatSettings } from "@openducktor/frontend-core/queries/use-workspace-chat-settings";
+import type { ToolPartSession } from "@openducktor/frontend-core/queries/agent-session-tool-part";
 import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import { useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
@@ -28,6 +29,15 @@ export const useRowState = (
     rowState.set(activeStreamingMessageId, subagentPendingCountBySessionKey);
   }, [activeStreamingMessageId, rowState, subagentPendingCountBySessionKey]);
   return rowState;
+};
+
+/** The session whose tool rows read the full details that compact history cut. */
+export const useToolPartSession = (): ToolPartSession => {
+  const { identity, repoPath, sessionScope } = useSessionTarget();
+  return useMemo(
+    () => ({ ...identity, repoPath, sessionScope }),
+    [identity, repoPath, sessionScope],
+  );
 };
 
 /** The session facts, the stores, and the actions that every transcript row reads. */

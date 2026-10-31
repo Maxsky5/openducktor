@@ -70,6 +70,9 @@ const operations = (
   },
   readSessionTodos: async () => [],
   readSessionHistory,
+  readSessionToolPart: async () => {
+    throw new Error("Unexpected tool part read");
+  },
   loadAgentSessionHistory,
   loadAgentSessionContext: async () => undefined,
   sendAgentMessage: async () => null,

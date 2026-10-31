@@ -124,6 +124,7 @@ const createAgentEngine = (hostClient: HostClient, queryClient: QueryClient): Ag
       void queryClient.cancelQueries(filters).then(() => queryClient.invalidateQueries(filters));
       return history;
     },
+    loadSessionToolPart: (input) => hostClient.agentRuntimeLoadSessionToolPart(input),
     loadSessionTodos: (input) => hostClient.agentRuntimeLoadSessionTodos(input),
     updateSessionModel: (input) => hostClient.agentSessionControlUpdateModel(input),
     submitUserMessage: async (input) => {
