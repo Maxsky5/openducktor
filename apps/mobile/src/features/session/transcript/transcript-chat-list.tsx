@@ -23,11 +23,13 @@ import {
   type AccessibilityActionInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  findNodeHandle,
   Platform,
   StyleSheet,
   View,
 } from "react-native";
 import { KEYBOARD_DISMISS_ON_DRAG } from "@/ui/keyboard-dismiss";
+import { redrawOnScroll } from "../../../../modules/openducktor-scroll";
 import { BOTTOM_EDGE_HEIGHT } from "./transcript-follow";
 import { messageParts } from "./transcript-message-parts";
 import {
@@ -38,6 +40,7 @@ import {
   transcriptListItems,
 } from "./transcript-list-items";
 import type { ListPlace } from "./transcript-list-slots";
+import { ListShownProvider } from "./rows/disclosure";
 import { TranscriptNotice } from "./transcript-notice";
 import { TranscriptNoticeContext } from "./transcript-notice-context";
 import { TranscriptRow } from "./transcript-row";
@@ -130,40 +133,23 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     visibleRows.setVisible(shown ? rowKeysNearViewport(items, viewableIndices.current) : []);
   }, [items, shown, visibleRows]);
 
-  /** The height of a row before the reader opens or closes one of its parts. */
-  const resizingRow = useRef<{ key: string; height: number } | null>(null);
-  const rowHeight = useCallback(
-    (key: string): number | undefined => {
-      const index = itemsRef.current?.items.findIndex((row) => row.key === key) ?? -1;
-      return index < 0 ? undefined : listRef.current?.getLayout(index)?.height;
-    },
-    [itemsRef, listRef],
-  );
+  // The inverted list keeps the bottom edge of a row in place, so a row that grows would move its
+  // top. The list keeps the item above the row in place instead: the row keeps its top, and the
+  // rows under it move. A row of the list of the first rows grows down and keeps its top in place.
   const beforeRowResize = useCallback(
     (key: string) => {
-      const height = rowHeight(key);
-      resizingRow.current = height === undefined ? null : { key, height };
+      if (!inverted) return;
+      const index = itemsRef.current?.items.findIndex((row) => row.key === key) ?? -1;
+      if (index >= 0) listRef.current?.keepItemInPlace(index + 1);
     },
-    [rowHeight],
+    [inverted, itemsRef, listRef],
   );
-  // Android draws a scroll in the frame after the rows move: `View.scrollTo` asks for the redraw
-  // of the scroll view on the next frame. A change of a prop that redraws the scroll view at once
-  // makes the scroll show in the frame of the rows. Both fading edge values turn the fade off.
-  const [redrawScroll, setRedrawScroll] = useState(false);
-  // The inverted list keeps the bottom edge of a row in place, so a row that grows moves its top.
-  // After the list measures the row again, the list moves by the growth, so the row stays put.
-  // A row of the list of the first rows grows down and keeps its top in place.
-  const onCommitLayoutEffect = useCallback(() => {
-    const resizing = resizingRow.current;
-    const list = listRef.current;
-    if (resizing === null || list === null) return;
-    resizingRow.current = null;
-    const growth = (rowHeight(resizing.key) ?? resizing.height) - resizing.height;
-    if (!inverted || growth === 0) return;
-    const offset = Math.max(0, list.getAbsoluteLastScrollOffset() + growth);
-    list.scrollToOffset({ offset, animated: false });
-    if (Platform.OS === "android") setRedrawScroll((redraw) => !redraw);
-  }, [inverted, listRef, rowHeight]);
+  // On Android, the scroll view draws each scroll in the frame of the layout change that caused it.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const viewTag = findNodeHandle(listRef.current?.getNativeScrollRef() ?? null);
+    if (viewTag !== null && viewTag !== undefined) redrawOnScroll(viewTag);
+  }, [listRef]);
 
   const context = useTranscriptRowsContext({
     visibleRows,
@@ -257,30 +243,30 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
     >
       <TranscriptRowsProvider value={context}>
-        <FlashList
-          ref={listRef}
-          data={items}
-          inverted={inverted}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          getItemType={getItemType}
-          onScroll={onScroll}
-          onContentSizeChange={onContentSizeChange}
-          onCommitLayoutEffect={onCommitLayoutEffect}
-          onViewableItemsChanged={onViewableItemsChanged}
-          onScrollEndDrag={onRestShown}
-          onMomentumScrollEnd={onRestShown}
-          // As on desktop, no scroll bar: the list measures rows as they come near.
-          showsVerticalScrollIndicator={false}
-          fadingEdgeLength={redrawScroll ? NO_FADING_EDGE : 0}
-          // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
-          // transcript, and Android gives their taps to the list below them too.
-          keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-          keyboardShouldPersistTaps="always"
-          accessibilityLabel="Transcript"
-          accessibilityActions={accessibilityActions}
-          onAccessibilityAction={onAccessibilityAction}
-        />
+        <ListShownProvider value={shown}>
+          <FlashList
+            ref={listRef}
+            data={items}
+            inverted={inverted}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            getItemType={getItemType}
+            onScroll={onScroll}
+            onContentSizeChange={onContentSizeChange}
+            onViewableItemsChanged={onViewableItemsChanged}
+            onScrollEndDrag={onRestShown}
+            onMomentumScrollEnd={onRestShown}
+            // As on desktop, no scroll bar: the list measures rows as they come near.
+            showsVerticalScrollIndicator={false}
+            // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
+            // transcript, and Android gives their taps to the list below them too.
+            keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+            keyboardShouldPersistTaps="always"
+            accessibilityLabel="Transcript"
+            accessibilityActions={accessibilityActions}
+            onAccessibilityAction={onAccessibilityAction}
+          />
+        </ListShownProvider>
       </TranscriptRowsProvider>
     </View>
   );
@@ -292,6 +278,5 @@ const styles = StyleSheet.create({
   bottomSpace: { height: BOTTOM_EDGE_HEIGHT },
   topSpace: { height: 16 },
 });
-const NO_FADING_EDGE = { start: 0, end: 0 };
 const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
 const TOP_SPACE = <View style={styles.topSpace} />;

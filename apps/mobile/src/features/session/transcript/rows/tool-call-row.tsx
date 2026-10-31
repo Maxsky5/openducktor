@@ -14,6 +14,7 @@ import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agen
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { useAppTheme } from "@/theme/app-theme-context";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useDisclosure } from "./disclosure";
 import { LineDetails, ToolLine, type ToolLineTone } from "./row-parts";
@@ -55,6 +56,7 @@ export const ToolCallRow = memo(function ToolCallRow({
   displayName: string;
   rowKey: string;
 }): ReactElement {
+  const theme = useAppTheme();
   const { workingDirectory } = useTranscriptRows();
   const colors = useCardDetailsColors();
   const disclosure = useDisclosure(false, rowKey);
@@ -80,18 +82,21 @@ export const ToolCallRow = memo(function ToolCallRow({
         disclosure={expandable ? disclosure : null}
         accessibilityLabel={`${name}${summary.length > 0 ? `: ${summary}` : ""}${stateLabel}`}
       />
-      {expandable && disclosure.open ? (
-        <LineDetails animate={disclosure.pressed}>
-          <ToolDetails
-            meta={meta}
-            resetKey={rowKey}
-            hasInput={availability.hasInput}
-            hasOutput={availability.hasOutput}
-            hasError={availability.hasError}
-            colors={colors}
-          />
-        </LineDetails>
-      ) : null}
+      <LineDetails
+        key={rowKey}
+        open={expandable && disclosure.open}
+        animate={disclosure.pressed}
+        gap={theme.space.xs}
+      >
+        <ToolDetails
+          meta={meta}
+          resetKey={rowKey}
+          hasInput={availability.hasInput}
+          hasOutput={availability.hasOutput}
+          hasError={availability.hasError}
+          colors={colors}
+        />
+      </LineDetails>
       <QuestionDetails meta={meta} resetKey={rowKey} />
       <ToolFileEdits meta={meta} resetKey={rowKey} />
     </View>

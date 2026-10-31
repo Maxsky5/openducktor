@@ -10,7 +10,8 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useDisclosure } from "./disclosure";
 import { TranscriptMarkdown } from "./markdown-blocks";
-import { DisclosureMarker, Reveal } from "./row-parts";
+import { Collapse } from "./collapse";
+import { DisclosureMarker } from "./row-parts";
 
 type CompactionTranscriptRow = Extract<AgentChatTranscriptRow, { kind: "compaction" }>;
 
@@ -62,8 +63,7 @@ export const CompactionRow = memo(function CompactionRow({
   return (
     <View>
       <Touchable
-        feedback="highlight"
-        radius={theme.radius.sm}
+        feedback="none"
         onPress={disclosure.toggle}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -72,16 +72,19 @@ export const CompactionRow = memo(function CompactionRow({
       >
         {separator}
       </Touchable>
-      {disclosure.open ? (
-        <Reveal animate={disclosure.pressed} style={styles.context}>
-          <TranscriptMarkdown
-            markdown={row.context}
-            revision={`${row.key}:context`}
-            rowKey={row.key}
-            variant="compact"
-          />
-        </Reveal>
-      ) : null}
+      <Collapse
+        key={row.key}
+        open={disclosure.open}
+        animate={disclosure.pressed}
+        style={styles.context}
+      >
+        <TranscriptMarkdown
+          markdown={row.context}
+          revision={`${row.key}:context`}
+          rowKey={row.key}
+          variant="compact"
+        />
+      </Collapse>
     </View>
   );
 });

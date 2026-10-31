@@ -1,8 +1,42 @@
+diff --git a/dist/FlashListRef.d.ts b/dist/FlashListRef.d.ts
+index 08b83f3e9baf5cf5c2229237b9c0d12fab030a3b..d9931641856be9414c5594d04cc1737e2d2a17e8 100644
+--- a/dist/FlashListRef.d.ts
++++ b/dist/FlashListRef.d.ts
+@@ -280,6 +280,11 @@ export interface FlashListRef<T> {
+      * listRef.current?.recomputeViewableItems();
+      */
+     recomputeViewableItems: () => void;
++    /**
++     * Keeps the item at this index in place through the next layout change, instead of the first
++     * visible item. Call it before a change that resizes an item before it.
++     */
++    keepItemInPlace: (index: number) => void;
+     /**
+      * Disables item recycling in preparation for layout animations.
+      *
 diff --git a/dist/recyclerview/RecyclerView.js b/dist/recyclerview/RecyclerView.js
-index 6799c8a61bff4607633196097da35c7a6975f0b6..1c1c9cc9b8dcfedd4946abbc4c2f10f6cd1438f2 100644
+index 6799c8a61bff4607633196097da35c7a6975f0b6..ed7416193eaa5af374058452a7b4e651dde57c3b 100644
 --- a/dist/recyclerview/RecyclerView.js
 +++ b/dist/recyclerview/RecyclerView.js
-@@ -241,7 +241,11 @@ const RecyclerViewComponent = (props, ref) => {
+@@ -59,7 +59,7 @@ const RecyclerViewComponent = (props, ref) => {
+     const refHolder = useMemo(() => new Map(), []);
+     // Initialize core RecyclerView manager and content offset management
+     const { recyclerViewManager, velocityTracker } = useRecyclerViewManager(props);
+-    const { applyOffsetCorrection, computeFirstVisibleIndexForOffsetCorrection, applyInitialScrollIndex, handlerMethods, } = useRecyclerViewController(recyclerViewManager, ref, scrollViewRef, scrollAnchorRef);
++    const { applyOffsetCorrection, applyOffsetCorrectionToNewLayout, computeFirstVisibleIndexForOffsetCorrection, applyInitialScrollIndex, handlerMethods, } = useRecyclerViewController(recyclerViewManager, ref, scrollViewRef, scrollAnchorRef);
+     // Initialize view holder collection ref
+     const viewHolderCollectionRef = useRef(null);
+     // Hook to handle list loading
+@@ -127,6 +127,8 @@ const RecyclerViewComponent = (props, ref) => {
+         }
+         if (recyclerViewManager.modifyChildrenLayout(layoutInfo, (_a = data === null || data === void 0 ? void 0 : data.length) !== null && _a !== void 0 ? _a : 0) &&
+             !hasExceededMaxRendersWithoutCommit) {
++            // Keep the tracked item in place in the same render as the new layouts
++            applyOffsetCorrectionToNewLayout();
+             // Trigger re-render if layout modifications were made
+             setRenderId((prev) => prev + 1);
+         }
+@@ -241,7 +243,11 @@ const RecyclerViewComponent = (props, ref) => {
       */
      const validateItemSize = useCallback((index, size) => {
          var _a, _b, _c, _d;
@@ -15,11 +49,129 @@ index 6799c8a61bff4607633196097da35c7a6975f0b6..1c1c9cc9b8dcfedd4946abbc4c2f10f6
          const width = Math.max(Math.min(layout.width, (_a = layout.maxWidth) !== null && _a !== void 0 ? _a : Infinity), (_b = layout.minWidth) !== null && _b !== void 0 ? _b : 0);
          const height = Math.max(Math.min(layout.height, (_c = layout.maxHeight) !== null && _c !== void 0 ? _c : Infinity), (_d = layout.minHeight) !== null && _d !== void 0 ? _d : 0);
          if (areDimensionsNotEqual(width, size.width) ||
+diff --git a/dist/recyclerview/hooks/useRecyclerViewController.d.ts b/dist/recyclerview/hooks/useRecyclerViewController.d.ts
+index 62d55cd8288b7fc684415a4f5eb9bb6b13b71bfe..185401249622cf075c91bad82688a59d6744b3e7 100644
+--- a/dist/recyclerview/hooks/useRecyclerViewController.d.ts
++++ b/dist/recyclerview/hooks/useRecyclerViewController.d.ts
+@@ -21,6 +21,7 @@ import { ScrollAnchorRef } from "../components/ScrollAnchor";
+  */
+ export declare function useRecyclerViewController<T>(recyclerViewManager: RecyclerViewManager<T>, ref: React.Ref<FlashListRef<T>>, scrollViewRef: RefObject<CompatScroller>, scrollAnchorRef: React.RefObject<ScrollAnchorRef>): {
+     applyOffsetCorrection: () => void;
++    applyOffsetCorrectionToNewLayout: () => void;
+     computeFirstVisibleIndexForOffsetCorrection: () => void;
+     applyInitialScrollIndex: () => void;
+     handlerMethods: FlashListRef<T>;
+diff --git a/dist/recyclerview/hooks/useRecyclerViewController.js b/dist/recyclerview/hooks/useRecyclerViewController.js
+index 08724d1f33824ef563948cff17904d7f497739d4..97b11958418a32024a0a5a5c33d66dc1214c39ed 100644
+--- a/dist/recyclerview/hooks/useRecyclerViewController.js
++++ b/dist/recyclerview/hooks/useRecyclerViewController.js
+@@ -162,6 +162,42 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+         updateScrollOffsetWithCallback,
+         computeFirstVisibleIndexForOffsetCorrection,
+     ]);
++    /**
++     * Moves the tracked item back to its place in the render that applies new item layouts, so the
++     * new positions and the scroll that keeps the item in place show in the same frame. The
++     * engaged indices follow the new offset, so the items that come into view render with them.
++     */
++    const applyOffsetCorrectionToNewLayout = useCallback(() => {
++        var _a, _b;
++        const key = firstVisibleItemKey.current;
++        if (key === undefined ||
++            !PlatformConfig.supportsOffsetCorrection ||
++            pauseOffsetCorrection.current ||
++            recyclerViewManager.animationOptimizationsEnabled ||
++            !recyclerViewManager.getIsFirstLayoutComplete() ||
++            !recyclerViewManager.hasStableDataKeys() ||
++            !recyclerViewManager.shouldMaintainVisibleContentPosition() ||
++            recyclerViewManager.getDataLength() !== lastDataLengthRef.current) {
++            return;
++        }
++        // A large change can move the item out of the engaged indices.
++        const index = (_b = recyclerViewManager
++            .getEngagedIndices()
++            .findValue((engaged) => recyclerViewManager.getDataKey(engaged) === key)) !== null && _b !== void 0 ? _b : recyclerViewManager.props.data.findIndex((_item, dataIndex) => recyclerViewManager.getDataKey(dataIndex) === key);
++        if (index < 0) {
++            return;
++        }
++        const layout = recyclerViewManager.getLayout(index);
++        const diff = recyclerViewManager.props.horizontal
++            ? layout.x - firstVisibleItemLayout.current.x
++            : layout.y - firstVisibleItemLayout.current.y;
++        if (diff === 0) {
++            return;
++        }
++        firstVisibleItemLayout.current = { ...layout };
++        (_a = scrollAnchorRef.current) === null || _a === void 0 ? void 0 : _a.scrollBy(diff);
++        recyclerViewManager.updateScrollOffset(recyclerViewManager.getAbsoluteLastScrollOffset() + diff);
++    }, [recyclerViewManager, scrollAnchorRef]);
+     const handlerMethods = useMemo(() => {
+         return {
+             get props() {
+@@ -441,6 +477,16 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+             recomputeViewableItems: () => {
+                 recyclerViewManager.recomputeViewableItems();
+             },
++            /**
++             * Keeps the item at this index in place through the next layout change, instead of
++             * the first visible item.
++             */
++            keepItemInPlace: (index) => {
++                firstVisibleItemKey.current = recyclerViewManager.getDataKey(index);
++                firstVisibleItemLayout.current = {
++                    ...recyclerViewManager.getLayout(index),
++                };
++            },
+             /**
+              * Disables item recycling in preparation for layout animations.
+              */
+@@ -508,6 +554,7 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+     }, [handlerMethods, scrollViewRef, recyclerViewManager]);
+     return {
+         applyOffsetCorrection,
++        applyOffsetCorrectionToNewLayout,
+         computeFirstVisibleIndexForOffsetCorrection,
+         applyInitialScrollIndex,
+         handlerMethods,
+diff --git a/src/FlashListRef.ts b/src/FlashListRef.ts
+index 07bac2aa20ea35ee3e85f0295a54569bc175da59..6ae76a58d03f56208adc2cd5f21df40cba710108 100644
+--- a/src/FlashListRef.ts
++++ b/src/FlashListRef.ts
+@@ -295,6 +295,12 @@ export interface FlashListRef<T> {
+    */
+   recomputeViewableItems: () => void;
+ 
++  /**
++   * Keeps the item at this index in place through the next layout change, instead of the first
++   * visible item. Call it before a change that resizes an item before it.
++   */
++  keepItemInPlace: (index: number) => void;
++
+   /**
+    * Disables item recycling in preparation for layout animations.
+    *
 diff --git a/src/recyclerview/RecyclerView.tsx b/src/recyclerview/RecyclerView.tsx
-index 3c25e7e893004932b8a13072e01fe2a940d365d4..52bdd7bd142f5071f7cd8dafff3be822b640d4cd 100644
+index 3c25e7e893004932b8a13072e01fe2a940d365d4..230168e8df39334bb0aa7d15e4109c679f606909 100644
 --- a/src/recyclerview/RecyclerView.tsx
 +++ b/src/recyclerview/RecyclerView.tsx
-@@ -374,7 +374,11 @@ const RecyclerViewComponent = <T,>(
+@@ -138,6 +138,7 @@ const RecyclerViewComponent = <T,>(
+     useRecyclerViewManager(props);
+   const {
+     applyOffsetCorrection,
++    applyOffsetCorrectionToNewLayout,
+     computeFirstVisibleIndexForOffsetCorrection,
+     applyInitialScrollIndex,
+     handlerMethods,
+@@ -238,6 +239,8 @@ const RecyclerViewComponent = <T,>(
+       recyclerViewManager.modifyChildrenLayout(layoutInfo, data?.length ?? 0) &&
+       !hasExceededMaxRendersWithoutCommit
+     ) {
++      // Keep the tracked item in place in the same render as the new layouts
++      applyOffsetCorrectionToNewLayout();
+       // Trigger re-render if layout modifications were made
+       setRenderId((prev) => prev + 1);
+     } else {
+@@ -374,7 +377,11 @@ const RecyclerViewComponent = <T,>(
     */
    const validateItemSize = useCallback(
      (index: number, size: RVDimension) => {
@@ -32,3 +184,83 @@ index 3c25e7e893004932b8a13072e01fe2a940d365d4..52bdd7bd142f5071f7cd8dafff3be822
        const width = Math.max(
          Math.min(layout.width, layout.maxWidth ?? Infinity),
          layout.minWidth ?? 0
+diff --git a/src/recyclerview/hooks/useRecyclerViewController.tsx b/src/recyclerview/hooks/useRecyclerViewController.tsx
+index 3689830d995ff4f11c9fba6b3f54d9962d481726..ef439e0f225bcfc3d223c392a08a7e87f7b67db8 100644
+--- a/src/recyclerview/hooks/useRecyclerViewController.tsx
++++ b/src/recyclerview/hooks/useRecyclerViewController.tsx
+@@ -222,6 +222,50 @@ export function useRecyclerViewController<T>(
+     computeFirstVisibleIndexForOffsetCorrection,
+   ]);
+ 
++  /**
++   * Moves the tracked item back to its place in the render that applies new item layouts, so the
++   * new positions and the scroll that keeps the item in place show in the same frame. The
++   * engaged indices follow the new offset, so the items that come into view render with them.
++   */
++  const applyOffsetCorrectionToNewLayout = useCallback(() => {
++    const key = firstVisibleItemKey.current;
++    if (
++      key === undefined ||
++      !PlatformConfig.supportsOffsetCorrection ||
++      pauseOffsetCorrection.current ||
++      recyclerViewManager.animationOptimizationsEnabled ||
++      !recyclerViewManager.getIsFirstLayoutComplete() ||
++      !recyclerViewManager.hasStableDataKeys() ||
++      !recyclerViewManager.shouldMaintainVisibleContentPosition() ||
++      recyclerViewManager.getDataLength() !== lastDataLengthRef.current
++    ) {
++      return;
++    }
++    // A large change can move the item out of the engaged indices.
++    const index =
++      recyclerViewManager
++        .getEngagedIndices()
++        .findValue((engaged) => recyclerViewManager.getDataKey(engaged) === key) ??
++      recyclerViewManager.props.data!.findIndex(
++        (_item, dataIndex) => recyclerViewManager.getDataKey(dataIndex) === key
++      );
++    if (index < 0) {
++      return;
++    }
++    const layout = recyclerViewManager.getLayout(index);
++    const diff = recyclerViewManager.props.horizontal
++      ? layout.x - firstVisibleItemLayout.current!.x
++      : layout.y - firstVisibleItemLayout.current!.y;
++    if (diff === 0) {
++      return;
++    }
++    firstVisibleItemLayout.current = { ...layout };
++    scrollAnchorRef.current?.scrollBy(diff);
++    recyclerViewManager.updateScrollOffset(
++      recyclerViewManager.getAbsoluteLastScrollOffset() + diff
++    );
++  }, [recyclerViewManager, scrollAnchorRef]);
++
+   const handlerMethods: FlashListRef<T> = useMemo(() => {
+     return {
+       get props() {
+@@ -554,6 +598,16 @@ export function useRecyclerViewController<T>(
+       recomputeViewableItems: () => {
+         recyclerViewManager.recomputeViewableItems();
+       },
++      /**
++       * Keeps the item at this index in place through the next layout change, instead of the
++       * first visible item.
++       */
++      keepItemInPlace: (index: number) => {
++        firstVisibleItemKey.current = recyclerViewManager.getDataKey(index);
++        firstVisibleItemLayout.current = {
++          ...recyclerViewManager.getLayout(index),
++        };
++      },
+       /**
+        * Disables item recycling in preparation for layout animations.
+        */
+@@ -635,6 +689,7 @@ export function useRecyclerViewController<T>(
+ 
+   return {
+     applyOffsetCorrection,
++    applyOffsetCorrectionToNewLayout,
+     computeFirstVisibleIndexForOffsetCorrection,
+     applyInitialScrollIndex,
+     handlerMethods,

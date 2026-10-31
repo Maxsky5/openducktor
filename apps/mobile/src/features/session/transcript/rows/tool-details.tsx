@@ -15,7 +15,7 @@ import {
   useToolPartDetails,
 } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { memo, type ReactElement, useLayoutEffect, useMemo } from "react";
+import { memo, type ReactElement, useMemo } from "react";
 import { type StyleProp, View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useFeedbackStore } from "@/app-shell/app-services";
@@ -29,7 +29,7 @@ import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
-import { useRowLayout } from "./disclosure";
+import { Collapse } from "./collapse";
 import { FileEditView } from "./file-edit-view";
 import { DetailsBox, LINE_DETAILS_INSET, PreText } from "./row-parts";
 
@@ -215,18 +215,20 @@ export function FullDetails(props: FullDetailsProps): ReactElement {
 
 function FullDetailsBody({ meta, what, color, children }: FullDetailsProps): ReactElement {
   const { meta: full, error, retry } = useToolPartDetails(meta, true);
-  const layoutRow = useRowLayout();
-  const loaded = !full.detailsOmitted;
-  // The list reuses the view of a row for other rows, so the flag resets for another call.
-  const [shown, setShown] = useRecyclingState(loaded, [meta.partId, meta.callId]);
-  // The full text is taller than the loader. As for a press, the list reads the row height before
-  // the change, so the row stays in place.
-  useLayoutEffect(() => {
-    if (!loaded || shown) return;
-    layoutRow?.();
-    setShown(true);
-  }, [layoutRow, loaded, setShown, shown]);
-  if (shown) return children(full);
+  // The full text grows from the height of the loader. The list reuses the view of a row for other
+  // rows, so the height resets for another call.
+  const [loaderHeight, setLoaderHeight] = useRecyclingState<number | null>(null, [
+    meta.partId,
+    meta.callId,
+  ]);
+  if (!full.detailsOmitted)
+    return loaderHeight === null ? (
+      children(full)
+    ) : (
+      <Collapse key={`${meta.partId}:${meta.callId}`} open animate from={loaderHeight}>
+        {children(full)}
+      </Collapse>
+    );
   if (error !== null)
     return (
       <View style={styles.file}>
@@ -245,7 +247,12 @@ function FullDetailsBody({ meta, what, color, children }: FullDetailsProps): Rea
       </View>
     );
   return (
-    <View style={styles.loading} accessible accessibilityLabel={`Loading the full ${what}`}>
+    <View
+      style={styles.loading}
+      onLayout={(event) => setLoaderHeight(event.nativeEvent.layout.height, true)}
+      accessible
+      accessibilityLabel={`Loading the full ${what}`}
+    >
       <LoaderSpinner size={12} color={color} />
       <Text style={[styles.fileText, { color }]}>{`Loading the full ${what}…`}</Text>
     </View>
@@ -431,7 +438,7 @@ export const ToolFileEdits = memo(function ToolFileEdits({
         <FileEditView
           key={data.filePath}
           data={data}
-          resetKey={resetKey}
+          resetKey={`${resetKey}:file:${data.filePath}`}
           defaultOpen={expandFileDiffsByDefault}
         />
       ))}

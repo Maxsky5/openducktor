@@ -17,9 +17,10 @@ import { MenuTriggerContext } from "./menu-trigger-context";
 
 /**
  * The press feedback of a control. Rows highlight their background, buttons and cards scale a
- * little, and plain text or icon controls dim. Both platforms use the same feedback.
+ * little, and plain text or icon controls dim. A transcript part that opens or closes shows no
+ * press feedback: its own motion answers the press. Both platforms use the same feedback.
  */
-type TouchFeedback = "highlight" | "scale" | "opacity";
+type TouchFeedback = "highlight" | "scale" | "opacity" | "none";
 
 export type TouchableProps = Pick<
   AccessibilityProps,
@@ -66,6 +67,26 @@ const roundingOf = (radius: number): ViewStyle => {
     roundings.set(radius, rounding);
   }
   return rounding;
+};
+
+const NO_FEEDBACK = {} as const;
+
+/** The native button props of a press feedback. */
+const feedbackPropsOf = (
+  feedback: TouchFeedback,
+  underlayColor: string,
+  reducedMotion: boolean,
+) => {
+  switch (feedback) {
+    case "highlight":
+      return { underlayColor, activeUnderlayOpacity: 1 };
+    case "opacity":
+      return { activeOpacity: 0.4 };
+    case "none":
+      return NO_FEEDBACK;
+    case "scale":
+      return reducedMotion ? { activeOpacity: 0.75 } : { activeScale: 0.97 };
+  }
 };
 
 const ACTIVATE = { name: "activate" } as const;
@@ -129,14 +150,7 @@ export function Touchable({
     else onAccessibilityAction?.(event);
   };
 
-  const feedbackProps =
-    feedback === "highlight"
-      ? { underlayColor: theme.colors.fillStrong, activeUnderlayOpacity: 1 }
-      : feedback === "opacity"
-        ? { activeOpacity: 0.4 }
-        : reducedMotion
-          ? { activeOpacity: 0.75 }
-          : { activeScale: 0.97 };
+  const feedbackProps = feedbackPropsOf(feedback, theme.colors.fillStrong, reducedMotion);
   const dimmed = disabled && dimWhenDisabled;
   // The array keeps its identity while its parts do, so a render with the same styles sends no
   // new style props.

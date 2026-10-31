@@ -9,7 +9,8 @@ import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useDisclosure } from "./rows/disclosure";
-import { DisclosureMarker, Reveal } from "./rows/row-parts";
+import { Collapse } from "./rows/collapse";
+import { DisclosureMarker } from "./rows/row-parts";
 
 /** The desktop `h-8` outline action, a little taller for a finger. */
 const ACTION_HEIGHT = 36;
@@ -72,18 +73,16 @@ export const TranscriptNotice = memo(function TranscriptNotice({
                 />
                 <Text style={[styles.title, { color: textColor }]}>Show details</Text>
               </Touchable>
-              {details.open ? (
-                <Reveal animate={details.pressed} style={styles.details}>
-                  {notice.details.map((detail) => (
-                    <View key={detail.label} style={styles.detail}>
-                      <Text style={[styles.detailLabel, { color: textColor }]}>{detail.label}</Text>
-                      <Text selectable style={[styles.detailValue, { color: textColor }]}>
-                        {detail.value}
-                      </Text>
-                    </View>
-                  ))}
-                </Reveal>
-              ) : null}
+              <Collapse open={details.open} animate={details.pressed} style={styles.details}>
+                {notice.details.map((detail) => (
+                  <View key={detail.label} style={styles.detail}>
+                    <Text style={[styles.detailLabel, { color: textColor }]}>{detail.label}</Text>
+                    <Text selectable style={[styles.detailValue, { color: textColor }]}>
+                      {detail.value}
+                    </Text>
+                  </View>
+                ))}
+              </Collapse>
             </View>
           ) : null}
           {action ? (

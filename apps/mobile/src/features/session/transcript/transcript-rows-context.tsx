@@ -50,8 +50,8 @@ export type TranscriptRowsContextValue = {
    */
   openFullView: (view: TranscriptFullView) => void;
   /**
-   * The reader opens or closes a part of the row with this key. The list reads the row height
-   * before the change, so it can keep the row in place after the change.
+   * A part of the row with this key opens or closes. Call it before the change, so the list keeps
+   * the row in place through the change.
    */
   beforeRowResize: (key: string) => void;
 };

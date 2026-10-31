@@ -17,6 +17,7 @@ import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { truncateForDisplay } from "../transcript-text";
+import { Collapse } from "./collapse";
 import { type Disclosure, useDisclosure } from "./disclosure";
 
 /** The marker of a desktop `<details>` summary: a small chevron that turns down when open. */
@@ -43,32 +44,6 @@ export function DisclosureMarker({
       <Icon name="chevron-right" size={size} colorValue={color} />
     </Animated.View>
   );
-}
-
-const REVEAL: CSSStyle<ViewStyle> = {
-  animationName: {
-    from: { opacity: 0, transform: [{ translateY: -4 }] },
-    to: { opacity: 1, transform: [{ translateY: 0 }] },
-  },
-  animationDuration: motion.base,
-  animationTimingFunction: motion.easeOut,
-};
-
-const REVEAL_REDUCED: CSSStyle<ViewStyle> = {
-  animationName: { from: { opacity: 0 }, to: { opacity: 1 } },
-  animationDuration: motion.fast,
-  animationTimingFunction: motion.easeOut,
-};
-
-/** Content that a press opened. It fades in only after a press, never when a row mounts. */
-export function Reveal({
-  animate,
-  style,
-  children,
-}: PropsWithChildren<{ animate: boolean; style?: StyleProp<ViewStyle> }>): ReactElement {
-  const reducedMotion = useReducedMotion();
-  const motionStyle = animate ? (reducedMotion ? REVEAL_REDUCED : REVEAL) : null;
-  return <Animated.View style={[style, motionStyle]}>{children}</Animated.View>;
 }
 
 /** Copies a text and says the result, as the desktop copy buttons. */
@@ -224,8 +199,7 @@ export const ToolLine = memo(function ToolLine({
   }
   return (
     <Touchable
-      feedback="highlight"
-      radius={theme.radius.sm}
+      feedback="none"
       onPress={disclosure.toggle}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
@@ -270,8 +244,7 @@ export function DetailsBox({
   return (
     <View style={[styles.box, frameStyle]}>
       <Touchable
-        feedback="highlight"
-        radius={4}
+        feedback="none"
         onPress={disclosure.toggle}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -289,11 +262,14 @@ export function DetailsBox({
           />
         ) : null}
       </Touchable>
-      {disclosure.open ? (
-        <Reveal animate={disclosure.pressed} style={[styles.boxBody, divided && styles.boxDivided]}>
-          {children}
-        </Reveal>
-      ) : null}
+      <Collapse
+        key={resetKey}
+        open={disclosure.open}
+        animate={disclosure.pressed}
+        style={[styles.boxBody, divided && styles.boxDivided]}
+      >
+        {children}
+      </Collapse>
     </View>
   );
 }
@@ -346,15 +322,20 @@ export const StatusPill = memo(function StatusPill({
   );
 });
 
-/** The space before details under a tool line: the desktop `ml-5 mt-1 space-y-2`. */
+/**
+ * The details under a tool line: the desktop `ml-5 mt-1 space-y-2`. `gap` is the gap of the row
+ * before the details.
+ */
 export function LineDetails({
+  open,
   animate,
+  gap,
   children,
-}: PropsWithChildren<{ animate: boolean }>): ReactElement {
+}: PropsWithChildren<{ open: boolean; animate: boolean; gap: number }>): ReactElement | null {
   return (
-    <Reveal animate={animate} style={styles.lineDetails}>
+    <Collapse open={open} animate={animate} gap={gap} style={styles.lineDetails}>
       {children}
-    </Reveal>
+    </Collapse>
   );
 }
 
