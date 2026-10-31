@@ -1,7 +1,7 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import type { ClientConnection } from "../../connection/client-connection";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
@@ -86,22 +86,32 @@ describe("useTaskCleanupImpact", () => {
     }
   });
 
-  test("uses one batch session command plus per-task worktree and terminal commands when cold", async () => {
-    const { calls, connection } = createHost();
-    const harness = createHarness({ enabled: true, taskIds: ["task-2", "task-1"] }, connection);
+  test.each([true, false])(
+    "loads cold cleanup data once when the browser online hint is %s",
+    async (online) => {
+      const previous = onlineManager.isOnline();
+      onlineManager.setOnline(online);
+      const { calls, connection } = createHost();
+      const harness = createHarness({ enabled: true, taskIds: ["task-2", "task-1"] }, connection);
 
-    try {
-      await harness.mount();
-      await harness.waitFor(({ impact }) => !impact.isLoadingImpact);
-      expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
-      expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
-      expect(calls.agentSessionsList).not.toHaveBeenCalled();
-      expect(calls.taskWorktreeGet).toHaveBeenCalledTimes(2);
-      expect(calls.terminalList).toHaveBeenCalledTimes(2);
-    } finally {
-      await harness.unmount();
-    }
-  });
+      try {
+        await harness.mount();
+        await harness.waitFor(({ impact }) => !impact.isLoadingImpact, 500);
+        expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
+        expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+        expect(calls.agentSessionsList).not.toHaveBeenCalled();
+        expect(calls.taskWorktreeGet).toHaveBeenCalledTimes(2);
+        expect(calls.terminalList).toHaveBeenCalledTimes(2);
+      } finally {
+        try {
+          await harness.unmount();
+          await connection.dispose();
+        } finally {
+          onlineManager.setOnline(previous);
+        }
+      }
+    },
+  );
 
   test("reuses warm session and worktree cache entries", async () => {
     const { calls, connection, sessionFixture } = createHost();
@@ -163,24 +173,34 @@ describe("useTaskCleanupImpact", () => {
     }
   });
 
-  test("surfaces batch session hydration failures", async () => {
-    const { calls, connection } = createHost();
-    calls.agentSessionsListForTasks.mockImplementation(async () => {
-      throw new Error("batch session read failed");
-    });
-    const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, connection);
-
-    try {
-      await harness.mount();
-      await harness.waitFor(({ impact }) => impact.impactError !== null);
-      expect(harness.getLatest().impact).toMatchObject({
-        impactError: "Unable to load linked worktree cleanup impact.",
-        isLoadingImpact: false,
+  test.each([true, false])(
+    "shows a cleanup read failure when the browser online hint is %s",
+    async (online) => {
+      const previous = onlineManager.isOnline();
+      onlineManager.setOnline(online);
+      const { calls, connection } = createHost();
+      calls.agentSessionsListForTasks.mockImplementation(async () => {
+        throw new Error("batch session read failed");
       });
-      expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
-      expect(calls.agentSessionsList).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
+      const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, connection);
+
+      try {
+        await harness.mount();
+        await harness.waitFor(({ impact }) => impact.impactError !== null, 500);
+        expect(harness.getLatest().impact).toMatchObject({
+          impactError: "Unable to load linked worktree cleanup impact.",
+          isLoadingImpact: false,
+        });
+        expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
+        expect(calls.agentSessionsList).not.toHaveBeenCalled();
+      } finally {
+        try {
+          await harness.unmount();
+          await connection.dispose();
+        } finally {
+          onlineManager.setOnline(previous);
+        }
+      }
+    },
+  );
 });
