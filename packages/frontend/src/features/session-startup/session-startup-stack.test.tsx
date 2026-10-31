@@ -10,7 +10,7 @@ import { QueryProvider } from "@/test-utils/query-provider";
 import { createWorkspaceStateFixture } from "@/test-utils/shared-test-fixtures";
 import { AppToaster, StartupNotifications } from "./session-startup-stack";
 
-test("keeps background starts visible, worktree progress inspectable, and only settled attempts dismissible", async () => {
+test("keeps background starts and ordinary notices in one stack until they settle or disconnect", async () => {
   const connection = createTestClientConnection();
   const attemptIds = Array.from({ length: 6 }, (_, index) =>
     connection.startupAttempts.begin({
@@ -24,20 +24,8 @@ test("keeps background starts visible, worktree progress inspectable, and only s
     }),
   );
   const firstId = attemptIds[0];
-  const cleanupId = attemptIds[1];
-  if (!firstId || !cleanupId) throw new Error("A startup attempt is missing.");
-  const view = render(
-    <MemoryRouter>
-      <QueryProvider connection={connection}>
-        <WorkspaceStateContext value={createWorkspaceStateFixture()}>
-          <WorkspacePreviewTransitionGuardProvider>
-            <AppToaster />
-            <StartupNotifications />
-          </WorkspacePreviewTransitionGuardProvider>
-        </WorkspaceStateContext>
-      </QueryProvider>
-    </MemoryRouter>,
-  );
+  if (!firstId) throw new Error("A startup attempt is missing.");
+  const view = renderNotifications(connection);
   let ordinaryToastId: string | number | undefined;
   try {
     act(() => {
@@ -47,6 +35,52 @@ test("keeps background starts visible, worktree progress inspectable, and only s
     expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
     await waitFor(() => expect(notifications.getAllByText(/^repo · task-\d$/)).toHaveLength(6));
     expect(notifications.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    const firstNotice = notifications.getByText("repo · task-0").closest("[data-sonner-toast]");
+    if (!(firstNotice instanceof HTMLElement)) throw new Error("The startup notice is missing.");
+    const first = within(firstNotice);
+    expect(first.queryByRole("button", { name: "Close toast" })).toBeNull();
+    act(() => {
+      connection.startupAttempts.fail(firstId, "Runtime refused the start. Check its settings.");
+    });
+    fireEvent.click(await first.findByRole("button", { name: "Close toast" }));
+    expect(connection.startupAttempts.getAttempt(firstId)).toBeNull();
+    expect(connection.startupAttempts.getSnapshot()).toHaveLength(5);
+    await waitFor(() => expect(notifications.getAllByText(/^repo · task-[1-5]$/)).toHaveLength(5));
+    expect(notifications.getByText("Ordinary notification")).toBeDefined();
+    await act(async () => {
+      await connection.dispose();
+    });
+    await waitFor(() => expect(notifications.queryAllByText(/^repo · task-\d$/)).toHaveLength(0));
+    expect(notifications.queryByRole("button", { name: "View progress" })).toBeNull();
+    expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
+    expect(notifications.getByText("Ordinary notification")).toBeDefined();
+  } finally {
+    view.unmount();
+    if (ordinaryToastId !== undefined) act(() => toast.dismiss(ordinaryToastId));
+    await connection.dispose();
+  }
+});
+
+test("keeps worktree progress and failed cleanup inspectable through updates and a refused repair", async () => {
+  const connection = createTestClientConnection();
+  const attemptIds = Array.from({ length: 2 }, (_, index) =>
+    connection.startupAttempts.begin({
+      origin: {
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        scope: { kind: "task", taskId: `task-${index}`, role: "build" },
+      },
+      label: `Background start ${index}`,
+      presentation: "notification",
+    }),
+  );
+  const firstId = attemptIds[0];
+  const cleanupId = attemptIds[1];
+  if (!firstId || !cleanupId) throw new Error("A startup attempt is missing.");
+  const view = renderNotifications(connection);
+  try {
+    const notifications = within(await view.findByRole("region", { name: /^Notifications/ }));
+    await waitFor(() => expect(notifications.getAllByText(/^repo · task-\d$/)).toHaveLength(2));
     await act(async () => {
       await connection.startupAttempts.operation(firstId, async (context) => {
         const startupProgress: StartupOperationSnapshot = {
@@ -82,7 +116,6 @@ test("keeps background starts visible, worktree progress inspectable, and only s
     expect(first.queryByText("Created the task branch in a new checkout.")).toBeNull();
     expect(notifications.getAllByRole("list", { name: "Session startup steps" })).toHaveLength(1);
     expect(first.queryByRole("button", { name: "Close toast" })).toBeNull();
-    expect(await notifications.findByText("Ordinary notification")).toBeDefined();
 
     await act(async () => {
       await connection.startupAttempts.operation(cleanupId, async (context) => {
@@ -135,7 +168,7 @@ test("keeps background starts visible, worktree progress inspectable, and only s
       cleanup.getAllByText("Stop the native session before removing this checkout.").length,
     ).toBeGreaterThan(0);
     expect(cleanup.queryByRole("list", { name: "Session startup steps" })).toBeNull();
-    expect(connection.startupAttempts.getSnapshot()).toHaveLength(6);
+    expect(connection.startupAttempts.getSnapshot()).toHaveLength(2);
 
     fireEvent.click(first.getByRole("button", { name: "Hide progress" }));
     await first.findByRole("button", { name: "View progress" });
@@ -165,30 +198,31 @@ test("keeps background starts visible, worktree progress inspectable, and only s
     expect((await first.findByRole("alert")).textContent).toContain("Check its settings");
     expect(first.getByRole("button", { name: "Hide progress" })).toBeDefined();
     expect(first.getByRole("list", { name: "Session startup steps" })).toBeDefined();
-    expect(connection.startupAttempts.getSnapshot()).toHaveLength(6);
+    expect(connection.startupAttempts.getSnapshot()).toHaveLength(2);
     fireEvent.click(first.getByRole("button", { name: "Hide progress" }));
     await first.findByRole("button", { name: "View progress" });
     fireEvent.click(await first.findByRole("button", { name: "Retry session preparation" }));
     expect(
       await first.findByText("Preparation repair was refused. Correct its settings."),
     ).toBeDefined();
-    expect(connection.startupAttempts.getSnapshot()).toHaveLength(6);
-    fireEvent.click(first.getByRole("button", { name: "Close toast" }));
-    expect(connection.startupAttempts.getAttempt(firstId)).toBeNull();
-    expect(connection.startupAttempts.getSnapshot()).toHaveLength(5);
-    expect(notifications.getAllByText(/^repo · task-[1-5]$/)).toHaveLength(5);
-    expect(notifications.getByText("Ordinary notification")).toBeDefined();
-
-    await act(async () => {
-      await connection.dispose();
-    });
-    await waitFor(() => expect(notifications.queryAllByText(/^repo · task-\d$/)).toHaveLength(0));
-    expect(notifications.queryByRole("button", { name: "View progress" })).toBeNull();
-    expect(view.getAllByRole("region", { name: /^Notifications/ })).toHaveLength(1);
-    expect(notifications.getByText("Ordinary notification")).toBeDefined();
+    expect(connection.startupAttempts.getSnapshot()).toHaveLength(2);
   } finally {
     view.unmount();
-    if (ordinaryToastId !== undefined) act(() => toast.dismiss(ordinaryToastId));
     await connection.dispose();
   }
 });
+
+function renderNotifications(connection: ReturnType<typeof createTestClientConnection>) {
+  return render(
+    <MemoryRouter>
+      <QueryProvider connection={connection}>
+        <WorkspaceStateContext value={createWorkspaceStateFixture()}>
+          <WorkspacePreviewTransitionGuardProvider>
+            <AppToaster />
+            <StartupNotifications />
+          </WorkspacePreviewTransitionGuardProvider>
+        </WorkspaceStateContext>
+      </QueryProvider>
+    </MemoryRouter>,
+  );
+}
