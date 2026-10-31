@@ -11,7 +11,8 @@ export function useSheetNavigation(workspaceId: string) {
   const close = useCallback(() => {
     if (left.current) return;
     left.current = true;
-    if (router.canGoBack()) router.back();
+    // Dismiss the sheet instead of following the focused tab's back history.
+    router.dismiss();
   }, [router]);
   const openSession = useCallback(
     (identity: AgentSessionIdentity) => {
