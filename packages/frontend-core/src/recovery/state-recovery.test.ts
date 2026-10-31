@@ -19,7 +19,10 @@ test("host recovery refetches active host reads and skips reads marked to skip i
     await queryClient.refetchQueries();
     expect(reads).toEqual({ host: 1, device: 1 });
 
-    await synchronizeConnectionState(queryClient, [], true);
+    await synchronizeConnectionState(queryClient, [], true, {
+      hostChanged: false,
+      missedEventNames: [],
+    });
 
     expect(reads).toEqual({ host: 2, device: 1 });
     expect(queryClient.getQueryState(["device"])?.isInvalidated).toBe(false);
@@ -47,7 +50,10 @@ test("recovery reads again a query whose first read waits for the reconnect", as
     staleTime: Infinity,
   }).subscribe(() => {});
   try {
-    await synchronizeConnectionState(queryClient, [], true);
+    await synchronizeConnectionState(queryClient, [], true, {
+      hostChanged: false,
+      missedEventNames: [],
+    });
 
     expect(calls).toBe(2);
     expect(queryClient.getQueryData(["first-read"])).toBe("recovered");
@@ -72,7 +78,12 @@ test("a host error of one read leaves the recovery to that read's view", async (
   const queryClient = new QueryClient();
   const stop = observeFailing(queryClient, new HostInvokeError("The runtime is starting.", null));
   try {
-    await expect(synchronizeConnectionState(queryClient, [], true)).resolves.toBeUndefined();
+    await expect(
+      synchronizeConnectionState(queryClient, [], true, {
+        hostChanged: false,
+        missedEventNames: [],
+      }),
+    ).resolves.toBeUndefined();
     expect(queryClient.getQueryState(["failing"])?.status).toBe("error");
   } finally {
     stop();
@@ -85,7 +96,12 @@ test("a lost connection during a recovery read fails the recovery", async () => 
   const lost = remoteError("transport_failure", "The socket closed.", "Reconnect.");
   const stop = observeFailing(queryClient, lost);
   try {
-    await expect(synchronizeConnectionState(queryClient, [], true)).rejects.toBe(lost);
+    await expect(
+      synchronizeConnectionState(queryClient, [], true, {
+        hostChanged: false,
+        missedEventNames: [],
+      }),
+    ).rejects.toBe(lost);
   } finally {
     stop();
     queryClient.clear();

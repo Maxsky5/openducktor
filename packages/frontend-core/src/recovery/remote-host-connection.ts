@@ -88,8 +88,8 @@ export const createRemoteHostConnection = ({
     // owner keeps its state and transcripts and receives those changes in order, as if the
     // connection had stayed up. A gap or another host needs a new snapshot and history.
     const hostChanged =
-      context.hostReplay.hostChanged ||
-      context.previousHostInstanceId !== context.host.hostInstanceId;
+      context.hostChanged ||
+      (context.previousHostInstanceId !== null && context.hostReplay.hostChanged);
     const gaps = new Set(context.hostReplay.gaps);
     await Promise.all(
       [...live].map((owner) => {
@@ -108,7 +108,10 @@ export const createRemoteHostConnection = ({
         context.previousHostInstanceId !== context.host.hostInstanceId ||
         context.hostReplay.hostChanged ||
         context.hostReplay.gaps.length > 0;
-      await synchronizeConnectionState(queryClient, controls, missed);
+      await synchronizeConnectionState(queryClient, controls, missed, {
+        hostChanged,
+        missedEventNames: context.hostReplay.gaps,
+      });
       context.signal.throwIfAborted();
     }
   };
@@ -186,6 +189,19 @@ export const createRemoteHostConnection = ({
         if (event.channel === "openducktor://run-event")
           logListenerFailure(listener(event.payload));
       }, listener),
+    subscribeStartupProgress: async (listener) => {
+      const stop = await subscribe((event) => {
+        if (event.channel === "openducktor://session-startup-progress")
+          logListenerFailure(listener(event));
+      }, listener);
+      try {
+        await remote.connect();
+        return stop;
+      } catch (cause) {
+        stop();
+        throw cause;
+      }
+    },
     subscribeWorkspaceSessionUpdates: (listener) =>
       subscribe((event) => {
         if (event.channel === "openducktor://workspace-session-updated")

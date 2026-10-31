@@ -75,6 +75,11 @@ export type CreateHostCommandRouterInput = {
   dispose?: () => Effect.Effect<void, HostCommandHandlerError>;
   initialize?: () => Effect.Effect<void, HostCommandHandlerError>;
   handlers: HostCommandHandlers;
+  trackCommand?: <A, E>(
+    command: string,
+    args: HostCommandArgs,
+    work: Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | HostError>;
 };
 const toHostCommandHandlerError = (
   cause: unknown,
@@ -116,6 +121,7 @@ export const createEffectHostCommandRouter = ({
   dispose,
   initialize,
   handlers,
+  trackCommand,
 }: CreateHostCommandRouterInput): EffectHostCommandRouter => {
   function invoke<Command extends HostCommandName>(
     command: Command,
@@ -158,9 +164,9 @@ export const createEffectHostCommandRouter = ({
         try: () => handler(args),
         catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
       });
-      return yield* handlerEffect.pipe(
-        Effect.withSpan("host.command", { attributes: { command: hostCommand } }),
-      );
+      return yield* (
+        trackCommand ? trackCommand(hostCommand, args, handlerEffect) : handlerEffect
+      ).pipe(Effect.withSpan("host.command", { attributes: { command: hostCommand } }));
     });
   }
 

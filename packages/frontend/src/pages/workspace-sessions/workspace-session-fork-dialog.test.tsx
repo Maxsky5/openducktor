@@ -1,15 +1,23 @@
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import {
   repoConfigSchema,
   type WorkspaceSession,
   type WorkspaceSessionForkInput,
   type WorkspaceSessionForkResult,
+  type StartupOperationContext,
+  type WorkspaceSessionStartInput,
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { act } from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, useState } from "react";
+import { MemoryRouter, useLocation } from "react-router";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+  type TestHostConnectionOverrides,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
@@ -17,6 +25,15 @@ import {
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
 import { WorkspaceSessionForkDialog } from "./workspace-session-fork-dialog";
+import { HostInvokeError } from "@openducktor/host-client";
+import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
+import { AppToaster, StartupNotifications } from "@/features/session-startup/session-startup-stack";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import {
+  createWorkspaceRecordFixture,
+  createWorkspaceStateFixture,
+} from "@/test-utils/shared-test-fixtures";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 
 const source: WorkspaceSession = {
   id: "source",
@@ -45,11 +62,16 @@ const identity = {
 const point = { messageId: "native-reply" };
 
 function renderFork(
-  perform: (input: WorkspaceSessionForkInput) => Promise<WorkspaceSessionForkResult>,
+  perform: (
+    input: WorkspaceSessionForkInput,
+    startup: StartupOperationContext | undefined,
+  ) => Promise<WorkspaceSessionForkResult>,
   record = source,
+  overrides: TestHostConnectionOverrides = {},
 ) {
   const store = createAgentSessionsStore("/repo");
-  const connection = createTestClientConnection({
+  const host = createTestHostConnection({
+    ...overrides,
     client: {
       workspaceGetRepoConfig: async () =>
         repoConfigSchema.parse({
@@ -58,41 +80,318 @@ function renderFork(
           repoPath: "/repo",
           branchPrefix: "odt",
         }),
-      workspaceSessionFork: perform,
+      workspaceSessionFork: async ({ startup, ...input }) => {
+        try {
+          return await perform(input, startup);
+        } catch (cause) {
+          if (!startup) throw cause;
+          if (cause instanceof HostInvokeError && cause.failure?.startupProgress) throw cause;
+          throw new HostInvokeError(cause instanceof Error ? cause.message : String(cause), {
+            kind: "session_startup",
+            startupProgress: {
+              context: startup,
+              hostInstanceId: "host",
+              revision: 1,
+              workspaceId: input.workspaceId,
+              repoPath: "/repo",
+              scope: { kind: "workspace" },
+              phase: "failed",
+              ownership: { state: "not_saved" },
+              steps: [],
+            },
+          });
+        }
+      },
+      ...overrides.client,
     },
   });
+  const connection = createTestClientConnection({ host, scheduleTask: () => () => {} });
+  const live = createStartupLiveSourceFake(connection.queryClient);
   const completed: WorkspaceSession[] = [];
   let closed = 0;
+  const workspace = createWorkspaceRecordFixture({
+    workspaceId: "workspace",
+    workspaceName: "Workspace",
+    repoPath: "/repo",
+  });
   function Dialog() {
     const queryClient = useQueryClient();
     const pending = useSessionForkRequests(queryClient);
+    const [open, setOpen] = useState(true);
+    const location = useLocation();
     return (
-      <WorkspaceSessionForkDialog
-        open
-        workspace={{ workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" }}
-        record={record}
-        source={identity}
-        point={point}
-        disabledReason={null}
-        pending={pending.has(sessionForkRequestKey("/repo", identity, point))}
-        onClose={() => {
-          closed += 1;
-        }}
-        onForked={(child) => {
-          completed.push(child);
-        }}
-      />
+      <>
+        <output aria-label="Current location">
+          {location.pathname}
+          {location.search}
+        </output>
+        <AppToaster />
+        <StartupNotifications />
+        {open ? (
+          <WorkspaceSessionForkDialog
+            open={open}
+            workspace={workspace}
+            record={record}
+            source={identity}
+            point={point}
+            disabledReason={null}
+            pending={pending.has(sessionForkRequestKey("/repo", identity, point))}
+            onClose={() => {
+              closed += 1;
+              setOpen(false);
+            }}
+            onForked={(child) => {
+              completed.push(child);
+            }}
+          />
+        ) : null}
+      </>
     );
   }
   const view = render(
-    <QueryProvider connection={connection}>
-      <AgentSessionsContext value={store}>
-        <Dialog />
-      </AgentSessionsContext>
-    </QueryProvider>,
+    <MemoryRouter>
+      <QueryProvider connection={connection}>
+        <WorkspaceStateContext
+          value={createWorkspaceStateFixture({
+            workspaces: [workspace],
+            activeWorkspace: workspace,
+          })}
+        >
+          <WorkspacePreviewTransitionGuardProvider>
+            <AgentSessionsContext value={store}>
+              <Dialog />
+            </AgentSessionsContext>
+          </WorkspacePreviewTransitionGuardProvider>
+        </WorkspaceStateContext>
+      </QueryProvider>
+    </MemoryRouter>,
   );
-  return { view, completed, closed: () => closed };
+  return {
+    view: {
+      ...view,
+      unmount: () => {
+        view.unmount();
+      },
+    },
+    completed,
+    connection,
+    live,
+    closed: () => closed,
+  };
 }
+
+test("opening a saved failed same-folder fork retains feedback and session inspection", async () => {
+  const child = { ...source, id: "saved-child", externalSessionId: "native-child" };
+  const fork = mock(
+    async (_input: WorkspaceSessionForkInput, startup: StartupOperationContext | undefined) => {
+      if (!startup) throw new Error("Missing startup context.");
+      throw new HostInvokeError("Fork setup failed. Inspect the saved child.", {
+        kind: "session_startup",
+        startupProgress: {
+          context: startup,
+          hostInstanceId: "host",
+          revision: 1,
+          workspaceId: "workspace",
+          repoPath: "/repo",
+          scope: { kind: "workspace" },
+          phase: "failed",
+          ownership: { state: "saved", target: { kind: "workspace", record: child } },
+          steps: [{ id: "fork", label: "Save forked session", state: "completed", details: [] }],
+        },
+      });
+    },
+  );
+  const { view, connection, closed, completed } = renderFork(fork);
+  try {
+    fireEvent.click(view.getByRole("button", { name: "Fork chat" }));
+    const open = await view.findByRole("button", { name: "Open session" }, { timeout: 800 });
+    const original = connection.startupAttempts.getSnapshot()[0];
+    if (!original) throw new Error("Fork attempt is missing.");
+    await act(async () => {
+      fireEvent.click(open);
+    });
+    expect(closed()).toBe(1);
+    expect(view.queryByRole("dialog")).toBeNull();
+    expect(view.getByLabelText("Current location").textContent).toBe(
+      "/sessions?workspace=workspace&kind=workspace&session=saved-child",
+    );
+    expect(connection.startupAttempts.getAttempt(original.id)).toMatchObject({
+      id: original.id,
+      presentation: "notification",
+      status: { phase: "failed" },
+      operations: original.operations,
+    });
+    const notifications = within(await view.findByRole("region", { name: /^Notifications/ }));
+    const details = await notifications.findByRole("button", { name: "Details" });
+    const toast = details.closest<HTMLElement>("[data-sonner-toast]");
+    if (!toast) throw new Error("The startup notification is missing.");
+    const notification = within(toast);
+    expect(notification.queryByRole("button", { name: "View progress" })).toBeNull();
+    expect(notification.queryByText(/\d+\/\d+ steps/)).toBeNull();
+    const reopen = notification.getByRole("button", { name: "Open" });
+    expect(reopen.hasAttribute("data-action")).toBe(true);
+    await act(async () => {
+      fireEvent.click(reopen);
+    });
+    expect(toast.getAttribute("data-removed")).not.toBe("true");
+    expect(connection.startupAttempts.getAttempt(original.id)).toMatchObject({
+      presentation: "notification",
+      status: { phase: "failed" },
+    });
+    fireEvent.click(details);
+    const inspect = await notification.findByRole("button", { name: "Inspect saved session" });
+    expect(notification.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(notification.queryByText("Save forked session")).toBeNull();
+    fireEvent.click(inspect);
+    expect(view.getByText("saved-child")).toBeDefined();
+    expect(fork).toHaveBeenCalledTimes(1);
+    expect(completed).toEqual([]);
+  } finally {
+    view.unmount();
+    await connection.dispose();
+  }
+});
+
+test.each([
+  ["fork", "automatic"],
+  ["repair", "automatic"],
+  ["repair", "manual"],
+] as const)(
+  "%s permits %s workspace handoff after confirmed readiness without racing its response",
+  async (operation, handoff) => {
+    const response = Promise.withResolvers<void>();
+    const publishProgress = Promise.withResolvers<void>();
+    const child = { ...source, id: "ready-child", externalSessionId: "native-child" };
+    const runtimeSession = {
+      runtimeKind: child.runtimeKind,
+      externalSessionId: "native-child",
+      workingDirectory: child.executionTarget.workingDirectory,
+      startedAt: "2026-10-26T00:00:00.000Z",
+      status: "idle" as const,
+    };
+    let receiveProgress: Parameters<HostConnection["subscribeStartupProgress"]>[0] = () => {};
+    let live: ReturnType<typeof createStartupLiveSourceFake>;
+    const prepare = async (startup: StartupOperationContext | undefined) => {
+      if (!startup) throw new Error("Missing startup context.");
+      await publishProgress.promise;
+      const startupProgress = live.prepared({
+        context: startup,
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        scope: { kind: "workspace", sessionId: source.id },
+        ownership: { state: "saved", target: { kind: "workspace", record: child, runtimeSession } },
+      });
+      receiveProgress({
+        channel: "openducktor://session-startup-progress",
+        payload: startupProgress,
+      });
+      await response.promise;
+      return { session: child, runtimeSession, startupProgress };
+    };
+    const fork = mock(
+      async (_input: WorkspaceSessionForkInput, startup: StartupOperationContext | undefined) => {
+        if (!startup) throw new Error("Missing startup context.");
+        if (operation === "repair")
+          throw new HostInvokeError("Prepare the saved fork again.", {
+            kind: "session_startup",
+            startupProgress: {
+              context: startup,
+              hostInstanceId: "host",
+              revision: 1,
+              workspaceId: "workspace",
+              repoPath: "/repo",
+              scope: { kind: "workspace", sessionId: source.id },
+              phase: "failed",
+              ownership: { state: "saved", target: { kind: "workspace", record: child } },
+              steps: [
+                { id: "save", label: "Save forked session", state: "completed", details: [] },
+              ],
+            },
+          });
+        const prepared = await prepare(startup);
+        return {
+          record: prepared.session,
+          runtimeSession,
+          startupProgress: prepared.startupProgress,
+        };
+      },
+    );
+    const repair = mock(async (input: WorkspaceSessionStartInput) => prepare(input.startup));
+    const harness = renderFork(fork, source, {
+      subscribeStartupProgress: async (listener) => {
+        receiveProgress = listener;
+        return () => {};
+      },
+      client: { workspaceSessionStart: repair },
+    });
+    live = harness.live;
+    try {
+      fireEvent.click(harness.view.getByRole("button", { name: "Fork chat" }));
+      if (operation === "repair")
+        fireEvent.click(
+          await harness.view.findByRole(
+            "button",
+            { name: "Retry session preparation" },
+            { timeout: 800 },
+          ),
+        );
+      await waitFor(() => expect(operation === "repair" ? repair : fork).toHaveBeenCalledTimes(1), {
+        timeout: 800,
+      });
+      expect(harness.view.queryByRole("button", { name: "Open session" })).toBeNull();
+      await act(async () => {
+        publishProgress.resolve();
+      });
+      await waitFor(
+        () =>
+          expect(harness.connection.startupAttempts.getSnapshot()[0]?.status.phase).toBe("ready"),
+        { timeout: 800 },
+      );
+      const id = harness.connection.startupAttempts.getSnapshot()[0]?.id;
+      if (!id) throw new Error("Fork attempt is missing.");
+      expect(harness.completed).toEqual([]);
+      expect(harness.closed()).toBe(0);
+      expect(harness.view.getByRole("dialog")).toBeDefined();
+      if (operation === "fork") {
+        expect(
+          harness.view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled"),
+        ).toBe(true);
+        expect(
+          harness.view.getByRole("radio", { name: "Same folder" }).closest("fieldset")?.disabled,
+        ).toBe(true);
+        expect(harness.view.queryByRole("region", { name: "Session startup details" })).toBeNull();
+      }
+      if (handoff === "manual") {
+        await act(async () => {
+          fireEvent.click(harness.view.getByRole("button", { name: "Open session" }));
+        });
+        expect(harness.view.getByLabelText("Current location").textContent).toBe(
+          "/sessions?workspace=workspace&kind=workspace&session=ready-child",
+        );
+        expect(harness.connection.startupAttempts.getAttempt(id)).toBeNull();
+        expect(harness.closed()).toBe(1);
+      }
+      await act(async () => {
+        response.resolve();
+      });
+      if (handoff === "automatic")
+        await waitFor(() => expect(harness.completed).toEqual([child]), { timeout: 800 });
+      else expect(harness.completed).toEqual([]);
+      expect(harness.connection.startupAttempts.getAttempt(id)).toBeNull();
+      expect(harness.view.queryByRole("dialog")).toBeNull();
+      expect(harness.view.queryByRole("alert")).toBeNull();
+      expect(fork).toHaveBeenCalledTimes(1);
+      expect(repair).toHaveBeenCalledTimes(operation === "repair" ? 1 : 0);
+    } finally {
+      await act(async () => {
+        publishProgress.resolve();
+        response.resolve();
+      });
+      harness.view.unmount();
+      await harness.connection.dispose();
+    }
+  },
+);
 
 test("fork dialog defaults to the source folder and blocks duplicate submit and close while pending", async () => {
   const calls: WorkspaceSessionForkInput[] = [];
@@ -110,8 +409,10 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
     expect(view.getByText("/worktrees/source-feature")).toBeDefined();
     expect(view.getByText("source-feature")).toBeDefined();
     expect(view.getByText("odt/source-feature")).toBeDefined();
+    const submit = view.getByRole("button", { name: "Fork chat" });
+    const form = submit.closest("form");
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Fork chat" }));
+      fireEvent.click(submit);
     });
     expect(calls).toEqual([
       {
@@ -121,13 +422,19 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
         destination: { kind: "same_folder" },
       },
     ]);
-    expect(view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled")).toBe(true);
-    fireEvent.click(view.getByRole("radio", { name: "New worktree" }));
-    expect(view.getByRole("radio", { name: "Same folder" }).getAttribute("aria-checked")).toBe(
-      "true",
+    expect(view.getByRole("button", { name: "Forking chat…" })).toBe(submit);
+    expect(submit.closest("form")).toBe(form);
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.querySelector("svg")).not.toBeNull();
+    expect(view.getByRole("radio", { name: "Same folder" }).closest("fieldset")?.disabled).toBe(
+      true,
     );
+    expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
+    expect(view.queryByRole("button", { name: "Fork chat" })).toBeNull();
     expect(view.queryByLabelText("Worktree name")).toBeNull();
-    fireEvent.submit(view.getByRole("button", { name: "Forking chat…" }).closest("form")!);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(view.queryByRole("button", { name: "Close" })).toBeNull();
     expect(calls).toHaveLength(1);
     expect(closed()).toBe(0);
@@ -135,6 +442,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
       reject(new Error("The source reply no longer exists. Reload history."));
     });
     expect((await view.findByRole("alert")).textContent).toContain("Reload history");
+    fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
     expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false);
     expect(completed).toEqual([]);
   } finally {
@@ -175,12 +483,15 @@ test("new worktree uses New chat defaults and validation and keeps inputs after 
       name: "retry-fork",
       branchName: "feature/alternate",
     });
-    expect(name.hasAttribute("disabled")).toBe(true);
-    expect(branch.hasAttribute("disabled")).toBe(true);
+    expect(view.getByLabelText("Worktree name")).toBe(name);
+    expect(view.getByLabelText("Branch name optional")).toBe(branch);
+    expect(name.closest("fieldset")?.disabled).toBe(true);
+    expect(view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled")).toBe(true);
     await act(async () => {
       reject(new Error("Claude refused the fork point. Load another reply."));
     });
     expect((await view.findByRole("alert")).textContent).toContain("Load another reply");
+    fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
     expect(view.getByDisplayValue("retry-fork")).toBeDefined();
     expect(view.getByDisplayValue("feature/alternate")).toBeDefined();
     expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false);

@@ -2,6 +2,18 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "agentSessionStartupResultSchema",
+  "workspaceSessionStartInputSchema",
+  "startupOperationContextSchema",
+  "startupScopeSchema",
+  "savedStartupTargetSchema",
+  "startupOwnershipSchema",
+  "startupPreparedHandoffSchema",
+  "startupInstructionSchema",
+  "startupStepSchema",
+  "startupOperationSnapshotSchema",
+  "sessionStartupProgressEventSchema",
+  "terminalCommandResultSchema",
   "agentSessionResumeIntentSchema",
   "gitPublicationPreviewSchema",
   "sessionOperationObservationSchema",

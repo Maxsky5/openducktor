@@ -1,4 +1,8 @@
-import type { TerminalLifecycle, TerminalSummary } from "@openducktor/contracts";
+import type {
+  TerminalCommandResult,
+  TerminalLifecycle,
+  TerminalSummary,
+} from "@openducktor/contracts";
 
 type ReadyTerminalTab = {
   tabId: string;
@@ -103,6 +107,23 @@ const terminalExitsEqual = (
   );
 };
 
+const terminalCommandResultsEqual = (
+  left: TerminalCommandResult | undefined,
+  right: TerminalCommandResult | undefined,
+): boolean => {
+  if (left === right) return true;
+  if (!left || !right || left.type !== right.type) return false;
+  if (
+    left.type === "exited" &&
+    right.type === "exited" &&
+    (left.exitCode !== right.exitCode || left.signal !== right.signal)
+  )
+    return false;
+  if (left.type === "failed" && right.type === "failed" && left.message !== right.message)
+    return false;
+  return arraysEqualByIdentity(left.outputTail, right.outputTail);
+};
+
 type TerminalSummaryComparator = (left: TerminalSummary, right: TerminalSummary) => boolean;
 
 const terminalSummaryComparators = {
@@ -114,6 +135,8 @@ const terminalSummaryComparators = {
   lifecycle: (left, right) => left.lifecycle === right.lifecycle,
   exit: (left, right) => terminalExitsEqual(left.exit, right.exit),
   startedBy: (left, right) => left.startedBy === right.startedBy,
+  initialCommandResult: (left, right) =>
+    terminalCommandResultsEqual(left.initialCommandResult, right.initialCommandResult),
 } satisfies Record<keyof TerminalSummary, TerminalSummaryComparator>;
 
 const terminalSummaryFieldComparators = Object.values<TerminalSummaryComparator>(

@@ -170,16 +170,21 @@ describe("notification navigation", () => {
   });
 
   test("matches only the requested error episode", () => {
-    document.body.innerHTML = `
+    const fixture = document.createElement("div");
+    fixture.innerHTML = `
       <article data-notification-attention-kind="error" data-notification-attention-id="error-1"></article>
       <article data-notification-attention-kind="error" data-notification-attention-id="error-2"></article>
       <div data-notification-attention-kind="error"></div>
     `;
-
-    expect(
-      findNotificationAttentionTarget("error", "error-2")?.dataset.notificationAttentionId,
-    ).toBe("error-2");
-    expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
+    document.body.append(fixture);
+    try {
+      expect(
+        findNotificationAttentionTarget("error", "error-2")?.dataset.notificationAttentionId,
+      ).toBe("error-2");
+      expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
+    } finally {
+      fixture.remove();
+    }
   });
 });
 

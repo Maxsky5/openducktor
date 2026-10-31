@@ -2,6 +2,7 @@ import type {
   AgentSessionLiveAttachInput,
   AgentSessionLiveEnvelope,
   HostEventPayload,
+  SessionStartupProgressEvent,
   NotificationCursor,
   NotificationStreamFrame,
   TaskEventCursor,
@@ -43,6 +44,10 @@ export type TaskMergeStatusUpdateListener = (
   payload: HostEventPayload<"openducktor://task-merge-status-updated"> | ConnectionControlEvent,
 ) => void | Promise<void>;
 
+export type StartupProgressListener = (
+  event: SessionStartupProgressEvent | ConnectionControlEvent,
+) => void | Promise<void>;
+
 /** Browser tab changes. Control events report stream loss and reconnects. */
 export type BrowserTabEventListener = (
   payload: HostEventPayload<"openducktor://browser-event"> | ConnectionControlEvent,
@@ -62,6 +67,7 @@ export type HostConnection = {
     listener: WorkspaceProviderSetupUpdateListener,
   ) => Promise<() => void>;
   client: HostClient;
+  subscribeStartupProgress: (listener: StartupProgressListener) => Promise<() => void>;
   subscribeWorkspaceSessionUpdates: (
     listener: WorkspaceSessionUpdateListener,
   ) => Promise<() => void>;

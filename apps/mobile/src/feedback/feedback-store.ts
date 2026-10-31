@@ -22,10 +22,17 @@ export type FeedbackState = {
   windows: string[];
   /** The open menus. A menu sits near its anchor, often under the toasts, so toasts wait for it. */
   menus: number;
+  /** Layout shared by the two in-app feedback stacks. These values stay in memory. */
+  toastStackHeight: number;
+  startupVisible: boolean;
+  startupCovers: number;
 };
 
 /** Whether an open menu hides the toasts. */
 export const toastsCoveredBy = (state: FeedbackState): boolean => state.menus > 0;
+
+export const startupCoveredBy = (state: FeedbackState): boolean =>
+  toastsCoveredBy(state) || state.startupCovers > 0;
 
 /** The window that shows the toasts: the newest open window, or `null` for the root view. */
 export const toastWindowOf = (state: FeedbackState): string | null => state.windows.at(-1) ?? null;
@@ -39,7 +46,14 @@ const MAX_VISIBLE = 3;
  * reach it, because the app creates no notification runtime.
  */
 export const createFeedbackStore = () => {
-  const store = createStore<FeedbackState>(() => ({ messages: [], windows: [], menus: 0 }));
+  const store = createStore<FeedbackState>(() => ({
+    messages: [],
+    windows: [],
+    menus: 0,
+    toastStackHeight: 0,
+    startupVisible: false,
+    startupCovers: 0,
+  }));
   let nextId = 1;
   // The messages that a window showed. A toast that moves to another window, as when a sheet
   // closes, then shows there at once and does not enter a second time.
@@ -92,13 +106,41 @@ export const createFeedbackStore = () => {
       store.setState(({ menus }) => ({ menus: menus - 1 }));
     };
   };
+  /** Startup cards can fill a sheet, so sheets hide them while short feedback stays visible. */
+  const coverStartup = (): (() => void) => {
+    store.setState(({ startupCovers }) => ({ startupCovers: startupCovers + 1 }));
+    let closed = false;
+    return () => {
+      if (closed) return;
+      closed = true;
+      store.setState(({ startupCovers }) => ({ startupCovers: startupCovers - 1 }));
+    };
+  };
   /** A window showed the toast of message `id`. */
   const markPresented = (id: string) => {
     if (store.getState().messages.some((entry) => entry.id === id)) presented.add(id);
   };
   /** Whether a window showed the toast of message `id` already. */
   const wasPresented = (id: string): boolean => presented.has(id);
-  return { store, feedback, dismiss, openWindow, openMenu, markPresented, wasPresented };
+  const setToastStackHeight = (toastStackHeight: number): void => {
+    if (store.getState().toastStackHeight !== toastStackHeight)
+      store.setState({ toastStackHeight });
+  };
+  const setStartupVisible = (startupVisible: boolean): void => {
+    if (store.getState().startupVisible !== startupVisible) store.setState({ startupVisible });
+  };
+  return {
+    store,
+    feedback,
+    dismiss,
+    openWindow,
+    openMenu,
+    coverStartup,
+    markPresented,
+    wasPresented,
+    setToastStackHeight,
+    setStartupVisible,
+  };
 };
 
 export type FeedbackStore = ReturnType<typeof createFeedbackStore>;

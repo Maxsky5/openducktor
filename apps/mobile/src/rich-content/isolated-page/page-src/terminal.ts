@@ -194,7 +194,7 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
     fontSize: message.fontSize,
     lineHeight: LINE_HEIGHT,
     scrollback: SCROLLBACK_ROWS,
-    screenReaderMode: true,
+    screenReaderMode: message.screenReaderMode ?? true,
     theme: themeOf(message.colors),
     linkHandler: {
       allowNonHttpProtocols: false,
@@ -208,7 +208,7 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
   opening = false;
   if (latestConfiguration !== null) applyConfiguration(created, latestConfiguration);
   installLinks(created);
-  installTouchSelection(created);
+  installTouch(created);
   created.onData((data) => {
     if (pasting || (!heldModifiers.ctrl && !heldModifiers.alt)) {
       sendInput(data);
@@ -223,6 +223,18 @@ const openTerminal = async (message: ConfigureMessage): Promise<void> => {
     if (!restoringScreen) post({ type: "terminal_resize", columns: cols, rows });
   });
   created.onSelectionChange(reportSelection);
+  let lastViewport: { row: number; follow: boolean } | null = null;
+  created.onScroll((row) => {
+    if (!latestConfiguration?.trackViewport) return;
+    const follow = row === created.buffer.active.baseY;
+    if (
+      (lastViewport?.follow && follow) ||
+      (lastViewport?.row === row && lastViewport.follow === follow)
+    )
+      return;
+    lastViewport = { row, follow };
+    post({ type: "terminal_viewport", row, follow, restored: false });
+  });
   // The page has no clipboard access. OSC 52 clipboard writes from programs stay ignored.
   created.parser.registerOscHandler(52, () => true);
   textInput = installTerminalTextInput(
@@ -262,13 +274,15 @@ const installLinks = (current: Terminal): void => {
 };
 
 /**
- * Touch selection: a long press selects the word under the finger, and moving the finger then
- * extends the selection. A short drag still scrolls the terminal.
+ * A long press selects text. A short drag scrolls xterm's rows, since its scrollbar has no
+ * touch handler.
  */
-const installTouchSelection = (current: Terminal): void => {
+const installTouch = (current: Terminal): void => {
   let timer: number | null = null;
   let start: XtermTouch | null = null;
   let anchor: number | null = null;
+  let scrollRow = 0;
+  let scrolling = false;
 
   const cellIndex = (touch: XtermTouch): number | null => {
     const screen = screenRoot.querySelector(".xterm-screen");
@@ -314,9 +328,12 @@ const installTouchSelection = (current: Terminal): void => {
     (event) => {
       cancelPress();
       anchor = null;
+      start = null;
+      scrolling = false;
       const touch = event.touches[0];
       if (event.touches.length !== 1 || touch === undefined) return;
       start = { clientX: touch.clientX, clientY: touch.clientY };
+      scrollRow = current.buffer.active.viewportY;
       timer = setTimeout(() => {
         timer = null;
         if (start === null) return;
@@ -332,12 +349,18 @@ const installTouchSelection = (current: Terminal): void => {
       const touch = event.touches[0];
       if (touch === undefined) return;
       if (anchor === null) {
-        if (
-          start !== null &&
-          Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY) > TOUCH_SLOP_PX
-        ) {
-          cancelPress();
-        }
+        if (start === null) return;
+        const distance = Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY);
+        if (!scrolling && distance <= TOUCH_SLOP_PX) return;
+        scrolling = true;
+        cancelPress();
+        const screen = screenRoot.querySelector(".xterm-screen");
+        if (screen === null) return;
+        const rowHeight = screen.getBoundingClientRect().height / current.rows;
+        if (rowHeight <= 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        current.scrollToLine(scrollRow + Math.round((start.clientY - touch.clientY) / rowHeight));
         return;
       }
       // While a selection grows, the finger does not scroll the terminal.
@@ -351,9 +374,10 @@ const installTouchSelection = (current: Terminal): void => {
   const endPress = (event: XtermTouchEvent): void => {
     cancelPress();
     start = null;
-    if (anchor === null) return;
+    if (anchor === null && !scrolling) return;
     anchor = null;
-    // A long press does not also tap the terminal.
+    scrolling = false;
+    // A drag or long press does not also tap the terminal.
     event.preventDefault();
   };
   terminalElement.addEventListener("touchend", endPress, capture);
@@ -404,6 +428,7 @@ type ConfigureMessage = Extract<TerminalPageInbound, { type: "terminal_configure
 
 const applyConfiguration = (current: Terminal, message: ConfigureMessage): void => {
   current.options.theme = themeOf(message.colors);
+  current.options.screenReaderMode = message.screenReaderMode ?? true;
   setInputEnabled(current, message.inputEnabled);
   if (current.options.fontSize !== message.fontSize) {
     current.options.fontSize = message.fontSize;
@@ -471,6 +496,29 @@ function receive(message: TerminalPageInbound): void {
       current.clearSelection();
       document.getSelection()?.removeAllRanges();
       return;
+    case "terminal_read_output": {
+      const buffer = current.buffer.active;
+      const lines: string[] = [];
+      for (let row = 0; row < buffer.length; row++)
+        lines.push(buffer.getLine(row)?.translateToString(true) ?? "");
+      post({
+        type: "terminal_output_text",
+        text: lines.join("\n").slice(-MAX_TERMINAL_PAGE_TEXT_LENGTH),
+      });
+      return;
+    }
+    case "terminal_set_viewport": {
+      if (message.follow) current.scrollToBottom();
+      else current.scrollToLine(message.row);
+      const { viewportY, baseY } = current.buffer.active;
+      post({
+        type: "terminal_viewport",
+        row: viewportY,
+        follow: viewportY === baseY,
+        restored: true,
+      });
+      return;
+    }
     case "terminal_focus":
       current.focus();
       return;

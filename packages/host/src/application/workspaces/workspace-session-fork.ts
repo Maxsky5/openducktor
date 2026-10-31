@@ -13,6 +13,11 @@ import {
 } from "@openducktor/contracts";
 import { Cause, Clock, Effect, Exit } from "effect";
 import {
+  startupStep,
+  updateStartup,
+  stopStartupSession,
+} from "../agent-sessions/session-startup-progress";
+import {
   type HostError,
   HostOperationError,
   HostValidationError,
@@ -202,20 +207,23 @@ const forkAndSave = (
   Effect.uninterruptible(
     Effect.gen(function* () {
       const manualTitle = forkTitle(input.source);
-      const child = yield* deps.live.forkSession({
-        repoPath: input.repoPath,
-        runtimeKind: input.source.runtimeKind,
-        sourceWorkingDirectory: input.source.executionTarget.workingDirectory,
-        workingDirectory: input.target.workingDirectory,
-        parentExternalSessionId: input.parentExternalSessionId,
-        forkPoint: input.forkPoint,
-        sessionScope:
-          manualTitle === null
-            ? { kind: "repository" }
-            : { kind: "repository", title: manualTitle },
-        systemPrompt: input.source.roleSnapshot?.systemPrompt ?? "",
-        model: input.model,
-      });
+      const child = yield* startupStep(
+        { id: "prepare", label: "Fork native session" },
+        deps.live.forkSession({
+          repoPath: input.repoPath,
+          runtimeKind: input.source.runtimeKind,
+          sourceWorkingDirectory: input.source.executionTarget.workingDirectory,
+          workingDirectory: input.target.workingDirectory,
+          parentExternalSessionId: input.parentExternalSessionId,
+          forkPoint: input.forkPoint,
+          sessionScope:
+            manualTitle === null
+              ? { kind: "repository" }
+              : { kind: "repository", title: manualTitle },
+          systemPrompt: input.source.roleSnapshot?.systemPrompt ?? "",
+          model: input.model,
+        }),
+      );
       const saved = yield* Effect.exit(
         Effect.gen(function* () {
           if (
@@ -244,33 +252,84 @@ const forkAndSave = (
             updatedAt: now,
             archivedAt: null,
           };
-          return yield* deps.store
-            .create({
-              workspaceId: input.workspaceId,
-              repoPath: input.repoPath,
-              session: record,
-            })
-            .pipe(
-              Effect.mapError((cause) =>
-                toHostOperationError(cause, "workspaceSession.fork.persist"),
+          return yield* startupStep(
+            { id: "save", label: "Save forked workspace session" },
+            deps.store
+              .create({
+                workspaceId: input.workspaceId,
+                repoPath: input.repoPath,
+                session: record,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  toHostOperationError(cause, "workspaceSession.fork.persist"),
+                ),
               ),
-            );
+          );
         }),
       );
       if (Exit.isSuccess(saved)) {
         input.retain();
+        yield* updateStartup((progress) =>
+          progress.ownership({
+            state: "saved",
+            target: { kind: "workspace", record: saved.value, runtimeSession: child },
+          }),
+        );
         if (titleSyncNeedsTurn(input.source.runtimeKind))
           deps.markTitleSyncPending(toRef(input.repoPath, child));
         return { record: saved.value, runtimeSession: child };
       }
       if (child.externalSessionId === input.parentExternalSessionId)
         return yield* Effect.failCause(saved.cause);
+      yield* updateStartup((progress) => {
+        progress.phase("settling");
+        progress.ownership({ state: "unknown" });
+        progress.step({
+          id: "cleanup",
+          label: "Stop unused native fork",
+          state: "running",
+          details: [child.externalSessionId],
+        });
+      });
       const childRef = toRef(input.repoPath, child);
-      const stopped = yield* Effect.exit(deps.live.stopSession(childRef));
+      const stopped = yield* Effect.exit(
+        stopStartupSession(childRef, deps.live.stopSession(childRef)),
+      );
+      if (Exit.isFailure(stopped)) {
+        input.retain();
+        yield* updateStartup((progress) =>
+          progress.step({
+            id: "cleanup",
+            label: "Stop unused native fork",
+            state: "failed",
+            details: [
+              "The native fork did not confirm Stop. Keep its checkout until Stop succeeds.",
+            ],
+            resources: [
+              {
+                kind: "worktree",
+                value: input.target.workingDirectory,
+                state: "retained",
+                nextAction: `Stop native session ${child.externalSessionId} before removing this checkout.`,
+              },
+            ],
+          }),
+        );
+      }
       const released = yield* Effect.exit(deps.live.releaseSession(childRef));
       const failures = [stopped, released].flatMap((result) =>
         Exit.isFailure(result) ? [result.cause] : [],
       );
+      if (failures.length === 0)
+        yield* updateStartup((progress) =>
+          progress.step({
+            id: "cleanup",
+            label: "Stop unused native fork",
+            state: "completed",
+            details: ["The unused fork was stopped and released. Native history can remain."],
+          }),
+        );
       let message = `Could not save the fork: ${Cause.pretty(saved.cause)}`;
       if (failures.length > 0)
         message += ` Cleanup of runtime session ${child.externalSessionId} also failed: ${failures.map(Cause.pretty).join("; ")}.`;

@@ -204,6 +204,7 @@ export function useAgentStudioSelectedSessionView({
     });
   }, [host, workspaceRepoPath, runtimeKind, externalSessionId, workingDirectory, taskId, role]);
   const preparation = useChatSessionPreparation({
+    repoPath: workspaceRepoPath,
     identity: selectedSessionIdentity,
     targetKey: JSON.stringify([workspaceRepoPath, selectedSessionIdentity, taskId, role]),
     enabled:

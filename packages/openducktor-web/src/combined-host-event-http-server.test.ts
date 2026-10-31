@@ -6,6 +6,7 @@ import { BufferedHostEventStream } from "@openducktor/remote-host/host-event-bus
 import { createCombinedHostSseResponse } from "@openducktor/remote-host/combined-host-event-http-server";
 import {
   BROWSER_EVENT_STREAM_NAME,
+  STARTUP_EVENT_STREAM_NAME,
   liveSessionStreamEventName,
 } from "@openducktor/remote-host/host-event-stream-name";
 
@@ -423,6 +424,53 @@ test("browser tab events use their own event name, so they cannot evict other ev
     expect(decode((await reader.read()).value)).toContain(
       replayComplete(false, [BROWSER_EVENT_STREAM_NAME]),
     );
+  } finally {
+    await reader.cancel();
+  }
+});
+
+test("startup progress replay survives unrelated host event eviction", async () => {
+  const host = new BufferedHostEventStream({
+    events: 4,
+    bytes: 1024 * 1024,
+    totalBytes: 1024 * 1024,
+  });
+  host.emit(
+    {
+      channel: "openducktor://session-startup-progress",
+      payload: {
+        context: { startupAttemptId: "attempt-1", operationId: "operation-1" },
+        hostInstanceId: "host-1",
+        revision: 1,
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        scope: { kind: "workspace" },
+        phase: "running",
+        steps: [],
+        ownership: { state: "not_saved" },
+      },
+    },
+    () => {},
+  );
+  for (let index = 0; index < 6; index++) {
+    host.emit(
+      {
+        channel: "openducktor://run-event",
+        payload: { type: "autopilot_failure", failure: `failure ${index}` },
+      },
+      () => {},
+    );
+  }
+  const reader = (
+    await resume(host, { hostEpoch: host.hostEpoch, hostEventId: 0 })
+  ).body!.getReader();
+  try {
+    await reader.read();
+    const progress = decode((await reader.read()).value);
+    expect(progress).toContain(`event: ${STARTUP_EVENT_STREAM_NAME}\n`);
+    expect(progress).toContain('"startupAttemptId":"attempt-1"');
+    for (let index = 0; index < 4; index++) await reader.read();
+    expect(decode((await reader.read()).value)).toContain(replayComplete(false, ["message"]));
   } finally {
     await reader.cancel();
   }

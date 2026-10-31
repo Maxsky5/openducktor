@@ -15,17 +15,20 @@ import {
   useSessionStartKickoffDraft,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
-import { type ReactElement, type ReactNode, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
+import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { OptionPickerSheet } from "@/ui/option-picker-sheet";
 import { BranchPickerSheet } from "@/features/branches/branch-picker-sheet";
 import { EffortField, ModelField, SpeedField } from "@/features/model-picker/model-field";
 import { modelSummary } from "@/features/model-picker/model-field-model";
-import { motion } from "@/theme/tokens";
+import { motion, radius } from "@/theme/tokens";
 import { Button } from "@/ui/button";
+import { Icon } from "@/ui/icon";
+import { Touchable } from "@/ui/touchable";
 import { SegmentedControl, SwitchRow, TextField } from "@/ui/fields";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
@@ -164,14 +167,11 @@ const modelLoadingLabel = (model: SessionStartModalModel): string | null => {
 export function SessionStartForm({
   model: shown,
   branchesFailure,
-  notices,
   onEdit = NO_EDIT_REPORT,
 }: {
   model: SessionStartModalModel;
   /** The failed branch list read, which the target branch choice needs. */
   branchesFailure: BranchesFailure | null;
-  /** Notices above the choices, such as a first message that did not reach its session. */
-  notices?: ReactNode;
   /** Runs when the user changes a choice. */
   onEdit?: (() => void) | undefined;
 }): ReactElement {
@@ -214,15 +214,10 @@ export function SessionStartForm({
       note={blockedReason}
       secondary={
         model.allowRunInBackground ? (
-          <Button
-            label={titleCase(model.backgroundConfirmLabel ?? "Run in background")}
-            variant="gray"
-            size="lg"
-            command
+          <SessionStartBackgroundButton
+            model={model}
             disabled={confirmDisabled}
-            accessibilityHint="Starts the session and keeps this screen."
-            onPress={() => confirm(true)}
-            fill
+            onConfirm={() => confirm(true)}
           />
         ) : null
       }
@@ -240,7 +235,6 @@ export function SessionStartForm({
         />
       }
     >
-      {notices}
       <StartNotices model={model} branchesFailure={choosesTargetBranch ? branchesFailure : null} />
       <FormBody>
         <FormLead text={model.description} />
@@ -300,6 +294,44 @@ export function SessionStartForm({
         ) : null}
       </FormBody>
     </ActionForm>
+  );
+}
+
+function SessionStartBackgroundButton({
+  model,
+  disabled,
+  onConfirm,
+}: {
+  model: SessionStartModalModel;
+  disabled: boolean;
+  onConfirm: () => void;
+}): ReactElement {
+  const submitted = model.phase.kind === "progress";
+  const label = submitted
+    ? "Continue in background"
+    : (model.backgroundConfirmLabel ?? "Run in background");
+  const blocked = useCommandBlocked(!submitted, label);
+  const inactive = !submitted && (disabled || blocked);
+  const hint = submitted
+    ? "Keeps the session start running and closes this sheet."
+    : "Starts the session and keeps this screen.";
+  return (
+    <Touchable
+      feedback="scale"
+      disabled={inactive}
+      radius={radius.lg}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={blocked ? "Available when the host connection is live." : hint}
+      onPress={submitted ? model.onContinueInBackground : onConfirm}
+      containerStyle={styles.backgroundActionContainer}
+      style={styles.backgroundAction}
+    >
+      <Icon name="layers" size={16} color="label" />
+      <Text variant="subhead" weight="medium" style={styles.backgroundLabel}>
+        {label}
+      </Text>
+    </Touchable>
   );
 }
 
@@ -464,6 +496,20 @@ function KickoffPromptField({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  backgroundActionContainer: { flexGrow: 1, flexShrink: 1 },
+  backgroundAction: {
+    backgroundColor: theme.desktop.card,
+    borderColor: theme.desktop.input,
+    borderWidth: 1,
+    minHeight: theme.touchTarget,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: theme.space.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.space.sm,
+  },
+  backgroundLabel: { flexShrink: 1 },
   notices: {
     gap: theme.space.sm,
     paddingHorizontal: theme.layout.screenPadding,

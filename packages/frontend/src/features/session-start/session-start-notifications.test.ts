@@ -1,14 +1,8 @@
-import { BUILTIN_ROLE_LABELS, createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
-import { sonnerFeedback } from "@/lib/sonner-feedback";
-import { showSessionStartMessageRecovery } from "./session-start-message-recovery";
-import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { type NotificationOccurrence } from "@openducktor/contracts";
-import { toast } from "sonner";
-import { createNotificationPolicy } from "@openducktor/frontend-core/notifications/notification-policy";
 import { navigateToNotificationTarget } from "@/features/notifications/notification-navigation-logic";
-import { startKanbanSessionFlow } from "@openducktor/frontend-core/tasks/workflow/kanban-session-start-actions";
 import { buildSessionStartErrorOccurrence } from "@openducktor/core";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
@@ -51,87 +45,6 @@ const baseInput = {
 };
 
 describe("session-start notifications", () => {
-  test.each([
-    "disabled",
-    "os_suppressed",
-    "in_app",
-    "delivery_failed",
-    "publisher_failed",
-  ] as const)(
-    "preserves background kickoff failure feedback with %s notifications",
-    async (scenario) => {
-      const settings = createBuiltinNotificationSettings();
-      settings.volumePercent = 0;
-      settings.kinds["agent.session_error"] = {
-        enabled: scenario !== "disabled",
-        target: scenario === "os_suppressed" ? "os" : "in_app",
-        sound: "none",
-      };
-      const deliverInApp = mock(async () => {
-        if (scenario === "delivery_failed") throw new Error("Toast delivery failed");
-      });
-      const deliverOs = mock(async () => ({ status: "shown" as const }));
-      const policy = createNotificationPolicy({
-        inApp: { deliver: deliverInApp },
-        os: { deliver: deliverOs },
-        sound: { play: async () => {} },
-        onFailure: () => {},
-      });
-      const notifications = createPublisher();
-      notifications.publishSessionError = async (input) => {
-        if (scenario === "publisher_failed") throw new Error("Publication failed");
-        const occurrence = buildSessionStartErrorOccurrence(
-          { repoPath: "/repo", repositoryLabel: "Repo" },
-          { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
-        );
-        const local = await policy.dispatch(
-          occurrence,
-          { phase: "local", inAppFeedbackHandled: input.inAppFeedbackHandled === true },
-          settings,
-        );
-        if (local.externalPlan)
-          await policy.dispatch(occurrence, { phase: "external", appFocused: true }, settings);
-        return local.inAppDelivered;
-      };
-      const runSessionStartWorkflow = createSessionStartWorkflowRunner({
-        workspaceId: "workspace-1",
-        startAgentSession: async () => session,
-        sendAgentMessage: async () => {
-          throw new Error("First message failed");
-        },
-        notifications,
-      });
-      const showError = spyOn(toast, "error").mockImplementation(() => "error-toast");
-      try {
-        const started = await startKanbanSessionFlow({
-          request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
-          decision: baseInput.decision,
-          tasks: [baseInput.task],
-          workspaceId: "workspace-1",
-          startInBackground: true,
-          feedback: sonnerFeedback,
-          onPostStartMessageFailure: showSessionStartMessageRecovery,
-          runSessionStartWorkflow,
-          openStartedSession: () => {},
-        });
-        expect(started).toMatchObject(session);
-        expect(showError).toHaveBeenCalledTimes(1);
-        expect(showError).toHaveBeenCalledWith(
-          "Session started, but the first message failed.",
-          expect.objectContaining({
-            description: "First message failed",
-            action: expect.objectContaining({ label: "Retry message" }),
-          }),
-        );
-        expect(deliverOs).not.toHaveBeenCalled();
-        expect(deliverInApp).not.toHaveBeenCalled();
-        expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
-      } finally {
-        showError.mockRestore();
-      }
-    },
-  );
-
   test.each(["fresh", "fork"] as const)(
     "publishes Started after a successful %s start",
     async (startMode) => {
@@ -140,7 +53,7 @@ describe("session-start notifications", () => {
         workspaceId: "workspace-1",
         startAgentSession: mock(async () => session),
         notifications,
-        createLaunchAttemptId: () => "launch-1",
+        launchAttemptId: "launch-1",
       });
 
       await runner({
@@ -157,6 +70,7 @@ describe("session-start notifications", () => {
         taskId: "task-1",
         taskTitle: "Build notifications",
         role: "build",
+        inAppFeedbackHandled: true,
         session,
       });
       expect(notifications.publishSessionError).not.toHaveBeenCalled();
@@ -169,7 +83,7 @@ describe("session-start notifications", () => {
       workspaceId: "workspace-1",
       startAgentSession: mock(async () => session),
       notifications,
-      createLaunchAttemptId: () => "launch-reuse",
+      launchAttemptId: "launch-reuse",
     });
 
     await runner({
@@ -190,7 +104,7 @@ describe("session-start notifications", () => {
         throw startFailure;
       }),
       notifications,
-      createLaunchAttemptId: () => "launch-error",
+      launchAttemptId: "launch-error",
     });
 
     let rejected: unknown;
@@ -210,6 +124,7 @@ describe("session-start notifications", () => {
         taskId: "task-1",
         taskTitle: "Build notifications",
         role: "build",
+        inAppFeedbackHandled: true,
       },
       startFailure.message,
     );
@@ -224,7 +139,7 @@ describe("session-start notifications", () => {
         throw "start failed";
       }),
       notifications,
-      createLaunchAttemptId: () => "launch-string-error",
+      launchAttemptId: "launch-string-error",
     });
 
     let rejected: unknown;
@@ -239,29 +154,7 @@ describe("session-start notifications", () => {
     expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
   });
 
-  test("leaves feedback to the caller when no in-app notification appears", async () => {
-    const notifications = createPublisher();
-    notifications.publishSessionError = mock(async () => false);
-    const runner = createSessionStartWorkflowRunner({
-      workspaceId: "workspace-1",
-      startAgentSession: mock(async () => {
-        throw new Error("start failed");
-      }),
-      notifications,
-      createLaunchAttemptId: () => "launch-no-in-app",
-    });
-
-    let rejected: unknown;
-    try {
-      await runner(baseInput);
-    } catch (cause) {
-      rejected = cause;
-    }
-
-    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(false);
-  });
-
-  test("leaves feedback to the caller when the error notification cannot publish", async () => {
+  test("reports notification failure while the startup trace handles feedback", async () => {
     const notifications = createPublisher();
     notifications.publishSessionError = mock(() => {
       throw new Error("notification failed");
@@ -272,7 +165,7 @@ describe("session-start notifications", () => {
         throw new Error("start failed");
       }),
       notifications,
-      createLaunchAttemptId: () => "launch-notification-error",
+      launchAttemptId: "launch-notification-error",
     });
 
     let rejected: unknown;
@@ -282,7 +175,7 @@ describe("session-start notifications", () => {
       rejected = cause;
     }
 
-    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(false);
+    expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
     expect(notifications.reportFailure).toHaveBeenCalledWith(
       expect.objectContaining({ message: "notification failed" }),
       expect.objectContaining({ launchAttemptId: "launch-notification-error" }),
@@ -293,66 +186,12 @@ describe("session-start notifications", () => {
     expect(isSessionStartFailureFeedbackHandled(new Error("other failure"))).toBe(false);
   });
 
-  test("reports a failed retry callback and leaves the launch failure to the host", async () => {
-    const failure = new Error("Feedback failed");
+  test("preserves accepted-message evidence when the host reports a later failure", async () => {
     const notifications = createPublisher();
-    notifications.publishSessionError = mock(async () => false);
-    const runner = createSessionStartWorkflowRunner({
-      workspaceId: "workspace-1",
-      startAgentSession: async () => session,
-      sendAgentMessage: async () => {
-        throw new Error("Send rejected");
-      },
-      notifications,
-    });
-    const callback = mock(() => {
-      throw failure;
-    });
-    const result = await runner({
-      ...baseInput,
-      request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
-      onPostStartMessageFailure: callback,
-    });
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(notifications.reportFailure).toHaveBeenCalledWith(failure, expect.anything());
-    // The host shows the failure in the saved session and sends its error notification.
-    expect(notifications.publishSessionError).not.toHaveBeenCalled();
-    expect(isSessionStartFailureFeedbackHandled(result.postStartActionError)).toBe(true);
-  });
-
-  test("marks in-app feedback as handled after the retry callback shows it", async () => {
-    const notifications = createPublisher();
-    notifications.publishSessionError = mock(async () => false);
-    const runner = createSessionStartWorkflowRunner({
-      workspaceId: "workspace-1",
-      startAgentSession: async () => session,
-      sendAgentMessage: async () => {
-        throw new Error("Send rejected");
-      },
-      notifications,
-    });
-    const callback = mock(
-      (_result: Pick<SessionStartWorkflowResult, "retryPostStartMessage">) => {},
-    );
-    const result = await runner({
-      ...baseInput,
-      request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
-      onPostStartMessageFailure: callback,
-    });
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback.mock.calls[0]?.[0].retryPostStartMessage).toBeFunction();
-    expect(notifications.publishSessionError).not.toHaveBeenCalled();
-    // The Retry toast shows the error, so the host notification skips its in-app toast.
-    expect(notifications.markInAppFeedbackHandled).toHaveBeenCalledWith("launch-failure:fake");
-    expect(isSessionStartFailureFeedbackHandled(result.postStartActionError)).toBe(true);
-  });
-
-  test("does not call the retry callback when the host accepted the first message", async () => {
-    const notifications = createPublisher();
-    const callback = mock(() => {});
     const runner = createRunner({
       workspaceId: "workspace-1",
       repoPath: "/repo",
+      launchAttemptId: "launch-accepted",
       sendAgentMessage: async () => {
         throw new Error("Unexpected resend");
       },
@@ -386,9 +225,7 @@ describe("session-start notifications", () => {
     const result = await runner({
       ...baseInput,
       request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
-      onPostStartMessageFailure: callback,
     });
-    expect(callback).not.toHaveBeenCalled();
     expect(result.retryPostStartMessage).toBeUndefined();
     expect(result.postStartMessageReceipt?.postAcceptanceFailure).toBe(
       "Stream closed after acceptance",
@@ -407,7 +244,7 @@ describe("session-start notifications", () => {
         throw new Error("message failed");
       }),
       notifications,
-      createLaunchAttemptId: () => "launch-post-error",
+      launchAttemptId: "launch-post-error",
     });
 
     await runner({
@@ -459,7 +296,7 @@ describe("session-start notifications", () => {
         }),
       },
       notifications,
-      createLaunchAttemptId: () => "launch-post-error",
+      launchAttemptId: "launch-post-error",
     });
 
     await runner({

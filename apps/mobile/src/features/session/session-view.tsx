@@ -20,6 +20,9 @@ import { useFocusPendingInput, useSessionTarget } from "./session-target";
 import { LiveSessionTranscript, ReadOnlySessionTranscript } from "./session-transcript-source";
 import { createJumpToLatestSignal } from "./transcript/jump-to-latest-signal";
 import { usePublishVisibleSession } from "./use-publish-visible-session";
+import { useSessionFork } from "./fork/session-fork";
+import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { StartupTrace } from "@/features/session-startup/startup-trace";
 
 /**
  * The session view. The navigation bar carries the session identity, status, and the work views,
@@ -34,6 +37,8 @@ import { usePublishVisibleSession } from "./use-publish-visible-session";
  */
 export const SessionView = memo(function SessionView(): ReactElement {
   const target = useSessionTarget();
+  const fork = useSessionFork();
+  const startup = useStartupAttempt(fork?.startupAttemptId);
   const focusPendingInput = useFocusPendingInput();
   const { readOnly, workspace } = target;
   const router = useRouter();
@@ -57,6 +62,11 @@ export const SessionView = memo(function SessionView(): ReactElement {
       <View style={styles.row}>
         <View style={styles.main}>
           <SessionHeader showsRail={!side} />
+          {startup?.presentation === "inline" ? (
+            <View style={styles.startup}>
+              <StartupTrace attemptId={startup.id} presentation="inline" />
+            </View>
+          ) : null}
           {readOnly ? null : <SessionGitConflict />}
           {/* A read-only session has no composer, so its column keeps the bottom safe area. */}
           <KeyboardInsetView
@@ -86,4 +96,5 @@ const styles = StyleSheet.create({
   main: { flex: 1, minWidth: 0 },
   column: { flex: 1 },
   transcript: { flex: 1 },
+  startup: { maxHeight: 280 },
 });

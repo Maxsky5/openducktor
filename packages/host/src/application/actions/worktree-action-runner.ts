@@ -1,4 +1,9 @@
-import type { RepoAction, RepoActions, TerminalOwnedContext } from "@openducktor/contracts";
+import type {
+  RepoAction,
+  RepoActions,
+  TerminalOwnedContext,
+  StartupStep,
+} from "@openducktor/contracts";
 import { Data, Effect, Option } from "effect";
 import type {
   StartedCommandTerminal,
@@ -8,6 +13,11 @@ import type {
 import { TERMINAL_LIMITS } from "../terminals/terminal-limits";
 import type { TerminalServiceError } from "../terminals/terminal-service-error";
 import { actionCommandLines, type RepoActionHasNoCommandError } from "./repo-action-command";
+import {
+  CurrentStartupProgress,
+  startupFailure,
+  type StartupProgressRecorder,
+} from "../agent-sessions/session-startup-progress";
 
 const WAIT_LIMIT_MINUTES = 5;
 
@@ -102,8 +112,10 @@ export const createWorktreeActionRunner = (
     const startAction = (
       action: RepoAction,
       context: TerminalOwnedContext,
-    ): Effect.Effect<StartedCommandTerminal, WorktreeActionStartError> =>
-      actionCommandLines(action).pipe(
+      progress: StartupProgressRecorder | undefined,
+    ): Effect.Effect<StartedCommandTerminal, WorktreeActionStartError> => {
+      const step = worktreeActionStep(action);
+      return actionCommandLines(action).pipe(
         Effect.flatMap((commandLines) =>
           Effect.uninterruptible(
             terminals
@@ -113,10 +125,46 @@ export const createWorktreeActionRunner = (
                 label: action.name,
                 commandLines,
                 startedBy: "host",
+                onResult: (result) => {
+                  const succeeded =
+                    result.type === "exited" && result.exitCode === 0 && result.signal === null;
+                  const outcome: StartupStep = {
+                    ...step,
+                    state: succeeded ? "completed" : "failed",
+                    details: result.outputTail.slice(),
+                    action: { ...step.action, result },
+                  };
+                  if (!succeeded) {
+                    let reason: string;
+                    if (result.type === "failed") reason = result.message;
+                    else if (result.type === "closed")
+                      reason = "stopped because its terminal closed before the command ended.";
+                    else
+                      reason = `exited with code ${result.exitCode ?? "unknown"}${result.signal ? ` and signal ${result.signal}` : ""}.`;
+                    outcome.failure = startupFailure(
+                      step.id,
+                      actionMessage(action.name, reason, result.outputTail),
+                    );
+                  }
+                  progress?.step(outcome);
+                },
               })
               .pipe(
                 Effect.tap((started) =>
-                  Effect.sync(() => terminalIds.add(started.response.ref.terminalId)),
+                  Effect.sync(() => {
+                    terminalIds.add(started.response.ref.terminalId);
+                    progress?.step({
+                      ...step,
+                      state: "running",
+                      details: action.waitBeforeAgentStart
+                        ? []
+                        : ["Started. Continues in its terminal after the session is ready."],
+                      action: {
+                        ...step.action,
+                        terminalId: started.response.ref.terminalId,
+                      },
+                    });
+                  }),
                 ),
               ),
           ),
@@ -130,6 +178,7 @@ export const createWorktreeActionRunner = (
             }),
         ),
       );
+    };
 
     const timeoutError = (action: RepoAction, terminalId: string) =>
       terminals.readOutputTail(terminalId, TERMINAL_LIMITS.commandOutputTailLines).pipe(
@@ -167,16 +216,32 @@ export const createWorktreeActionRunner = (
 
     return {
       run: ({ context, actions }) =>
-        Effect.forEach(
-          actions.items.filter((action) => action.runOnWorktreeCreate),
-          (action) =>
-            startAction(action, context).pipe(
-              Effect.flatMap((started) =>
-                action.waitBeforeAgentStart ? awaitAction(action, started) : Effect.void,
+        Effect.gen(function* () {
+          const progress = yield* CurrentStartupProgress;
+          const configured = actions.items.filter((action) => action.runOnWorktreeCreate);
+          for (const action of configured)
+            progress?.step({ ...worktreeActionStep(action), state: "pending" });
+          yield* Effect.forEach(
+            configured,
+            (action) =>
+              startAction(action, context, progress).pipe(
+                Effect.flatMap((started) =>
+                  action.waitBeforeAgentStart ? awaitAction(action, started) : Effect.void,
+                ),
+                Effect.tapError((failure) =>
+                  Effect.sync(() =>
+                    progress?.step({
+                      id: `action:${action.id}`,
+                      label: action.name,
+                      state: "failed",
+                      failure: startupFailure(`action:${action.id}`, failure.message),
+                    }),
+                  ),
+                ),
               ),
-            ),
-          { discard: true },
-        ),
+            { discard: true },
+          );
+        }),
       stopTerminals: () =>
         Effect.gen(function* () {
           const [, failures] = yield* Effect.partition(
@@ -207,12 +272,24 @@ export const createWorktreeActionRunner = (
   },
 });
 
+export const worktreeActionStep = (
+  action: RepoAction,
+): Pick<StartupStep, "id" | "label"> & { action: NonNullable<StartupStep["action"]> } => ({
+  id: `action:${action.id}`,
+  label: action.name,
+  action: {
+    actionId: action.id,
+    command: action.command,
+    waitBeforeAgentStart: action.waitBeforeAgentStart,
+  },
+});
+
 const actionMessage = (actionName: string, summary: string, outputTail: readonly string[]) =>
   `Worktree action "${actionName}" ${summary}${
     outputTail.length > 0 ? `\nLast output:\n${outputTail.join("\n")}` : ""
   }`;
 
-const TIMEOUT_SUMMARY = `did not finish within ${WAIT_LIMIT_MINUTES} minutes, so OpenDucktor stopped it.`;
+const TIMEOUT_SUMMARY = `did not finish within ${WAIT_LIMIT_MINUTES} minutes. Startup is stopping its terminal before cleanup.`;
 
 const requireSuccess = (
   actionName: string,

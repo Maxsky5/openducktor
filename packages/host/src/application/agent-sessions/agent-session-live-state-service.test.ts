@@ -163,6 +163,61 @@ const expectHostFailure = async <Success>(
   return result.failure;
 };
 
+test("startup preparation receipt identifies a published target boundary", async () => {
+  const h = createHarness();
+  const binding = h.service.createRuntimeRegistration({
+    runtimeId: "prepared-runtime",
+    runtimeKind: "codex",
+  });
+  await Effect.runPromise(
+    h.service.registerRuntimeAdapter({
+      ...fakeAdapter({ runtimeId: "prepared-runtime", snapshots: () => [liveSnapshot("ready")] }),
+      binding,
+    }),
+  );
+  const receipt = await Effect.runPromise(
+    h.service.finalizeStartupPreparation(sessionRef("ready"), "prepared-runtime"),
+  );
+  const publication = h.events.at(-1);
+  expect(receipt.runtimeId).toBe("prepared-runtime");
+  expect(publication).toMatchObject({
+    type: "session_upsert",
+    session: { ref: receipt.ref },
+    sequence: receipt.liveStateSequence,
+  });
+  expect(receipt.liveStateSequence).toBeGreaterThan(0);
+});
+
+test("startup preparation cannot issue a receipt for a missing native session", async () => {
+  const h = createHarness();
+  await Effect.runPromise(
+    h.service.registerRuntimeAdapter(fakeAdapter({ runtimeId: "runtime", snapshots: () => [] })),
+  );
+  const failure = await expectHostFailure(
+    h.service.finalizeStartupPreparation(sessionRef("missing"), "runtime"),
+  );
+  expect(failure).toMatchObject({
+    _tag: "HostResourceError",
+    operation: "agent-session-live.finalize-startup",
+  });
+  expect(h.events.filter((event) => event.type === "session_upsert")).toEqual([]);
+});
+
+test("a replacement runtime cannot confirm a late startup handoff from its predecessor", async () => {
+  const h = createHarness();
+  await Effect.runPromise(
+    h.service.registerRuntimeAdapter(
+      fakeAdapter({ runtimeId: "replacement", snapshots: () => [liveSnapshot("ready")] }),
+    ),
+  );
+  h.events.length = 0;
+  const failure = await expectHostFailure(
+    h.service.finalizeStartupPreparation(sessionRef("ready"), "original"),
+  );
+  expect(failure.message).toContain("no longer confirmed");
+  expect(h.events.filter((event) => event.type === "session_upsert")).toEqual([]);
+});
+
 test.each(["runtime", "session"] as const)(
   "clears a starting hold after %s removal even when fault reporting fails",
   async (removal) => {

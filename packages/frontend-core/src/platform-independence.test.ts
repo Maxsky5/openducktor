@@ -243,6 +243,8 @@ describe("frontend core without a DOM", () => {
       expect(controlEvents).toContainEqual({
         __openducktorConnectionControl: true,
         kind: "reconnected",
+        hostChanged: false,
+        missedEventNames: ["message"],
         missedEvents: true,
       });
     } finally {

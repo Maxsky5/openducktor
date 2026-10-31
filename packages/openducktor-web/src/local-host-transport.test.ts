@@ -1,5 +1,6 @@
 import {
   BROWSER_EVENT_STREAM_NAME,
+  STARTUP_EVENT_STREAM_NAME,
   liveSessionStreamEventName,
 } from "@openducktor/remote-host/host-event-stream-name";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -457,6 +458,77 @@ describe("createLocalHostClient", () => {
 });
 
 describe("local host SSE subscriptions", () => {
+  test("waits for startup replay before dispatch and reports startup coverage separately", async () => {
+    const { subscribeLocalHostStartupProgress } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const listener = mock(() => {});
+    let ready = false;
+    const subscription = subscribeLocalHostStartupProgress(listener).then((stop: () => void) => {
+      ready = true;
+      return stop;
+    });
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, STARTUP_EVENT_STREAM_NAME);
+    eventSource.emit("open", "");
+    await Promise.resolve();
+    expect(ready).toBe(false);
+
+    eventSource.connect();
+    const stop = await subscription;
+    const progress = {
+      channel: "openducktor://session-startup-progress",
+      payload: {
+        context: { startupAttemptId: "attempt-1", operationId: "operation-1" },
+        hostInstanceId: "host-1",
+        revision: 1,
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        scope: { kind: "workspace" },
+        phase: "running",
+        steps: [],
+        ownership: { state: "not_saved" },
+      },
+    };
+    try {
+      expect(ready).toBe(true);
+      eventSource.emit(STARTUP_EVENT_STREAM_NAME, JSON.stringify(progress));
+      expect(listener).toHaveBeenNthCalledWith(1, progress);
+      expect(() => eventSource.emit("message", JSON.stringify(progress))).toThrow(
+        "wrong stream event name",
+      );
+      eventSource.connect({ hostChanged: false, gaps: ["message"] });
+      expect(listener).toHaveBeenNthCalledWith(2, {
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: false,
+        hostChanged: false,
+        missedEventNames: ["message"],
+      });
+      eventSource.connect({ hostChanged: false, gaps: [STARTUP_EVENT_STREAM_NAME] });
+      expect(listener).toHaveBeenNthCalledWith(3, {
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: true,
+        hostChanged: false,
+        missedEventNames: [STARTUP_EVENT_STREAM_NAME],
+      });
+      eventSource.connect({ hostChanged: true, gaps: [] });
+      expect(listener).toHaveBeenNthCalledWith(4, {
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: true,
+        hostChanged: true,
+        missedEventNames: [],
+      });
+    } finally {
+      stop();
+    }
+    expect(eventSource.hasListener(STARTUP_EVENT_STREAM_NAME)).toBe(false);
+    expect(eventSource.closed).toBe(true);
+  });
+
   test("waits for the Azure connection stream to open", async () => {
     const { subscribeLocalHostAzureDevOpsConnectionUpdates } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
@@ -719,11 +791,20 @@ describe("local host SSE subscriptions", () => {
     eventSource.connect({ hostChanged: false, gaps: ["message"] });
     eventSource.connect({ hostChanged: true, gaps: [] });
     expect(listener).toHaveBeenCalledTimes(4);
-    for (const [index, missedEvents] of [false, false, true, true].entries()) {
+    for (const [index, coverage] of [
+      { missedEvents: false, hostChanged: false, missedEventNames: [] },
+      {
+        missedEvents: false,
+        hostChanged: false,
+        missedEventNames: [liveSessionStreamEventName("/repo")],
+      },
+      { missedEvents: true, hostChanged: false, missedEventNames: ["message"] },
+      { missedEvents: true, hostChanged: true, missedEventNames: [] },
+    ].entries()) {
       expect(listener).toHaveBeenNthCalledWith(index + 1, {
         __openducktorConnectionControl: true,
         kind: "reconnected",
-        missedEvents,
+        ...coverage,
       });
     }
 
@@ -770,6 +851,8 @@ describe("local host SSE subscriptions", () => {
       __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
+      hostChanged: false,
+      missedEventNames: [],
     });
     unsubscribe();
   });
@@ -805,8 +888,20 @@ describe("local host SSE subscriptions", () => {
 
     expect(received).toEqual([
       JSON.parse(envelope).payload,
-      { __openducktorConnectionControl: true, kind: "reconnected", missedEvents: false },
-      { __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true },
+      {
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: false,
+        hostChanged: false,
+        missedEventNames: ["message"],
+      },
+      {
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: true,
+        hostChanged: false,
+        missedEventNames: [BROWSER_EVENT_STREAM_NAME],
+      },
     ]);
     unsubscribe();
     expect(eventSource.hasListener(BROWSER_EVENT_STREAM_NAME)).toBe(false);
@@ -831,7 +926,13 @@ describe("local host SSE subscriptions", () => {
 
     expect(received).toEqual([
       payload,
-      { __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true },
+      {
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: true,
+        hostChanged: false,
+        missedEventNames: ["message"],
+      },
     ]);
     unsubscribe();
   });
@@ -867,6 +968,8 @@ describe("local host SSE subscriptions", () => {
       __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
+      hostChanged: false,
+      missedEventNames: [],
     });
 
     expect(() => eventSource.connect()).toThrow("reconnect listener failed");
@@ -1070,6 +1173,8 @@ describe("local host SSE subscriptions", () => {
       __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: true,
+      hostChanged: false,
+      missedEventNames: [],
     });
     const unsubscribe = await subscription;
 
@@ -1110,6 +1215,8 @@ describe("local host SSE subscriptions", () => {
       __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
+      hostChanged: false,
+      missedEventNames: [],
     });
 
     eventSource.emit("error", "lost again");
@@ -1152,6 +1259,8 @@ describe("local host SSE subscriptions", () => {
       __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
+      hostChanged: false,
+      missedEventNames: [],
     };
     expect(late).toHaveBeenLastCalledWith(reconnected);
 
@@ -1218,6 +1327,8 @@ describe("local host SSE subscriptions", () => {
       __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: true,
+      hostChanged: false,
+      missedEventNames: ["message"],
     });
 
     unsubscribeThrowing();
@@ -1254,6 +1365,8 @@ describe("local host SSE subscriptions", () => {
           __openducktorConnectionControl: true,
           kind: "reconnected",
           missedEvents: true,
+          hostChanged: false,
+          missedEventNames: ["message"],
         });
         recovery.reject(failure);
         await waitForCondition(() => report.mock.calls.length === 1);

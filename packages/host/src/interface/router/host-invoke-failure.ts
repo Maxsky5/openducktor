@@ -27,8 +27,16 @@ import {
 } from "../../effect/host-errors";
 import { SessionOperationError } from "../../ports/session-operation-error";
 import { WorkflowIntentRejectedError } from "../../ports/workflow-intent-rejected-error";
+import { startupFailureProgress } from "../../application/agent-sessions/session-startup-progress";
 
 export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | undefined => {
+  const failure = mapHostInvokeFailure(cause);
+  const startupProgress = startupFailureProgress(cause);
+  if (!startupProgress) return failure;
+  return failure ? { ...failure, startupProgress } : { kind: "session_startup", startupProgress };
+};
+
+const mapHostInvokeFailure = (cause: unknown): HostInvokeFailure | undefined => {
   if (cause instanceof SessionOperationError)
     return { kind: "session_operation", observation: cause.observation };
   if (cause instanceof WorkflowIntentRejectedError) return { kind: "workflow_intent_rejected" };

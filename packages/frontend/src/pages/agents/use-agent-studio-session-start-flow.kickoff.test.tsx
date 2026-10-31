@@ -1,4 +1,8 @@
-import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
+import { useSessionStartWorkflowRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-workflow-runner";
+import {
+  createAgentStudioStartupTestHost,
+  type AgentStudioWorkflowFixture,
+} from "./agent-studio-startup-test-host";
 import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
@@ -19,7 +23,10 @@ import { useAgentStudioSessionStartFlow } from "./session-start/use-agent-studio
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioSessionStartFlow>[0];
+type ProductionHookArgs = Parameters<typeof useAgentStudioSessionStartFlow>[0];
+type HookArgs = Omit<ProductionHookArgs, "runSessionStartWorkflow"> & {
+  workflow: AgentStudioWorkflowFixture;
+};
 
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -27,17 +34,18 @@ const sessionIdentity = (externalSessionId: string) => ({
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 
-const createRunSessionStartWorkflow = (
-  overrides: Partial<Parameters<typeof createSessionStartWorkflowRunner>[0]> = {},
-) =>
-  createSessionStartWorkflowRunner({
-    workspaceId: null,
-    startAgentSession: async () => sessionIdentity("session-new"),
-    sendAgentMessage: async () => null,
-    ...overrides,
-  });
+const createWorkflowFixture = (
+  overrides: Partial<AgentStudioWorkflowFixture> = {},
+): AgentStudioWorkflowFixture => ({
+  workspaceId: "workspace-1",
+  startAgentSession: async () => sessionIdentity("session-new"),
+  sendAgentMessage: async () => null,
+  ...overrides,
+});
 
 const createHookHarness = (initialProps: HookArgs) => {
+  let currentWorkflow = initialProps.workflow;
+  const startupHost = createAgentStudioStartupTestHost(() => currentWorkflow);
   const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -49,7 +57,7 @@ const createHookHarness = (initialProps: HookArgs) => {
       },
       createElement(
         QueryProvider,
-        null,
+        { connection: startupHost.connection },
         createElement(
           HostRuntimeStatusContext.Provider,
           {
@@ -105,19 +113,39 @@ const createHookHarness = (initialProps: HookArgs) => {
                   loadRepoRuntimeFileSearch: async () => [],
                 },
               },
-              children,
+              createElement(startupHost.Providers, null, children),
             ),
           ),
         ),
       ),
     );
 
-  return createCoreHookHarness(useAgentStudioSessionStartFlow, initialProps, { wrapper });
+  const harness = createCoreHookHarness(
+    (props: HookArgs) => {
+      currentWorkflow = props.workflow;
+      const runSessionStartWorkflow = useSessionStartWorkflowRunner({
+        workspaceId: props.workspaceId,
+        repoPath: props.workspaceRepoPath,
+        notifications: props.workflow.notifications,
+      });
+      return useAgentStudioSessionStartFlow({ ...props, runSessionStartWorkflow });
+    },
+    initialProps,
+    { wrapper },
+  );
+  return {
+    ...harness,
+    connection: startupHost.connection,
+    unmount: async () => {
+      await harness.unmount();
+      await startupHost.dispose();
+    },
+  };
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  workspaceId: null,
-  workspaceRepoPath: null,
+  workspaceId: "workspace-1",
+  workspaceRepoPath: "/repo",
   favoriteState: {
     favorites: [],
     isLoading: false,
@@ -146,19 +174,15 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     profileId: "spec",
   },
   repoSettings: null,
-  runSessionStartWorkflow: createRunSessionStartWorkflow(),
+  workflow: createWorkflowFixture(),
   scheduleQueryUpdate: () => {},
   ...overrides,
 });
 
 describe("useAgentStudioSessionStartFlow kickoff failures", () => {
-  test.each([
-    { fails: true, feedbackHandled: false },
-    { fails: true, feedbackHandled: true },
-    { fails: false, feedbackHandled: false },
-  ])(
-    "keeps the session with fails=$fails and feedbackHandled=$feedbackHandled",
-    async ({ fails, feedbackHandled }) => {
+  test.each([true, false])(
+    "keeps the saved session and startup feedback when kickoff fails=%s",
+    async (fails) => {
       const startAgentSession = mock(async () => sessionIdentity("session-new"));
       const sendAgentMessage = mock(async () => {
         if (fails) throw new Error("kickoff failed");
@@ -168,12 +192,12 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
       const harness = createHookHarness(
         createBaseArgs({
           scheduleQueryUpdate,
-          runSessionStartWorkflow: createRunSessionStartWorkflow({
+          workflow: createWorkflowFixture({
             startAgentSession,
             sendAgentMessage,
             notifications: {
               publishSessionStarted: () => {},
-              publishSessionError: async () => feedbackHandled,
+              publishSessionError: async () => false,
               markInAppFeedbackHandled: () => {},
               reportFailure: () => {},
             },
@@ -188,7 +212,9 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
       await harness.waitFor(
         (state) =>
           state.sessionStartModal !== null &&
-          state.sessionStartModal.isSelectionCatalogLoading === false,
+          state.sessionStartModal.isSelectionCatalogLoading === false &&
+          state.sessionStartModal.isKickoffPromptLoading === false &&
+          state.sessionStartModal.kickoffPromptError === null,
       );
       await withMockedToast(async ({ toastErrorMock }) => {
         await harness.run(async (state) => {
@@ -208,24 +234,25 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
 
         expect(startAgentSession).toHaveBeenCalledTimes(1);
         expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-        expect(scheduleQueryUpdate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            task: "task-1",
-            session: "session-new",
-          }),
-        );
         if (fails) {
-          expect(toastErrorMock).toHaveBeenCalledTimes(1);
-          expect(toastErrorMock).toHaveBeenCalledWith(
-            "Session started, but the first message failed.",
-            expect.objectContaining({
-              description: "kickoff failed",
-              action: expect.objectContaining({ label: "Retry message" }),
-            }),
-          );
+          expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+          expect(harness.connection.startupAttempts.getSnapshot()).toMatchObject([
+            {
+              status: { phase: "failed", confirmation: "current" },
+              ownership: {
+                state: "saved",
+                target: { kind: "task", record: { externalSessionId: "session-new" } },
+              },
+              error: expect.stringContaining("kickoff failed"),
+              recoveryActions: [{ kind: "retry_message" }],
+            },
+          ]);
         } else {
-          expect(toastErrorMock).not.toHaveBeenCalled();
+          expect(scheduleQueryUpdate).toHaveBeenCalledWith(
+            expect.objectContaining({ task: "task-1", session: "session-new" }),
+          );
         }
+        expect(toastErrorMock).not.toHaveBeenCalled();
       });
 
       await harness.unmount();

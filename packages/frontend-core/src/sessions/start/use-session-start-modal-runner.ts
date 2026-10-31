@@ -24,6 +24,8 @@ import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validati
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
 import { useSessionStartKickoffPrompt } from "./use-session-start-kickoff-prompt";
+import { useStartupAttempt } from "../startup/use-startup-attempts";
+import { startupIsPending } from "../startup/startup-navigation";
 
 export type SessionStartModalDecision = Exclude<NewSessionStartDecision, null>;
 
@@ -42,6 +44,7 @@ type SessionStartDecisionRequestContext = Pick<
 >;
 
 type SessionStartModalRunResult = {
+  startupAttemptId: string;
   decision: SessionStartModalDecision;
   runInBackground: boolean;
   request: SessionStartModalOpenRequest;
@@ -57,32 +60,42 @@ type SessionStartModalRunnerResult = {
 };
 
 type PendingModalRun = {
+  startupAttemptId?: string;
   scopeKey: string | null;
   request: SessionStartModalOpenRequest;
   execute: (result: SessionStartModalRunResult) => Promise<() => void>;
   cancel: () => void;
 };
 
-/** Keeps a start locked to its scope until execution ends, even if another scope opens a modal. */
+/** Locks the foreground submission until it settles or moves to background feedback. */
 export function useSessionStartModalRunner({
   branches = [],
   favoriteState,
   repoSettings,
   workspaceRepoPath,
   scopeKey = workspaceRepoPath,
+  workspaceId = scopeKey,
+  onBackgroundTransfer,
 }: {
   branches?: GitBranch[];
   favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
+  workspaceId?: string | null;
   scopeKey?: string | null;
+  onBackgroundTransfer?: ((attemptId: string) => void) | undefined;
 }): SessionStartModalRunnerResult {
-  const { feedback } = useClientConnection();
+  const { feedback, startupAttempts } = useClientConnection();
   const scopeRef = useRef(scopeKey);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
+  const startupAttemptId =
+    pendingRunRef.current?.scopeKey === scopeKey
+      ? (pendingRunRef.current.startupAttemptId ?? null)
+      : null;
+  const activeAttempt = useStartupAttempt(startupAttemptId);
   const confirmationsRef = useRef(new Map<string | null, PendingModalRun>());
   const [confirmations, setConfirmations] = useState(confirmationsRef.current);
-  const isStarting = confirmations.has(scopeKey);
+  const isStarting = confirmations.has(scopeKey) || startupIsPending(activeAttempt);
 
   const {
     intent,
@@ -158,10 +171,55 @@ export function useSessionStartModalRunner({
       }
 
       pendingRunRef.current = null;
+      if (pendingRun.startupAttemptId) {
+        const attempt = startupAttempts.getAttempt(pendingRun.startupAttemptId);
+        if (attempt) {
+          if (settle && attempt.presentation === "dialog" && attempt.status.phase === "ready")
+            startupAttempts.handoff(attempt.id);
+          else if (!settle) startupAttempts.continueInBackground(attempt.id);
+        }
+      }
       closeStartModal();
       (settle ?? pendingRun.cancel)();
     },
-    [closeStartModal],
+    [closeStartModal, startupAttempts],
+  );
+
+  const releaseConfirmation = useCallback((run: PendingModalRun): void => {
+    if (confirmationsRef.current.get(run.scopeKey) !== run) return;
+    const remaining = new Map(confirmationsRef.current);
+    remaining.delete(run.scopeKey);
+    confirmationsRef.current = remaining;
+    setConfirmations(remaining);
+  }, []);
+
+  const continueRunInBackground = useCallback(
+    (run: PendingModalRun): void => {
+      if (!run.startupAttemptId) return;
+      startupAttempts.continueInBackground(run.startupAttemptId);
+      if (pendingRunRef.current === run) {
+        pendingRunRef.current = null;
+        closeStartModal();
+        onBackgroundTransfer?.(run.startupAttemptId);
+      }
+      if (confirmationsRef.current.get(run.scopeKey) !== run) run.cancel();
+      releaseConfirmation(run);
+    },
+    [closeStartModal, onBackgroundTransfer, releaseConfirmation, startupAttempts],
+  );
+
+  useEffect(
+    () => () => {
+      const pendingRun = pendingRunRef.current;
+      pendingRunRef.current = null;
+      if (pendingRun?.startupAttemptId)
+        startupAttempts.continueInBackground(pendingRun.startupAttemptId);
+      pendingRun?.cancel();
+      for (const run of confirmationsRef.current.values())
+        if (run !== pendingRun && run.startupAttemptId)
+          startupAttempts.continueInBackground(run.startupAttemptId);
+    },
+    [startupAttempts],
   );
 
   useEffect(() => {
@@ -223,10 +281,7 @@ export function useSessionStartModalRunner({
       }
 
       const pendingRun = pendingRunRef.current;
-      if (!pendingRun) {
-        feedback.show("error", "Session start request is no longer available.");
-        return;
-      }
+      if (!pendingRun) return;
 
       if (
         pendingRun.request.requestId !== intent?.requestId ||
@@ -271,26 +326,57 @@ export function useSessionStartModalRunner({
           });
         }
 
+        if (!workspaceRepoPath || !workspaceId)
+          throw new Error("Select a workspace before starting the session.");
+        const attemptId = startupAttempts.begin({
+          origin: {
+            workspaceId,
+            repoPath: workspaceRepoPath,
+            scope: { kind: "task", taskId: requestContext.taskId, role: requestContext.role },
+          },
+          label: requestContext.title ?? `Start ${requestContext.role} session`,
+          presentation: input.runInBackground ? "notification" : "dialog",
+          instructionRequired: requestContext.postStartAction !== "none",
+        });
+        pendingRun.startupAttemptId = attemptId;
+        if (input.runInBackground) continueRunInBackground(pendingRun);
         const settle = await pendingRun.execute({
+          startupAttemptId: attemptId,
           decision,
           runInBackground: input.runInBackground ?? false,
           request: requestContext,
         });
+        const outcome = startupAttempts.getAttempt(attemptId);
+        if (
+          startupIsPending(outcome) &&
+          (outcome?.operations.length !== 0 || outcome.status.confirmation === "unconfirmed")
+        ) {
+          pendingRun.cancel();
+          return;
+        }
+        if (outcome?.status.phase === "failed" || outcome?.status.phase === "canceled") {
+          if (pendingRunRef.current !== pendingRun) settle();
+          return;
+        }
+        if (outcome?.operations.length === 0) startupAttempts.release(attemptId);
         if (pendingRunRef.current === pendingRun) resolvePendingRun(settle);
         else settle();
       } catch (error) {
-        if (!isSessionStartFailureFeedbackHandled(error)) {
+        if (pendingRun.startupAttemptId) {
+          const attempt = startupAttempts.getAttempt(pendingRun.startupAttemptId);
+          if (attempt && !["ready", "failed", "canceled"].includes(attempt.status.phase)) {
+            if (attempt.operations.length === 0)
+              startupAttempts.rejectBeforeDispatch(attempt.id, errorMessage(error));
+            else startupAttempts.fail(attempt.id, errorMessage(error), false);
+          }
+        } else if (!isSessionStartFailureFeedbackHandled(error)) {
           feedback.show("error", "Failed to start the session.", {
             description: errorMessage(error),
           });
         }
+        if (pendingRunRef.current !== pendingRun) pendingRun.cancel();
       } finally {
-        if (confirmationsRef.current.get(scopeKey) === pendingRun) {
-          const remaining = new Map(confirmationsRef.current);
-          remaining.delete(scopeKey);
-          confirmationsRef.current = remaining;
-          setConfirmations(remaining);
-        }
+        releaseConfirmation(pendingRun);
       }
     },
     [
@@ -305,15 +391,33 @@ export function useSessionStartModalRunner({
       selection,
       selectedRuntimeDescriptor,
       selectedRuntimeKind,
+      workspaceId,
+      workspaceRepoPath,
+      startupAttempts,
+      continueRunInBackground,
+      releaseConfirmation,
     ],
   );
 
   const sessionStartModal = useMemo<SessionStartModalModel | null>(() => {
-    if (!intent) {
+    if (!intent || (startupAttemptId && !activeAttempt)) {
       return null;
     }
 
     return {
+      phase: startupAttemptId ? { kind: "progress", startupAttemptId } : { kind: "choices" },
+      onContinueInBackground: () => {
+        const run = pendingRunRef.current;
+        if (run?.startupAttemptId === startupAttemptId) continueRunInBackground(run);
+      },
+      onEditChoices: () => {
+        if (!startupAttemptId) return;
+        const attempt = startupAttempts.getAttempt(startupAttemptId);
+        if (attempt?.ownership.state !== "not_saved" || attempt.status.confirmation !== "current")
+          return;
+        startupAttempts.dismiss(startupAttemptId);
+        if (pendingRunRef.current) delete pendingRunRef.current.startupAttemptId;
+      },
       open: isOpen,
       requestId: intent.requestId,
       kickoffPrompt,
@@ -356,7 +460,7 @@ export function useSessionStartModalRunner({
       onSelectRuntimeProfile: handleSelectRuntimeProfile,
       onSelectModelPair: handleSelectModelPair,
       onSelectVariant: handleSelectVariant,
-      allowRunInBackground: intent.source === "task_action",
+      allowRunInBackground: true,
       backgroundConfirmLabel: "Run in background",
       isStarting,
       onOpenChange: (nextOpen: boolean) => {
@@ -364,6 +468,11 @@ export function useSessionStartModalRunner({
           if (isStarting) {
             return;
           }
+          if (
+            startupAttemptId &&
+            startupAttempts.getAttempt(startupAttemptId)?.presentation === "dialog"
+          )
+            startupAttempts.dismiss(startupAttemptId);
           resolvePendingRun();
         }
       },
@@ -410,6 +519,10 @@ export function useSessionStartModalRunner({
     supportsVariants,
     targetBranchOptions,
     variantOptions,
+    startupAttemptId,
+    activeAttempt,
+    startupAttempts,
+    continueRunInBackground,
   ]);
 
   return {

@@ -20,6 +20,18 @@ import type { ClientFeedback } from "../platform/client-feedback";
 import type { ClientStorage } from "../platform/client-storage";
 import type { AttachmentStager } from "../platform/device-file";
 import type { HostConnection } from "./host-connection";
+import {
+  createStartupAttemptStore,
+  type StartupAttemptStore,
+} from "../sessions/startup/startup-attempt-store";
+import {
+  adoptStartupPreparedHandoff,
+  isStartupPreparedHandoffCurrent,
+  releaseStartupPreparationAttempt,
+  releaseStartupPreparations,
+} from "../sessions/startup/startup-prepared-handoff";
+import { releaseStartupTerminalOutput } from "../terminals/use-startup-terminal-output";
+import { updateTerminalCommandResults } from "../queries/terminals";
 
 export type ClientConnectionOptions = {
   host: HostConnection;
@@ -61,6 +73,7 @@ export type ClientConnection = {
   readonly feedback: ClientFeedback;
   readonly stageAttachment: AttachmentStager;
   readonly drafts: ClientDrafts;
+  readonly startupAttempts: StartupAttemptStore;
   /**
    * Writes every unsaved chat and inline comment draft now. It rejects with an actionable message
    * when a draft could not be saved. That draft stays in memory.
@@ -142,6 +155,15 @@ export const createClientConnection = ({
     }
   };
   let disposal: Promise<void> | null = null;
+  const startupAttempts = createStartupAttemptStore(
+    host,
+    {
+      adopt: (snapshot) => adoptStartupPreparedHandoff(queryClient, snapshot),
+      isCurrent: (id, handoff) => isStartupPreparedHandoffCurrent(queryClient, id, handoff),
+      release: (id) => releaseStartupPreparationAttempt(queryClient, id),
+    },
+    (snapshot) => updateTerminalCommandResults(queryClient, snapshot),
+  );
   const connection: ClientConnection = {
     host,
     queryClient,
@@ -149,6 +171,7 @@ export const createClientConnection = ({
     feedback,
     stageAttachment,
     drafts,
+    startupAttempts,
     saveDrafts,
     dispose: () => {
       disposal ??= (async () => {
@@ -162,6 +185,9 @@ export const createClientConnection = ({
         };
         // Page hide runs this. The draft writes start before the first await, so they end before unload.
         const draftsSaved = saveDraftsOnDispose ? attempt(saveDrafts) : Promise.resolve();
+        startupAttempts.dispose();
+        releaseStartupTerminalOutput(connection);
+        releaseStartupPreparations(queryClient);
         drafts.queuedMessageEdits.dispose();
         await attempt(() => queryClient.cancelQueries());
         await draftsSaved;

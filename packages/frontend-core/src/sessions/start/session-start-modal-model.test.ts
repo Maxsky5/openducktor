@@ -16,6 +16,9 @@ const sourceOption = {
 };
 
 const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionStartModalModel => ({
+  phase: { kind: "choices" },
+  onContinueInBackground: () => {},
+  onEditChoices: () => {},
   open: true,
   title: "Start Builder Session",
   description: "Choose how to start.",

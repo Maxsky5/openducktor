@@ -51,6 +51,8 @@ export type RemoteSynchronizationContext = {
   signal: AbortSignal;
   host: RemoteHostDescriptor;
   previousHostInstanceId: string | null;
+  /** Confirmed replacement retained until synchronization reports it. */
+  hostChanged: boolean;
   hostReplay: BrowserReplayComplete;
 };
 export type RemoteSynchronizer = (context: RemoteSynchronizationContext) => Promise<void>;
@@ -117,6 +119,8 @@ export const createRemoteHostClient = (
   let pending: Promise<void> | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let attempts = 0;
+  let pendingHostChanged = false;
+  const pendingReplayGaps = new Set<string>();
   let cursor: BrowserEventCursor | null = null;
   /** How long a stream of this connection can stay silent, or null for a host without heartbeats. */
   let streamSilenceLimitMs: number | null = null;
@@ -366,7 +370,10 @@ export const createRemoteHostClient = (
           ? 3 * REMOTE_STREAM_HEARTBEAT_INTERVAL_MS
           : null;
         state = { ...state, host: accepted.host };
-        if (previousHostInstanceId !== accepted.host.hostInstanceId) cursor = null;
+        if (previousHostInstanceId !== accepted.host.hostInstanceId) {
+          cursor = null;
+          if (previousHostInstanceId !== null) pendingHostChanged = true;
+        }
         const replay = deferred<BrowserReplayComplete>();
         const attached = deferred<void>();
         const setupTimer = setTimeout(() => {
@@ -422,6 +429,8 @@ export const createRemoteHostClient = (
         } finally {
           clearTimeout(setupTimer);
         }
+        for (const gap of hostReplay.gaps) pendingReplayGaps.add(gap);
+        hostReplay = { ...hostReplay, gaps: [...pendingReplayGaps] };
         publish("synchronizing");
         try {
           await waitWithAbort(
@@ -430,6 +439,7 @@ export const createRemoteHostClient = (
               signal: abort.signal,
               host: accepted.host,
               previousHostInstanceId,
+              hostChanged: pendingHostChanged,
               hostReplay,
             }),
             abort.signal,
@@ -440,6 +450,8 @@ export const createRemoteHostClient = (
         }
         abort.signal.throwIfAborted();
         if (generation !== current) return;
+        pendingReplayGaps.clear();
+        pendingHostChanged = false;
         attempts = 0;
         publish("connected");
       } catch (cause) {

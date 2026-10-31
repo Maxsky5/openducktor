@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createFeedbackStore, toastsCoveredBy, toastWindowOf } from "./feedback-store";
+import {
+  createFeedbackStore,
+  startupCoveredBy,
+  toastsCoveredBy,
+  toastWindowOf,
+} from "./feedback-store";
 
 describe("feedback store", () => {
   test("replaces a message with the same ID and keeps errors longer", () => {
@@ -75,6 +80,20 @@ describe("feedback store", () => {
     closeSubmenu();
     expect(covered()).toBe(true);
     closeMenu();
+    expect(covered()).toBe(false);
+  });
+
+  test("sheets cover startup cards without covering short feedback until the last sheet closes", () => {
+    const { store, coverStartup } = createFeedbackStore();
+    const covered = () => startupCoveredBy(store.getState());
+    const closeSheet = coverStartup();
+    const closeDialog = coverStartup();
+    expect(covered()).toBe(true);
+    expect(toastsCoveredBy(store.getState())).toBe(false);
+    closeDialog();
+    closeDialog();
+    expect(covered()).toBe(true);
+    closeSheet();
     expect(covered()).toBe(false);
   });
 });

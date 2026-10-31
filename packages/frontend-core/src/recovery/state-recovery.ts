@@ -1,7 +1,7 @@
 import type { Query, QueryClient } from "@tanstack/react-query";
 import { isConnectionFailure } from "../lib/command-outcome";
 import "../queries/query-meta";
-import { connectionReconnectedEvent } from "./connection-control-events";
+import { connectionReconnectedEvent, type ReconnectionCoverage } from "./connection-control-events";
 import type { ConnectionControlListener } from "../connection/host-connection";
 
 /** Event-owned baselines finish before active Query reads and the connection barrier. */
@@ -9,9 +9,10 @@ export const synchronizeConnectionState = async (
   queryClient: QueryClient,
   listeners: Iterable<ConnectionControlListener>,
   missedEvents: boolean,
+  coverage: ReconnectionCoverage,
 ): Promise<void> => {
   const recoveries: Promise<void>[] = [];
-  const event = connectionReconnectedEvent(missedEvents);
+  const event = connectionReconnectedEvent(missedEvents, coverage);
   for (const listener of listeners) {
     try {
       recoveries.push(Promise.resolve(listener(event)));

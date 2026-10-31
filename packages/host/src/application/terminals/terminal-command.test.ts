@@ -3,6 +3,7 @@ import type {
   TerminalActivityMessage,
   TerminalOwnedContext,
   TerminalStartedBy,
+  TerminalCommandResult,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TerminalPtyError } from "../../ports/terminal-pty-port";
@@ -46,12 +47,16 @@ describe("TerminalService command terminals", () => {
     const { service, pty, settleTitles } = await makeService();
     const output: string[] = [];
     const messages: TerminalActivityMessage[] = [];
+    const results: TerminalCommandResult[] = [];
     const stop = await Effect.runPromise(
       service.observeActivity((message) => messages.push(message)),
     );
     try {
       const { response } = await Effect.runPromise(
-        service.startCommand(commandRequest("Checks", ["bun install", "bun test"])),
+        service.startCommand({
+          ...commandRequest("Checks", ["bun install", "bun test"]),
+          onResult: (result) => results.push(result),
+        }),
       );
       expect(response.summary).toMatchObject({
         label: "Checks",
@@ -102,6 +107,15 @@ describe("TerminalService command terminals", () => {
       pty.emit(new TextEncoder().encode("$ "));
       const [listed] = (await Effect.runPromise(service.list({ kind: "all" }))).terminals;
       expect(listed).toMatchObject({ label: "Checks", lifecycle: "running", exit: null });
+      expect(results).toEqual([
+        {
+          type: "exited",
+          exitCode: 1,
+          signal: null,
+          outputTail: ["$ bun install", "$ bun test", "tests failed"],
+        },
+      ]);
+      expect(listed?.initialCommandResult).toEqual(results[0]);
       await Effect.runPromise(service.write(response.ref.terminalId, new Uint8Array([3])));
       expect(pty.operations).toContain("write:\u0003");
     } finally {

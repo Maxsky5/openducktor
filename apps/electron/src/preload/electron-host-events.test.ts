@@ -7,6 +7,47 @@ import { forwardElectronHostEvent } from "../main/electron-host-event-forwarding
 import { type ElectronHostEventListener, subscribeElectronHostEvent } from "./electron-host-events";
 
 describe("subscribeElectronHostEvent", () => {
+  test("routes startup progress through main and preload without waiting for another request", () => {
+    const ipcRenderer = new EventEmitter();
+    const listener = mock(() => {});
+    const channel = "openducktor://session-startup-progress";
+    const payload: HostEventPayload<typeof channel> = {
+      context: { startupAttemptId: "attempt-1", operationId: "operation-1" },
+      hostInstanceId: "host-1",
+      revision: 1,
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      scope: { kind: "workspace" },
+      phase: "running",
+      steps: [{ id: "checks", label: "Check workspace", state: "running", details: [] }],
+      ownership: { state: "not_saved" },
+    };
+    const stop = subscribeElectronHostEvent(ipcRenderer, channel, listener);
+    const report = mock(() => {});
+    try {
+      forwardElectronHostEvent(
+        [
+          {
+            isDestroyed: () => false,
+            webContents: {
+              isDestroyed: () => false,
+              send: (name, event) => {
+                ipcRenderer.emit(name, {}, event);
+              },
+            },
+          },
+        ],
+        { channel, payload },
+        report,
+      );
+      expect(listener).toHaveBeenCalledWith(payload);
+      expect(report).not.toHaveBeenCalled();
+    } finally {
+      stop();
+    }
+    expect(ipcRenderer.eventNames()).toEqual([]);
+  });
+
   test("routes temporary provider updates through IPC and releases the listener", () => {
     const ipcRenderer = new EventEmitter();
     const listener = mock(() => {});

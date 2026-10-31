@@ -8,6 +8,8 @@ import {
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
+import { startupStep, updateStartup } from "../agent-sessions/session-startup-progress";
+import { worktreeActionStep } from "../actions/worktree-action-runner";
 import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -160,6 +162,15 @@ export const withWorkspaceSessionTarget = <A, E>(
           yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
         ]);
         const target = yield* readExistingWorktreeTarget(dependencies, repoPath, workingDirectory);
+        yield* updateStartup((progress) =>
+          progress.step({
+            id: "checkout",
+            label: "Reuse existing worktree",
+            state: "completed",
+            details: [target.workingDirectory],
+            resources: [{ kind: "worktree", value: target.workingDirectory, state: "reused" }],
+          }),
+        );
         return yield* restore(use(target, () => {}));
       }
       if (!(yield* git.isGitRepository(repoPath))) {
@@ -171,6 +182,14 @@ export const withWorkspaceSessionTarget = <A, E>(
         );
       }
       if (destination.location === "local_repo_root") {
+        yield* updateStartup((progress) =>
+          progress.step({
+            id: "checkout",
+            label: "Use current checkout",
+            state: "completed",
+            details: [repoPath],
+          }),
+        );
         return yield* restore(
           use({ kind: "local_repo_root", workingDirectory: repoPath }, () => {}),
         );
@@ -219,6 +238,29 @@ export const withWorkspaceSessionTarget = <A, E>(
           : settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
       const namespace = settingsConfig.join(base, "workspace-sessions");
       const workingDirectory = settingsConfig.join(namespace, worktree.name);
+      yield* updateStartup((progress) => {
+        progress.step({
+          id: "checkout",
+          label: "Create workspace worktree",
+          state: "pending",
+          details: [workingDirectory, branch],
+        });
+        if (newBranch?.upstreamRemote)
+          progress.step({
+            id: "upstream",
+            label: "Set branch upstream",
+            state: "pending",
+            details: [newBranch.upstreamRemote],
+          });
+        progress.step({
+          id: "copies",
+          label: "Copy configured files",
+          state: "pending",
+          details: repoConfig.worktreeCopyPaths,
+        });
+        for (const action of repoConfig.actions.items.filter((item) => item.runOnWorktreeCreate))
+          progress.step({ ...worktreeActionStep(action), state: "pending" });
+      });
       // A restore of this directory holds its guard. Check the directory after it finishes.
       yield* dependencies.lifecycle.acquireWorktreeRead(
         yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
@@ -247,40 +289,68 @@ export const withWorkspaceSessionTarget = <A, E>(
           Effect.gen(function* () {
             yield* Effect.uninterruptible(
               Effect.gen(function* () {
-                yield* git
-                  .createWorktree(
-                    repoPath,
-                    workingDirectory,
-                    branch,
-                    createBranch,
-                    createBranch ? (input.startPoint ?? newBranch?.startPoint) : undefined,
-                  )
-                  .pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new HostOperationError({
-                          operation: "workspaceSession.create.acquire",
-                          message: `Git did not confirm worktree creation at ${workingDirectory} for branch ${branch}. Inspect the directory and branch before retrying. No automatic cleanup ran.\n${cause.message}`,
-                          cause,
-                        }),
+                yield* startupStep(
+                  {
+                    id: "checkout",
+                    label: "Create workspace worktree",
+                    details: [workingDirectory, branch],
+                  },
+                  git
+                    .createWorktree(
+                      repoPath,
+                      workingDirectory,
+                      branch,
+                      createBranch,
+                      createBranch ? (input.startPoint ?? newBranch?.startPoint) : undefined,
+                    )
+                    .pipe(
+                      Effect.mapError(
+                        (cause) =>
+                          new HostOperationError({
+                            operation: "workspaceSession.create.acquire",
+                            message: `Git did not confirm worktree creation at ${workingDirectory} for branch ${branch}. Inspect the directory and branch before retrying. No automatic cleanup ran.\n${cause.message}`,
+                            cause,
+                          }),
+                      ),
                     ),
-                  );
+                );
                 acquired = true;
+                yield* updateStartup((progress) =>
+                  progress.step({
+                    id: "checkout",
+                    label: "Create workspace worktree",
+                    state: "completed",
+                    resources: [
+                      { kind: "worktree", value: workingDirectory, state: "created" },
+                      { kind: "branch", value: branch, state: createBranch ? "created" : "reused" },
+                    ],
+                  }),
+                );
                 if (newBranch?.upstreamRemote) {
-                  const upstream = yield* git.configureBranchUpstream(
-                    repoPath,
-                    workingDirectory,
-                    branch,
-                    newBranch.upstreamRemote,
+                  const upstream = yield* startupStep(
+                    { id: "upstream", label: "Set branch upstream" },
+                    git.configureBranchUpstream(
+                      repoPath,
+                      workingDirectory,
+                      branch,
+                      newBranch.upstreamRemote,
+                    ),
                   );
                   createdTrackingRef = upstream.createdTrackingRef;
                 }
               }),
             );
-            yield* worktreeFiles.copyConfiguredPaths(
-              repoPath,
-              workingDirectory,
-              repoConfig.worktreeCopyPaths,
+            yield* startupStep(
+              {
+                id: "copies",
+                label: "Copy configured files",
+                details: repoConfig.worktreeCopyPaths,
+              },
+              worktreeFiles.copyConfiguredPaths(
+                repoPath,
+                workingDirectory,
+                repoConfig.worktreeCopyPaths,
+              ),
             );
             yield* runWorkspaceSessionWorktreeActions(actionRun, {
               owner: input.owner,
@@ -304,6 +374,18 @@ export const withWorkspaceSessionTarget = <A, E>(
       );
       if (Exit.isSuccess(result)) return result.value;
       if (!acquired || retained) return yield* Effect.failCause(result.cause);
+      yield* updateStartup((progress) => {
+        progress.phase("settling");
+        progress.step({
+          id: "cleanup",
+          label: "Clean up new worktree",
+          state: "running",
+          resources: [
+            { kind: "worktree", value: workingDirectory, state: "retained" },
+            { kind: "branch", value: branch, state: "retained" },
+          ],
+        });
+      });
 
       const stopActions =
         input.rollbackMode === "all_owned"
@@ -312,7 +394,7 @@ export const withWorkspaceSessionTarget = <A, E>(
                 (cause) =>
                   new HostOperationError({
                     operation: "workspaceSession.create.cleanup",
-                    message: `Could not stop worktree action terminals ${cause.terminalIds.join(", ")}: ${cause.cause.map((failure) => failure.message).join("; ")}. Close these terminals before retrying.`,
+                    message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}\nCould not stop worktree action terminals ${cause.terminalIds.join(", ")}: ${cause.cause.map((failure) => failure.message).join("; ")}. OpenDucktor kept worktree ${workingDirectory} and branch ${branch}. Close these terminals before removing these resources.`,
                     cause,
                   }),
               ),
@@ -322,8 +404,7 @@ export const withWorkspaceSessionTarget = <A, E>(
               message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}`,
             });
       const stopped = yield* Effect.exit(stopActions);
-      if (Exit.isFailure(stopped) && input.rollbackMode !== "all_owned")
-        return yield* Effect.failCause(stopped.cause);
+      if (Exit.isFailure(stopped)) return yield* Effect.failCause(stopped.cause);
       const removeWorktree = Effect.gen(function* () {
         if (yield* git.isRegisteredWorktree(repoPath, workingDirectory))
           yield* git.removeWorktree(repoPath, workingDirectory, true);
@@ -361,6 +442,17 @@ export const withWorkspaceSessionTarget = <A, E>(
           cause: { creation: result.cause, cleanup: failures },
           details: { workingDirectory, branch },
         });
+      yield* updateStartup((progress) =>
+        progress.step({
+          id: "cleanup",
+          label: "Clean up new worktree",
+          state: "completed",
+          resources: [
+            { kind: "worktree", value: workingDirectory, state: "removed" },
+            { kind: "branch", value: branch, state: createBranch ? "removed" : "reused" },
+          ],
+        }),
+      );
       return yield* Effect.failCause(result.cause);
     }),
   ).pipe(Effect.scoped);

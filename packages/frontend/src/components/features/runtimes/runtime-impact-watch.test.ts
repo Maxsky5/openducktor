@@ -47,6 +47,8 @@ const reconnected = {
   __openducktorConnectionControl: true,
   kind: "reconnected",
   missedEvents: true,
+  hostChanged: false,
+  missedEventNames: [],
 } as const;
 
 describe("watchRuntimeImpact", () => {

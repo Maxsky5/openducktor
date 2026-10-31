@@ -4,15 +4,11 @@ import {
   acceptedAgentCommandSchema,
 } from "./agent-session-control-schemas";
 import { agentModelSelectionSchema, agentSessionLiveRefSchema } from "./agent-session-schemas";
+import { workflowFailureSchema } from "./workflow-failure-schemas";
+
+export { workflowFailureSchema, type WorkflowFailure } from "./workflow-failure-schemas";
 
 const text = z.string().min(1);
-export const workflowFailureSchema = z.strictObject({
-  stage: text,
-  code: text,
-  message: text,
-  nextAction: text,
-});
-export type WorkflowFailure = z.infer<typeof workflowFailureSchema>;
 export const sessionOperationObservationSchema = z.strictObject({
   ref: agentSessionLiveRefSchema,
   kind: z.enum(["submission", "reattach", "continue", "stop", "model"]),

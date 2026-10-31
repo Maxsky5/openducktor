@@ -4,6 +4,7 @@ import {
   workspaceSessionForkInputSchema,
   workspaceSessionListInputSchema,
   workspaceSessionRefInputSchema,
+  workspaceSessionStartInputSchema,
   workspaceSessionRenameInputSchema,
   workspaceSessionSetDraftModelInputSchema,
   workspaceSessionSetTargetBranchInputSchema,
@@ -15,6 +16,7 @@ import type { WorkspaceSessionUpdatedPublisher } from "../../application/workspa
 import { causeMessage, HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
+import { startupStep } from "../../application/agent-sessions/session-startup-progress";
 
 export const createWorkspaceSessionCommandHandlers = (
   service: WorkspaceSessionService,
@@ -46,7 +48,14 @@ export const createWorkspaceSessionCommandHandlers = (
         Effect.flatMap((input) =>
           service
             .create(input)
-            .pipe(Effect.tap(({ session }) => publishUpdated(input.workspaceId, session))),
+            .pipe(
+              Effect.tap(({ session }) =>
+                startupStep(
+                  { id: "publish", label: "Publish saved session" },
+                  publishUpdated(input.workspaceId, session),
+                ),
+              ),
+            ),
         ),
       ),
     workspace_session_fork: (args) =>
@@ -55,7 +64,10 @@ export const createWorkspaceSessionCommandHandlers = (
           Effect.gen(function* () {
             const result = yield* service.fork(input);
             const published = yield* Effect.exit(
-              Effect.suspend(() => publishUpdated(input.workspaceId, result.record)),
+              startupStep(
+                { id: "publish", label: "Publish saved session" },
+                Effect.suspend(() => publishUpdated(input.workspaceId, result.record)),
+              ),
             );
             if (Exit.isFailure(published))
               result.syncWarning = `The fork was saved, but session updates could not sync: ${causeMessage(published.cause)}. Reconnect to refresh sessions.`;
@@ -64,11 +76,18 @@ export const createWorkspaceSessionCommandHandlers = (
         ),
       ),
     workspace_session_start: (args) =>
-      parseInput(workspaceSessionRefInputSchema, args).pipe(
+      parseInput(workspaceSessionStartInputSchema, args).pipe(
         Effect.flatMap((input) =>
           service
             .start(input)
-            .pipe(Effect.tap(({ session }) => publishUpdated(input.workspaceId, session))),
+            .pipe(
+              Effect.tap(({ session }) =>
+                startupStep(
+                  { id: "publish", label: "Publish saved session" },
+                  publishUpdated(input.workspaceId, session),
+                ),
+              ),
+            ),
         ),
       ),
     workspace_session_set_draft_model: (args) =>

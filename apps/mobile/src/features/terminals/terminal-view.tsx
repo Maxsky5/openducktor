@@ -1,5 +1,6 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import type { TerminalTouchKey } from "@openducktor/frontend-core/terminals/terminal-keyboard-policy";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { checkHttpUrl } from "@openducktor/frontend-core/terminals/terminal-url-policy";
@@ -45,6 +46,8 @@ import { INPUT_DELIVERY_UNKNOWN, type TerminalSessionState } from "./terminal-se
 import { NO_TOUCH_MODIFIERS, touchModifiersReducer } from "./touch-key-modifiers";
 import { useTerminalSession } from "./use-terminal-session";
 import { KeyboardInsetView } from "@/ui/keyboard-inset-view";
+import { terminalCommandResultLabel } from "./terminal-command-result-label";
+import type { TerminalCommandResult } from "@openducktor/contracts";
 
 /**
  * The terminal list members that one terminal view reads. The view takes them one by one, so a
@@ -301,6 +304,7 @@ export const TerminalView = memo(function TerminalView({
             </View>
           ) : null}
         </View>
+        <TerminalInitialCommandNotice result={tab.summary.initialCommandResult} />
         <TerminalBottomNotices
           state={state}
           exited={lifecycle === "exited"}
@@ -323,6 +327,23 @@ export const TerminalView = memo(function TerminalView({
     </KeyboardInsetView>
   );
 });
+
+function TerminalInitialCommandNotice({
+  result,
+}: {
+  result: TerminalCommandResult | undefined;
+}): ReactElement | null {
+  if (!result) return null;
+  const successful = terminalCommandSucceeded(result);
+  return (
+    <TerminalNoticeStrip
+      tone={successful ? "muted" : "warning"}
+      edge="bottom"
+      title="Initial command result."
+      message={terminalCommandResultLabel(result)}
+    />
+  );
+}
 
 /** The notices above the terminal: unavailable shortcuts and paused input. */
 function TerminalTopNotices({

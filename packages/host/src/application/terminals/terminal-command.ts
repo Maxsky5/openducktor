@@ -3,6 +3,7 @@ import type {
   TerminalCreateResponse,
   TerminalOwnedLaunchSpec,
   TerminalStartedBy,
+  TerminalCommandResult,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { TerminalServiceError } from "./terminal-service-error";
@@ -10,22 +11,13 @@ import type { TerminalServiceError } from "./terminal-service-error";
 /** The lines of a command terminal. They run in order and stop after the first failed line. */
 export type TerminalCommandLines = readonly [string, ...string[]];
 
-export type TerminalCommandResult =
-  | {
-      readonly type: "exited";
-      readonly exitCode: number | null;
-      readonly signal: string | null;
-      readonly outputTail: readonly string[];
-    }
-  /** The terminal closed before the command ended. */
-  | { readonly type: "closed"; readonly outputTail: readonly string[] }
-  /** The terminal process failed before the command ended. */
-  | { readonly type: "failed"; readonly message: string; readonly outputTail: readonly string[] };
+export type { TerminalCommandResult } from "@openducktor/contracts";
 
 export type TerminalCommandRequest = TerminalOwnedLaunchSpec & {
   label: string;
   commandLines: TerminalCommandLines;
   startedBy: TerminalStartedBy;
+  onResult?: (result: TerminalCommandResult) => void;
 };
 
 export type StartedCommandTerminal = {

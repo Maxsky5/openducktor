@@ -6,14 +6,12 @@ import {
   builtinRoleId,
 } from "@openducktor/workflows";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
-import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSessionStartKickoffResolver } from "@openducktor/frontend-core/sessions/start/session-start-kickoff";
 import type { GitBranch } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
-import { toast } from "sonner";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import type {
@@ -26,11 +24,7 @@ import type {
   SessionStartPostAction,
   SessionStartWorkflowResult,
 } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
-import {
-  buildSessionStartModalRequest,
-  isSessionStartFailureFeedbackHandled,
-} from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
-import { sessionStartPostActionErrorTitle } from "@openducktor/frontend-core/sessions/start/session-start-post-action-errors";
+import { buildSessionStartModalRequest } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import { useSessionStartModalRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-modal-runner";
 import { useWorkspaceSessionStartGate } from "@openducktor/frontend-core/sessions/start/use-workspace-session-start-gate";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -46,6 +40,7 @@ import {
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "../query-sync/agent-studio-navigation";
 import { useAsyncActivityTracker } from "@openducktor/frontend-core/lib/use-async-activity-tracker";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
 
@@ -74,15 +69,6 @@ type UseAgentStudioSessionStartFlowArgs = {
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
 type AgentStudioSessionStartGateResult = SessionStartWorkflowResult | undefined;
 
-const buildSessionStartKey = (params: {
-  workspaceId: string | null;
-  taskId: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
-}): string => {
-  return JSON.stringify([params.workspaceId, params.taskId, params.role, params.launchActionId]);
-};
-
 export function useAgentStudioSessionStartFlow({
   branches = [],
   favoriteState,
@@ -103,6 +89,7 @@ export function useAgentStudioSessionStartFlow({
   scheduleQueryUpdate,
 }: UseAgentStudioSessionStartFlowArgs) {
   const queryClient = useQueryClient();
+  const { startupAttempts } = useClientConnection();
   const contextKey = `${workspaceId}:${taskId}:${role}`;
   const isCurrentContext = useSessionStartContext(contextKey);
   const sessionStartGate =
@@ -126,12 +113,16 @@ export function useAgentStudioSessionStartFlow({
       favoriteState,
       repoSettings,
       workspaceRepoPath,
+      workspaceId,
     });
 
   const executeRequestedSessionStart = useCallback(
     async <T>(
       request: SessionStartFlowRequest,
-      executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
+      executeWithDecision: (
+        decision: ResolvedSessionStartDecision,
+        startupAttemptId: string,
+      ) => Promise<T | undefined>,
     ): Promise<T | undefined> => {
       const isSameTaskAndRole = request.taskId === taskId && request.role === role;
       return runInternalSessionStartRequest(
@@ -158,7 +149,7 @@ export function useAgentStudioSessionStartFlow({
             : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
         }),
-        async ({ decision }) => executeWithDecision(decision),
+        async ({ decision, startupAttemptId }) => executeWithDecision(decision, startupAttemptId),
       );
     },
     [
@@ -193,26 +184,22 @@ export function useAgentStudioSessionStartFlow({
     async (request: SessionStartFlowRequest): Promise<SessionStartWorkflowResult | undefined> => {
       const executeWithDecision = async (
         decision: ResolvedSessionStartDecision,
+        startupAttemptId: string,
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
+          startupAttemptId,
           request,
           decision,
           task: request.taskId === taskId ? selectedTask : null,
-          onPostStartMessageFailure: showSessionStartMessageRecovery,
         };
 
         const workflow = await runWorkflow(workflowInput);
+        const attempt = startupAttempts.getAttempt(startupAttemptId);
         if (
-          workflow.postStartActionError &&
-          !workflow.retryPostStartMessage &&
-          !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
-        ) {
-          toast.error(sessionStartPostActionErrorTitle(request.postStartAction), {
-            description: workflow.postStartActionError.message,
-          });
-        }
-
-        if (isCurrentContext())
+          isCurrentContext() &&
+          attempt?.presentation === "dialog" &&
+          attempt.status.phase === "ready"
+        )
           scheduleQueryUpdate(
             buildAgentStudioSelectionQueryUpdate({
               taskId: request.taskId,
@@ -232,6 +219,7 @@ export function useAgentStudioSessionStartFlow({
       selectedTask,
       scheduleQueryUpdate,
       taskId,
+      startupAttempts,
     ],
   );
 
@@ -426,3 +414,12 @@ export function useAgentStudioSessionStartFlow({
     handleQuickAction: (option: AgentStudioSessionQuickActionOption) => void;
   };
 }
+
+const buildSessionStartKey = (params: {
+  workspaceId: string | null;
+  taskId: string;
+  role: AgentRole;
+  launchActionId: SessionLaunchActionId;
+}): string => {
+  return JSON.stringify([params.workspaceId, params.taskId, params.role, params.launchActionId]);
+};

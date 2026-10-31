@@ -14,6 +14,7 @@ import { tabLinkIds } from "@/components/ui/tab-link-ids";
 import { TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { canRetryTerminalCreation } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { terminalCommandResultNotice } from "./terminal-command-result";
 import type { TerminalExitNotice } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import type {
   TerminalSessionsModel,
@@ -185,6 +186,8 @@ const TerminalViewport = memo(function TerminalViewport({
   const [attention, setAttention] = useState<string | null>(null);
   const [exitNotice, setExitNotice] = useState<TerminalExitNotice | null>(null);
   const notice = attention === null ? exitNotice : { text: attention, isFailure: true };
+  const commandResult = tab.summary?.initialCommandResult;
+  const commandNotice = commandResult ? terminalCommandResultNotice(commandResult) : null;
   const handleLifecycle = useCallback(
     (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => {
       if (tab.terminalId) onLifecycle(scopeKey, tab.terminalId, lifecycle);
@@ -272,6 +275,20 @@ const TerminalViewport = memo(function TerminalViewport({
           )}
         >
           {notice.text}
+        </p>
+      ) : null}
+      {commandNotice ? (
+        <p
+          role="status"
+          aria-label="Setup command result"
+          className={cn(
+            "shrink-0 border-t border-border px-3 py-1.5 text-xs",
+            commandNotice.isFailure
+              ? "bg-warning-surface text-warning-surface-foreground"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {commandNotice.text}
         </p>
       ) : null}
     </div>

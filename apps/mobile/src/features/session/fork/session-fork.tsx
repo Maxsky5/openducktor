@@ -8,23 +8,28 @@ import {
   sessionForkRequestKey,
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
-import { FORK_CHAT_TEXT } from "@openducktor/frontend-core/workspace-sessions/fork/workspace-session-fork-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useIsFocused, useNavigation, useRouter } from "expo-router";
 import {
   createContext,
+  useCallback,
   type PropsWithChildren,
   type ReactElement,
   use,
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { routes, switchedSessionParams } from "@/navigation/routes";
 import { useSessionScreen } from "../session-target";
+import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
+import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
 
 /** The Fork action of the completed replies of the open session, as on desktop. */
 export type SessionForkActions = {
+  startupAttemptId: string | null;
   /** Why a fork cannot run now, or null when it can. The disabled action reads it. */
   disabledReason: string | null;
   isPending: (point: AgentSessionForkPoint) => boolean;
@@ -46,7 +51,23 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
   const queryClient = useQueryClient();
   const store = useAgentSessionsContext();
   const router = useRouter();
-  const { feedback } = useClientConnection();
+  const navigation = useNavigation();
+  const { feedback, startupAttempts } = useClientConnection();
+  const visibleHandoff = useVisibleHandoff();
+  const focused = useIsFocused();
+  const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
+  const startupAttempt = useStartupAttempt(startupAttemptId);
+  const inlineOrigin = useRef<{ attemptId: string; sessionKey: string | null } | null>(null);
+  useEffect(() => {
+    if (!focused && inlineOrigin.current)
+      startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
+  }, [focused, startupAttempts]);
+  useEffect(() => {
+    return () => {
+      if (inlineOrigin.current)
+        startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
+    };
+  }, [startupAttempts]);
   const pending = useSessionForkRequests(queryClient);
   const { owner, readOnly, identity, repoPath, sessionKey } = target;
   const { workspaceId } = target.workspace;
@@ -58,6 +79,25 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
       shownSession.current = null;
     };
   }, [sessionKey]);
+  const openReadyFork = useCallback(
+    (attemptId: string) => {
+      const attempt = startupAttempts.getAttempt(attemptId);
+      const destination = attempt?.navigationTarget;
+      if (
+        !navigation.isFocused() ||
+        inlineOrigin.current?.attemptId !== attemptId ||
+        shownSession.current !== inlineOrigin.current.sessionKey ||
+        attempt?.presentation !== "inline" ||
+        !startupAttempts.isReadyForHandoff(attemptId) ||
+        destination?.kind !== "task_session"
+      )
+        return;
+      router.setParams(switchedSessionParams(destination.workspaceId, destination.identity));
+      startupAttempts.handoff(attemptId);
+    },
+    [navigation, router, startupAttempts],
+  );
+  useRepairedStartupHandoff(startupAttempt, false, openReadyFork);
   const archived = owner.kind === "chat" && owner.record.archivedAt !== null;
   const disabledReason = sessionForkDisabledReason({
     runtimeReadiness: interaction.runtimeReadiness,
@@ -73,6 +113,7 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
     if (owner.kind === "chat") {
       const chatId = owner.record.id;
       return {
+        startupAttemptId,
         disabledReason,
         isPending,
         onFork: (point) => {
@@ -83,28 +124,46 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
     }
     const { taskId, role } = owner;
     return {
+      startupAttemptId,
       disabledReason,
       isPending,
       onFork: (point) => {
         if (disabledReason || isPending(point)) return;
         const startedIn = shownSession.current;
-        void forkTaskSession(queryClient, store, {
-          ...identity,
-          repoPath,
-          sessionScope: { kind: "workflow", taskId, role },
-          forkPoint: point,
-        }).then(
-          (result) => {
-            if (result.syncWarning)
-              feedback.show("warning", FORK_CHAT_TEXT.forkedWithWarning, {
-                description: result.syncWarning,
-              });
-            // The fork is a session of the same task, so the screen switches to it in place.
-            if (shownSession.current === startedIn)
-              router.setParams(switchedSessionParams(workspaceId, result.runtimeSession));
+        let submittedAttemptId: string | null = null;
+        void forkTaskSession(
+          queryClient,
+          store,
+          {
+            ...identity,
+            repoPath,
+            sessionScope: { kind: "workflow", taskId, role },
+            forkPoint: point,
           },
-          (cause: unknown) =>
-            feedback.show("error", "Could not fork the chat", { description: errorMessage(cause) }),
+          {
+            workspaceId,
+            presentation: "inline",
+            onAttempt: (id) => {
+              submittedAttemptId = id;
+              if (inlineOrigin.current)
+                startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
+              inlineOrigin.current = { attemptId: id, sessionKey: startedIn };
+              setStartupAttemptId(id);
+            },
+          },
+        ).then(
+          () => {
+            // The fork is a session of the same task, so the screen switches to it in place.
+            visibleHandoff(() => {
+              if (submittedAttemptId) openReadyFork(submittedAttemptId);
+            });
+          },
+          (cause: unknown) => {
+            if (!submittedAttemptId)
+              feedback.show("error", "Could not fork the chat", {
+                description: errorMessage(cause),
+              });
+          },
         );
       },
     };
@@ -113,6 +172,7 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
     feedback,
     identity,
     owner,
+    openReadyFork,
     pending,
     queryClient,
     readOnly,
@@ -120,6 +180,9 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
     router,
     store,
     workspaceId,
+    startupAttemptId,
+    startupAttempts,
+    visibleHandoff,
   ]);
   return <SessionForkContext value={actions}>{children}</SessionForkContext>;
 }

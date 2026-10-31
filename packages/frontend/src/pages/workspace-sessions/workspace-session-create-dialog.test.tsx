@@ -1,38 +1,63 @@
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
+  type WorkspaceSession,
+  type AgentSessionLiveEnvelope,
+  type WorkspaceSessionStartInput,
+  type WorkspaceSessionStartResult,
+  type StartupOperationContext,
+  type StartupOperationSnapshot,
   repoConfigSchema,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
-import { act, type ComponentProps } from "react";
-import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { act, type ComponentProps, useState } from "react";
+import { MemoryRouter, useLocation } from "react-router";
+import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
 import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
+  createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
+import { AppToaster, StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 
 function renderCreation(
-  create: (input: WorkspaceSessionCreateInput) => Promise<WorkspaceSessionCreateResult>,
+  create: (
+    input: WorkspaceSessionCreateInput,
+    startup: StartupOperationContext | undefined,
+  ) => Promise<WorkspaceSessionCreateResult>,
   onClose = () => {},
-  onCreated: () => void = () => {
+  onCreated: (session: WorkspaceSession) => void = () => {
     throw new Error("Unexpected successful creation");
   },
   clientOverrides: Partial<HostClient> = {},
 ) {
   const snapshot = createSettingsSnapshotFixture();
+  const workspace = createWorkspaceRecordFixture({
+    workspaceId: "A",
+    workspaceName: "A",
+    repoPath: "/repo",
+  });
+  let savedRecord: WorkspaceSession | null = null;
   const catalog: AgentModelCatalog = {
     runtime: OPENCODE_RUNTIME_DESCRIPTOR,
     models: [
@@ -53,10 +78,10 @@ function renderCreation(
     isLoadingBranches: false,
     isSwitchingBranch: false,
     branchSyncDegraded: false,
-    workspaces: [],
+    workspaces: [workspace],
     closedWorkspaces: [],
     incompleteRemovals: [],
-    activeWorkspace: null,
+    activeWorkspace: workspace,
     branches: [],
     activeBranch: null,
     commitWorkspaceProviderSetup: async () => {
@@ -110,7 +135,15 @@ function renderCreation(
     loadRepoRuntimeCatalog: async () => createRuntimeCatalogFixture({ models: catalog }),
     loadRepoRuntimeFileSearch: async () => [],
   };
-  const connection = createTestClientConnection({
+  let publishProgress: (snapshot: StartupOperationSnapshot) => void = () => {
+    throw new Error("Startup progress is not subscribed.");
+  };
+  const host = createTestHostConnection({
+    subscribeStartupProgress: async (listener) => {
+      publishProgress = (snapshot) =>
+        listener({ channel: "openducktor://session-startup-progress", payload: snapshot });
+      return () => {};
+    },
     client: {
       workspaceGetSettingsSnapshot: async () => snapshot,
       workspaceGetRepoConfig: async () =>
@@ -135,39 +168,233 @@ function renderCreation(
         { id: "alpha", name: "Alpha", systemPrompt: "Alpha prompt" },
         { id: "zeta", name: "Zeta", systemPrompt: "Zeta prompt" },
       ],
-      workspaceSessionCreate: create,
+      workspaceSessionCreate: async ({ startup, ...input }) => {
+        try {
+          const result = await create(input, startup);
+          savedRecord = result.session;
+          return result;
+        } catch (cause) {
+          if (!startup) throw cause;
+          const error = cause instanceof Error ? cause : new Error(String(cause));
+          const startupProgress = {
+            context: startup,
+            hostInstanceId: "host",
+            revision: 1,
+            workspaceId: input.workspaceId,
+            repoPath: "/repo",
+            scope: { kind: "workspace" as const },
+            phase: "failed" as const,
+            ownership: { state: "not_saved" as const },
+            steps: [],
+          };
+          throw new HostInvokeError(
+            error.message,
+            {
+              ...(error instanceof HostInvokeError && error.failure
+                ? error.failure
+                : { kind: "session_startup" as const }),
+              startupProgress,
+            },
+            error,
+          );
+        }
+      },
+      workspaceSessionStart: async (input) => {
+        if (!savedRecord || !input.startup) throw new Error("No saved session to prepare.");
+        const session = { ...savedRecord, externalSessionId: "prepared-session" };
+        const runtimeSession = {
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.executionTarget.workingDirectory,
+          externalSessionId: session.externalSessionId,
+          startedAt: "2026-10-26T00:00:00.000Z",
+          status: "idle" as const,
+        };
+        return {
+          session,
+          runtimeSession,
+          startupProgress: live.prepared({
+            context: input.startup,
+            workspaceId: input.workspaceId,
+            repoPath: "/repo",
+            scope: { kind: "workspace" },
+            ownership: {
+              state: "saved",
+              target: { kind: "workspace", record: session, runtimeSession },
+            },
+          }),
+        };
+      },
       ...clientOverrides,
     },
   });
+  const connection = createTestClientConnection({ host });
   const queryClient = connection.queryClient;
+  const live = createStartupLiveSourceFake(queryClient);
+  function Creation() {
+    const [open, setOpen] = useState(true);
+    const location = useLocation();
+    return (
+      <>
+        <output aria-label="Current location">
+          {location.pathname}
+          {location.search}
+        </output>
+        <AppToaster />
+        <StartupNotifications />
+        {open ? (
+          <WorkspaceSessionCreateDialog
+            workspace={workspace}
+            onClose={() => {
+              onClose();
+              setOpen(false);
+            }}
+            onCreated={onCreated}
+          />
+        ) : null}
+      </>
+    );
+  }
   const view = render(
-    <QueryProvider connection={connection}>
-      <WorkspaceStateContext value={workspaceState}>
-        <ChecksStateContext
-          value={{
-            pathCheck: createObservedCheckFixture(),
-            gitCheck: createObservedCheckFixture(),
-            checksRepoPath: null,
-            taskStoreCheck: createObservedCheckFixture(),
-            isRefreshingChecks: false,
-            refreshChecks: async () => {},
-          }}
-        >
-          <RuntimeDefinitionsContext value={definitions}>
-            <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
-              <WorkspaceSessionCreateDialog
-                workspace={{ workspaceId: "A", workspaceName: "A", repoPath: "/repo" }}
-                onClose={onClose}
-                onCreated={onCreated}
-              />
-            </HostRuntimeStatusContext>
-          </RuntimeDefinitionsContext>
-        </ChecksStateContext>
-      </WorkspaceStateContext>
-    </QueryProvider>,
+    <MemoryRouter>
+      <WorkspacePreviewTransitionGuardProvider>
+        <QueryProvider connection={connection}>
+          <AgentSessionsContext value={createAgentSessionsStore("/repo")}>
+            <WorkspaceStateContext value={workspaceState}>
+              <ChecksStateContext
+                value={{
+                  pathCheck: createObservedCheckFixture(),
+                  gitCheck: createObservedCheckFixture(),
+                  checksRepoPath: null,
+                  taskStoreCheck: createObservedCheckFixture(),
+                  isRefreshingChecks: false,
+                  refreshChecks: async () => {},
+                }}
+              >
+                <RuntimeDefinitionsContext value={definitions}>
+                  <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+                    <Creation />
+                  </HostRuntimeStatusContext>
+                </RuntimeDefinitionsContext>
+              </ChecksStateContext>
+            </WorkspaceStateContext>
+          </AgentSessionsContext>
+        </QueryProvider>
+      </WorkspacePreviewTransitionGuardProvider>
+    </MemoryRouter>,
   );
-  return { ...view, queryClient };
+  return {
+    ...view,
+    connection,
+    queryClient,
+    publishProgress: (snapshot: StartupOperationSnapshot) => publishProgress(snapshot),
+    publishLive: (envelope: AgentSessionLiveEnvelope) => live.publish("/repo", envelope),
+    unmount: () => {
+      view.unmount();
+      live.dispose();
+    },
+  };
 }
+
+test("opening a saved failed current-checkout creation retains feedback and session inspection", async () => {
+  const session: WorkspaceSession = {
+    id: "retained-created",
+    runtimeKind: "opencode",
+    externalSessionId: "native-created",
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    targetBranch: null,
+    createdAt: 1,
+    updatedAt: 1,
+    archivedAt: null,
+  };
+  const create = mock(async () => ({ session }));
+  let starts = 0;
+  let closes = 0;
+  const view = renderCreation(
+    create,
+    () => {
+      closes += 1;
+    },
+    () => {
+      throw new Error("A failed start must not hand off automatically.");
+    },
+    {
+      workspaceSessionStart: async (input) => {
+        starts += 1;
+        if (!input.startup) throw new Error("Missing startup context.");
+        throw new HostInvokeError("Session setup failed. Inspect the saved session.", {
+          kind: "session_startup",
+          startupProgress: {
+            context: input.startup,
+            hostInstanceId: "host",
+            revision: 1,
+            workspaceId: "A",
+            repoPath: "/repo",
+            scope: { kind: "workspace" },
+            phase: "failed",
+            ownership: { state: "saved", target: { kind: "workspace", record: session } },
+            prepared: {
+              ref: {
+                repoPath: "/repo",
+                runtimeKind: "opencode",
+                externalSessionId: "native-created",
+                workingDirectory: "/repo",
+              },
+              runtimeId: "runtime",
+              liveStateSequence: 1,
+            },
+            steps: [
+              {
+                id: "checkout",
+                label: "Reuse checkout",
+                state: "completed",
+                details: ["Reused /repo."],
+              },
+            ],
+          },
+        });
+      },
+    },
+  );
+  try {
+    await selectModel(view);
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    const open = await view.findByRole("button", { name: "Open session" }, { timeout: 800 });
+    const original = view.connection.startupAttempts.getSnapshot()[0];
+    if (!original) throw new Error("Creation attempt is missing.");
+    await act(async () => {
+      fireEvent.click(open);
+    });
+    expect(closes).toBe(1);
+    expect(view.queryByRole("dialog")).toBeNull();
+    expect(view.getByLabelText("Current location").textContent).toBe(
+      "/sessions?workspace=A&kind=workspace&session=retained-created",
+    );
+    expect(view.connection.startupAttempts.getAttempt(original.id)).toMatchObject({
+      id: original.id,
+      presentation: "notification",
+      status: { phase: "failed" },
+      operations: original.operations,
+    });
+    expect(await view.findByRole("region", { name: /^Notifications/ })).toBeDefined();
+    expect(view.queryByRole("button", { name: "View progress" })).toBeNull();
+    expect(view.queryByText(/\d+\/\d+ steps/)).toBeNull();
+    fireEvent.click(await view.findByRole("button", { name: "Details" }));
+    const inspect = await view.findByRole("button", { name: "Inspect saved session" });
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText("Reuse checkout")).toBeNull();
+    fireEvent.click(inspect);
+    expect(view.getByText("retained-created")).toBeDefined();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(starts).toBe(1);
+  } finally {
+    view.unmount();
+    await view.connection.dispose();
+  }
+});
 
 function worktreeOf(input: WorkspaceSessionCreateInput | undefined) {
   return input?.location === "local_worktree" ? input.worktree : undefined;
@@ -247,6 +474,7 @@ test("New worktree hides Tracked upstream and returns an upstream pick to the de
     fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
+    fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
     fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));
     fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     await waitFor(() => expect(requests).toHaveLength(2), { timeout: 800 });
@@ -343,7 +571,7 @@ test("uses the task modal label-to-control gap for every form field", async () =
   }
 });
 
-test("an ordinary creation failure retains inputs, re-enables the form and does not report success", async () => {
+test("a current-checkout creation keeps disabled choices pending and failure feedback until Edit choices", async () => {
   let rejectCreation!: (cause: Error) => void;
   let created = 0;
   let closed = 0;
@@ -362,17 +590,31 @@ test("an ordinary creation failure retains inputs, re-enables the form and does 
   try {
     await selectModel(view);
     const name = view.getByLabelText("Name optional");
+    const submit = view.getByRole("button", { name: "Create chat" });
+    const form = submit.closest("form");
     fireEvent.change(name, { target: { value: "Retained session" } });
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+      fireEvent.click(submit);
     });
+    expect(view.getByLabelText("Name optional")).toBe(name);
+    expect(view.getByRole("button", { name: "Creating chat…" })).toBe(submit);
+    expect(submit.closest("form")).toBe(form);
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(submit.querySelector("svg")).not.toBeNull();
+    expect(name.closest("fieldset")?.disabled).toBe(true);
+    expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
     await act(async () => {
       rejectCreation(new Error("Runtime startup failed: executable missing"));
     });
     await view.findByRole("alert", {}, { timeout: 800 });
     expect(view.getByRole("alert").textContent).toBe("Runtime startup failed: executable missing");
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Create chat" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
     expect(view.getByDisplayValue("Retained session") !== null).toBe(true);
-    expect(name.closest("fieldset")?.disabled).toBe(false);
+    expect(view.getByLabelText("Name optional").closest("fieldset")?.disabled).toBe(false);
     expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(false);
     expect(
       view
@@ -386,12 +628,142 @@ test("an ordinary creation failure retains inputs, re-enables the form and does 
   }
 });
 
+test("retries preparation of the saved draft and waits for native live evidence before handoff", async () => {
+  const draft: WorkspaceSession = {
+    id: "retained-draft",
+    runtimeKind: "opencode",
+    externalSessionId: null,
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    targetBranch: null,
+    createdAt: 1,
+    updatedAt: 1,
+    archivedAt: null,
+  };
+  const create = mock(async () => ({ session: draft }));
+  const starts: WorkspaceSessionStartInput[] = [];
+  const handedOff: WorkspaceSession[] = [];
+  const prepared = Promise.withResolvers<WorkspaceSessionStartResult>();
+  const view = renderCreation(
+    create,
+    () => {},
+    (record) => {
+      handedOff.push(record);
+    },
+    {
+      workspaceSessionStart: async (input) => {
+        starts.push(input);
+        if (!input.startup) throw new Error("Startup context is missing.");
+        if (starts.length === 1)
+          throw new HostInvokeError("Runtime preparation failed. Check the runtime and retry.", {
+            kind: "session_startup",
+            startupProgress: {
+              context: input.startup,
+              hostInstanceId: "host",
+              revision: 1,
+              workspaceId: input.workspaceId,
+              repoPath: "/repo",
+              scope: { kind: "workspace", sessionId: draft.id },
+              phase: "failed",
+              ownership: { state: "saved", target: { kind: "workspace", record: draft } },
+              steps: [{ id: "prepare", label: "Prepare session", state: "failed", details: [] }],
+            },
+          });
+        return prepared.promise;
+      },
+    },
+  );
+  try {
+    await selectModel(view);
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    const retry = await view.findByRole(
+      "button",
+      { name: "Retry session preparation" },
+      { timeout: 800 },
+    );
+    expect(view.queryByRole("button", { name: "Edit choices" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Open session" })).toBeNull();
+    expect(handedOff).toEqual([]);
+    fireEvent.click(retry);
+    await waitFor(() => expect(starts).toHaveLength(2), { timeout: 800 });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(starts.map((input) => input.sessionId)).toEqual([draft.id, draft.id]);
+    const session = { ...draft, externalSessionId: "prepared-native" };
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: session.runtimeKind,
+      workingDirectory: "/repo",
+      externalSessionId: session.externalSessionId,
+    };
+    const startedAt = "2026-10-26T00:00:00.000Z";
+    const runtimeSession = {
+      externalSessionId: session.externalSessionId,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: "/repo",
+      startedAt,
+      status: "idle" as const,
+    };
+    const startup = starts[1]?.startup;
+    if (!startup) throw new Error("Repair startup context is missing.");
+    await act(async () => {
+      prepared.resolve({
+        session,
+        runtimeSession,
+        startupProgress: {
+          context: startup,
+          hostInstanceId: "host",
+          revision: 1,
+          workspaceId: "A",
+          repoPath: "/repo",
+          scope: { kind: "workspace", sessionId: draft.id },
+          phase: "completed",
+          ownership: {
+            state: "saved",
+            target: { kind: "workspace", record: session, runtimeSession },
+          },
+          prepared: { ref, runtimeId: "runtime", liveStateSequence: 5 },
+          steps: [{ id: "prepare", label: "Prepare session", state: "completed", details: [] }],
+        },
+      });
+    });
+    expect(handedOff).toEqual([]);
+    expect(view.queryByRole("button", { name: "Retry session preparation" })).toBeNull();
+    await act(async () => {
+      view.publishLive({
+        type: "session_upsert",
+        sequence: 5,
+        session: {
+          ref,
+          activity: "idle",
+          title: "Prepared session",
+          startedAt,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          contextUsage: null,
+        },
+      });
+    });
+    await waitFor(() => expect(handedOff).toHaveLength(1), { timeout: 800 });
+    expect(handedOff[0]?.id).toBe(draft.id);
+    expect(handedOff[0]?.externalSessionId).toBe("prepared-native");
+    expect(create).toHaveBeenCalledTimes(1);
+  } finally {
+    view.unmount();
+  }
+});
+
 test("creation keeps Role, Runtime Profile, Effort and location separate and blocks duplicate pending input", async () => {
-  const requests: WorkspaceSessionCreateInput[] = [];
+  const requests: {
+    input: WorkspaceSessionCreateInput;
+    startup: StartupOperationContext | undefined;
+  }[] = [];
   let closed = 0;
   const view = renderCreation(
-    async (input) => {
-      requests.push(input);
+    async (input, startup) => {
+      requests.push({ input, startup });
       return new Promise<never>(() => {});
     },
     () => {
@@ -418,7 +790,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       fireEvent.click(view.getByRole("button", { name: "Create chat" }));
     });
     await waitFor(() => expect(requests.length).toBe(1), { timeout: 800 });
-    expect(requests[0]).toEqual({
+    expect(requests[0]?.input).toEqual({
       workspaceId: "A",
       runtimeKind: "opencode",
       selectedModel: {
@@ -434,21 +806,43 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       manualTitle: "My session",
       targetBranch: { remote: "origin", branch: "main" },
     });
-    const name = view.getByLabelText("Name optional");
-    const fieldset = name.closest("fieldset");
-    expect(fieldset?.disabled).toBe(true);
-    fireEvent.click(view.getByRole("radio", { name: "Current checkout" }));
-    expect(view.getByRole("radio", { name: "New worktree" }).getAttribute("aria-checked")).toBe(
-      "true",
+    expect(view.getByLabelText("Name optional").closest("fieldset")?.disabled).toBe(true);
+    expect(view.getByRole("button", { name: "Creating chat…" }).hasAttribute("disabled")).toBe(
+      true,
     );
-    expect(view.getByLabelText("Worktree name")).toBeDefined();
-    expect(
-      view
-        .getByRole("button", { name: "Select model, OpenCode, Test model" })
-        .getAttribute("aria-disabled"),
-    ).toBe("true");
-    fireEvent.submit(name.closest("form")!);
-    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
+    expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    const startup = requests[0]?.startup;
+    if (!startup) throw new Error("Creation startup context is missing.");
+    await act(async () => {
+      view.publishProgress({
+        context: startup,
+        hostInstanceId: "host",
+        revision: 1,
+        workspaceId: "A",
+        repoPath: "/repo",
+        scope: { kind: "workspace" },
+        phase: "running",
+        ownership: { state: "not_saved" },
+        steps: [
+          {
+            id: "checkout",
+            label: "Create worktree",
+            state: "completed",
+            details: [],
+            resources: [{ kind: "worktree", value: "/repo/my-feature", state: "created" }],
+          },
+          { id: "copies", label: "Copy configured files", state: "pending", details: [] },
+          { id: "save", label: "Save session", state: "pending", details: [] },
+        ],
+      });
+    });
+    expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+    expect(view.getByText("Create worktree")).toBeDefined();
+    expect(view.queryByText("Copy configured files")).toBeNull();
+    expect(view.queryByText("Save session")).toBeNull();
+    expect(view.queryByRole("button", { name: "Close" })).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(requests.length).toBe(1);
     expect(closed).toBe(0);
   } finally {
@@ -696,6 +1090,7 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
       const name = view.getByLabelText("Worktree name");
       fireEvent.change(name, { target: { value: "collision" } });
       fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+      fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
       const alert = await view.findByRole("alert");
       expect(alert.textContent).toBe(message);
       expect(alert.id).toBe(
@@ -703,8 +1098,9 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
           ? "workspace-session-worktree-name-error"
           : "workspace-session-branch-error",
       );
-      if (field === "worktree.name") expect(name.getAttribute("aria-invalid")).toBe("true");
-      fireEvent.change(name, { target: { value: "another-name" } });
+      if (field === "worktree.name")
+        expect(view.getByLabelText("Worktree name").getAttribute("aria-invalid")).toBe("true");
+      fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "another-name" } });
       expect(view.queryByRole("alert")).toBeNull();
       expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(
         false,
@@ -896,6 +1292,7 @@ test("a failed creation reads the worktrees again and marks a removed choice as 
     fireEvent.click(selector);
     fireEvent.click(view.getByRole("option", { name: /\/worktrees\/one/ }));
     fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
     await view.findByText(
       "The selected worktree is no longer available. Select another worktree.",
       {},

@@ -35,6 +35,8 @@ import { type HostError, HostOperationError, HostResourceError } from "../../eff
 import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
+import { createNodeSessionStartupTracker } from "../../composition/node/node-session-startup-progress";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import {
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
@@ -79,6 +81,60 @@ const worktreeInput = (): Extract<WorkspaceSessionCreateInput, { location: "loca
 });
 
 describe("host-owned Workspace Session lifecycle", () => {
+  test("tracked draft publication failure retains the exact saved session", async () => {
+    const h = setup();
+    const router = toPromiseHostCommandRouter(
+      createEffectHostCommandRouter({
+        handlers: createWorkspaceSessionCommandHandlers(h.service, () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "workspaceSession.publish",
+              message: "Updates could not sync",
+            }),
+          ),
+        ),
+        trackCommand: createNodeSessionStartupTracker({
+          hostInstanceId: "host",
+          eventBus: undefined,
+          taskWorkflows: builtinTaskWorkflows,
+          settings: {
+            ...h.dependencies.settings,
+            getRepoConfigByRepoPath: () => h.dependencies.settings.getRepoConfig("fairnest"),
+          },
+          finalize: () => Effect.die(new Error("A draft has no native preparation")),
+          runtime: {
+            probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+          },
+        }),
+      }),
+    );
+    let failed = false;
+    try {
+      await router.invoke("workspace_session_create", {
+        ...input(),
+        startup: { startupAttemptId: "attempt", operationId: "create" },
+      });
+    } catch (error) {
+      failed = true;
+      const saved = await Effect.runPromise(h.service.listActive("fairnest"));
+      expect(saved).toHaveLength(1);
+      expect(hostInvokeFailureFromError(error)).toMatchObject({
+        kind: "session_startup",
+        startupProgress: {
+          phase: "failed",
+          ownership: {
+            state: "saved",
+            target: { kind: "workspace", record: { id: saved[0]?.id, externalSessionId: null } },
+          },
+          steps: expect.arrayContaining([
+            expect.objectContaining({ id: "publish", state: "failed" }),
+          ]),
+        },
+      });
+    }
+    expect(failed).toBe(true);
+    expect(h.starts).toHaveLength(0);
+  });
   let database: SqliteTaskStoreTestHarness;
   beforeEach(async () => {
     database = await createSqliteTaskStoreHarness();
@@ -543,7 +599,7 @@ describe("host-owned Workspace Session lifecycle", () => {
   });
 
   test.each([false, true])(
-    "cleans every acquired fork resource after a save failure, terminal cleanup fails=%s",
+    "removes fork resources only after action terminals stop, terminal cleanup fails=%s",
     async (terminalFailure) => {
       const h = setup();
       const draft = await Effect.runPromise(h.service.create(input()));
@@ -593,11 +649,10 @@ describe("host-owned Workspace Session lifecycle", () => {
         "stop",
         "release",
         "close-action-terminals",
-        "remove-worktree",
-        "delete-branch",
+        ...(terminalFailure ? [] : ["remove-worktree", "delete-branch"]),
       ]);
-      expect(h.paths.has(h.state.worktree)).toBe(false);
-      expect(h.branches.has("refs/heads/odt/fork-chat")).toBe(false);
+      expect(h.paths.has(h.state.worktree)).toBe(terminalFailure);
+      expect(h.branches.has("refs/heads/odt/fork-chat")).toBe(terminalFailure);
       expect(await Effect.runPromise(service.listActive("fairnest"))).toHaveLength(1);
     },
   );
@@ -1476,7 +1531,10 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.calls).toEqual(["worktree", "copy", "actions", "save"]);
       expect(h.starts).toEqual([]);
       const ref = { workspaceId: "fairnest", sessionId: session.id };
-      const started = await router.invoke("workspace_session_start", ref);
+      const started = await router.invoke("workspace_session_start", {
+        ...ref,
+        startup: { startupAttemptId: "attempt", operationId: "start" },
+      });
       expect(h.starts[0]?.workingDirectory).toBe(session.executionTarget.workingDirectory);
       const callsBeforeArchive = [...h.calls];
       const archived = await router.invoke("workspace_session_archive", {

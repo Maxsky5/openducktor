@@ -18,12 +18,24 @@ import { createRemoteFetchService } from "../../git/remote-fetch-service";
 import { createTaskMergeDetectionService } from "./task-merge-detection-service";
 
 const run = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    env: gitFixtureEnv,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Merge Detection Test",
+      "-c",
+      "user.email=merge-detection@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ],
+    {
+      cwd,
+      encoding: "utf8",
+      env: gitFixtureEnv,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  ).trim();
 
 const taskCard = (id: string): TaskCard => ({
   id,
@@ -52,19 +64,12 @@ const taskCard = (id: string): TaskCard => ({
 
 let root: string;
 let repo: string;
-let other: string;
 let worktreeBase: string;
 
 const commitFile = async (cwd: string, name: string, content: string) => {
   await writeFile(path.join(cwd, name), content);
   run(cwd, "add", name);
   run(cwd, "commit", "-m", `change ${name}`);
-};
-
-const configureGit = (cwd: string) => {
-  run(cwd, "config", "user.name", "Merge Detection Test");
-  run(cwd, "config", "user.email", "merge-detection@example.invalid");
-  run(cwd, "config", "commit.gpgsign", "false");
 };
 
 const createService = (tasks: TaskCard[]) => {
@@ -142,19 +147,18 @@ const resultsByTask = (snapshot: TaskMergeStatusSnapshot) =>
 
 beforeEach(async () => {
   root = await realpath(await mkdtemp(path.join(tmpdir(), "merge-detection-")));
-  const origin = path.join(root, "origin.git");
   repo = path.join(root, "repo");
-  other = path.join(root, "other");
   worktreeBase = path.join(root, "worktrees");
+});
+
+const createRepository = async () => {
+  const origin = path.join(root, "origin.git");
   run(root, "init", "--bare", "--initial-branch=main", origin);
   run(root, "init", "--initial-branch=main", repo);
-  configureGit(repo);
   await commitFile(repo, "base.txt", "base\n");
   run(repo, "remote", "add", "origin", origin);
   run(repo, "push", "-u", "origin", "main");
-  run(root, "clone", origin, other);
-  configureGit(other);
-});
+};
 
 afterEach(async () => {
   await removeTestDirectory(root);
@@ -163,16 +167,14 @@ afterEach(async () => {
 describe("merge detection with real Git", () => {
   // Each case creates repositories and starts many Git processes, which can exceed 5 seconds.
   test("finds each merge type and tells branches without commits apart", async () => {
-    const createTaskBranch = async (taskId: string, withCommit: boolean) => {
-      run(repo, "branch", `odt/${taskId}`, "origin/main");
-      if (!withCommit) return;
-      run(repo, "checkout", `odt/${taskId}`);
-      await commitFile(repo, `${taskId}.txt`, `${taskId}\n`);
-      run(repo, "checkout", "main");
-    };
+    await createRepository();
+    const other = path.join(root, "other");
+    run(root, "clone", path.join(root, "origin.git"), other);
     for (const taskId of ["t-merge", "t-ff", "t-squash", "t-rebase", "t-open"]) {
-      await createTaskBranch(taskId, true);
+      run(repo, "checkout", "-b", `odt/${taskId}`, "origin/main");
+      await commitFile(repo, `${taskId}.txt`, `${taskId}\n`);
     }
+    run(repo, "checkout", "main");
     // A branch without commits that a Git panel pull moved forward.
     run(repo, "worktree", "add", "-b", "odt/t-empty", path.join(worktreeBase, "t-empty"), "main");
     run(repo, "push", "origin", "odt/t-merge", "odt/t-ff", "odt/t-squash", "odt/t-rebase");
@@ -212,18 +214,16 @@ describe("merge detection with real Git", () => {
   }, 30_000);
 
   test("checks branches whose reflog Git maintenance expired, without a failure", async () => {
+    await createRepository();
     run(repo, "branch", "odt/t-idle", "origin/main");
     for (const taskId of ["t-squash", "t-open"]) {
       run(repo, "checkout", "-b", `odt/${taskId}`, "origin/main");
       await commitFile(repo, `${taskId}.txt`, `${taskId}\n`);
     }
     run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-squash");
-    run(other, "fetch", "origin");
-    run(other, "merge", "--squash", "origin/odt/t-squash");
-    run(other, "commit", "-m", "Squash t-squash");
-    run(other, "push", "origin", "main");
-    run(repo, "fetch", "origin");
+    run(repo, "merge", "--squash", "odt/t-squash");
+    run(repo, "commit", "-m", "Squash t-squash");
+    run(repo, "push", "origin", "main");
     // `git gc` expires old reflog entries in the same way, and leaves empty reflog files.
     run(repo, "reflog", "expire", "--expire=now", "--all");
 
@@ -239,80 +239,37 @@ describe("merge detection with real Git", () => {
     });
   }, 30_000);
 
-  test("needs a commit that the branch kept, on both merge paths", async () => {
+  test("finds merged commits kept after resets and cherry-picks", async () => {
+    await createRepository();
     // A reset to the same commit keeps the task commit, so its merge still counts.
     run(repo, "checkout", "-b", "odt/t-reset", "origin/main");
     await commitFile(repo, "t-reset.txt", "reset\n");
     run(repo, "reset", "--hard", "HEAD");
-    run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-reset");
     // A reset that drops a later commit keeps the earlier task commit.
     run(repo, "checkout", "-b", "odt/t-partial", "origin/main");
     await commitFile(repo, "t-partial-a.txt", "a\n");
     await commitFile(repo, "t-partial-b.txt", "b\n");
     run(repo, "reset", "--hard", "HEAD~1");
-    run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-partial");
     // A cherry-pick makes a commit of the branch's own.
     run(repo, "checkout", "-b", "side", "origin/main");
     await commitFile(repo, "side.txt", "side\n");
     run(repo, "checkout", "-b", "odt/t-pick", "origin/main");
     run(repo, "cherry-pick", "side");
-    run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-pick");
     // A reset back to a dropped commit restores it.
     run(repo, "checkout", "-b", "odt/t-restore", "origin/main");
     await commitFile(repo, "t-restore.txt", "restore\n");
     run(repo, "reset", "--hard", "HEAD~1");
     run(repo, "reset", "--hard", "ORIG_HEAD");
     run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-restore");
-    // A reset after a rebase keeps the rebased task commit that its tip holds.
-    run(repo, "checkout", "-b", "rebase-base", "origin/main");
-    await commitFile(repo, "rebase-base.txt", "base\n");
-    run(repo, "checkout", "-b", "odt/t-rebase", "origin/main");
-    await commitFile(repo, "t-rebase-a.txt", "a\n");
-    await commitFile(repo, "t-rebase-b.txt", "b\n");
-    run(repo, "rebase", "rebase-base");
-    run(repo, "reset", "--hard", "HEAD~1");
-    run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-rebase");
-    // A reset to the target tip after the merge keeps the rebased task commit.
-    run(repo, "checkout", "-b", "odt/t-forward", "origin/main");
-    await commitFile(repo, "t-forward.txt", "forward\n");
-    run(repo, "rebase", "rebase-base");
-    run(repo, "checkout", "main");
-    run(repo, "push", "origin", "odt/t-forward");
-    run(other, "fetch", "origin");
-    run(other, "merge", "--ff-only", "origin/odt/t-reset");
-    run(other, "merge", "--no-ff", "-m", "Merge t-partial", "origin/odt/t-partial");
-    run(other, "merge", "--no-ff", "-m", "Merge t-pick", "origin/odt/t-pick");
-    run(other, "merge", "--no-ff", "-m", "Merge t-restore", "origin/odt/t-restore");
-    run(other, "merge", "--no-ff", "-m", "Merge t-rebase", "origin/odt/t-rebase");
-    run(other, "merge", "--no-ff", "-m", "Merge t-forward", "origin/odt/t-forward");
-    run(other, "push", "origin", "main");
-    run(repo, "fetch", "origin");
-    run(repo, "merge", "--ff-only", "origin/main");
-    run(repo, "branch", "--force", "odt/t-forward", "origin/main");
-    // A release branch gets the change of main by cherry-pick. A task branch that starts at main
-    // and gets no commit leaves the release tree unchanged, but it is not merged.
-    await commitFile(repo, "shared.txt", "shared\n");
+    run(repo, "merge", "--ff-only", "odt/t-reset");
+    for (const taskId of ["t-partial", "t-pick", "t-restore"]) {
+      run(repo, "merge", "--no-ff", "-m", `Merge ${taskId}`, `odt/${taskId}`);
+    }
     run(repo, "push", "origin", "main");
-    run(repo, "checkout", "-b", "release", "main~1");
-    run(repo, "cherry-pick", "main");
-    run(repo, "push", "origin", "release");
-    run(repo, "checkout", "main");
-    run(repo, "branch", "odt/t-cherry", "main");
 
-    const { service, logs } = createService([
-      taskCard("t-reset"),
-      taskCard("t-partial"),
-      taskCard("t-pick"),
-      taskCard("t-restore"),
-      taskCard("t-rebase"),
-      taskCard("t-forward"),
-      { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
-    ]);
+    const { service, logs } = createService(
+      ["t-reset", "t-partial", "t-pick", "t-restore"].map(taskCard),
+    );
     const snapshot = await Effect.runPromise(service.runPass("/workspace"));
 
     expect(logs).toEqual([]);
@@ -321,15 +278,64 @@ describe("merge detection with real Git", () => {
       "t-partial": "merged",
       "t-pick": "merged",
       "t-restore": "merged",
+    });
+  }, 30_000);
+
+  test("finds rebased commits kept after a reset within or beyond the rebased history", async () => {
+    await createRepository();
+    // A reset after a rebase keeps the rebased task commit that its tip holds.
+    run(repo, "checkout", "-b", "rebase-base", "origin/main");
+    await commitFile(repo, "rebase-base.txt", "base\n");
+    run(repo, "checkout", "-b", "odt/t-rebase", "origin/main");
+    await commitFile(repo, "t-rebase-a.txt", "a\n");
+    await commitFile(repo, "t-rebase-b.txt", "b\n");
+    run(repo, "rebase", "rebase-base");
+    run(repo, "reset", "--hard", "HEAD~1");
+    // A reset to the target tip after the merge keeps the rebased task commit.
+    run(repo, "checkout", "-b", "odt/t-forward", "origin/main");
+    await commitFile(repo, "t-forward.txt", "forward\n");
+    run(repo, "rebase", "rebase-base");
+    run(repo, "checkout", "main");
+    run(repo, "merge", "--no-ff", "-m", "Merge t-rebase", "odt/t-rebase");
+    run(repo, "merge", "--no-ff", "-m", "Merge t-forward", "odt/t-forward");
+    run(repo, "push", "origin", "main");
+    run(repo, "branch", "--force", "odt/t-forward", "origin/main");
+
+    const { service, logs } = createService(["t-rebase", "t-forward"].map(taskCard));
+    const snapshot = await Effect.runPromise(service.runPass("/workspace"));
+
+    expect(logs).toEqual([]);
+    expect(resultsByTask(snapshot)).toEqual({
       "t-rebase": "merged",
       "t-forward": "merged",
+    });
+  }, 30_000);
+
+  test("keeps a branch without its own commit unmerged against an equivalent release tree", async () => {
+    await createRepository();
+    // A release branch gets the change of main by cherry-pick. A task branch that starts at main
+    // and gets no commit leaves the release tree unchanged, but it is not merged.
+    await commitFile(repo, "shared.txt", "shared\n");
+    run(repo, "checkout", "-b", "release", "main~1");
+    // The source line makes a distinct commit even when both commits have the same timestamp.
+    run(repo, "cherry-pick", "-x", "main");
+    run(repo, "push", "origin", "release");
+    run(repo, "branch", "odt/t-cherry", "main");
+
+    const { service, logs } = createService([
+      { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
+    ]);
+    const snapshot = await Effect.runPromise(service.runPass("/workspace"));
+
+    expect(logs).toEqual([]);
+    expect(resultsByTask(snapshot)).toEqual({
       "t-cherry": "not_merged:0",
     });
   }, 30_000);
 
   test("keeps the last result and shows a failure when the fetch fails", async () => {
-    run(repo, "branch", "odt/t-open", "origin/main");
-    run(repo, "checkout", "odt/t-open");
+    await createRepository();
+    run(repo, "checkout", "-b", "odt/t-open", "origin/main");
     await commitFile(repo, "t-open.txt", "open\n");
     run(repo, "checkout", "main");
     const { service, logs } = createService([taskCard("t-open")]);

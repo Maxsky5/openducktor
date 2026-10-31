@@ -184,6 +184,11 @@ describe("live sessions across a reconnect", () => {
   test.each([
     ["a complete replay keeps the state and delivers the missed changes", [], 1],
     [
+      "a gap for another repository keeps this live state",
+      [liveSessionStreamEventName("/other")],
+      1,
+    ],
+    [
       "a replay gap replaces the state with a new snapshot",
       [liveSessionStreamEventName("/repo")],
       2,
@@ -197,8 +202,12 @@ describe("live sessions across a reconnect", () => {
       queryClient: createClientQueryClient(),
     });
     const received: AgentSessionLiveEnvelope[] = [];
+    const controls: unknown[] = [];
     try {
       await connection.waitForAdmission();
+      const stopProgress = await connection.subscribeStartupProgress((event) => {
+        controls.push(event);
+      });
       const stop = await connection.observeAgentSessionLive({ repoPath: "/repo" }, (envelope) =>
         received.push(envelope),
       );
@@ -213,6 +222,13 @@ describe("live sessions across a reconnect", () => {
       host.streams[1]?.push(liveFrame(transcriptEvent("after", 4), 3));
       await waitForExpectation(() => expect(received.at(-1)).toEqual(transcriptEvent("after", 4)));
 
+      expect(controls).toContainEqual({
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: gaps.length > 0,
+        hostChanged: false,
+        missedEventNames: gaps,
+      });
       expect(host.attaches()).toBe(attaches);
       expect(received).toEqual(
         attaches === 1
@@ -251,6 +267,7 @@ describe("live sessions across a reconnect", () => {
               transcriptEvent("after", 4),
             ],
       );
+      stopProgress();
       stop();
     } finally {
       await connection.remote.disconnect();

@@ -29,6 +29,7 @@ import { createSessionOperationOwner } from "./session-operation-owner";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
 import { hasForegroundTurn, hasBlockingInput } from "./session-foreground-readiness";
+import { startupStep, completeStartupSession } from "./session-startup-progress";
 
 type ObservedSessionCommands = Pick<
   AgentSessionLiveStateService,
@@ -214,7 +215,7 @@ export const createAgentSessionCommandService = ({
     startSession: (input: Parameters<typeof runtime.startSession>[0]) =>
       owner.supervise(creation.startSession(input)),
     startWorkflowSession: (input: Parameters<typeof workflow.startWorkflowSession>[0]) =>
-      owner.supervise(workflow.startWorkflowSession(input)),
+      owner.supervise(completeStartupSession(workflow.startWorkflowSession(input), input.repoPath)),
     forkSession: (input: Parameters<typeof workflow.forkSession>[0]) =>
       owner.supervise(
         Effect.gen(function* () {
@@ -236,9 +237,12 @@ export const createAgentSessionCommandService = ({
             repoPath,
             workStartGuard: owner.captureGuard(parent),
           });
-          return yield* root.sessionScope.kind === "repository"
-            ? policyFor(root.sessionScope).run(parent, "fork session", work)
-            : work;
+          return yield* completeStartupSession(
+            root.sessionScope.kind === "repository"
+              ? policyFor(root.sessionScope).run(parent, "fork session", work)
+              : work,
+            repoPath,
+          );
         }),
       ),
     loadContext: (input: Parameters<typeof runtime.loadContext>[0]) =>
@@ -303,61 +307,67 @@ export const createAgentSessionCommandService = ({
         return yield* owner.run(
           ref,
           continuesTurn ? "continue" : "reattach",
-          Effect.gen(function* () {
-            const live = yield* continuesTurn ? checkPending(ref) : readAvailableSession(ref);
-            const prepared = yield* policy.prepareResume(ref);
-            let model = prepared.input.model;
-            let systemPrompt = prepared.input.systemPrompt;
-            if (continuesTurn) {
-              model =
-                (yield* continuationModel(
-                  prepared.input,
-                  live.type === "live" ? live.session : undefined,
-                )) ?? undefined;
-              systemPrompt = (yield* turnPreparation.context(ref)) ?? systemPrompt;
-            }
-            const runtimeInput = {
-              ...prepared.input,
-              model,
-              systemPrompt,
-            };
-            if (continuesTurn) {
-              const { resumeMode: _resumeMode, ...continuationInput } = runtimeInput;
-              const options = yield* owner.options();
-              yield* Effect.try({
-                try: () => options.assertCurrent?.(),
-                catch: (cause) => toHostOperationError(cause, "session.continue"),
-              });
-              yield* checkPending(ref);
-              const continued = yield* runtime.continueInterruptedTurn({
-                ...continuationInput,
-                workStartGuard: options.assertCurrent
-                  ? { assertCurrent: options.assertCurrent }
-                  : undefined,
-                onWorkIssued: options.onSent,
-                onWorkAccepted: options.onAccepted,
-              });
-              yield* owner.controlAccepted();
-              return continued;
-            }
-            const resumeOptions = yield* owner.options("reattach");
-            return yield* resumeAndSaveSession({
-              ref,
-              resume: runtime.resumeSession({
-                ...runtimeInput,
-                workStartGuard: resumeOptions.assertCurrent
-                  ? { assertCurrent: resumeOptions.assertCurrent }
-                  : undefined,
-                onWorkIssued: resumeOptions.onSent,
-                onWorkAccepted: resumeOptions.onAccepted,
-              }),
-              save: prepared.save,
-              release: runtime.releaseSession,
-            }).pipe(
-              Effect.tap(() => owner.reattached()),
-              Effect.map(({ session }) => session),
-            );
-          }),
+          completeStartupSession(
+            Effect.gen(function* () {
+              const live = yield* continuesTurn ? checkPending(ref) : readAvailableSession(ref);
+              const prepared = yield* policy.prepareResume(ref);
+              let model = prepared.input.model;
+              let systemPrompt = prepared.input.systemPrompt;
+              if (continuesTurn) {
+                model =
+                  (yield* continuationModel(
+                    prepared.input,
+                    live.type === "live" ? live.session : undefined,
+                  )) ?? undefined;
+                systemPrompt = (yield* turnPreparation.context(ref)) ?? systemPrompt;
+              }
+              const runtimeInput = {
+                ...prepared.input,
+                model,
+                systemPrompt,
+              };
+              if (continuesTurn) {
+                const { resumeMode: _resumeMode, ...continuationInput } = runtimeInput;
+                const options = yield* owner.options();
+                yield* Effect.try({
+                  try: () => options.assertCurrent?.(),
+                  catch: (cause) => toHostOperationError(cause, "session.continue"),
+                });
+                yield* checkPending(ref);
+                const continued = yield* runtime.continueInterruptedTurn({
+                  ...continuationInput,
+                  workStartGuard: options.assertCurrent
+                    ? { assertCurrent: options.assertCurrent }
+                    : undefined,
+                  onWorkIssued: options.onSent,
+                  onWorkAccepted: options.onAccepted,
+                });
+                yield* owner.controlAccepted();
+                return continued;
+              }
+              const resumeOptions = yield* owner.options("reattach");
+              return yield* resumeAndSaveSession({
+                ref,
+                resume: startupStep(
+                  { id: "prepare", label: "Resume native session" },
+                  runtime.resumeSession({
+                    ...runtimeInput,
+                    workStartGuard: resumeOptions.assertCurrent
+                      ? { assertCurrent: resumeOptions.assertCurrent }
+                      : undefined,
+                    onWorkIssued: resumeOptions.onSent,
+                    onWorkAccepted: resumeOptions.onAccepted,
+                  }),
+                ),
+                save: prepared.save,
+                release: runtime.releaseSession,
+              }).pipe(
+                Effect.tap(() => owner.reattached()),
+                Effect.map(({ session }) => session),
+              );
+            }),
+            repoPath,
+          ),
           undefined,
           input.workStartGuard?.assertCurrent,
         );

@@ -137,3 +137,5 @@ export * from "./remote-host-schemas";
 export * from "./task-artifact-schemas";
 export * from "./artifact-preview-schemas";
 export * from "./odt-artifact-schemas";
+
+export * from "./session-startup-schemas";

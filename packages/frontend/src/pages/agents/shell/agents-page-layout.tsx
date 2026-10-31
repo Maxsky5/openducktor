@@ -49,6 +49,7 @@ import type {
   AgentStudioRightPanelBridgeModel,
   AgentStudioSelectedFileRefreshModel,
 } from "./use-agent-studio-right-panel-bridge";
+import { InlineStartup } from "@/features/session-startup/inline-session-startup";
 
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
@@ -355,11 +356,27 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     () => (
       <ChatFileLinkProvider owner={fileLinkOwner}>
         <ChatArtifactLinkProvider owner={chatArtifactLinkOwner}>
-          <MemoizedAgentChatPane chatModel={chatModel} />
+          <div className="flex h-full min-h-0 flex-col">
+            <InlineStartup
+              repoPath={chatFileLinkOwner.repoPath}
+              taskId={chatFileLinkOwner.taskId}
+              role={chatHeaderModel.selectedRole}
+            />
+            <div className="min-h-0 flex-1">
+              <MemoizedAgentChatPane chatModel={chatModel} />
+            </div>
+          </div>
         </ChatArtifactLinkProvider>
       </ChatFileLinkProvider>
     ),
-    [chatModel, chatArtifactLinkOwner, fileLinkOwner],
+    [
+      chatModel,
+      chatArtifactLinkOwner,
+      fileLinkOwner,
+      chatFileLinkOwner.repoPath,
+      chatFileLinkOwner.taskId,
+      chatHeaderModel.selectedRole,
+    ],
   );
   const rightPanelContent = useMemo(
     () => (

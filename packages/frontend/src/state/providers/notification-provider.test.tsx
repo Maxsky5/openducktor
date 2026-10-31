@@ -1,6 +1,13 @@
-import { describe, expect, mock, test } from "bun:test";
-import { type NotificationOsCapability } from "@openducktor/contracts";
+import { describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  type NotificationOccurrence,
+  type NotificationOsCapability,
+  type NotificationOsDeliveryRequest,
+} from "@openducktor/contracts";
+import { waitFor } from "@testing-library/react";
+import * as cuelume from "cuelume";
 import type { PropsWithChildren } from "react";
+import { toast } from "sonner";
 import {
   createBridge,
   workflowClosedOccurrence,
@@ -19,6 +26,100 @@ import { WorkspaceStateContext } from "../app-state-contexts";
 import { useNotificationContext } from "../notifications/notification-context";
 import { NotificationProvider } from "./notification-provider";
 import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures";
+
+test("startup feedback suppresses only its in-app Started toast through publication echoes", async () => {
+  const settings = createBuiltinNotificationSettings();
+  settings.volumePercent = 17;
+  settings.osFocus = "always_send";
+  settings.soundFocus = "always_play";
+  settings.kinds["agent.session_started"] = { enabled: true, target: "both", sound: "chime" };
+  const playSound = spyOn(cuelume, "play").mockImplementation(() => {});
+  const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
+    status: "shown" as const,
+  }));
+  let onFrame: Parameters<HostConnection["subscribeNotificationStream"]>[1] = () => {};
+  let onOccurrence: Parameters<NotificationBridge["subscribeOccurrences"]>[0] = () => {};
+  let sequence = 0;
+  configureShellBridge({
+    ...createUnavailableShellBridge(),
+    notifications: createBridge({
+      showOsNotification,
+      subscribeOccurrences: (listener) => {
+        onOccurrence = listener;
+        return () => {};
+      },
+      publishOccurrence: async (occurrence, selectedSettings) => {
+        onOccurrence(occurrence, selectedSettings);
+        return { occurrence, settings: selectedSettings };
+      },
+    }),
+  });
+  const connection = createTestClientConnection({
+    host: createTestHostConnection({
+      subscribeNotificationStream: async (_input, listener) => {
+        onFrame = listener;
+        return () => {};
+      },
+      client: {
+        notificationPublishAction: async (occurrence: NotificationOccurrence) => {
+          const selected = { occurrence, settings, preferenceRevision: 1 };
+          onFrame({
+            type: "occurrence",
+            cursor: { epoch: "epoch", sequence: ++sequence },
+            selected,
+          });
+          return selected;
+        },
+      },
+    }),
+  });
+  const workspace = createWorkspaceState();
+  const record = createWorkspaceRecordFixture();
+  workspace.workspaces = [record];
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceStateContext value={workspace}>
+        <NotificationProvider>{children}</NotificationProvider>
+      </WorkspaceStateContext>
+    </ClientConnectionProvider>
+  );
+  const hook = createHookHarness(useNotificationContext, undefined, { wrapper });
+  try {
+    await hook.mount();
+    for (const inAppFeedbackHandled of [true, false]) {
+      const count = showOsNotification.mock.calls.length + 1;
+      await hook.run((context) => {
+        context.sessionStartNotifications.publishSessionStarted({
+          launchAttemptId: crypto.randomUUID(),
+          workspaceId: record.workspaceId,
+          taskId: "task-1",
+          role: "build",
+          inAppFeedbackHandled,
+          session: {
+            externalSessionId: "session-1",
+            runtimeKind: "codex",
+            workingDirectory: "/repo/worktree",
+          },
+        });
+      });
+      await waitFor(() => expect(showOsNotification).toHaveBeenCalledTimes(count), {
+        timeout: 500,
+      });
+      const occurrenceId = showOsNotification.mock.calls[count - 1]?.[0].occurrenceId;
+      expect(toast.getHistory().some((entry) => entry.id === occurrenceId)).toBe(
+        !inAppFeedbackHandled,
+      );
+      expect(playSound).toHaveBeenCalledTimes(count);
+    }
+  } finally {
+    for (const [request] of showOsNotification.mock.calls) toast.dismiss(request.occurrenceId);
+    await hook.unmount();
+    await connection.dispose();
+    configureShellBridge(createUnavailableShellBridge());
+    playSound.mockRestore();
+  }
+});
 
 describe("notification permission recovery", () => {
   test.each([

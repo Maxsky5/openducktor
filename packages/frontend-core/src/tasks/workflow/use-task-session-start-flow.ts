@@ -46,7 +46,10 @@ export type TaskViewTarget = Extract<SessionNavigationTarget, { kind: "task" | "
  * Opens a task view. `selected` names the repository when the user picked this exact session,
  * so the view can select it before the session list loads. The platform owns the route.
  */
-export type OpenTaskView = (target: TaskViewTarget, selected?: { repoPath: string }) => void;
+export type OpenTaskView = (
+  target: TaskViewTarget,
+  selected?: { repoPath: string },
+) => void | Promise<void>;
 
 type UseTaskSessionStartFlowArgs = {
   activeWorkspaceId: string | null;
@@ -56,10 +59,9 @@ type UseTaskSessionStartFlowArgs = {
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   openTaskView: OpenTaskView;
-  /** Shows the retry of a first message that did not reach the started session. */
-  onPostStartMessageFailure: (result: SessionStartWorkflowResult) => void;
   workspaceRepoPath: string | null;
   runSessionStartWorkflow: RunSessionStartWorkflow;
+  onBackgroundTransfer?: (attemptId: string) => void;
 };
 
 export type UseTaskSessionStartFlowResult = {
@@ -136,22 +138,24 @@ export function useTaskSessionStartFlow({
   tasks,
   sessions,
   openTaskView,
-  onPostStartMessageFailure,
   workspaceRepoPath,
   runSessionStartWorkflow,
+  onBackgroundTransfer,
 }: UseTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
-  const { feedback } = useClientConnection();
+  const { feedback, startupAttempts } = useClientConnection();
   const queryClient = useQueryClient();
   const isCurrentContext = useSessionStartContext(activeWorkspaceId);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, isSessionStarting, runSessionStartRequest } =
     useSessionStartModalRunner({
+      workspaceId: activeWorkspaceId,
       scopeKey: activeWorkspaceId,
       branches,
       favoriteState,
       repoSettings,
       workspaceRepoPath,
+      onBackgroundTransfer,
     });
 
   const {
@@ -174,11 +178,11 @@ export function useTaskSessionStartFlow({
   );
 
   const openStartedSession = useCallback(
-    (intent: SessionStartFlowRequest, session: AgentSessionIdentity): void => {
+    (intent: SessionStartFlowRequest, session: AgentSessionIdentity): void | Promise<void> => {
       if (!activeWorkspaceId) {
         throw new Error("No active workspace is selected.");
       }
-      openTaskView({
+      return openTaskView({
         kind: "task_session",
         workspaceId: activeWorkspaceId,
         taskId: intent.taskId,
@@ -206,19 +210,24 @@ export function useTaskSessionStartFlow({
           taskSessions,
           selectedTask,
         }),
-        async ({ decision, runInBackground }) => {
+        async ({ decision, runInBackground, startupAttemptId }) => {
           const input: Parameters<typeof startKanbanSessionFlow>[0] = {
+            startupAttemptId,
             workspaceId: activeWorkspaceId,
             request: intent,
             decision,
             startInBackground: runInBackground,
             isCurrent: isCurrentContext,
             tasks,
-            feedback,
-            onPostStartMessageFailure,
             runSessionStartWorkflow,
             openStartedSession: (request, session) => {
-              if (isCurrentContext()) openStartedSession(request, session);
+              const attempt = startupAttempts.getAttempt(startupAttemptId);
+              if (
+                isCurrentContext() &&
+                attempt?.presentation === "dialog" &&
+                attempt.status.phase === "ready"
+              )
+                return openStartedSession(request, session);
             },
           };
           const session = await startKanbanSessionFlow(input);
@@ -227,9 +236,7 @@ export function useTaskSessionStartFlow({
       );
     },
     [
-      feedback,
       isCurrentContext,
-      onPostStartMessageFailure,
       queryClient,
       openStartedSession,
       runSessionStartWorkflow,
@@ -237,6 +244,7 @@ export function useTaskSessionStartFlow({
       sessions,
       tasks,
       activeWorkspaceId,
+      startupAttempts,
     ],
   );
 

@@ -21,6 +21,8 @@ import {
 } from "./task-workflow-session-storage";
 import { TaskSessionOwnershipCommittedError } from "./task-session-ownership-error";
 import { validateTaskSessionWorkflowAvailable } from "../tasks/support/task-session-workflow-validation";
+import { startupStep, stopStartupSession } from "./session-startup-progress";
+import type { AgentSessionWorkflowScope } from "@openducktor/contracts";
 
 export type RuntimeControl = Pick<
   AgentSessionLiveStateService,
@@ -78,6 +80,43 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
     deps;
   return {
     start: createStartTaskWorkflowSession(deps),
+    completeSavedStart: (input: {
+      repoPath: string;
+      sessionScope: AgentSessionWorkflowScope;
+      session: AgentSessionControlSummary;
+    }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+          const scope = input.sessionScope;
+          yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "repair session startup");
+          yield* readStoredWorkflowSession(
+            tasks,
+            { ...input.session, repoPath, sessionScope: scope },
+            "read-resume",
+          );
+          const task = yield* taskReader.getTask({ repoPath, taskId: scope.taskId });
+          yield* startupStep(
+            { id: "workflow", label: "Apply task workflow updates" },
+            deps.taskSessionStart.complete(
+              {
+                canonicalRepoPath: repoPath,
+                task,
+                preparedStatus: task.status,
+                role: scope.role,
+                runtimeKind: input.session.runtimeKind,
+                workingDirectory: input.session.workingDirectory,
+                rollback: () => Effect.void,
+              },
+              (start) =>
+                writes.applyStartEvent(start).pipe(
+                  Effect.tap(({ publish }) => publish),
+                  Effect.map(({ task }) => task),
+                ),
+            ),
+          );
+        }),
+      ),
     resume: (
       input: Parameters<RuntimeControl["resumeSession"]>[0],
     ): Effect.Effect<PreparedTaskSession, HostError> =>
@@ -166,7 +205,10 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
           return yield* Effect.uninterruptible(
             Effect.gen(function* () {
               yield* progress.checkCanceled();
-              const summary = yield* runtime.forkSession(runtimeInput);
+              const summary = yield* startupStep(
+                { id: "prepare", label: "Fork native session" },
+                runtime.forkSession(runtimeInput),
+              );
               const saved = yield* Effect.exit(
                 Effect.gen(function* () {
                   if (
@@ -199,15 +241,17 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
               if (
                 saveFailure._tag === "Some" &&
                 saveFailure.value instanceof TaskSessionOwnershipCommittedError
-              )
+              ) {
+                progress.saved();
                 return yield* Effect.failCause(saved.cause);
+              }
               if (
                 summary.externalSessionId === parent.externalSessionId ||
                 (!input.forkPoint && saved.cause.reasons.some(Cause.isDieReason))
               )
                 return yield* Effect.failCause(saved.cause);
               const ref = toControlSessionRef(repoPath, summary);
-              const stopped = yield* Effect.exit(progress.stop(ref));
+              const stopped = yield* Effect.exit(stopStartupSession(ref, progress.stop(ref)));
               if (
                 !input.forkPoint &&
                 Exit.isFailure(stopped) &&

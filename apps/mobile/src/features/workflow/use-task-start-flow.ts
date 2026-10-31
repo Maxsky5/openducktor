@@ -5,29 +5,27 @@ import {
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
-import { sessionStartMessageRetry } from "@openducktor/frontend-core/sessions/start/session-start-message-retry";
-import type { SessionStartWorkflowResult } from "@openducktor/frontend-core/sessions/start/session-start-workflow";
 import { useSessionStartWorkflowRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-workflow-runner";
 import {
   type OpenTaskView,
   useTaskSessionStartFlow,
 } from "@openducktor/frontend-core/tasks/workflow/use-task-session-start-flow";
-import { useCallback, useMemo } from "react";
-import { reportMessageRetry } from "./start-session/message-retry-store";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigation } from "expo-router";
 import { showNoSession } from "./task-action-routing";
 import { useModelFavorites } from "@/features/model-picker/use-model-favorites";
 import { useSheetNavigation } from "./use-sheet-navigation";
 import { useWorkspaceRepoSettings } from "./use-workspace-repo-settings";
+import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
+import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
+import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
+import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
 
-/**
- * The shared task session start flow of frontend-core, for a workflow sheet. A start that opens
- * its session leaves the sheet and opens the session. A first message that did not reach the
- * session goes to the retry store of the connection, so the task details offer Retry message, and
- * a message tells the user where to retry it.
- */
-export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
+export function useTaskStartFlow(workspace: WorkspaceRecord) {
   const connection = useClientConnection();
+  const [backgroundAttemptId, setBackgroundAttemptId] = useState<string | null>(null);
   const { tasks } = useRequiredContext(TasksStateContext, "useTaskStartFlow");
   const sessions = useAgentSessionSummaries();
   const {
@@ -41,26 +39,39 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
   } = useWorkspaceRepoSettings(workspace);
   const favoriteState = useModelFavorites();
   const navigation = useSheetNavigation(workspace.workspaceId);
+  const routeNavigation = useNavigation();
+  const visibleHandoff = useVisibleHandoff();
   const { workspaceId, repoPath } = workspace;
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({ workspaceId, repoPath });
   const openTaskView = useCallback<OpenTaskView>(
     (target) => {
       if (target.kind === "task_session") {
-        navigation.openSession(target.identity);
-        return;
+        const startup = connection.startupAttempts.getSnapshot().find((attempt) => {
+          const destination = attempt.navigationTarget;
+          return (
+            attempt.presentation === "dialog" &&
+            destination?.kind === "task_session" &&
+            destination.workspaceId === target.workspaceId &&
+            agentSessionIdentityKey(destination.identity) ===
+              agentSessionIdentityKey(target.identity)
+          );
+        });
+        return visibleHandoff(() => {
+          if (
+            !routeNavigation.isFocused() ||
+            (startup &&
+              (!connection.startupAttempts.isReadyForHandoff(startup.id) ||
+                connection.startupAttempts.getAttempt(startup.id)?.presentation !== "dialog"))
+          )
+            return;
+          navigation.openSession(target.identity);
+        });
       }
       // The flow opens the task when the role has no session to continue.
       if (target.role) showNoSession(connection.feedback, target.taskId, target.role);
       navigation.openTask(target.taskId);
     },
-    [connection.feedback, navigation],
-  );
-  const onPostStartMessageFailure = useCallback(
-    (result: SessionStartWorkflowResult) => {
-      const retry = sessionStartMessageRetry(result);
-      if (retry) reportMessageRetry(connection, taskId, retry);
-    },
-    [connection, taskId],
+    [connection, navigation, routeNavigation, visibleHandoff],
   );
   const flow = useTaskSessionStartFlow({
     activeWorkspaceId: workspaceId,
@@ -70,10 +81,22 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
     tasks,
     sessions,
     openTaskView,
-    onPostStartMessageFailure,
     workspaceRepoPath: repoPath,
     runSessionStartWorkflow,
+    onBackgroundTransfer: setBackgroundAttemptId,
   });
+  const start = flow.sessionStartModal;
+  const attemptId = start?.phase.kind === "progress" ? start.phase.startupAttemptId : null;
+  const attempt = useStartupAttempt(attemptId);
+  useStartupSheetClose(attemptId, navigation.close);
+  useRepairedStartupHandoff(attempt);
+  useEffect(() => {
+    if (attemptId && !attempt) navigation.close();
+  }, [attempt, attemptId, navigation]);
+  // Let the sheet's removal guard update before closing it.
+  useEffect(() => {
+    if (backgroundAttemptId) navigation.close();
+  }, [backgroundAttemptId, navigation]);
   // A start reads the role defaults and the target branch when its choices open, so it waits for
   // the current repository settings.
   const settings = useMemo(
@@ -84,5 +107,14 @@ export function useTaskStartFlow(workspace: WorkspaceRecord, taskId: string) {
     }),
     [repoSettingsError, repoSettingsReady, retryRepoSettings],
   );
-  return { flow, navigation, tasks, sessions, settings, branchesFailure, gitProvider };
+  return {
+    flow,
+    navigation,
+    tasks,
+    sessions,
+    settings,
+    branchesFailure,
+    gitProvider,
+    backgroundAttemptId,
+  };
 }

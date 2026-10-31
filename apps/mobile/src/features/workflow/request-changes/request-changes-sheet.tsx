@@ -14,9 +14,8 @@ import { EmptyState, LoadingState } from "@/ui/states";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
-import { MessageRetryNotices } from "../start-session/message-retry-notice";
 import { RepoSettingsFailure } from "../start-session/repo-settings-failure";
-import { SessionStartForm } from "../start-session/session-start-form";
+import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { requestChangesRemove } from "./request-changes-remove";
@@ -45,10 +44,8 @@ function RequestChangesContent({
   workspace: WorkspaceRecord;
   taskId: string;
 }): ReactElement {
-  const { flow, navigation, tasks, settings, branchesFailure } = useTaskStartFlow(
-    workspace,
-    taskId,
-  );
+  const { flow, navigation, tasks, settings, branchesFailure, backgroundAttemptId } =
+    useTaskStartFlow(workspace);
   const confirmDiscard = useConfirmDiscard();
   const task = tasks.find((entry) => entry.id === taskId) ?? null;
   const feedback = flow.humanReviewFeedbackModal;
@@ -64,7 +61,7 @@ function RequestChangesContent({
   });
 
   // Cancel, Android back, and the swipe gesture ask before they drop typed feedback.
-  const remove = requestChangesRemove(feedback, start);
+  const remove = requestChangesRemove(feedback, start, backgroundAttemptId !== null);
   const hasUnsentFeedback = remove === "confirm_discard";
   const discardFeedback = () => {
     void confirmDiscard({
@@ -91,19 +88,7 @@ function RequestChangesContent({
     );
   }
   if (start?.open) {
-    return (
-      <GroupedSheet
-        title={start.title}
-        onClose={() => start.onOpenChange(false)}
-        closable={!start.isStarting}
-      >
-        <SessionStartForm
-          model={start}
-          branchesFailure={branchesFailure}
-          notices={<MessageRetryNotices taskId={task.id} />}
-        />
-      </GroupedSheet>
-    );
+    return <SessionStartSheet model={start} branchesFailure={branchesFailure} />;
   }
   if (settings.error && !triggered) {
     return (
@@ -141,7 +126,6 @@ function RequestChangesContent({
           />
         }
       >
-        <MessageRetryNotices taskId={task.id} />
         <FormBody>
           <View style={styles.lead}>
             <FormLead text={COPY.description} />

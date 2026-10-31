@@ -38,7 +38,10 @@ test.each(["resource", "shell"])(
           }).subscribe(onResult);
     try {
       await failed.promise;
-      await synchronizeConnectionState(client, [], true);
+      await synchronizeConnectionState(client, [], true, {
+        hostChanged: false,
+        missedEventNames: [],
+      });
       const [query] = client.getQueryCache().getAll();
       expect(query?.state.error?.message).toBe("The independent read failed.");
       expect(reads).toBe(1);
@@ -98,7 +101,10 @@ test.each(["success", "failure", "superseded"])(
       await baseline.promise;
       listener(connectionStreamWarningEvent("Disconnected"));
       let settled = false;
-      const recovery = synchronizeConnectionState(queryClient, [listener], true);
+      const recovery = synchronizeConnectionState(queryClient, [listener], true, {
+        hostChanged: false,
+        missedEventNames: [],
+      });
       const outcome = recovery.then(
         () => {
           settled = true;

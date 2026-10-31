@@ -28,6 +28,7 @@ import type {
   FileDiff,
   SessionOperationObservation,
   TaskAgentSessions,
+  StartupPreparedHandoff,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
@@ -51,6 +52,10 @@ import type { WithProcessStartAdmission } from "../workspaces/workspace-admissio
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 
 export type AgentSessionLiveStateService = {
+  readonly finalizeStartupPreparation: (
+    ref: AgentSessionLiveRef,
+    expectedRuntimeId?: string,
+  ) => Effect.Effect<StartupPreparedHandoff, HostError>;
   readonly readStartedRoots: (repoPath: string) => AgentSessionAuthorizedRoot[];
   readonly resolvePendingApproval: (
     input: Parameters<AgentSessionLiveAdapterPort["resolvePendingApproval"]>[0],

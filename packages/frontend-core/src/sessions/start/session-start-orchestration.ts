@@ -39,11 +39,11 @@ type BuildSessionStartModalRequestArgs = {
 };
 
 export type RunSessionStartWorkflowInput = {
+  startupAttemptId?: string;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
   isCurrent?: () => boolean;
   task: TaskCard | null;
-  onPostStartMessageFailure?: (result: SessionStartWorkflowResult) => void;
 };
 
 export type RunSessionStartWorkflow = (
@@ -87,27 +87,26 @@ export class SessionStartWorkflowError extends Error {
 export const isSessionStartFailureFeedbackHandled = (cause: unknown): boolean =>
   cause instanceof SessionStartWorkflowError && cause.feedbackHandled;
 
-/** Publishes a start error once. It returns true when the app already showed the error. */
+/** Publishes a start error once while the startup trace owns in-app feedback. */
 const publishSessionStartError = async (
   notifications: SessionStartNotificationPublisher | undefined,
   input: SessionStartNotificationInput,
   error: Error,
   reportFailure: (cause: unknown) => void,
-): Promise<boolean> => {
+): Promise<void> => {
   const noticeId = hostLaunchNoticeId(error);
   if (noticeId !== undefined) {
     try {
-      if (input.inAppFeedbackHandled) notifications?.markInAppFeedbackHandled(noticeId);
+      notifications?.markInAppFeedbackHandled(noticeId);
     } catch (cause) {
       reportFailure(cause);
     }
-    return true;
+    return;
   }
   try {
-    return (await notifications?.publishSessionError(input, error.message)) === true;
+    await notifications?.publishSessionError(input, error.message);
   } catch (cause) {
     reportFailure(cause);
-    return false;
   }
 };
 
@@ -117,7 +116,7 @@ type CreateSessionStartWorkflowRunnerArgs = {
   client: WorkflowLaunchClient;
   sendAgentMessage: SendAgentMessage;
   notifications?: SessionStartNotificationPublisher | undefined;
-  createLaunchAttemptId?: () => string;
+  launchAttemptId: string;
 };
 
 export const createSessionStartWorkflowRunner = ({
@@ -126,15 +125,15 @@ export const createSessionStartWorkflowRunner = ({
   client,
   sendAgentMessage,
   notifications,
-  createLaunchAttemptId = () => crypto.randomUUID(),
+  launchAttemptId,
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
   return async (input) => {
-    const launchAttemptId = createLaunchAttemptId();
     const notificationInput: SessionStartNotificationInput = {
       launchAttemptId,
       workspaceId,
       taskId: input.request.taskId,
       role: input.request.role,
+      inAppFeedbackHandled: true,
     };
     if (input.task?.title) notificationInput.taskTitle = input.task.title;
     const reportNotificationFailure = (cause: unknown): void => {
@@ -166,29 +165,18 @@ export const createSessionStartWorkflowRunner = ({
       });
     } catch (cause) {
       const startError = cause instanceof Error ? cause : new Error(String(cause));
-      const feedbackHandled = await publishFailure(startError, notificationInput);
-      throw new SessionStartWorkflowError(startError, feedbackHandled);
+      await publishFailure(startError, notificationInput);
+      throw new SessionStartWorkflowError(startError, true);
     }
 
     const { postStartActionError } = result;
     const session = toAgentSessionIdentity(result);
     const notificationWithSession = { ...notificationInput, session };
     if (postStartActionError) {
-      if (result.retryPostStartMessage && input.onPostStartMessageFailure) {
-        try {
-          input.onPostStartMessageFailure(result);
-          notificationWithSession.inAppFeedbackHandled = true;
-        } catch (cause) {
-          reportNotificationFailure(cause);
-        }
-      }
-      const feedbackHandled = await publishFailure(postStartActionError, notificationWithSession);
+      await publishFailure(postStartActionError, notificationWithSession);
       return {
         ...result,
-        postStartActionError: new SessionStartWorkflowError(
-          postStartActionError,
-          notificationWithSession.inAppFeedbackHandled === true || feedbackHandled,
-        ),
+        postStartActionError: new SessionStartWorkflowError(postStartActionError, true),
       };
     }
     try {

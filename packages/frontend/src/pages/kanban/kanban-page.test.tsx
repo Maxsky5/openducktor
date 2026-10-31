@@ -1,4 +1,4 @@
-import { createWorkflowLaunchClient } from "@/test-utils/workflow-launch-client";
+import { createAgentStudioStartupTestHost } from "../agents/agent-studio-startup-test-host";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
@@ -17,7 +17,6 @@ import { MemoryRouter, useLocation } from "react-router";
 import type { HostClient } from "@openducktor/host-client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
@@ -223,6 +222,11 @@ type KanbanPageHarness = RenderResult & {
   getMergedPullRequestModalProps: () => KanbanPageModels["mergedPullRequestModal"];
   getModels: () => KanbanPageModels | null;
   getLocation: () => string;
+  getStartupAttempts: () => ReturnType<
+    ReturnType<
+      typeof createAgentStudioStartupTestHost
+    >["connection"]["startupAttempts"]["getSnapshot"]
+  >;
 };
 
 const requireCallback = <Callback extends (...args: never[]) => void>(
@@ -568,10 +572,16 @@ const renderPage = async (
     await import("@/features/task-workflow/use-task-workflow-actions-controller");
   const sessionStore = createAgentSessionsStore("/repo");
   sessionStore.setSessionCollection(() => createAgentSessionCollection(renderState.sessions));
-  const connection = createTestClientConnection({
-    client: hostClientFakes,
-    feedback: sonnerFeedback,
-  });
+  const startupHost = createAgentStudioStartupTestHost(
+    () => ({
+      workspaceId: "repo",
+      startAgentSession: startAgentSessionMock,
+      sendAgentMessage: sendAgentMessageMock,
+    }),
+    false,
+    hostClientFakes,
+  );
+  const { connection } = startupHost;
   const queryClient = connection.queryClient;
   const checksStateValue = createChecksStateValue();
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
@@ -682,7 +692,13 @@ const renderPage = async (
     </ClientConnectionProvider>,
   );
 
+  const unmount = renderer.unmount;
   return Object.assign(renderer, {
+    unmount: () => {
+      unmount();
+      void startupHost.dispose();
+    },
+    getStartupAttempts: connection.startupAttempts.getSnapshot,
     getKanbanColumnProps: () => getKanbanColumnProps(latest),
     getIsLoadingTasks: () => latest.isLoadingTasks,
     getShowHorizontalScrollbars: () => latest.showHorizontalScrollbars,
@@ -842,12 +858,7 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
-    const launchClient = createWorkflowLaunchClient({
-      workspaceId: "repo",
-      startAgentSession: startAgentSessionMock,
-      sendAgentMessage: sendAgentMessageMock,
-    });
-    hostClientFakes = { agentSessionWorkflowLaunch: launchClient.agentSessionWorkflowLaunch };
+    hostClientFakes = {};
     toastSpies = [
       spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
       spyOn(sonnerModule.toast, "error").mockImplementation(toastErrorMock),
@@ -1175,41 +1186,51 @@ describe("KanbanPage session start modal flow", () => {
     }
   });
 
-  kanbanTest(
-    "background confirm keeps user on Kanban and publishes a started notification",
-    async () => {
-      const renderer = await renderPage();
+  kanbanTest("background confirm keeps the page and retains startup success feedback", async () => {
+    const renderer = await renderPage();
 
-      await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
-      });
+    await act(async () => {
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+    });
 
-      await confirmSessionStartModal(renderer, {
-        runInBackground: true,
-        modelId: "openai/gpt-5",
-        profileId: "build-agent",
-        variant: "default",
-      });
-      await waitForMockCall(sendAgentMessageMock);
+    await confirmSessionStartModal(renderer, {
+      runInBackground: true,
+      modelId: "openai/gpt-5",
+      profileId: "build-agent",
+      variant: "default",
+    });
+    await waitForMockCall(sendAgentMessageMock);
 
-      expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
-      expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
-      expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
-      expect(renderer.getLocation()).toBe("/");
-      expect(publishSessionStartedMock).toHaveBeenCalledWith(
-        expect.objectContaining({
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
+    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+    expect(renderer.getLocation()).toBe("/");
+    expect(publishSessionStartedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "build",
+        session: sessionIdentity("session-1"),
+      }),
+    );
+    await waitFor(() => expect(renderer.getStartupAttempts()[0]?.status.phase).toBe("ready"));
+    expect(renderer.getStartupAttempts()).toMatchObject([
+      {
+        presentation: "notification",
+        status: { phase: "ready", confirmation: "current", successExpiresAt: expect.any(Number) },
+        navigationTarget: {
+          kind: "task_session",
+          workspaceId: "repo",
           taskId: "TASK-123",
-          role: "build",
-          session: sessionIdentity("session-1"),
-        }),
-      );
-      expect(toastSuccessMock).not.toHaveBeenCalled();
+          identity: sessionIdentity("session-1"),
+        },
+      },
+    ]);
+    expect(toastSuccessMock).not.toHaveBeenCalled();
 
-      await act(async () => {
-        renderer.unmount();
-      });
-    },
-  );
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 
   kanbanTest("reuse confirm fails fast when the modal has no reusable source option", async () => {
     const renderer = await renderPage();
@@ -1273,7 +1294,7 @@ describe("KanbanPage session start modal flow", () => {
   );
 
   kanbanTest(
-    "kickoff send failure offers Retry and leaves the session error to the host",
+    "kickoff send failure keeps the saved session and retry action in startup feedback",
     async () => {
       sendAgentMessageMock.mockImplementationOnce(async () => {
         throw new Error("config unavailable");
@@ -1293,15 +1314,20 @@ describe("KanbanPage session start modal flow", () => {
 
       expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
       expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
-      expect(renderer.getLocation()).toBe(
-        "/sessions?workspace=repo&kind=task&task=TASK-123&session=session-1&agent=build",
-      );
-      // The host reports the failed launch in the saved session.
+      expect(renderer.getLocation()).toBe("/");
       expect(publishSessionErrorMock).not.toHaveBeenCalled();
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "Session started, but the first message failed.",
-        expect.objectContaining({ action: expect.objectContaining({ label: "Retry message" }) }),
-      );
+      expect(toastErrorMock).not.toHaveBeenCalled();
+      expect(renderer.getStartupAttempts()).toMatchObject([
+        {
+          status: { phase: "failed", confirmation: "current" },
+          ownership: {
+            state: "saved",
+            target: { kind: "task", record: { externalSessionId: "session-1" } },
+          },
+          recoveryActions: [{ kind: "retry_message", label: "Retry message" }],
+          error: expect.stringContaining("config unavailable"),
+        },
+      ]);
 
       await act(async () => {
         renderer.unmount();
@@ -1332,9 +1358,17 @@ describe("KanbanPage session start modal flow", () => {
       "Worktree path already exists for task TASK-123",
     );
     expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty("session");
-    expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty(
+    expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).toHaveProperty(
       "inAppFeedbackHandled",
+      true,
     );
+    expect(renderer.getStartupAttempts()).toMatchObject([
+      {
+        status: { phase: "failed", confirmation: "current" },
+        ownership: { state: "not_saved" },
+        error: expect.stringContaining("Worktree path already exists"),
+      },
+    ]);
     expect(toastErrorMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe("/");
 

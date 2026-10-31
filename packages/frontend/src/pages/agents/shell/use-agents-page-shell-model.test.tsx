@@ -337,6 +337,9 @@ const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
 };
 const baseSessionStartModal: SessionStartModalModel = {
   open: true,
+  phase: { kind: "choices" },
+  onContinueInBackground: () => {},
+  onEditChoices: () => {},
   title: "Start Planner Session",
   description: "Pick a model and launch a session.",
   confirmLabel: "Start session",

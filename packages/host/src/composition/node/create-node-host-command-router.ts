@@ -50,10 +50,6 @@ import { createLocalAttachmentCommandHandlers } from "../../interface/commands/l
 import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
 import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
 import { createRuntimeCommandHandlers } from "../../interface/commands/runtime-command-handlers";
-import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
-import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
-import { createTaskMergeStatusCommandHandlers } from "../../interface/commands/task-merge-status-command-handlers";
-import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createRepoActionCommandHandlers } from "../../interface/commands/repo-action-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
 import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
@@ -78,6 +74,7 @@ import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
+import { createNodeSessionStartupTracker } from "./node-session-startup-progress";
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
@@ -437,6 +434,8 @@ export const assembleNodeEffectHostCommandRouter = (
       clientVersion,
       runtimeRegistry,
       adapterRegistry: liveSessionAdapterRegistry,
+      taskAssetStagingService,
+      taskWorktreeService,
     }),
     ...createWorkspaceFilesCommandHandlers(workspaceFiles),
     ...createNodeGitProviderCommandHandlers({
@@ -471,17 +470,25 @@ export const assembleNodeEffectHostCommandRouter = (
       repoStoreDiagnostics: taskStore,
       remoteFetch,
     }),
-    ...createTaskAssetCommandHandlers(taskAssetStagingService),
-    ...createTaskCommandHandlers(taskService),
-    ...createTaskMergeStatusCommandHandlers(taskSessions.mergeDetection),
-    ...createTaskWorktreeCommandHandlers(taskWorktreeService),
     ...createTerminalCommandHandlers(terminalService),
     ...createBrowserCommandHandlers(browserService),
     ...createRepoActionCommandHandlers(repoActionService),
     ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
-  return Object.assign(createEffectHostCommandRouter({ ...hostRouterLifecycle, handlers }), {
+  const router = createEffectHostCommandRouter({
+    ...hostRouterLifecycle,
+    handlers,
+    trackCommand: createNodeSessionStartupTracker({
+      hostInstanceId,
+      eventBus,
+      settings: workspaceSettingsService,
+      taskWorkflows,
+      finalize: agentSessionLiveStateService.finalizeStartupPreparation,
+      runtime: runtimeRegistry,
+    }),
+  });
+  return Object.assign(router, {
     hostInstanceId,
     hostSettings: workspaceSettingsService,
     taskAssetReadService,

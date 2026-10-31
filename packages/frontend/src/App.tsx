@@ -16,7 +16,7 @@ import {
   WorkspacePreviewRouteGuard,
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
-import { Toaster } from "@/components/ui/sonner";
+import { AppToaster } from "@/features/session-startup/session-startup-stack";
 import { loadNotFoundPage } from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
@@ -68,7 +68,7 @@ function AppProviders(): ReactElement {
             <ApplicationOverlays>
               <WorkspacePreviewRouteGuard />
               <Outlet />
-              <Toaster />
+              <AppToaster />
             </ApplicationOverlays>
           </WorkspacePreviewTransitionGuardProvider>
         </AppStateProvider>

@@ -20,6 +20,10 @@ import {
   createWorkspaceSessionLiveSource,
   WorkspaceSessionLiveSourceContext,
 } from "../../workspace-activity/workspace-session-live-source";
+import {
+  registerStartupLiveSource,
+  retainStartupPreparationWorkspaces,
+} from "../../sessions/startup/startup-prepared-handoff";
 
 /** Keeps one live stream per open workspace for activity and session readers. */
 export function WorkspaceActivityProvider({ children }: PropsWithChildren): ReactElement {
@@ -62,6 +66,7 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
     () => createWorkspaceArchivedSessionsPort(queryClient),
     [queryClient],
   );
+  useEffect(() => registerStartupLiveSource(queryClient, liveSource), [queryClient, liveSource]);
 
   const observer = useMemo(
     () =>
@@ -85,13 +90,17 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
   );
 
   useEffect(() => {
+    retainStartupPreparationWorkspaces(
+      queryClient,
+      workspaces.map((workspace) => workspace.repoPath),
+    );
     observer.syncWorkspaces(
       workspaces.map((workspace) => ({
         workspaceId: workspace.workspaceId,
         repoPath: workspace.repoPath,
       })),
     );
-  }, [observer, workspaces]);
+  }, [observer, workspaces, queryClient]);
 
   useEffect(() => () => observer.dispose(), [observer]);
 

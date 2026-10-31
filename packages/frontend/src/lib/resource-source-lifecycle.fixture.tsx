@@ -124,7 +124,10 @@ try {
   await waitFor(() =>
     assert.equal(view.getByTestId("retry").getAttribute("data-error"), "Resource unavailable."),
   );
-  await synchronizeConnectionState(client, [], false);
+  await synchronizeConnectionState(client, [], false, {
+    hostChanged: false,
+    missedEventNames: [],
+  });
   assert.equal(reads, 1);
   assert.equal(view.getByTestId("retry").getAttribute("data-error"), "Resource unavailable.");
   await act(async () => {

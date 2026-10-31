@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { isoTimestampSchema } from "./string-schemas";
+import { startupOperationContextSchema } from "./session-startup-context-schemas";
+import { startupOperationSnapshotSchema } from "./session-startup-schemas";
+import { agentSessionControlSummarySchema } from "./agent-session-summary-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
@@ -15,6 +17,11 @@ import { slashCommandDescriptorSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
 import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-limits";
 import { agentSessionRecordSchema } from "./session-schemas";
+
+export {
+  agentSessionControlSummarySchema,
+  type AgentSessionControlSummary,
+} from "./agent-session-summary-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -84,6 +91,7 @@ export const agentSessionControlStartInputSchema = z
     sessionScope: agentSessionScopeSchema,
     systemPrompt: z.string(),
     model: agentModelSelectionSchema.optional(),
+    startup: startupOperationContextSchema.optional(),
   })
   .strict();
 export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlStartInputSchema>;
@@ -103,6 +111,7 @@ export const agentWorkflowSessionStartInputSchema = z
     systemPrompt: z.string(),
     model: agentModelSelectionSchema,
     targetWorkingDirectory: nonEmptyStringSchema.optional(),
+    startup: startupOperationContextSchema.optional(),
   })
   .strict()
   .superRefine((input, context) => {
@@ -131,7 +140,11 @@ export type AgentSessionControlResumeInput = z.infer<typeof agentSessionControlR
 
 /** Public intent. The host prepares native context and model settings. */
 export const agentSessionResumeIntentSchema = agentSessionLiveRefSchema
-  .extend({ sessionScope: agentSessionScopeSchema, resumeMode: agentSessionResumeModeSchema })
+  .extend({
+    sessionScope: agentSessionScopeSchema,
+    resumeMode: agentSessionResumeModeSchema,
+    startup: startupOperationContextSchema.optional(),
+  })
   .strict();
 export type AgentSessionResumeIntent = z.infer<typeof agentSessionResumeIntentSchema>;
 
@@ -139,6 +152,7 @@ export const agentWorkflowSessionForkInputSchema = agentSessionLiveRefSchema
   .extend({
     sessionScope: agentSessionWorkflowScopeSchema,
     forkPoint: agentSessionForkPointSchema,
+    startup: startupOperationContextSchema.optional(),
   })
   .strict();
 export type AgentWorkflowSessionForkInput = z.infer<typeof agentWorkflowSessionForkInputSchema>;
@@ -153,6 +167,7 @@ export const agentSessionControlForkInputSchema = z
     sourceWorkingDirectory: nonEmptyStringSchema.optional(),
     forkPoint: agentSessionForkPointSchema.optional(),
     runtimeHistoryAnchor: nonEmptyStringSchema.optional(),
+    startup: startupOperationContextSchema.optional(),
   })
   .strict()
   .refine((input) => input.forkPoint === undefined || input.runtimeHistoryAnchor === undefined, {
@@ -242,25 +257,11 @@ export type AgentSessionControlStopInput = z.infer<typeof agentSessionControlSto
 export const agentSessionControlReleaseInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionControlReleaseInput = z.infer<typeof agentSessionControlReleaseInputSchema>;
 
-export const agentSessionControlSummarySchema = z
-  .object({
-    externalSessionId: nonEmptyStringSchema,
-    runtimeKind: runtimeKindSchema,
-    workingDirectory: nonEmptyStringSchema,
-    title: z.string().optional(),
-    startedAt: isoTimestampSchema,
-    status: z.enum(["starting", "running", "idle", "error", "stopped"]),
-    firstTurnCompleted: z.boolean().optional(),
-    // Native settings after the operation, when the runtime reports them.
-    model: agentModelSelectionSchema.optional(),
-  })
-  .strict();
-export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;
-
 export const agentWorkflowSessionForkResultSchema = z.strictObject({
   record: agentSessionRecordSchema,
   runtimeSession: agentSessionControlSummarySchema,
   syncWarning: nonEmptyStringSchema.optional(),
+  startupProgress: startupOperationSnapshotSchema.optional(),
 });
 export type AgentWorkflowSessionForkResult = z.infer<typeof agentWorkflowSessionForkResultSchema>;
 
@@ -276,3 +277,8 @@ export const acceptedAgentInputSchema = z.discriminatedUnion("type", [
   acceptedAgentCommandSchema,
 ]);
 export type AcceptedAgentInput = z.infer<typeof acceptedAgentInputSchema>;
+
+export const agentSessionStartupResultSchema = agentSessionControlSummarySchema.extend({
+  startupProgress: startupOperationSnapshotSchema.optional(),
+});
+export type AgentSessionStartupResult = z.infer<typeof agentSessionStartupResultSchema>;

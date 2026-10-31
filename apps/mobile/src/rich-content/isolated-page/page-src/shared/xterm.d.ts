@@ -65,6 +65,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
     translateToString(trimRight?: boolean): string;
   };
   export type XtermBuffer = {
+    readonly baseY: number;
     readonly viewportY: number;
     readonly length: number;
     getLine(row: number): XtermBufferLine | undefined;
@@ -101,6 +102,8 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   };
 
   export class Terminal {
+    scrollToBottom(): void;
+    scrollToLine(line: number): void;
     constructor(options: XtermOptions);
     readonly cols: number;
     readonly rows: number;

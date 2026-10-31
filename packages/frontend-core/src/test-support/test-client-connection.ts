@@ -26,6 +26,7 @@ export const createTestHostConnection = (
   const { client, ...streams } = overrides;
   return {
     client: Object.assign(createHostClient(unconfiguredCommand), client),
+    subscribeStartupProgress: noSubscription,
     subscribeWorkspaceProviderSetupUpdates: noSubscription,
     subscribeWorkspaceSessionUpdates: noSubscription,
     subscribeRuntimeChanges: noSubscription,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { startupOperationContextSchema } from "./session-startup-context-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { sessionLaunchResultSchema } from "./session-launch-schemas";
@@ -41,6 +42,7 @@ export const workflowLaunchDecisionSchema = z.discriminatedUnion("startMode", [
 export const workflowLaunchRequestSchema = z
   .object({
     workspaceId: z.string().min(1),
+    startup: startupOperationContextSchema.optional(),
     repoPath: z.string().min(1),
     taskId: z.string().min(1),
     policy: z

@@ -13,6 +13,7 @@ import {
 } from "@/features/notifications/notification-navigation";
 import { TaskWorkflowActionsProvider } from "@/features/task-workflow/task-workflow-actions-provider";
 import { useNotificationContext } from "@/state/notifications/notification-context";
+import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
 
 function NotificationFailurePromptHost(): ReactElement {
   const { deliveryFailure } = useNotificationContext();
@@ -42,6 +43,7 @@ export function ApplicationOverlays({ children }: PropsWithChildren): ReactEleme
             <NotificationNavigationRegistrar />
             <NotificationAttentionFocus />
             {children}
+            <StartupNotifications />
             <AppUpdatePrompt />
           </AgentSessionTranscriptDialogHost>
         </TaskWorkflowActionsProvider>

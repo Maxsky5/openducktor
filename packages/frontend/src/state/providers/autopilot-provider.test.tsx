@@ -173,6 +173,8 @@ describe("AutopilotProvider", () => {
           __openducktorConnectionControl: true,
           kind: "reconnected",
           missedEvents: true,
+          hostChanged: false,
+          missedEventNames: [],
         });
         let settled = false;
         const outcome = Promise.resolve(recovery).then(
@@ -270,6 +272,8 @@ describe("AutopilotProvider", () => {
         __openducktorConnectionControl: true,
         kind: "reconnected",
         missedEvents: false,
+        hostChanged: false,
+        missedEventNames: [],
       });
       held.alpha = { outcomes: [skipped("alpha-missed", alpha)], failure: null };
       held.beta = {
@@ -280,6 +284,8 @@ describe("AutopilotProvider", () => {
         __openducktorConnectionControl: true,
         kind: "reconnected",
         missedEvents: true,
+        hostChanged: false,
+        missedEventNames: [],
       });
 
       expect(shownToastIds()).toEqual([
@@ -392,6 +398,8 @@ describe("AutopilotProvider", () => {
         __openducktorConnectionControl: true as const,
         kind: "reconnected" as const,
         missedEvents: true,
+        hostChanged: false,
+        missedEventNames: [],
       },
     },
   ])("$name reloads the saved Autopilot rules for an open settings modal", async ({ payload }) => {

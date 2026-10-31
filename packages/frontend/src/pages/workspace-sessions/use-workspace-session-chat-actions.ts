@@ -115,6 +115,7 @@ export function useWorkspaceSessionChatActions(
     });
   }, [host, queryClient, record.id, store, workspace.repoPath, workspace.workspaceId]);
   const preparation = useChatSessionPreparation({
+    repoPath: workspace.repoPath,
     identity: recordIdentity,
     targetKey: JSON.stringify([workspace.workspaceId, record.id, visitKey]),
     enabled: preparationEnabled && record.archivedAt === null,
