@@ -101,10 +101,8 @@ export function Button({
 }: ButtonProps): ReactElement {
   const blockedByConnection = useCommandBlocked(command, label);
   const inactive = disabled || loading || blockedByConnection;
-  // As on desktop, a button that cannot run keeps its look at half opacity. The variant and the
-  // size pick plain style entries: a Unistyles variant would build the sheet again on each render,
-  // and buttons render in list rows.
-  const foreground = FOREGROUNDS[variant];
+  // Read theme styles here so a button opened after a theme change uses the current colors.
+  const foreground = styles[FOREGROUNDS[variant]];
   const iconSize = ICON_SIZES[size];
   return (
     <Touchable
@@ -122,7 +120,7 @@ export function Button({
       }
       accessibilityState={{ disabled: inactive, busy: loading }}
       containerStyle={fill ? styles.fill : styles.hug}
-      style={[styles.button, SURFACES[variant], SIZES[size], style]}
+      style={[styles.button, styles[variant], styles[size], style]}
     >
       <View style={styles.content}>
         <LeadingIcon
@@ -133,7 +131,7 @@ export function Button({
           variant={variant}
           foreground={foreground}
         />
-        <Text numberOfLines={1} style={[styles.label, LABELS[size], foreground]}>
+        <Text numberOfLines={1} style={[styles.label, styles[LABELS[size]], foreground]}>
           {label}
         </Text>
         {trailingIcon && !loading ? (
@@ -249,23 +247,13 @@ const styles = StyleSheet.create((theme) => ({
   foregroundWarning: { color: foregroundColor(theme, "warning") },
 }));
 
-const SURFACES = {
-  filled: styles.filled,
-  outline: styles.outline,
-  tinted: styles.tinted,
-  gray: styles.gray,
-  plain: styles.plain,
-  destructive: styles.destructive,
-  warning: styles.warning,
-};
-const SIZES = { sm: styles.sm, md: styles.md, lg: styles.lg };
-const LABELS = { sm: styles.labelSm, md: styles.labelMd, lg: styles.labelLg };
+const LABELS = { sm: "labelSm", md: "labelMd", lg: "labelLg" } as const;
 const FOREGROUNDS = {
-  filled: styles.foregroundFilled,
-  outline: styles.foregroundOutline,
-  tinted: styles.foregroundTinted,
-  gray: styles.foregroundGray,
-  plain: styles.foregroundPlain,
-  destructive: styles.foregroundDestructive,
-  warning: styles.foregroundWarning,
-};
+  filled: "foregroundFilled",
+  outline: "foregroundOutline",
+  tinted: "foregroundTinted",
+  gray: "foregroundGray",
+  plain: "foregroundPlain",
+  destructive: "foregroundDestructive",
+  warning: "foregroundWarning",
+} as const;
