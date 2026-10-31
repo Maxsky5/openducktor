@@ -11,6 +11,7 @@ import {
   normalizeToolInput,
   normalizeToolText,
   resolveToolMessageId,
+  toToolMessageMeta,
 } from "../support/tool-messages";
 import type {
   SessionPart,
@@ -69,77 +70,6 @@ const composeToolTimingMeta = (
     timingMeta.inputReadyAtMs = inputReadyAtMs;
   }
   return timingMeta;
-};
-
-const composeToolMessageMeta = (
-  part: ToolPart,
-  status: ToolPartStatus,
-  input: ToolInput | undefined,
-  output: string | undefined,
-  error: string | undefined,
-  timingMeta: ToolTimingMeta,
-  detailsOmitted: boolean,
-): ToolMeta => {
-  const meta: ToolMeta = {
-    kind: "tool",
-    partId: part.partId,
-    callId: part.callId,
-    tool: part.tool,
-    toolType: part.toolType,
-    status,
-  };
-  if (part.inputStreaming !== undefined) meta.inputStreaming = part.inputStreaming;
-  if (part.preview) {
-    meta.preview = part.preview;
-  }
-  if (part.title) {
-    meta.title = part.title;
-  }
-  if (part.displayLabel) {
-    meta.displayLabel = part.displayLabel;
-  }
-  if (input) {
-    meta.input = input;
-  }
-  if (output) {
-    meta.output = output;
-  }
-  if (error) {
-    meta.error = error;
-  }
-  if (part.resultContent) meta.resultContent = part.resultContent;
-  if (part.fileDiffs) {
-    meta.fileDiffs = part.fileDiffs;
-  }
-  if (part.fileContent) {
-    meta.fileContent = part.fileContent;
-  }
-  if (part.fileChanges) {
-    meta.fileChanges = part.fileChanges;
-  }
-  if (part.computerUse) {
-    meta.computerUse = part.computerUse;
-  }
-  if (part.metadata) {
-    meta.metadata = part.metadata;
-  }
-  if (part.startedAtMs !== undefined) {
-    meta.startedAtMs = part.startedAtMs;
-  }
-  if (part.endedAtMs !== undefined) {
-    meta.endedAtMs = part.endedAtMs;
-  }
-  if (timingMeta.observedStartedAtMs !== undefined) {
-    meta.observedStartedAtMs = timingMeta.observedStartedAtMs;
-  }
-  if (timingMeta.observedEndedAtMs !== undefined) {
-    meta.observedEndedAtMs = timingMeta.observedEndedAtMs;
-  }
-  if (timingMeta.inputReadyAtMs !== undefined) {
-    meta.inputReadyAtMs = timingMeta.inputReadyAtMs;
-  }
-  if (detailsOmitted) meta.detailsOmitted = true;
-  return meta;
 };
 
 const preserveExistingToolValue = <T>(
@@ -211,6 +141,16 @@ const composeToolPartSessionUpdate = ({
     status,
     resolvedInput,
   );
+  const metaPart: ToolPart = { ...resolvedPart, status };
+  delete metaPart.input;
+  delete metaPart.output;
+  delete metaPart.error;
+  if (resolvedInput) metaPart.input = resolvedInput;
+  if (resolvedOutput) metaPart.output = resolvedOutput;
+  if (resolvedError) metaPart.error = resolvedError;
+  // An input or output that the event lacks stays from a compact history row, still cut.
+  if (existingToolMeta?.detailsOmitted && (input === undefined || output === undefined))
+    metaPart.detailsOmitted = true;
 
   const contentPart: ToolPart = { ...resolvedPart, status };
   if (resolvedError !== undefined && resolvedError.length > 0) {
@@ -227,16 +167,7 @@ const composeToolPartSessionUpdate = ({
       role: "tool",
       content: formatToolContent(contentPart),
       timestamp: existing?.timestamp ?? timestamp,
-      meta: composeToolMessageMeta(
-        resolvedPart,
-        status,
-        resolvedInput,
-        resolvedOutput,
-        resolvedError,
-        timingMeta,
-        // An input or output that the event lacks stays from a compact history row, still cut.
-        existingToolMeta?.detailsOmitted === true && (input === undefined || output === undefined),
-      ),
+      meta: { ...toToolMessageMeta(metaPart), ...timingMeta },
     }),
   };
 };

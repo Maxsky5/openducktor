@@ -1,6 +1,7 @@
 import { z, type JSONType } from "zod";
-import type { HostCommandArgs } from "@openducktor/contracts";
+import { hostCommandInputRecordSchema, type HostCommandArgs } from "@openducktor/contracts";
 import {
+  AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
   browserEventCursorSchema,
   browserReplayCompleteSchema,
   hostErrorResponseSchema,
@@ -13,6 +14,7 @@ import {
   remoteTaskLeaseSchema,
   taskEventStreamFrameSchema,
   REMOTE_CONNECTION_HEADER,
+  REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
   REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   REMOTE_STREAM_HEARTBEAT_INTERVAL_MS,
   type BrowserEventCursor,
@@ -125,6 +127,8 @@ export const createRemoteHostClient = (
   let cursor: BrowserEventCursor | null = null;
   /** How long a stream of this connection can stay silent, or null for a host without heartbeats. */
   let streamSilenceLimitMs: number | null = null;
+  /** The host of this admission cuts long tool details from history on request. */
+  let compactHistory = false;
   /** When the host event stream last delivered bytes, heartbeats included. */
   let eventStreamBytesAt = 0;
   const eventStreamListeners = new Set<() => void>();
@@ -370,6 +374,9 @@ export const createRemoteHostClient = (
         )
           ? 3 * REMOTE_STREAM_HEARTBEAT_INTERVAL_MS
           : null;
+        compactHistory = negotiatedProtocol.capabilities.includes(
+          REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
+        );
         state = { ...state, host: accepted.host };
         if (previousHostInstanceId !== accepted.host.hostInstanceId) {
           cursor = null;
@@ -530,9 +537,11 @@ export const createRemoteHostClient = (
       if (read && !admitted) await connected(deadline);
       else if (!connectionId && pending) await pending;
       const { generation: current, signal } = currentConnection();
+      // Replies have a size limit, so a history read asks a host that can do it for compact history.
+      const body = command === LOAD_HISTORY_COMMAND && compactHistory ? compact(args) : args;
       let payload: JSONType;
       try {
-        payload = await json("POST", `/invoke/${encodeURIComponent(command)}`, signal, args ?? {});
+        payload = await json("POST", `/invoke/${encodeURIComponent(command)}`, signal, body ?? {});
       } catch (cause) {
         if (cause instanceof HostInvokeError) throw cause;
         if (cause instanceof RemoteRefusalError) {
@@ -540,17 +549,17 @@ export const createRemoteHostClient = (
           if (read && cause.failure.code === "connection_expired") continue;
           throw cause;
         }
-        if (cause instanceof RemoteReplyTooLargeError) throw cause;
+        if (cause instanceof RemoteReplyTooLargeError) {
+          // The connection is sound. The host ran a mutation, so its outcome is unknown.
+          if (read) throw cause;
+          throw outcomeUnknown(command);
+        }
         lost(current, cause);
         if (read) {
           if (Date.now() < deadline) continue;
           throw connectionError(cause);
         }
-        throw remoteError(
-          "outcome_unknown",
-          `The result of ${command} was lost.`,
-          "Read current host state to check the outcome. Do not resend the operation automatically.",
-        );
+        throw outcomeUnknown(command);
       }
       // A result of another shape is a version mismatch, not a lost connection.
       const parsed = resultSchema.safeParse(payload);
@@ -885,6 +894,18 @@ const parsePayload = <Value>(schema: z.ZodType<Value>, text: string): Value => {
   }
 };
 class RemoteRefusalError extends RemoteConnectionError {}
+const outcomeUnknown = (command: string): RemoteConnectionError =>
+  remoteError(
+    "outcome_unknown",
+    `The result of ${command} was lost.`,
+    "Read current host state to check the outcome. Do not resend the operation automatically.",
+  );
+const LOAD_HISTORY_COMMAND = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionHistory.command;
+/** The history read input with `toolDetails: "on_demand"`. */
+const compact = (args: HostCommandArgs): HostCommandArgs => ({
+  ...args,
+  input: { ...hostCommandInputRecordSchema.parse(args?.input), toolDetails: "on_demand" },
+});
 const SETUP_TIMEOUT_MS = 10_000;
 /** How long a read waits for a reconnect before it fails with the connection failure. */
 const READ_RECONNECT_WAIT_MS = 30_000;

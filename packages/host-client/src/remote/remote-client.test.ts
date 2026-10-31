@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_CONNECTION_HEADER,
+  REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   type HostEventEnvelope,
@@ -1345,6 +1346,66 @@ test("a read with a lost reply waits for the reconnect and runs again", async ()
   }
 });
 
+test("a history read asks only a host with the capability for compact history", async () => {
+  const input = {
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    runtimePolicy: { kind: "opencode" },
+    workingDirectory: "/repo",
+    externalSessionId: "session",
+  } as const;
+  for (const compact of [false, true]) {
+    const f = fixture();
+    const host = {
+      ...descriptor,
+      protocols: [
+        {
+          version: REMOTE_PROTOCOL_VERSION,
+          capabilities: [
+            ...REMOTE_BASELINE_CAPABILITIES,
+            ...(compact ? [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY] : []),
+          ],
+        },
+      ],
+    };
+    const bodies: unknown[] = [];
+    f.setMutation(async (_method, _url, _headers, _signal, body) => {
+      bodies.push(JSON.parse(body ?? "null"));
+      return json([]);
+    });
+    const transport: RemoteTransport = {
+      ...f.transport,
+      request: (method, url, headers, signal, body) => {
+        if (url === "https://host.example/remote") return Promise.resolve(json(host));
+        if (url.endsWith("/connections"))
+          return Promise.resolve(
+            json({
+              status: "accepted",
+              host,
+              connectionId: crypto.randomUUID(),
+              protocolVersion: REMOTE_PROTOCOL_VERSION,
+              missingOptionalCapabilities: [],
+            }),
+          );
+        return f.transport.request(method, url, headers, signal, body);
+      },
+    };
+    const remote = createRemoteHostClient(
+      "https://host.example/remote",
+      { ...hello, optionalCapabilities: [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY] },
+      transport,
+      async () => {},
+    );
+    try {
+      await remote.connect();
+      await remote.client.agentRuntimeLoadSessionHistory(input);
+      expect(bodies).toEqual([{ input: compact ? { ...input, toolDetails: "on_demand" } : input }]);
+    } finally {
+      await remote.disconnect();
+    }
+  }
+});
+
 test("a reply over the size limit fails its read and keeps the connection", async () => {
   const f = fixture();
   const chunk = new Uint8Array(1024 * 1024);
@@ -1385,6 +1446,38 @@ test("a reply over the size limit fails its read and keeps the connection", asyn
     expect(released).toBe(true);
     expect(remote.readState().status).toBe("connected");
     expect(f.requests.filter((request) => request.endsWith("/connections"))).toHaveLength(1);
+  } finally {
+    await remote.disconnect();
+  }
+});
+
+test("a mutation with a reply over the size limit has an unknown outcome", async () => {
+  const f = fixture();
+  const chunk = new Uint8Array(1024 * 1024);
+  let sends = 0;
+  f.setMutation(async () => {
+    sends += 1;
+    return {
+      status: 200,
+      headers: {},
+      body: (async function* () {
+        for (let index = 0; index < 40; index += 1) yield chunk;
+      })(),
+    };
+  });
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    await remote.connect();
+    await expect(remote.client.setTheme("dark")).rejects.toMatchObject({
+      failure: { code: "outcome_unknown" },
+    });
+    expect(sends).toBe(1);
+    expect(remote.readState().status).toBe("connected");
   } finally {
     await remote.disconnect();
   }

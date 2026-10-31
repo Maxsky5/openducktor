@@ -90,11 +90,6 @@ const historyFields = {
   ...policyBoundSessionFields,
   systemPromptContext: agentSessionHistorySystemPromptContextSchema.optional(),
   limit: z.number().int().positive().optional(),
-  /**
-   * `on_demand` cuts long tool details and marks each cut part with `detailsOmitted`. Remote
-   * clients use it, because their replies have a size limit.
-   */
-  toolDetails: z.literal("on_demand").optional(),
 };
 export const agentRuntimeLoadSessionHistoryInputSchema = z.discriminatedUnion("runtimeKind", [
   z.object({ ...historyFields, ...runtimePolicyBindings[0] }).strict(),
@@ -104,6 +99,23 @@ export const agentRuntimeLoadSessionHistoryInputSchema = z.discriminatedUnion("r
 export type AgentRuntimeLoadSessionHistoryInput = z.infer<
   typeof agentRuntimeLoadSessionHistoryInputSchema
 >;
+const historyCommandFields = {
+  ...historyFields,
+  /**
+   * `on_demand` cuts long tool details and marks each cut part with `detailsOmitted`. A remote
+   * client sends it only to a host with `REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY`.
+   */
+  toolDetails: z.literal("on_demand").optional(),
+};
+/** The wire input of `agent_runtime_load_session_history`. Runtime adapters never see `toolDetails`. */
+export const agentRuntimeLoadSessionHistoryCommandInputSchema = z.discriminatedUnion(
+  "runtimeKind",
+  [
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[0] }).strict(),
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[1] }).strict(),
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[2] }).strict(),
+  ],
+);
 const toolPartFields = {
   ...policyBoundSessionFields,
   partId: z.string().trim().min(1),
@@ -156,7 +168,7 @@ export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
   },
   loadSessionHistory: {
     command: "agent_runtime_load_session_history",
-    inputSchema: agentRuntimeLoadSessionHistoryInputSchema,
+    inputSchema: agentRuntimeLoadSessionHistoryCommandInputSchema,
     responseSchema: agentSessionHistorySchema,
   },
   loadSessionToolPart: {

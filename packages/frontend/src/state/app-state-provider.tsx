@@ -52,7 +52,6 @@ import { TerminalActivityProvider } from "./providers/terminal-activity-provider
 import { useQueryClient } from "@tanstack/react-query";
 import { RemoteAccessProvider } from "./remote-access-provider";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
-import { getShellBridge } from "@/lib/shell-bridge";
 
 export function ShellStateProvider({
   children,
@@ -65,13 +64,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const queryClient = useQueryClient();
   const hostClient = useHostClient();
   const { agentEngine, runtimeCatalogOperations } = useMemo(
-    () =>
-      createAgentRuntimeServices(
-        hostClient,
-        queryClient,
-        // A remote host reply has a size limit, so history leaves out long tool details.
-        getShellBridge().remoteConnection ? { historyToolDetails: "on_demand" } : {},
-      ),
+    () => createAgentRuntimeServices(hostClient, queryClient),
     [hostClient, queryClient],
   );
 

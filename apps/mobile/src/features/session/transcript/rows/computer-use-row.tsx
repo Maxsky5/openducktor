@@ -245,20 +245,12 @@ const styles = StyleSheet.create((theme) => ({
           borderColor: theme.desktop.destructiveBorder,
           backgroundColor: theme.desktop.destructiveSurface,
         },
-        false: {
-          borderColor: theme.desktop.border,
-          backgroundColor: theme.desktop.card,
-        },
+        false: { borderColor: theme.desktop.border, backgroundColor: theme.desktop.card },
       },
     },
   },
   summary: { gap: 2 },
-  titleLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.space.sm,
-    minHeight: 22,
-  },
+  titleLine: { flexDirection: "row", alignItems: "center", gap: theme.space.sm, minHeight: 22 },
   kind: {
     ...sansWeight("semibold"),
     fontSize: 11.5,
@@ -321,10 +313,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.space.sm,
     paddingVertical: theme.space.xs,
   },
-  sectionBody: {
-    paddingHorizontal: theme.space.sm,
-    paddingBottom: theme.space.sm,
-  },
+  sectionBody: { paddingHorizontal: theme.space.sm, paddingBottom: theme.space.sm },
   screenshot: {
     aspectRatio: 16 / 10,
     borderRadius: theme.radius.lg,
@@ -333,13 +322,6 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
   },
   image: { width: "100%", height: "100%" },
-  unavailable: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: theme.space.md,
-  },
-  unavailableText: {
-    textAlign: "center",
-    color: theme.desktop.mutedForeground,
-  },
+  unavailable: { alignItems: "center", justifyContent: "center", padding: theme.space.md },
+  unavailableText: { textAlign: "center", color: theme.desktop.mutedForeground },
 }));

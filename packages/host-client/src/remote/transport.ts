@@ -29,7 +29,8 @@ export class RemoteConnectionError extends Error {
 }
 /**
  * This client refused a reply that is larger than its limit. The connection is sound: only the
- * read that got the reply fails, and the same read gets the same reply again.
+ * read that got the reply fails, and the same read gets the same reply again. A mutation with such
+ * a reply has an unknown outcome instead.
  */
 export class RemoteReplyTooLargeError extends RemoteConnectionError {
   constructor(limit: number) {

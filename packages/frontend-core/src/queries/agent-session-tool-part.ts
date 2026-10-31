@@ -40,4 +40,6 @@ export const sessionToolPartQueryOptions = (
     // A remote read already waits for a reconnect. The user retries other failures.
     retry: false,
     refetchOnWindowFocus: false,
+    // A finished tool part does not change, so a reconnect does not read it again.
+    meta: { skipHostRecovery: true },
   });

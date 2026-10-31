@@ -30,19 +30,9 @@ type AgentRuntimeServices = {
   runtimeCatalogOperations: RuntimeCatalogOperations;
 };
 
-export type AgentRuntimeServicesOptions = {
-  /**
-   * `on_demand` asks the host to cut long tool details from history. A remote client sets it,
-   * because its replies have a size limit. Its tool rows then read the full part when the user
-   * opens the details.
-   */
-  historyToolDetails?: "on_demand";
-};
-
 export const createAgentRuntimeServices = (
   hostClient: HostClient,
   queryClient: QueryClient,
-  { historyToolDetails }: AgentRuntimeServicesOptions = {},
 ): AgentRuntimeServices => {
   const runtimeDefinitions = Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
   for (const definition of runtimeDefinitions) {
@@ -54,7 +44,7 @@ export const createAgentRuntimeServices = (
     }
   }
   return {
-    agentEngine: createAgentEngine(hostClient, queryClient, historyToolDetails),
+    agentEngine: createAgentEngine(hostClient, queryClient),
     runtimeCatalogOperations: createHostRuntimeCatalogOperations(hostClient),
   };
 };
@@ -95,11 +85,7 @@ const toCatalogRead = (catalog: AgentRuntimeCatalog): AgentRuntimeCatalogRead =>
   return read;
 };
 
-const createAgentEngine = (
-  hostClient: HostClient,
-  queryClient: QueryClient,
-  toolDetails: AgentRuntimeServicesOptions["historyToolDetails"],
-): AgentEnginePort => {
+const createAgentEngine = (hostClient: HostClient, queryClient: QueryClient): AgentEnginePort => {
   return {
     describeGeneratedImages: (input) => hostClient.agentSessionDescribeGeneratedImages(input),
     beginGeneratedImageBatch: (input) => hostClient.agentSessionBeginGeneratedImageBatch(input),
@@ -133,9 +119,7 @@ const createAgentEngine = (
       toCatalogRead(await hostClient.agentRuntimeLoadCatalog(input)),
     searchFiles: (input) => hostClient.agentRuntimeSearchFiles(input),
     loadSessionHistory: async (input) => {
-      const history = await hostClient.agentRuntimeLoadSessionHistory(
-        toolDetails ? { ...input, toolDetails } : input,
-      );
+      const history = await hostClient.agentRuntimeLoadSessionHistory(input);
       const filters = { queryKey: generatedImageMetadataSessionKey(input) };
       void queryClient.cancelQueries(filters).then(() => queryClient.invalidateQueries(filters));
       return history;

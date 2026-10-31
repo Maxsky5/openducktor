@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   HOST_COMMAND_NAMES,
   REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
   REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   REMOTE_CONNECTION_HEADER,
   REMOTE_PROTOCOL_VERSION,
@@ -58,10 +59,11 @@ type Connection = {
 };
 const MAX_CONNECTIONS = 128;
 const MAX_LEASES_PER_CONNECTION = 32;
-/** The baseline capabilities and the heartbeat of the event and task streams. */
+/** The baseline capabilities, the stream heartbeat, and compact session history. */
 const HOST_CAPABILITIES: readonly string[] = [
   ...REMOTE_BASELINE_CAPABILITIES,
   REMOTE_STREAM_HEARTBEAT_CAPABILITY,
+  REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
 ];
 const WORK_COMMANDS = new Set<string>(HOST_COMMAND_NAMES);
 const SHELL_COMMANDS = new Set(["open_external_url", "system_open_directory_in_tool"]);

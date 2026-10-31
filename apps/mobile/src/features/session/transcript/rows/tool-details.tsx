@@ -46,10 +46,7 @@ export const useCardDetailsColors = (): ToolDetailsColors => {
   // The parts of the theme stay the same objects until the theme changes, so the memo keys on them.
   return useMemo(
     () => ({
-      frame: {
-        borderColor: theme.desktop.border,
-        backgroundColor: theme.desktop.card,
-      },
+      frame: { borderColor: theme.desktop.border, backgroundColor: theme.desktop.card },
       text: theme.desktop.foreground,
       errorFrame: {
         borderColor: theme.desktop.destructiveBorder,
@@ -313,10 +310,7 @@ function DownloadAttachment({
     setBusy(true);
     try {
       const saved = await ("base64" in content
-        ? files.writeBase64({
-            base64: content.base64,
-            mediaType: content.mediaType,
-          })
+        ? files.writeBase64({ base64: content.base64, mediaType: content.mediaType })
         : files.write(new TextEncoder().encode(content.text), content.mediaType));
       if (!(await shareDeviceFile(saved.uri, name, content.mediaType))) {
         feedback.show("warning", "Sharing is not available on this device.");
@@ -419,12 +413,7 @@ const styles = StyleSheet.create((theme) => ({
   file: { gap: theme.space.xs },
   fileText: { ...sansWeight("regular"), fontSize: 13, lineHeight: 18 },
   fileUri: { ...monoWeight("regular"), fontSize: 12, lineHeight: 17 },
-  download: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-  },
+  download: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
   reading: { flexDirection: "row", alignItems: "center", gap: 6 },
   downloadText: { textDecorationLine: "underline" },
   questions: { paddingLeft: LINE_DETAILS_INSET, paddingRight: theme.space.xs },
