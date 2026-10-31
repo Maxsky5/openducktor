@@ -5,12 +5,12 @@ import { useAnnounce } from "@/ui/use-announce";
 
 const INSTRUCTION_TEXT = {
   submitting: "Submitting the initial instruction.",
-  accepted: "The initial instruction was accepted.",
+  accepted: null,
   queued: "The initial instruction is queued.",
   not_sent: "The initial instruction was not sent.",
   unknown:
     "Initial instruction delivery is unconfirmed. Inspect the session before you send again.",
-} satisfies Record<StartupInstruction["state"], string>;
+} satisfies Record<StartupInstruction["state"], string | null>;
 
 export function StartupInstructionNotice({
   instruction,
