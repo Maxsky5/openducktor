@@ -36,51 +36,78 @@ body {
 
 #root .xterm {
   height: 100%;
+  position: sticky;
+  top: 0;
+}
+
+.terminal-scroll-viewport {
+  position: absolute;
+  inset: 4px 56px 4px 8px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.terminal-scroll-viewport::-webkit-scrollbar,
+#root .xterm-scrollable-element > .scrollbar {
+  display: none;
+}
+
+.terminal-scrollbar {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  bottom: 4px;
+  width: 48px;
+  touch-action: none;
+}
+
+.terminal-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 8px;
+  border-radius: 4px;
+  background: var(--terminal-selection-handle);
+  opacity: 0.4;
+}
+
+.terminal-scrollbar:active .terminal-scrollbar-thumb {
+  opacity: 0.8;
 }
 
 /* Handle touch listeners stop propagation; mouse input bubbles to xterm. */
 .terminal-selection-handle {
   position: absolute;
   z-index: 5;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 0;
   background: transparent;
   touch-action: none;
-  transform: translate(-50%, -10px);
 }
 
 .terminal-selection-handle::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 21px;
+  top: var(--stem-y);
+  left: var(--stem-x);
   width: 2px;
-  height: 22px;
+  height: var(--stem-length);
   background: var(--terminal-selection-handle);
+  transform-origin: top center;
+  transform: rotate(var(--stem-angle));
 }
 
 .terminal-selection-handle::after {
   content: "";
   position: absolute;
-  top: 16px;
+  top: 15px;
   left: 15px;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--terminal-selection-handle);
-}
-
-.terminal-selection-handle[data-edge="start"] {
-  transform: translate(-50%, -34px);
-}
-
-.terminal-selection-handle[data-edge="start"]::before {
-  top: 7px;
-  height: 27px;
-}
-
-.terminal-selection-handle[data-edge="start"]::after {
-  top: 0;
 }

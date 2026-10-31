@@ -64,12 +64,12 @@ test.each([
   expect(terminal.getSelection()).toBe("hello");
 });
 
-test("a short drag cancels a long press and does not also tap the terminal", async () => {
+test("a short drag leaves native scrolling available and cancels a long press", async () => {
   const { terminal, element } = await openTerminal("hello world");
   touch(element, "touchstart", 2, 2);
-  expect(touch(element, "touchmove", 2, 0).defaultPrevented).toBe(true);
+  expect(touch(element, "touchmove", 2, 0).defaultPrevented).toBe(false);
   await new Promise((resolve) => setTimeout(resolve, 470));
-  expect(touch(element, "touchend", 2, 0).defaultPrevented).toBe(true);
+  expect(touch(element, "touchend", 2, 0).defaultPrevented).toBe(false);
   expect(terminal.hasSelection()).toBe(false);
 
   touch(element, "touchstart", 2);

@@ -44,11 +44,12 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   /** The hidden text field that takes keyboard and input method text. */
   export type XtermTextArea = {
     value: string;
+    inputMode: string;
     addEventListener(
       type: "input",
       listener: (event: { readonly inputType: string }) => void,
     ): void;
-    addEventListener(type: "focus" | "select", listener: () => void): void;
+    addEventListener(type: "focus" | "blur" | "select", listener: () => void): void;
   };
   export type XtermKeyboardEvent = {
     readonly altKey: boolean;
@@ -127,6 +128,7 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
     options: XtermOptions;
     readonly onData: XtermEvent<string>;
     readonly onResize: XtermEvent<{ cols: number; rows: number }>;
+    readonly onRender: XtermEvent<{ start: number; end: number }>;
     readonly onScroll: XtermEvent<number>;
     readonly onSelectionChange: XtermEvent<void>;
     readonly onWriteParsed: XtermEvent<void>;
