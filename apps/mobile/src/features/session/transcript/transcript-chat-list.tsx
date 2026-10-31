@@ -23,6 +23,7 @@ import {
   type AccessibilityActionInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -145,6 +146,10 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     },
     [rowHeight],
   );
+  // Android draws a scroll in the frame after the rows move: `View.scrollTo` asks for the redraw
+  // of the scroll view on the next frame. A change of a prop that redraws the scroll view at once
+  // makes the scroll show in the frame of the rows. Both fading edge values turn the fade off.
+  const [redrawScroll, setRedrawScroll] = useState(false);
   // The inverted list keeps the bottom edge of a row in place, so a row that grows moves its top.
   // After the list measures the row again, the list moves by the growth, so the row stays put.
   // A row of the list of the first rows grows down and keeps its top in place.
@@ -157,6 +162,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     if (!inverted || growth === 0) return;
     const offset = Math.max(0, list.getAbsoluteLastScrollOffset() + growth);
     list.scrollToOffset({ offset, animated: false });
+    if (Platform.OS === "android") setRedrawScroll((redraw) => !redraw);
   }, [inverted, listRef, rowHeight]);
 
   const context = useTranscriptRowsContext({
@@ -266,6 +272,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
           onMomentumScrollEnd={onRestShown}
           // As on desktop, no scroll bar: the list measures rows as they come near.
           showsVerticalScrollIndicator={false}
+          fadingEdgeLength={redrawScroll ? NO_FADING_EDGE : 0}
           // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
           // transcript, and Android gives their taps to the list below them too.
           keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
@@ -285,5 +292,6 @@ const styles = StyleSheet.create({
   bottomSpace: { height: BOTTOM_EDGE_HEIGHT },
   topSpace: { height: 16 },
 });
+const NO_FADING_EDGE = { start: 0, end: 0 };
 const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
 const TOP_SPACE = <View style={styles.topSpace} />;
