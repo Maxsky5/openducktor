@@ -39,6 +39,40 @@ const attempt = (operations: StartupOperationSnapshot[]): StartupAttempt => ({
   presentation: "dialog",
 });
 
+test.each(["removed", "retained", "unknown"] as const)(
+  "keeps captured output when cleanup reports the worktree as %s",
+  (state) => {
+    const action = {
+      actionId: "setup",
+      command: "bun install",
+      waitBeforeAgentStart: true,
+      terminalId: "setup-terminal",
+      result: {
+        type: "exited" as const,
+        exitCode: 1,
+        signal: null,
+        outputTail: ["Setup failed before cleanup"],
+      },
+    };
+    const startup = attempt([
+      operation("create", [
+        createdWorktree(),
+        step("setup", { state: "failed", action }),
+        step("cleanup", {
+          resources: [{ kind: "worktree", value: "/worktree", state }],
+        }),
+      ]),
+    ]);
+
+    for (const rows of [startupTraceRows(startup), startupFailureRows(startup)]) {
+      const shown = rows.find((row) => row.id === "create:setup")!.step.action!;
+      expect(shown.terminalId).toBe(state === "removed" ? undefined : "setup-terminal");
+      expect(shown.result?.outputTail).toEqual(["Setup failed before cleanup"]);
+    }
+    expect(action.terminalId).toBe("setup-terminal");
+  },
+);
+
 test("projects only worktree setup in execution order", () => {
   const startup = attempt([
     operation("create", [

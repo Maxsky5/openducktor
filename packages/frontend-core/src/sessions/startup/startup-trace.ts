@@ -23,7 +23,7 @@ export function startupTraceRows(attempt: StartupAttempt): { id: string; step: S
 
   return attempt.operations.flatMap((operation) => {
     const createsWorktree = createdWorktree(operation);
-    return operation.steps
+    return stepsAfterCleanup(operation)
       .filter(
         (step) =>
           (createsWorktree &&
@@ -40,7 +40,7 @@ export function startupTraceRows(attempt: StartupAttempt): { id: string; step: S
 
 export function startupFailureRows(attempt: StartupAttempt): { id: string; step: StartupStep }[] {
   return attempt.operations.flatMap((operation) =>
-    operation.steps
+    stepsAfterCleanup(operation)
       .filter(
         (step) =>
           stepHasFailure(step) ||
@@ -64,6 +64,23 @@ function createdWorktree(operation: StartupOperationSnapshot): boolean {
         (resource) => resource.kind === "worktree" && resource.state === "created",
       ),
   );
+}
+
+function stepsAfterCleanup(operation: StartupOperationSnapshot): StartupStep[] {
+  const removed = operation.steps.some((step) =>
+    step.resources?.some(
+      (resource) => resource.kind === "worktree" && resource.state === "removed",
+    ),
+  );
+  if (!removed) return operation.steps;
+
+  // Cleanup stops the action terminals before it removes their worktree.
+  return operation.steps.map((step) => {
+    if (!step.action?.terminalId) return step;
+    const action = { ...step.action };
+    delete action.terminalId;
+    return { ...step, action, details: action.result ? [] : step.details };
+  });
 }
 
 function stepHasFailure(step: StartupStep): boolean {
