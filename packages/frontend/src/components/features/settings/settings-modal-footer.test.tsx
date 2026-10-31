@@ -54,11 +54,9 @@ describe("SettingsModalFooter", () => {
         },
       });
       try {
-        expect(
-          screen.getByText("Runtime definitions unavailable: Catalog unavailable"),
-        ).toBeTruthy();
+        expect(screen.getByText("Could not load runtimes: Catalog unavailable")).toBeTruthy();
         expect(screen.getByText("Runtime executable check failed: Check failed")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Save Settings" }).hasAttribute("disabled")).toBe(
+        expect(screen.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
           true,
         );
         if (saveError) {
@@ -88,7 +86,7 @@ describe("SettingsModalFooter", () => {
       },
     });
     try {
-      expect(screen.getByRole("button", { name: "Save Settings" }).hasAttribute("disabled")).toBe(
+      expect(screen.getByRole("button", { name: "Save settings" }).hasAttribute("disabled")).toBe(
         true,
       );
       expect(screen.getByText("2 custom role field errors.")).toBeTruthy();
@@ -103,7 +101,7 @@ describe("SettingsModalFooter", () => {
     });
     try {
       expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Save Settings" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Save settings" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Save other settings" })).toBeNull();
     } finally {
       renderer.unmount();
@@ -211,7 +209,7 @@ describe("SettingsModalFooter", () => {
       expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(screen.getByText(/Runtime definitions unavailable: Definitions failed/i)).toBeTruthy();
+      expect(screen.getByText(/Could not load runtimes: Definitions failed/i)).toBeTruthy();
       expect(
         screen.getByText(/Runtime executable check failed: Executable check failed/i),
       ).toBeTruthy();

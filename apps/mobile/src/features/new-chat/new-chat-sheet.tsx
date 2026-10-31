@@ -41,7 +41,6 @@ import { useNewChatModel } from "./use-new-chat-model";
 export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
   const router = useRouter();
   const navigation = useNavigation();
-  const gate = useCommandGate();
   const { startupAttempts } = useClientConnection();
   const visibleHandoff = useVisibleHandoff();
   const { repoConfig, defaultModelSelection } = useWorkspaceSessionCreateDefaults(
@@ -105,7 +104,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
   if (attemptId && showProgress)
     return (
       <SheetScreen
-        title="New Chat"
+        title="New chat"
         closable={!starting}
         onClose={() => {
           requestClose();
@@ -123,61 +122,93 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
     );
 
   return (
-    <SheetScreen title="New Chat" closable={!starting} onClose={requestClose}>
+    <SheetScreen
+      title="New chat"
+      closable={!starting}
+      onClose={requestClose}
+      intro={<FormLead text="Choose where the agent works and how it starts." />}
+    >
       <Screen background="sheet">
-        <ActionForm
-          note={request.blockedReason && !starting ? request.blockedReason : null}
-          primary={
-            <CreateChatButton
-              creating={starting}
-              disabled={request.input === null || !gate.open}
-              onCreate={() => {
-                if (!starting && request.input) form.submit();
-              }}
-            />
-          }
-        >
-          <FormBody>
-            <FormLead text="Choose where the agent works and how it starts." />
-            <NewChatWorkspaceField workspace={workspace} disabled={starting} />
-            <TextField
-              label="Name"
-              value={form.name}
-              onChangeText={form.setName}
-              placeholder="What are you working on?"
-              maxLength={WORKSPACE_SESSION_MANUAL_TITLE_LIMIT}
-              autoComplete="off"
-              clearButtonMode="while-editing"
-              hint="Optional. A chat without a name gets a generated title."
-              error={request.fieldErrors.name}
-              editable={!starting}
-              returnKeyType="done"
-            />
-            <ModelFields
-              model={model}
-              modelError={request.fieldErrors.model}
-              repoConfig={repoConfig}
-              disabled={starting}
-            />
-            <CustomRoleField form={form} disabled={starting} />
-            <WorkLocationField form={form} disabled={starting} />
-            {form.location === "existing_worktree" ? (
-              <ExistingWorktreeField form={form} disabled={starting} />
-            ) : null}
-            <TargetBranchField form={form} disabled={starting} />
-            {form.location === "local_worktree" ? (
-              <WorktreeFields
-                form={form}
-                request={request}
-                branchPrefix={branchPrefix}
-                prefixFailed={repoConfig.isError}
-                disabled={starting}
-              />
-            ) : null}
-          </FormBody>
-        </ActionForm>
+        <ChatForm
+          workspace={workspace}
+          form={form}
+          model={model}
+          request={request}
+          repoConfig={repoConfig}
+          starting={starting}
+        />
       </Screen>
     </SheetScreen>
+  );
+}
+
+function ChatForm({
+  workspace,
+  form,
+  model,
+  request,
+  repoConfig,
+  starting,
+}: {
+  workspace: WorkspaceRecord;
+  form: ReturnType<typeof useWorkspaceSessionCreate>;
+  model: ReturnType<typeof useNewChatModel>;
+  request: ReturnType<typeof buildNewChatRequest>;
+  repoConfig: ReturnType<typeof useWorkspaceSessionCreateDefaults>["repoConfig"];
+  starting: boolean;
+}): ReactElement {
+  const gate = useCommandGate();
+  return (
+    <ActionForm
+      note={request.blockedReason && !starting ? request.blockedReason : null}
+      primary={
+        <CreateChatButton
+          creating={starting}
+          disabled={request.input === null || !gate.open}
+          onCreate={() => {
+            if (!starting && request.input) form.submit();
+          }}
+        />
+      }
+    >
+      <FormBody>
+        <NewChatWorkspaceField workspace={workspace} disabled={starting} />
+        <TextField
+          label="Name"
+          value={form.name}
+          onChangeText={form.setName}
+          placeholder="What are you working on?"
+          maxLength={WORKSPACE_SESSION_MANUAL_TITLE_LIMIT}
+          autoComplete="off"
+          clearButtonMode="while-editing"
+          hint="Optional. A chat without a name gets a generated title."
+          error={request.fieldErrors.name}
+          editable={!starting}
+          returnKeyType="done"
+        />
+        <ModelFields
+          model={model}
+          modelError={request.fieldErrors.model}
+          repoConfig={repoConfig}
+          disabled={starting}
+        />
+        <CustomRoleField form={form} disabled={starting} />
+        <WorkLocationField form={form} disabled={starting} />
+        {form.location === "existing_worktree" ? (
+          <ExistingWorktreeField form={form} disabled={starting} />
+        ) : null}
+        <TargetBranchField form={form} disabled={starting} />
+        {form.location === "local_worktree" ? (
+          <WorktreeFields
+            form={form}
+            request={request}
+            branchPrefix={repoConfig.data?.branchPrefix}
+            prefixFailed={repoConfig.isError}
+            disabled={starting}
+          />
+        ) : null}
+      </FormBody>
+    </ActionForm>
   );
 }
 
@@ -231,8 +262,8 @@ const useClose = (edited: boolean, running: boolean) => {
       return;
     }
     void confirmDiscard({
-      title: "Discard the New Chat?",
-      message: "Your choices are not saved.",
+      title: "Discard changes?",
+      message: "Your choices have not been saved.",
     }).then((confirmed) => {
       if (!confirmed) return;
       close();
@@ -252,7 +283,8 @@ function CreateChatButton({
 }): ReactElement {
   return (
     <Button
-      label={creating ? "Creating Chat" : "Create Chat"}
+      label={creating ? "Creating chat…" : "Create chat"}
+      icon="message-square-plus"
       size="lg"
       loading={creating}
       command

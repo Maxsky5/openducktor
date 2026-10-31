@@ -138,7 +138,7 @@ describe("TaskCreateModal", () => {
     const props = { open: true, onOpenChange: () => {}, tasks: [] };
     const rendered = render(createElement(TaskCreateModal, props));
     try {
-      const dialog = screen.getByRole("dialog", { name: "Create Task" });
+      const dialog = screen.getByRole("dialog", { name: "Create task" });
       await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true), {
         timeout: 250,
       });
@@ -166,14 +166,14 @@ describe("TaskCreateModal", () => {
       }),
     );
 
-    expect(await screen.findByText("Edit Task")).toBeTruthy();
+    expect(await screen.findByText("Edit task")).toBeTruthy();
     expect(screen.getByText("Markdown")).toBeTruthy();
     expect(screen.getByText("Preview")).toBeTruthy();
     expect(screen.getByText("Save Spec")).toBeTruthy();
-    const dialog = screen.getByRole("dialog", { name: "Edit Task" });
+    const dialog = screen.getByRole("dialog", { name: "Edit task" });
     const scrollRegion = dialog.querySelector("fieldset .overflow-y-auto");
-    expect(scrollRegion?.parentElement?.classList.contains("min-h-0")).toBe(true);
-    expect(scrollRegion?.parentElement?.classList.contains("flex")).toBe(true);
+    expect(scrollRegion?.closest("fieldset")?.classList.contains("min-h-0")).toBe(true);
+    expect(scrollRegion?.closest("fieldset")?.classList.contains("flex")).toBe(true);
 
     await act(async () => {
       rendered.unmount();
@@ -201,13 +201,9 @@ describe("TaskCreateModal", () => {
       createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
     );
 
-    expect(
-      await screen.findByText(
-        "Create a task in Alpha with the fields Planner and Builder rely on.",
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText("Create a task in Alpha.")).toBeTruthy();
     expect(screen.getByText("This task is for Alpha. Open Alpha again to create it.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Create Task" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Create task" }).hasAttribute("disabled")).toBe(true);
 
     await act(async () => {
       rendered.unmount();
@@ -333,7 +329,7 @@ describe("TaskCreateModal", () => {
         .getAllByRole<HTMLButtonElement>("button", { name: "Close" })
         .find((button) => button.textContent === "Close");
       expect(closeButton?.disabled).toBe(false);
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save changes" }).disabled).toBe(
         true,
       );
       expect(await screen.findByTestId("task-details-form")).toBeTruthy();
@@ -368,7 +364,7 @@ describe("TaskCreateModal", () => {
       );
 
       expect(await screen.findByText(/changed while you were editing/)).toBeTruthy();
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save changes" }).disabled).toBe(
         true,
       );
       await act(async () => rendered.unmount());

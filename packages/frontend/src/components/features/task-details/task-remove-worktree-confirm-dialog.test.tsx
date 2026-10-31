@@ -37,9 +37,8 @@ describe("TaskRemoveWorktreeConfirmDialog", () => {
   test("shows one loader in place of the content until the reads end", () => {
     const view = renderDialog({ branchNames: ["odt/TASK-1"] }, true);
 
-    expect(screen.getByText("Loading the task")).toBeTruthy();
-    expect(screen.queryByText("/worktrees/TASK-1")).toBeNull();
-    expect(screen.queryByText(BRANCH_WARNING)).toBeNull();
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove worktree and branch" })).toBeNull();
     view.unmount();
   });
 

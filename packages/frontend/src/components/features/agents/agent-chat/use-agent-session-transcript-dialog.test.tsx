@@ -280,6 +280,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
   }
 
+  // The first history read and its retry each show a 500 ms loader.
   test("retries failed runtime transcript history from the error notice", async () => {
     const sessionStore = createAgentSessionsStore("/repo-a");
     const connection = createTestClientConnection();
@@ -383,14 +384,14 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     try {
       expect(await screen.findByText("Failed to load session")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
 
       expect(await screen.findByText("Recovered history")).toBeTruthy();
       expect(historyAttempts).toBe(2);
     } finally {
       rendered.unmount();
     }
-  });
+  }, 2000);
 
   test("retries a failed skill catalog from the transcript notice", async () => {
     const sessionStore = createAgentSessionsStore("/repo-a");
@@ -488,7 +489,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     try {
       expect(await screen.findByText("Skills may be incomplete")).toBeTruthy();
       catalogAvailable = true;
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
@@ -565,7 +566,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
       expect(screen.getByText("Subagent activity")).toBeTruthy();
       expect(screen.getByText("View what this subagent did.")).toBeTruthy();
-      expect(screen.getByText("Opening conversation…")).toBeTruthy();
+      expect(screen.getByRole("dialog")).toBeTruthy();
     } finally {
       rendered.unmount();
     }
@@ -606,7 +607,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       try {
         fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
-        expect(screen.getByText("Opening conversation…")).toBeTruthy();
+        expect(screen.getByRole("dialog")).toBeTruthy();
         expect(frameDriver.pendingFrameCount()).toBe(1);
 
         fireEvent.click(screen.getByRole("button", { name: "Close" }));

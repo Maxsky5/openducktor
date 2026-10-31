@@ -132,11 +132,11 @@ const createHookHarness = (
     runtimeExecutablesCheck?: HostClient["runtimeExecutablesCheck"];
   },
 ) => {
-  const connection = createTestClientConnection({
-    client: options?.runtimeExecutablesCheck
-      ? { runtimeExecutablesCheck: options.runtimeExecutablesCheck }
-      : {},
-  });
+  const client: Partial<HostClient> = { workspaceGetSettingsSnapshot: loadSettingsSnapshot };
+  if (options?.runtimeExecutablesCheck) {
+    client.runtimeExecutablesCheck = options.runtimeExecutablesCheck;
+  }
+  const connection = createTestClientConnection({ client });
   const { queryClient } = connection;
   const initialSnapshot = settingsSnapshotFactory();
   queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, EMPTY_BRANCHES);

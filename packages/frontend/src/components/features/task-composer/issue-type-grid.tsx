@@ -23,31 +23,31 @@ export function IssueTypeGrid({
             key={option.value}
             type="button"
             className={cn(
-              "group min-h-36 cursor-pointer rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              option.accentClass,
+              "group grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-36 sm:grid-cols-[1fr_auto]",
+              selected && option.accentClass,
             )}
             onClick={() => onSelectIssueType(option.value)}
           >
-            <div className="flex items-start justify-between gap-3">
-              <span
-                className={cn(
-                  "inline-flex size-9 items-center justify-center rounded-lg",
-                  option.iconClass,
-                )}
-              >
-                <Icon className="size-4" />
-              </span>
-              <span
-                className={cn(
-                  "inline-flex size-6 items-center justify-center rounded-full border transition-colors",
-                  selected ? option.indicatorClass : "border-input bg-card text-transparent",
-                )}
-              >
-                <Check className="size-3.5" />
-              </span>
+            <span
+              className={cn(
+                "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
+                option.iconClass,
+              )}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 sm:col-span-2 sm:row-start-2">
+              <p className="text-sm font-semibold text-foreground sm:text-base">{option.label}</p>
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">{option.description}</p>
             </div>
-            <p className="mt-3 text-base font-semibold text-foreground">{option.label}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{option.description}</p>
+            <span
+              className={cn(
+                "inline-flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors sm:col-start-2 sm:row-start-1",
+                selected ? option.indicatorClass : "border-input bg-card text-transparent",
+              )}
+            >
+              <Check className="size-3.5" aria-hidden="true" />
+            </span>
           </button>
         );
       })}

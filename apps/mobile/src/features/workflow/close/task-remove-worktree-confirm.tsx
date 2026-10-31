@@ -11,7 +11,6 @@ import { StyleSheet } from "react-native-unistyles";
 import { toFlowFailure } from "@/host-session/command-outcome";
 import { Text } from "@/ui/text";
 import { TaskConfirmFrame } from "../confirm/task-confirm-view";
-import { TaskReadsLoading } from "../confirm/task-reads-loading";
 import { TaskCleanupTargets, TaskReadError } from "./task-close-content";
 
 /** Removes the worktree and the local task branch of a closed task, as on desktop. */
@@ -32,6 +31,12 @@ export function TaskRemoveWorktreeConfirm({
         disabled: dialog.confirmDisabled,
       }}
       isPending={operation.isPending}
+      loading={dialog.isPreparing}
+      intro={
+        <Text variant="body" style={styles.muted}>
+          {taskRemoveWorktreeDescription(dialog.taskId)}
+        </Text>
+      }
       failure={
         operation.error
           ? toFlowFailure(operation.error, operation.errorOutcomeUnknown, COPY.failureTitle)
@@ -41,27 +46,17 @@ export function TaskRemoveWorktreeConfirm({
       onCancel={dialog.onCancel}
       onConfirm={dialog.onConfirm}
     >
-      <Text variant="body" style={styles.muted}>
-        {taskRemoveWorktreeDescription(dialog.taskId)}
-      </Text>
-      {dialog.isPreparing ? (
-        <TaskReadsLoading />
-      ) : (
-        <>
-          {/* The close cleanup card shows the same rows. */}
-          <View style={styles.targets}>
-            <TaskCleanupTargets impact={impact} removes />
-          </View>
-          <View style={styles.lines}>
-            {taskRemoveWorktreeEffectLines(impact).map((line) => (
-              <Text key={line} variant="footnote" style={styles.muted}>
-                {line}
-              </Text>
-            ))}
-          </View>
-          <TaskReadError read={impact} />
-        </>
-      )}
+      <View style={styles.targets}>
+        <TaskCleanupTargets impact={impact} removes />
+      </View>
+      <View style={styles.lines}>
+        {taskRemoveWorktreeEffectLines(impact).map((line) => (
+          <Text key={line} variant="footnote" style={styles.muted}>
+            {line}
+          </Text>
+        ))}
+      </View>
+      <TaskReadError read={impact} />
     </TaskConfirmFrame>
   );
 }

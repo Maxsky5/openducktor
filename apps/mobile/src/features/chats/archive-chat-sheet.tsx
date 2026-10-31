@@ -39,7 +39,7 @@ import type { ChatSheetParams } from "./chat-sheet-params";
 import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
 
-const TITLE = "Archive Chat";
+const TITLE = "Archive chat";
 
 /** What happens to the worktree, under the worktree switch. The branch name is code. */
 function WorktreeNotice({
@@ -161,7 +161,15 @@ function ArchiveProblems({
           tone="destructive"
           title="Worktree check failed"
           message={errorMessage(checkError)}
-          action={<Button label="Check Again" size="sm" variant="outline" onPress={onCheckAgain} />}
+          action={
+            <Button
+              icon="refresh"
+              label="Check again"
+              size="sm"
+              variant="outline"
+              onPress={onCheckAgain}
+            />
+          }
         />
       ) : null}
       {warnings.map((warning) => (
@@ -218,6 +226,12 @@ function ArchiveChatForm({
       title={TITLE}
       subtitle={ARCHIVE_CHAT_TEXT.description}
       closable={!archive.isPending}
+      loading={
+        isWorktreeChat(record) &&
+        preview.data === undefined &&
+        preview.isFetching &&
+        !archive.isPending
+      }
     >
       <View style={styles.body}>
         <ArchivedChatCard record={record} />

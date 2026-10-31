@@ -47,7 +47,7 @@ type TaskConfirmationsProps = {
 /** The desktop icon of each confirm button. */
 const CONFIRM_ICONS = {
   reset_task: "rotate-ccw",
-  delete: "trash",
+  delete: "trash-2",
 } as const satisfies Record<TaskConfirmAction, IconName>;
 
 const FAILURE_TITLES = {
@@ -141,7 +141,7 @@ function RequestedTaskConfirm({
       copy={copy}
       confirm={confirm}
       isPending={dialog.operation.isPending}
-      impactError={impact.error}
+      loading={impact.isLoading || impact.isLoadingStopImpact}
       failure={error ? toFlowFailure(error, errorOutcomeUnknown, FAILURE_TITLES[action]) : null}
       icon={CONFIRM_ICONS[action]}
       onCancel={dialog.onCancel}
@@ -167,7 +167,7 @@ export function ResetImplementationConfirmation({
       copy={copy}
       confirm={confirm}
       isPending={model.isSubmitting}
-      impactError={model.impactError}
+      loading={model.isLoadingImpact}
       failure={
         model.errorMessage
           ? toFlowFailure(model.errorMessage, model.errorOutcomeUnknown, "Reset failed")

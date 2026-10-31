@@ -23,6 +23,16 @@ import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 const noop = () => {};
 
+const markupButton = (html: string, label: string): HTMLButtonElement => {
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const button = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent?.trim() === label,
+  );
+  if (!button) throw new Error(`The markup has no button named ${label}.`);
+  return button;
+};
+
 const LOADED_IMPACT = {
   worktreePaths: ["/worktrees/TASK-1"],
   branchNames: ["odt/TASK-1"],
@@ -170,7 +180,7 @@ describe("TaskApprovalModal", () => {
   test("renders the wrapper dialog title and description", () => {
     const rendered = render(createElement(ModalWithProviders, { model: createCompletionModel() }));
 
-    expect(screen.getByText("Publish And Mark Done")).toBeTruthy();
+    expect(screen.getByText("Publish and mark done")).toBeTruthy();
     expect(
       screen.getByText(
         "The local merge is already applied. Push origin/beta to publish it, then move the task to Done.",
@@ -184,7 +194,7 @@ describe("TaskApprovalModal", () => {
     const approval = render(
       createElement(ModalWithProviders, { model: createApprovalModel({ taskTitle: "Add login" }) }),
     );
-    expect(screen.getByText("Approve Task")).toBeTruthy();
+    expect(screen.getByText("Approve task")).toBeTruthy();
     expect(screen.getByText("Add login")).toBeTruthy();
     expect(screen.getByText("TASK-1")).toBeTruthy();
     expect(screen.queryByText(/open a pull request, or close the task/)).toBeNull();
@@ -193,8 +203,8 @@ describe("TaskApprovalModal", () => {
     const missingBuilder = render(
       createElement(ModalWithProviders, { model: createMissingBuilderWorktreeModel() }),
     );
-    expect(screen.getByText("Builder Worktree Missing")).toBeTruthy();
-    expect(screen.getByText(/OpenDucktor cannot find the builder worktree/)).toBeTruthy();
+    expect(screen.getByText("Builder worktree missing")).toBeTruthy();
+    expect(screen.getByText(/The Builder worktree is gone/)).toBeTruthy();
     missingBuilder.unmount();
   });
 
@@ -204,7 +214,7 @@ describe("TaskApprovalModal", () => {
     );
 
     expect(html).toContain("Next step");
-    expect(html).toContain("Push beta And Mark Done");
+    expect(html).toContain("Push beta and mark done");
     expect(html).toContain("Finish later to keep the task in Human Review");
   });
 
@@ -215,8 +225,21 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Publishing beta");
+    expect(html).toContain("Pushing beta");
     expect(html).toContain("animate-spin");
+  });
+
+  test("keeps the approval form visible when reads refresh during submission", () => {
+    const view = renderWithImpact(
+      createApprovalModel({ isSubmitting: true }),
+      () => new Promise(() => {}),
+    );
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Merge locally" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    view.unmount();
   });
 
   test("renders recovery copy when the builder worktree is missing", () => {
@@ -226,28 +249,28 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Reset Implementation");
-    // Close Task replaces Complete Task and shows the shared close content.
-    expect(html).toContain("Close Task");
+    expect(html).toContain("Reset implementation");
+    // Close task replaces Complete Task and shows the shared close content.
+    expect(html).toContain("Close task");
     expect(html).not.toContain("Complete Task");
     expect(html).toContain("Remove worktree and branch");
   });
 
-  test("shows the shared close content with Close Task selected", () => {
+  test("shows the shared close content with Close task selected", () => {
     const html = renderToStaticMarkup(
       createElement(PanelWithProviders, {
         model: createApprovalModel({ mode: "close_task", hasUncommittedChanges: true }),
       }),
     );
 
-    expect(html).toContain("Close Task merges no code and changes no pull request.");
+    expect(html).toContain("Closing does not merge code or change a pull request.");
     expect(html).toContain("Remove worktree and branch");
     // Uncommitted changes do not block a close, so their merge warning does not show.
     expect(html).not.toContain(">Uncommitted changes<");
-    expect(html).toContain(">Close Task</button>");
+    expect(html).toContain(">Close task</button>");
   });
 
-  test("keeps Close Task when the approval context read failed", () => {
+  test("keeps Close task when the approval context read failed", () => {
     const html = renderToStaticMarkup(
       createElement(PanelWithProviders, {
         model: createApprovalModel({
@@ -257,10 +280,10 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Direct Merge and Pull Request are unavailable");
+    expect(html).toContain("Merge and pull request options are unavailable");
     expect(html).toContain("The task worktree has a detached HEAD.");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Direct Merge<\/button>/);
-    expect(html).toContain(">Close Task</button>");
+    expect(markupButton(html, "Direct merge").disabled).toBe(true);
+    expect(html).toContain(">Close task</button>");
   });
 
   const renderWithImpact = (
@@ -299,7 +322,7 @@ describe("TaskApprovalModal", () => {
   });
   const button = (name: string) => screen.getByRole<HTMLButtonElement>("button", { name });
 
-  test("names the worktree that a direct merge keeps before Merge Locally works", async () => {
+  test("names the worktree that a direct merge keeps before Merge locally works", async () => {
     const view = renderWithImpact(
       createApprovalModel({ mode: "direct_merge", removeWorktree: false }),
       readKeptWorktree,
@@ -307,31 +330,34 @@ describe("TaskApprovalModal", () => {
 
     try {
       // The one loader shows until every read of the modal ends.
-      expect(screen.getByText("Loading the task")).toBeTruthy();
-      expect(button("Merge Locally").disabled).toBe(true);
-      expect(await screen.findByText("/worktrees/TASK-1")).toBeTruthy();
+      expect(screen.getByRole("status")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Merge locally" })).toBeNull();
+      await screen.findByRole("button", { name: "Merge locally" });
+      expect(screen.getByRole("button", { name: "Worktree details" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Worktree details" }));
+      expect(screen.getByText("/worktrees/TASK-1")).toBeTruthy();
       expect(screen.getByText("odt/TASK-1")).toBeTruthy();
       expect(
         screen
           .getByRole("switch", { name: "Remove worktree and branch" })
           .getAttribute("aria-checked"),
       ).toBe("false");
-      expect(button("Merge Locally").disabled).toBe(false);
+      expect(button("Merge locally").disabled).toBe(false);
     } finally {
       view.unmount();
     }
   });
 
   test.each([
-    ["Direct Merge", createApprovalModel({ mode: "direct_merge" }), "Merge Locally"],
-    ["Complete Direct Merge", createCompletionModel(), "Push beta And Mark Done"],
+    ["Direct merge", createApprovalModel({ mode: "direct_merge" }), "Merge locally"],
+    ["Complete Direct merge", createCompletionModel(), "Push beta and mark done"],
   ] as const)(
     "keeps %s disabled while the cleanup read is pending or failed",
     async (_stage, model, confirmLabel) => {
       const pending = renderWithImpact(model, () => new Promise(() => {}));
       try {
-        expect(screen.getByText("Loading the task")).toBeTruthy();
-        expect(button(confirmLabel).disabled).toBe(true);
+        expect(screen.getByRole("status")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: confirmLabel })).toBeNull();
       } finally {
         pending.unmount();
       }
@@ -342,7 +368,8 @@ describe("TaskApprovalModal", () => {
         return readKeptWorktree();
       });
       try {
-        expect(await screen.findByText("The worktree is not readable.")).toBeTruthy();
+        await screen.findByRole("button", { name: "Retry" });
+        expect(screen.getByText("The worktree is not readable.")).toBeTruthy();
         expect(button(confirmLabel).disabled).toBe(true);
 
         failRead = false;
@@ -384,15 +411,16 @@ describe("TaskApprovalModal", () => {
     const view = render(panel("direct_merge"));
 
     try {
-      expect(await screen.findByText("/worktrees/TASK-1")).toBeTruthy();
+      await screen.findByRole("button", { name: "Merge locally" });
+      expect(screen.getByRole("button", { name: "Worktree details" })).toBeTruthy();
       view.rerender(panel("close_task"));
 
       // The close content shows in the same render, with no loader and no new read.
       expect(screen.queryByText("Loading the task")).toBeNull();
       expect(
-        screen.getByText("Close Task merges no code and changes no pull request."),
+        screen.getByText("Closing does not merge code or change a pull request."),
       ).toBeTruthy();
-      expect(screen.getByText("/worktrees/TASK-1")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Worktree details" })).toBeTruthy();
       expect(impactGet).toHaveBeenCalledTimes(1);
       expect(stopImpactGet).toHaveBeenCalledTimes(1);
     } finally {
@@ -446,7 +474,7 @@ describe("TaskApprovalModal", () => {
 
     try {
       expect(await screen.findByText(notMergedText)).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
 
       await waitFor(() =>
         expect(
@@ -455,7 +483,7 @@ describe("TaskApprovalModal", () => {
       );
       expect(screen.getByText(notMergedText)).toBeTruthy();
       expect(screen.queryByText("Checking the merge status.")).toBeNull();
-      expect(screen.getByText("/worktrees/TASK-1")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Worktree details" })).toBeTruthy();
 
       await act(async () => {
         finishCheck();
@@ -572,7 +600,7 @@ describe("TaskApprovalModal", () => {
       expect(await screen.findByText("Not merged: 1 commit is not in origin/main.")).toBeTruthy();
       // The task branch gets a new commit while the modal stays open.
       branchOid = "new-tip";
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
 
       expect(await screen.findByText("Branch merged into origin/main.")).toBeTruthy();
       expect(screen.queryByText(/The task branch changed after the last check/)).toBeNull();
@@ -595,8 +623,8 @@ describe("TaskApprovalModal", () => {
     // The cleanup card names the targets, and only the checkbox shows the choice.
     expect(kept).toContain('aria-checked="false"');
     expect(removed).toContain('aria-checked="true"');
-    expect(kept).toContain("/worktrees/TASK-1");
-    expect(removed).toContain("/worktrees/TASK-1");
+    expect(kept).toContain("Worktree details");
+    expect(removed).toContain("Worktree details");
     expect(kept).not.toContain("clean up the builder workspace");
   });
 
@@ -607,7 +635,7 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Merge Locally");
+    expect(html).toContain("Merge locally");
     expect(html).toContain("animate-spin");
   });
 
@@ -618,9 +646,9 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Loading the task");
+    expect(html).toContain("Loading task details…");
     expect(html).toContain("animate-spin");
-    expect(html).toContain("text-status-running");
+    expect(html).toContain('role="status"');
   });
 
   test("renders the squash commit message editor when squash is selected", () => {
@@ -630,9 +658,9 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Squash Commit Message");
+    expect(html).toContain("Squash commit message");
     expect(html).toContain("feat: add Microsoft login");
-    expect(html).toContain("oldest commit unique to the builder branch");
+    expect(html).toContain("combining the branch changes into one commit");
   });
 
   test("disables direct merge confirmation when the squash commit message is empty", () => {
@@ -646,7 +674,7 @@ describe("TaskApprovalModal", () => {
     );
 
     expect(html).toContain("Enter the squash commit message before merging locally.");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Merge Locally<\/button>/);
+    expect(markupButton(html, "Merge locally").disabled).toBe(true);
   });
 
   test("does not show a squash validation error before the user interacts when no suggestion exists", () => {
@@ -663,7 +691,7 @@ describe("TaskApprovalModal", () => {
 
     expect(html).toContain('placeholder="e.g. feat: add Microsoft login"');
     expect(html).not.toContain("Enter the squash commit message before merging locally.");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Merge Locally<\/button>/);
+    expect(markupButton(html, "Merge locally").disabled).toBe(true);
   });
 
   test("fails fast when direct-merge completion branch context is missing", () => {
@@ -676,13 +704,11 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain(
-      "Missing target branch for direct-merge completion. Refresh approval context and retry.",
-    );
-    expect(html).not.toContain("the target branch");
+    expect(html).toContain("Close and reopen Approve task to load the target branch.");
+    expect(html).not.toContain(">the target branch</span>");
     expect(html).not.toContain("Local merge ready");
-    expect(html).toMatch(/<button[^>]*>Finish Later<\/button>/);
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Mark Task Done<\/button>/);
+    expect(html).toMatch(/<button[^>]*>Finish later<\/button>/);
+    expect(markupButton(html, "Mark task done").disabled).toBe(true);
   });
 
   test("renders AI pull request copy for the forked builder workflow", () => {
@@ -695,14 +721,10 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).toContain("Generate With AI");
-    expect(html).toContain(
-      "Choose a Builder session to fork, then let Builder create or update the pull request automatically.",
-    );
-    expect(html).toContain(
-      "OpenDucktor asks you to choose a Builder session to fork. That session then creates or updates the pull request.",
-    );
-    expect(html).toContain("Start PR Generation");
+    expect(html).toContain("Ask Builder");
+    expect(html).toContain("Let Builder create or update the pull request.");
+    expect(html).toContain("Next, choose the Builder session to fork.");
+    expect(html).toContain("Choose Builder session");
     expect(html).not.toContain("generate the pull request title and description");
   });
 
@@ -744,7 +766,7 @@ describe("TaskApprovalModal", () => {
     expect(html).toContain(
       "Pull request unavailable: GitHub is not configured for this repository.",
     );
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create Pull Request<\/button>/);
+    expect(markupButton(html, "Create pull request").disabled).toBe(true);
   });
 
   test("hides pull request approval when the provider does not support it", () => {
@@ -754,7 +776,7 @@ describe("TaskApprovalModal", () => {
       }),
     );
 
-    expect(html).not.toContain("Open Pull Request");
-    expect(html).toContain("Direct Merge");
+    expect(html).not.toContain("Open Pull request");
+    expect(html).toContain("Direct merge");
   });
 });

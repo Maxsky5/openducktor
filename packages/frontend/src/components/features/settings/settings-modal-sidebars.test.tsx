@@ -30,8 +30,8 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("General");
     expect(html).toContain("Git");
     expect(html).toContain("Repositories");
-    expect(html).toContain("System Prompts");
-    expect(html).toContain("Reusable Prompts");
+    expect(html).toContain("System prompts");
+    expect(html).toContain("Reusable prompts");
     expect(html).toContain("Appearance");
     expect(html).toContain("Chat");
     expect(html).toContain("Notifications");
@@ -143,7 +143,7 @@ describe("settings modal sidebars", () => {
       }),
     );
 
-    expect(html).toContain("Reusable Prompts");
+    expect(html).toContain("Reusable prompts");
     expect(html).toContain("Kanban");
     expect(html).toContain("2");
   });

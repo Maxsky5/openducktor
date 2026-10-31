@@ -12,7 +12,7 @@ export function useTaskApprovalReads(model: TaskApprovalModalModel) {
     task: { id: model.taskId, title: model.taskTitle },
     enabled: true,
   });
-  const readsPending = useTaskCloseReadsPending(impact.close);
+  const readsPending = useTaskCloseReadsPending(impact.close, model.removeWorktree);
   const mergeCheck = useTaskApprovalMergeCheck(model.taskId);
   // A loader that shows stays at least 500 ms, so a fast read does not flash it.
   const isPreparing = useMinimumLoader(

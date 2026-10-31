@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactElement, ReactNode } from "react";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { Modal, Platform, ScrollView, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -9,10 +10,13 @@ import { IconButton } from "./icon-button";
 import { Text } from "./text";
 import { Touchable } from "./touchable";
 import { KEYBOARD_DISMISS_ON_DRAG } from "./keyboard-dismiss";
+import { ModalLoadingContent } from "./modal-loading-content";
 
 export type InPlaceSheetProps = PropsWithChildren<{
   visible: boolean;
   title: string;
+  /** Task identity or a short introduction that stays above the loading body. */
+  intro?: ReactNode;
   /** Closes the sheet. A sheet whose action runs passes `dismissible={false}` instead. */
   onClose: () => void;
   /** False while an action runs: the close control and the system back gesture then do nothing. */
@@ -32,6 +36,8 @@ export type InPlaceSheetProps = PropsWithChildren<{
   background?: "grouped" | "surface" | undefined;
   /** The sheet finished opening. Android opens the keyboard for a field only after this. */
   onShow?: (() => void) | undefined;
+  loading?: boolean | undefined;
+  loadingLabel?: string | undefined;
 }>;
 
 /**
@@ -43,6 +49,7 @@ export type InPlaceSheetProps = PropsWithChildren<{
 export function InPlaceSheet({
   visible,
   title,
+  intro,
   onClose,
   dismissible = true,
   footer,
@@ -51,9 +58,13 @@ export function InPlaceSheet({
   padded = true,
   background = "grouped",
   onShow,
+  loading = false,
+  loadingLabel,
   children,
 }: InPlaceSheetProps): ReactElement {
   const ios = Platform.OS === "ios";
+  const isLoading = useMinimumLoader(loading, visible);
+  const showCloseControl = closeControl || isLoading;
   // A closed sheet renders with its screen, so it picks plain style entries instead of a
   // stylesheet variant, which runs native code on each render.
   const backgroundStyle = background === "surface" ? styles.surface : styles.grouped;
@@ -85,7 +96,7 @@ export function InPlaceSheet({
               </Text>
               {ios ? (
                 <View style={[styles.headerSide, styles.headerEnd]}>
-                  {closeControl ? (
+                  {showCloseControl ? (
                     <Touchable
                       feedback="opacity"
                       onPress={onClose}
@@ -101,7 +112,7 @@ export function InPlaceSheet({
                   ) : null}
                 </View>
               ) : null}
-              {!ios && closeControl ? (
+              {!ios && showCloseControl ? (
                 <IconButton
                   icon="x"
                   variant="filled"
@@ -111,6 +122,7 @@ export function InPlaceSheet({
                 />
               ) : null}
             </View>
+            {intro ? <View style={styles.intro}>{intro}</View> : null}
             {/* An iOS page sheet starts below the screen top, so the view reads its screen position.
                 The body moves with a transform and changes its size once, so a list in it does not
                 lay out again on each keyboard frame. The clip keeps it under the sheet header. */}
@@ -120,19 +132,21 @@ export function InPlaceSheet({
                 automaticOffset
                 style={styles.body}
               >
-                {scrolls ? (
-                  <ScrollView
-                    style={styles.body}
-                    contentContainerStyle={[styles.content, padded && styles.padded]}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-                  >
-                    {children}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.body}>{children}</View>
-                )}
-                {footer ? <View style={[styles.footer, backgroundStyle]}>{footer}</View> : null}
+                <ModalLoadingContent loading={isLoading} label={loadingLabel}>
+                  {scrolls ? (
+                    <ScrollView
+                      style={styles.body}
+                      contentContainerStyle={[styles.content, padded && styles.padded]}
+                      keyboardShouldPersistTaps="handled"
+                      keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+                    >
+                      {children}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.body}>{children}</View>
+                  )}
+                  {footer ? <View style={[styles.footer, backgroundStyle]}>{footer}</View> : null}
+                </ModalLoadingContent>
               </KeyboardAvoidingView>
             </View>
           </SafeAreaView>
@@ -166,11 +180,17 @@ const styles = StyleSheet.create((theme) => ({
     default: { ...theme.type.title2, flex: 1, color: theme.colors.label },
   }),
   body: { flex: 1 },
+  intro: {
+    paddingHorizontal: theme.layout.screenPadding,
+    paddingBottom: theme.space.md,
+    gap: theme.space.xs,
+  },
   keyboardClip: { flex: 1, overflow: "hidden" },
   content: { paddingBottom: theme.space.xxxl, gap: theme.space.md },
   padded: { paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space.sm },
   footer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.space.sm,
     paddingHorizontal: theme.layout.screenPadding,
     paddingTop: theme.space.md,

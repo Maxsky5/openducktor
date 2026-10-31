@@ -67,19 +67,20 @@ test.each([false, true])(
         </ClientConnectionProvider>,
       );
       const chooser = within(view.baseElement).getByRole("dialog", { name: "Sync pull requests" });
-      const all = within(chooser).getByRole<HTMLButtonElement>("button", {
-        name: "Sync all open workspaces",
-      });
-      expect(all.disabled).toBe(true);
-      expect(within(all).getByText("Checking workspaces...")).toBeTruthy();
-      const named = within(chooser).getByRole<HTMLButtonElement>("button", {
-        name: "Sync workspace Workspace 0",
-      });
-      expect(named.disabled).toBe(false);
+      expect(within(chooser).getByRole("status")).toBeTruthy();
+      expect(
+        within(chooser).queryByRole("button", { name: "Sync all open workspaces" }),
+      ).toBeNull();
       await act(async () => {
         if (failed) read.reject(new Error("Provider settings could not be read. Reopen Settings."));
         else read.resolve(null);
         await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      const all = await within(chooser).findByRole<HTMLButtonElement>("button", {
+        name: "Sync all open workspaces",
+      });
+      const named = within(chooser).getByRole<HTMLButtonElement>("button", {
+        name: "Sync workspace Workspace 0",
       });
       expect(all.disabled).toBe(failed);
       if (failed) {
@@ -269,18 +270,20 @@ test.each([
         </ClientConnectionProvider>,
       );
       const chooser = within(view.baseElement).getByRole("dialog", { name: "Sync pull requests" });
-      const named = within(chooser).getByRole<HTMLButtonElement>("button", {
-        name: "Sync workspace Chosen workspace",
-      });
-      expect(named.disabled).toBe(true);
-      expect(within(chooser).getByText("Checking Git provider...")).toBeTruthy();
+      expect(within(chooser).getByRole("status")).toBeTruthy();
+      expect(
+        within(chooser).queryByRole("button", { name: "Sync workspace Chosen workspace" }),
+      ).toBeNull();
       await act(async () => {
         if (provider instanceof Error) read.reject(provider);
         else read.resolve(provider);
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
+      const named = await within(chooser).findByRole<HTMLButtonElement>("button", {
+        name: "Sync workspace Chosen workspace",
+      });
       expect(named.disabled).toBe(reason !== null);
-      expect(within(chooser).queryByText("Checking Git provider...")).toBeNull();
+      expect(within(chooser).queryByText("Loading Git provider…")).toBeNull();
       if (reason) {
         expect(within(chooser).getByText(reason, { exact: false })).toBeTruthy();
         fireEvent.click(named);

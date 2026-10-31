@@ -104,9 +104,10 @@ export function useDiffCommentFlow({
   const remove = useCallback(
     (comment: InlineCommentDraft) => {
       void confirm({
-        title: "Remove Comment?",
-        message: "The comment does not go with the next message.",
+        title: "Remove comment?",
+        message: "This removes the comment from your next message.",
         confirmLabel: "Remove",
+        icon: "trash-2",
         destructive: true,
       }).then((confirmed) => {
         if (confirmed) removeComment(comment.id);

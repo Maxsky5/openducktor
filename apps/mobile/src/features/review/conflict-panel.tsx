@@ -43,8 +43,9 @@ export function ConflictPanel({
     onAbort: () => {
       void confirm({
         title: copy.abortLabel,
-        message: `This stops the ${copy.operationLabel} and puts the branch back as it was before it.`,
+        message: `This cancels the ${copy.operationLabel} and restores the branch to its earlier state.`,
         confirmLabel: copy.abortLabel,
+        icon: "rotate-ccw",
         destructive: true,
       }).then((confirmed) => {
         if (confirmed) void actions.abort();
@@ -54,7 +55,8 @@ export function ConflictPanel({
       void confirm({
         title: `Ask the ${recipientLabel} to resolve the conflict?`,
         message: actions.askDescription,
-        confirmLabel: "Send Request",
+        confirmLabel: "Send request",
+        icon: "send",
       }).then((confirmed) => {
         if (confirmed) void actions.askAgent();
       });

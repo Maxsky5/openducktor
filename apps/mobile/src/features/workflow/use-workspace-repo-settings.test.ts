@@ -1,6 +1,7 @@
 import "@openducktor/frontend-core/test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import type { GitBranch } from "@openducktor/contracts";
+import { repoConfigSchema, type GitBranch, type RepoConfig } from "@openducktor/contracts";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createWorkspaceRecordFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -11,6 +12,73 @@ import { useWorkspaceRepoSettings } from "./use-workspace-repo-settings";
 const main: GitBranch = { name: "main", isCurrent: true, isRemote: false };
 
 describe("useWorkspaceRepoSettings", () => {
+  test("uses cached settings immediately while the current read runs", async () => {
+    const refresh = Promise.withResolvers<RepoConfig>();
+    const snapshot = repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      branchPrefix: "odt",
+    });
+    const connection = createTestClientConnection({
+      client: { workspaceGetRepoConfig: async () => refresh.promise },
+    });
+    connection.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, snapshot);
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(ClientConnectionProvider, { connection }, children);
+    const workspace = createWorkspaceRecordFixture({ workspaceId: "repo", repoPath: "/repo" });
+    const ready: boolean[] = [];
+    const view = renderHook(
+      () => {
+        const state = useWorkspaceRepoSettings(workspace);
+        ready.push(state.repoSettingsReady);
+        return state;
+      },
+      { wrapper },
+    );
+    try {
+      expect(view.result.current.repoSettings?.branchPrefix).toBe("odt");
+      expect(ready).not.toContain(false);
+      await act(async () => refresh.reject(new Error("Settings refresh failed")));
+      await waitFor(() =>
+        expect(view.result.current.repoSettingsRefreshError?.message).toBe(
+          "Settings refresh failed",
+        ),
+      );
+      expect(view.result.current.repoSettingsError).toBeNull();
+      expect(view.result.current.repoSettings?.branchPrefix).toBe("odt");
+      expect(ready).not.toContain(false);
+    } finally {
+      refresh.resolve(snapshot);
+      view.unmount();
+      await connection.dispose();
+    }
+  });
+
+  test("waits for missing settings, then opens the form after preparation", async () => {
+    const read = Promise.withResolvers<RepoConfig>();
+    const connection = createTestClientConnection({
+      client: { workspaceGetRepoConfig: () => read.promise },
+    });
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(ClientConnectionProvider, { connection }, children);
+    const workspace = createWorkspaceRecordFixture({ workspaceId: "repo", repoPath: "/repo" });
+    const view = renderHook(() => useWorkspaceRepoSettings(workspace), { wrapper });
+    try {
+      expect(view.result.current.repoSettingsReady).toBe(false);
+      await act(async () =>
+        read.resolve(
+          repoConfigSchema.parse({ workspaceId: "repo", workspaceName: "Repo", repoPath: "/repo" }),
+        ),
+      );
+      await waitFor(() => expect(view.result.current.repoSettingsReady).toBe(true));
+      expect(view.result.current.repoSettings).not.toBeNull();
+    } finally {
+      view.unmount();
+      await connection.dispose();
+    }
+  });
+
   test("reports a failed branch read and reads the branches again on retry", async () => {
     let reads = 0;
     const connection = createTestClientConnection({

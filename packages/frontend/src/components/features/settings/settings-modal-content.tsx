@@ -1,5 +1,7 @@
 import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
 import type { ReactElement } from "react";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SettingsRemoteAccessSection } from "./settings-remote-access-section";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
@@ -84,10 +86,17 @@ export function SettingsModalContent({
     updateGlobalPromptOverrides,
   } = controller;
 
-  if (settingsError) {
+  if (settingsError && !snapshotDraft) {
     return (
-      <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+      <div
+        role="alert"
+        className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+      >
         Failed to load settings: {settingsError}
+        <Button variant="outline" onClick={controller.retrySettings}>
+          <RefreshCw data-icon="inline-start" />
+          Retry settings
+        </Button>
       </div>
     );
   }
@@ -124,8 +133,8 @@ export function SettingsModalContent({
   if (section === "prompts") {
     return (
       <PromptOverridesSection
-        title="Global Prompt Overrides"
-        description="Global overrides apply to every repository unless a repository-specific enabled override exists for the same prompt."
+        title="Global prompt overrides"
+        description="These prompts apply to every repository. An enabled repository override takes priority."
         tab={globalPromptRoleTab}
         errorCountsByTab={globalPromptRoleTabErrorCounts}
         overrides={snapshotDraft.globalPromptOverrides}

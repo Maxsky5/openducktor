@@ -294,7 +294,7 @@ describe("SessionCreateSplitAction", () => {
         await screen.findByRole("button", { name: /Import tasks from GitHub Issues/ }),
       );
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-      fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
 
       await waitFor(() => expect(success).toHaveBeenCalledWith("1 Task created"));

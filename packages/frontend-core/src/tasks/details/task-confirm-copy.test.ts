@@ -3,10 +3,8 @@ import {
   buildTaskDeleteConfirmCopy,
   buildTaskResetConfirmCopy,
   buildTaskResetImplementationConfirmCopy,
-  type TaskConfirmCopy,
   type TaskResetImplementationCopyInput,
   taskResetImplementationConfirmState,
-  taskStopImpactLine,
 } from "./task-confirm-copy";
 import type { TaskConfirmImpact } from "./task-confirm-dialog-types";
 
@@ -22,141 +20,81 @@ const impact = (overrides: Partial<TaskConfirmImpact> = {}): TaskConfirmImpact =
   ...overrides,
 });
 
-const texts = (copy: TaskConfirmCopy): string[] => copy.lines.map((line) => line.text);
-
-describe("taskStopImpactLine", () => {
-  test("names a failed stop preview as an error line", () => {
-    expect(taskStopImpactLine(null, "host unavailable", "close")).toEqual({
-      text: "Unable to check how many active sessions will be stopped: host unavailable",
-      emphasis: false,
-      error: true,
-    });
-  });
-
-  test("states the active sessions that stop, and nothing when none stop", () => {
-    expect(taskStopImpactLine(2, null, "delete")?.text).toBe(
-      "2 active agent sessions will be stopped before deletion.",
-    );
-    expect(taskStopImpactLine(0, null, "delete")).toBeNull();
-    expect(taskStopImpactLine(null, null, "delete")).toBeNull();
-  });
+test("reset separates the kept task from removed work and names worktree loss", () => {
+  const copy = buildTaskResetConfirmCopy(
+    { id: "ODT-2", title: "Fix login" },
+    impact({
+      terminalCount: 2,
+      activeSessionCount: 1,
+      hasManagedSessionCleanup: true,
+      managedWorktreeCount: 1,
+    }),
+  );
+  expect(copy.subject).toEqual({ id: "ODT-2", title: "Fix login" });
+  expect(copy.description).toContain("Backlog");
+  expect(copy.changes).toContain("Delete 1 linked worktree and related local branches");
+  expect(copy.changes).toContain("Stop 1 running agent session");
+  expect(copy.changes).toContain("Close 2 terminals");
+  expect(copy.kept).toEqual(["Task title, description and labels"]);
+  expect(copy.warning).toContain("Uncommitted work");
+  expect(copy.confirmLabel.idle).toBe("Reset task");
 });
 
-describe("buildTaskResetConfirmCopy", () => {
-  test("states what Reset Task clears and keeps", () => {
-    const copy = buildTaskResetConfirmCopy(
-      { id: "ODT-2", title: "Fix login" },
-      impact({ terminalCount: 2, hasManagedSessionCleanup: true, managedWorktreeCount: 1 }),
-    );
-    expect(copy.title).toBe("Reset Task");
-    expect(copy.description).toBe(
-      "Reset “Fix login” (ODT-2) back to Backlog? This permanently clears all task artifacts.",
-    );
-    expect(copy.tone).toBe("destructive");
-    expect(texts(copy)).toEqual([
-      "This action moves the task back to Backlog and keeps the task record itself.",
-      "All workflow and free artifacts will be removed.",
-      "Linked spec, planner, builder, and QA sessions will be removed.",
-      "Linked pull request and direct-merge metadata will be cleared.",
-      "2 associated terminals will be terminated before the task resets.",
-      "1 linked task worktree and its related local branch will also be deleted. Any uncommitted changes in that worktree will be lost.",
-    ]);
-    expect(copy.confirmLabel.idle).toBe("Reset task");
-  });
+test("delete does not invent worktree loss when the read found no worktree", () => {
+  const copy = buildTaskDeleteConfirmCopy({ id: "ODT-3", title: null }, impact());
+  expect(copy.subject.id).toBe("ODT-3");
+  expect(copy.kept).toEqual([]);
+  expect(copy.changes.some((change) => change.includes("worktree"))).toBe(false);
+  expect(copy.warning).toBe("This cannot be undone.");
 });
 
-describe("buildTaskDeleteConfirmCopy", () => {
-  test("names the task in the description", () => {
-    const copy = buildTaskDeleteConfirmCopy({ id: "ODT-3", title: "Login" }, impact());
-    expect(copy.description).toBe("Delete “Login” (ODT-3)? This cannot be undone.");
-    expect(texts(copy)).toEqual([
-      "This action permanently removes the task and all its workflow and free artifacts.",
-    ]);
-  });
-
-  test("names the cleanup impact of the task", () => {
-    const copy = buildTaskDeleteConfirmCopy(
-      { id: "ODT-4", title: null },
-      impact({ terminalCount: 1, activeSessionCountError: "boom", isLoading: true }),
-    );
-    expect(copy.description).toBe("Delete ODT-4? This cannot be undone.");
-    expect(copy.descriptionSegments).toEqual([
-      { text: "Delete ODT-4? This cannot be undone.", emphasis: false },
-    ]);
-    expect(texts(copy)).toEqual([
-      "This action permanently removes the task and all its workflow and free artifacts.",
-      "1 associated terminal will be terminated before deletion.",
-      "Unable to check how many active sessions will be stopped: boom",
-      "Checking linked task worktree cleanup impact before deletion.",
-    ]);
-    expect(copy.lines[2]?.error).toBe(true);
-    expect(copy.confirmLabel).toEqual({
-      idle: "Delete",
-      pending: "Deleting...",
-      checking: "Checking...",
-    });
-  });
+test("failed impact reads keep their errors and do not claim that cleanup is known", () => {
+  const copy = buildTaskDeleteConfirmCopy(
+    { id: "ODT-4", title: null },
+    impact({ activeSessionCountError: "host unavailable", error: "Could not read worktree." }),
+  );
+  expect(copy.errors).toEqual([
+    "Could not check running sessions: host unavailable",
+    "Could not read worktree.",
+  ]);
+  expect(copy.changes).toContain("Remove linked worktrees and local branches, if present");
+  expect(copy.warning).toContain("Uncommitted work");
 });
 
-describe("buildTaskResetImplementationConfirmCopy", () => {
-  const input = (
-    overrides: Partial<TaskResetImplementationCopyInput> = {},
-  ): TaskResetImplementationCopyInput => ({
-    taskId: "ODT-5",
-    taskTitle: "Fix login",
-    targetStatusLabel: "Ready for Dev",
-    activeSessionCount: 0,
-    activeSessionCountError: null,
-    isLoadingImpact: false,
-    hasCanonicalWorktree: false,
-    hasManagedSessionCleanup: false,
-    managedWorktreeCount: 0,
-    legacyWorktreeCount: 0,
-    terminalCount: 0,
-    impactError: null,
-    ...overrides,
-  });
+const implementation = (
+  overrides: Partial<TaskResetImplementationCopyInput> = {},
+): TaskResetImplementationCopyInput => ({
+  taskId: "ODT-5",
+  taskTitle: "Fix login",
+  targetStatusLabel: "Ready for Dev",
+  activeSessionCount: 0,
+  activeSessionCountError: null,
+  hasCanonicalWorktree: false,
+  legacyWorktreeCount: 0,
+  terminalCount: 0,
+  impactError: null,
+  ...overrides,
+});
 
-  test("names the task and the target status in the description", () => {
-    const copy = buildTaskResetImplementationConfirmCopy(input());
-    expect(copy.description).toBe(
-      "Reset the current implementation for Fix login. Builder and QA progress for this task will be discarded and the task will move back to Ready for Dev.",
-    );
-    expect(
-      copy.descriptionSegments.filter((segment) => segment.emphasis).map((segment) => segment.text),
-    ).toEqual(["Fix login", "Ready for Dev"]);
-  });
+test("implementation reset names its target and preserves the current checkout and ignored files", () => {
+  const copy = buildTaskResetImplementationConfirmCopy(
+    implementation({ hasCanonicalWorktree: true, legacyWorktreeCount: 2 }),
+  );
+  expect(copy.description).toContain("Ready for Dev");
+  expect(copy.kept).toContain("Current worktree, its branch and ignored files");
+  expect(copy.kept).toContain("Spec, plan and artifacts you added");
+  expect(copy.changes).toContain("Delete 2 older worktrees and related local branches");
+  expect(copy.changes).toContain(
+    "Reset tracked files to the latest local base commit and delete untracked files",
+  );
+  expect(copy.warning).toContain("Uncommitted and untracked work");
+});
 
-  test("states what the host keeps and removes for a canonical worktree", () => {
-    const copy = buildTaskResetImplementationConfirmCopy(
-      input({ hasCanonicalWorktree: true, legacyWorktreeCount: 2, terminalCount: 1 }),
-    );
-    expect(texts(copy)).toEqual([
-      "This action removes Builder and QA session history for this task.",
-      "The canonical task worktree and branch are retained. Tracked content is reset to the latest locally available base, ordinary untracked files are removed, and ignored files are preserved.",
-      "2 legacy implementation worktrees and their related local branches will be deleted. Any uncommitted changes in those worktrees will be lost.",
-      "Other related local task branches will be deleted if present.",
-      "1 associated terminal will be terminated before the implementation resets.",
-      "QA report artifacts and linked pull request metadata will be cleared. Specification, Implementation Plan, and free artifacts are kept.",
-      "Specs and implementation plans are kept. The task status will move back to Ready for Dev.",
-    ]);
-    expect(copy.confirmLabel).toEqual({
-      idle: "Reset implementation",
-      pending: "Resetting implementation…",
-      checking: "Checking impact…",
-    });
-  });
-
-  test("names related branches without a canonical worktree", () => {
-    const copy = buildTaskResetImplementationConfirmCopy(
-      input({ legacyWorktreeCount: 1, activeSessionCount: 1 }),
-    );
-    expect(texts(copy).slice(1, 4)).toEqual([
-      "1 active agent session will be stopped before the reset.",
-      "1 legacy implementation worktree and its related local branch will be deleted. Any uncommitted changes in that worktree will be lost.",
-      "Related local task branches will be deleted if present.",
-    ]);
-  });
+test("implementation reset does not claim a checkout stays when none exists", () => {
+  const copy = buildTaskResetImplementationConfirmCopy(implementation());
+  expect(copy.kept).toEqual(["Spec, plan and artifacts you added"]);
+  expect(copy.changes).toContain("Remove related local branches");
+  expect(copy.warning).not.toContain("untracked");
 });
 
 describe("taskResetImplementationConfirmState", () => {

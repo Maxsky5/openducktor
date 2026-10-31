@@ -11,9 +11,10 @@ import { closeTerminalTab } from "./terminal-close";
 /** Asks before a close stops a running process tree. The texts match the desktop dialog. */
 const confirmTerminalTerminate = (confirm: Confirm, label: string): Promise<boolean> =>
   confirm({
-    title: `Terminate and close ${label}?`,
-    message: "This stops the running process tree. This action cannot be undone.",
-    confirmLabel: "Terminate and close",
+    title: `Stop and close ${label}?`,
+    message: "Stops the terminal and the processes it started. Unfinished work may be lost.",
+    confirmLabel: "Stop and close",
+    icon: "square",
     destructive: true,
   });
 

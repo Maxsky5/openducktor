@@ -1,6 +1,9 @@
-import { useLayoutEffect, useRef, type ReactElement } from "react";
+import { useLayoutEffect, useMemo, useRef, type ReactElement } from "react";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
+import { DialogLoadingContext } from "@/components/ui/dialog-loading-context";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -27,14 +30,10 @@ type AgentSessionTranscriptDialogProps = {
   onFileSaved: (repoPath: string, taskId: string) => void;
 };
 
-type AgentSessionTranscriptDialogContentProps = {
-  preview: UseTaskExecutionFilePreviewControllerResult;
-  workspaceRepoPath: string | null;
-  target: AgentSessionTranscriptTarget;
-  title: string;
-  description: string;
-  onFileSaved: (repoPath: string, taskId: string) => void;
-};
+type TranscriptContentProps = Omit<
+  AgentSessionTranscriptDialogProps,
+  "open" | "onOpenChange" | "target"
+> & { target: AgentSessionTranscriptTarget };
 
 export function AgentSessionTranscriptDialog({
   preview,
@@ -57,7 +56,7 @@ export function AgentSessionTranscriptDialog({
         }}
       >
         {target ? (
-          <AgentSessionTranscriptDialogContent
+          <TranscriptContent
             preview={preview}
             workspaceRepoPath={workspaceRepoPath}
             target={target}
@@ -66,45 +65,28 @@ export function AgentSessionTranscriptDialog({
             onFileSaved={onFileSaved}
           />
         ) : (
-          <AgentSessionTranscriptDialogLoading title={title} description={description} />
+          <TranscriptHeader title={title} description={description} />
         )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function AgentSessionTranscriptDialogLoading({
-  title,
-  description,
-}: Pick<AgentSessionTranscriptDialogContentProps, "title" | "description">): ReactElement {
-  return (
-    <>
-      <DialogHeader className="border-b border-border bg-card px-6 py-4">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-background p-6">
-        <output className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
-          Opening conversation…
-        </output>
-      </div>
-    </>
-  );
-}
-
-function AgentSessionTranscriptDialogContent({
+function TranscriptContent({
   preview,
   workspaceRepoPath,
   target,
   title,
   description,
   onFileSaved,
-}: AgentSessionTranscriptDialogContentProps): ReactElement {
-  const { model } = useSessionTranscriptSurfaceModel({
+}: TranscriptContentProps): ReactElement {
+  const { model, isPreparing } = useSessionTranscriptSurfaceModel({
     isOpen: true,
     workspaceRepoPath,
     target,
   });
+  const loading = useMinimumLoader(isPreparing);
+  const preparation = useMemo(() => ({ loading, label: "Loading transcript…" }), [loading]);
   const linkRef = useRef<HTMLElement | null>(null);
   const hasPreview = preview.model.selectedFile !== null;
   useLayoutEffect(() => {
@@ -120,47 +102,61 @@ function AgentSessionTranscriptDialogContent({
 
   return (
     <>
-      <DialogHeader className="border-b border-border bg-card px-6 py-4">
-        <DialogTitle>{resolvedTitle}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
+      <TranscriptHeader title={resolvedTitle} description={description} />
 
-      <div className="relative min-h-0 flex-1">
-        <div
-          className="h-full min-h-0 bg-background"
-          style={{ visibility: hasPreview ? "hidden" : undefined }}
-          inert={hasPreview}
-        >
-          <ChatFileLinkProvider
-            owner={{
-              repoPath: workspaceRepoPath,
-              taskId: target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
-              workingDirectory: target.workingDirectory,
-              ownerKey: agentSessionIdentityKey(target),
-              onSelectFile: (file, trigger) => {
-                linkRef.current = trigger;
-                preview.onSelectFile(file);
-              },
-            }}
-          >
-            <AgentChatSurface model={model} />
-          </ChatFileLinkProvider>
-        </div>
-        {hasPreview ? (
-          <DiffWorkerProvider>
-            <div className="absolute inset-0 min-h-0 bg-background">
-              <TaskExecutionSelectedFilePreview
-                key={preview.model.previewSessionKey}
-                model={preview.model}
-                onFileSaved={() => {
-                  if (workspaceRepoPath && target.sessionScope?.kind === "workflow")
-                    onFileSaved(workspaceRepoPath, target.sessionScope.taskId);
+      <DialogLoadingContext value={preparation}>
+        <DialogBody className="relative flex min-h-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1">
+            <div
+              className="h-full min-h-0 bg-background"
+              style={{ visibility: hasPreview ? "hidden" : undefined }}
+              inert={hasPreview}
+            >
+              <ChatFileLinkProvider
+                owner={{
+                  repoPath: workspaceRepoPath,
+                  taskId:
+                    target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
+                  workingDirectory: target.workingDirectory,
+                  ownerKey: agentSessionIdentityKey(target),
+                  onSelectFile: (file, trigger) => {
+                    linkRef.current = trigger;
+                    preview.onSelectFile(file);
+                  },
                 }}
-              />
+              >
+                <AgentChatSurface model={model} />
+              </ChatFileLinkProvider>
             </div>
-          </DiffWorkerProvider>
-        ) : null}
-      </div>
+            {hasPreview ? (
+              <DiffWorkerProvider>
+                <div className="absolute inset-0 min-h-0 bg-background">
+                  <TaskExecutionSelectedFilePreview
+                    key={preview.model.previewSessionKey}
+                    model={preview.model}
+                    onFileSaved={() => {
+                      if (workspaceRepoPath && target.sessionScope?.kind === "workflow")
+                        onFileSaved(workspaceRepoPath, target.sessionScope.taskId);
+                    }}
+                  />
+                </div>
+              </DiffWorkerProvider>
+            ) : null}
+          </div>
+        </DialogBody>
+      </DialogLoadingContext>
     </>
+  );
+}
+
+function TranscriptHeader({
+  title,
+  description,
+}: Pick<TranscriptContentProps, "title" | "description">): ReactElement {
+  return (
+    <DialogHeader className="border-b border-border bg-card px-6 py-4">
+      <DialogTitle>{title}</DialogTitle>
+      <DialogDescription>{description}</DialogDescription>
+    </DialogHeader>
   );
 }

@@ -1,6 +1,10 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import {
@@ -80,6 +84,30 @@ const renderCreateModel = (
 };
 
 describe("useWorkspaceSessionCreateModel", () => {
+  test.each([null, { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }] as const)(
+    "shows ready model choices while another runtime loads with default %j",
+    async (defaultSelection) => {
+      const connection = createTestClientConnection();
+      connection.queryClient.setQueryData(
+        runtimeCatalogQueryKeys.catalog(runtimeRef),
+        createRuntimeCatalogFixture({ models: catalog }),
+      );
+      const other = createDeferred<AgentRuntimeCatalog>();
+      const definitions = definitionsWith(async () => other.promise);
+      definitions.availableRuntimeDefinitions.push(CODEX_RUNTIME_DESCRIPTOR);
+      const harness = renderCreateModel(definitions, defaultSelection, connection);
+      try {
+        await harness.mount();
+        expect(harness.getLatest().runtimes[0]?.resource.status).toBe("ready");
+        expect(harness.getLatest().resources[1]?.isLoading).toBe(true);
+        expect(harness.getLatest().isLoading).toBe(false);
+      } finally {
+        other.resolve(createRuntimeCatalogFixture({ models: catalog }));
+        await harness.unmount();
+      }
+    },
+  );
+
   test("allows a model choice while a stale catalog refreshes", async () => {
     const runtimeCatalog = createRuntimeCatalogFixture({ models: catalog });
     const connection = createTestClientConnection();
@@ -116,12 +144,15 @@ describe("useWorkspaceSessionCreateModel", () => {
 
   test("starts from the repository Default Model when its catalog is ready", async () => {
     const runtimeCatalog = createRuntimeCatalogFixture({ models: catalog });
+    const pending = createDeferred<AgentRuntimeCatalog>();
     const harness = renderCreateModel(
-      definitionsWith(async () => runtimeCatalog),
+      definitionsWith(async () => pending.promise),
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     );
     try {
       await harness.mount();
+      expect(harness.getLatest().isLoading).toBe(true);
+      await harness.run(() => pending.resolve(runtimeCatalog));
       await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
       expect(harness.getLatest().selection).toEqual({
         runtimeKind: "opencode",

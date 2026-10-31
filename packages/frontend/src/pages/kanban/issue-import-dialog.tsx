@@ -1,6 +1,6 @@
 import type { RepositoryGitProviderContext, SourceIssue } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, ListChecks, Loader2 } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
@@ -125,6 +125,14 @@ function IssueImportDialogSession({
       }}
     >
       <DialogContent
+        loading={
+          !unavailable &&
+          !isSubmitting &&
+          query.isPending &&
+          searchText.length === 0 &&
+          pageIndex === 0
+        }
+        loadingLabel="Loading items to import…"
         onCloseAutoFocus={onCloseAutoFocus}
         className="my-0 gap-0 p-0 sm:max-w-3xl"
         closeButton={isSubmitting || refreshingId !== null ? null : undefined}
@@ -251,6 +259,7 @@ function IssueImportFooter({
       ) : null}
       {step === "select" ? (
         <Button type="button" className="ml-auto" disabled={pendingCount === 0} onClick={onReview}>
+          <ListChecks data-icon="inline-start" />
           {ISSUE_IMPORT_LABELS.reviewTasks}
         </Button>
       ) : (
@@ -260,7 +269,11 @@ function IssueImportFooter({
           disabled={busy !== null || pendingCount === 0}
           onClick={() => void importItems()}
         >
-          {busy === "import" ? <Loader2 className="size-4 animate-spin" /> : null}
+          {busy === "import" ? (
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <Download data-icon="inline-start" />
+          )}
           {busy === "import" ? ISSUE_IMPORT_LABELS.importing : ISSUE_IMPORT_LABELS.importSelected}
         </Button>
       )}

@@ -1,10 +1,12 @@
 import { Stack, useRouter } from "expo-router";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 import { IconButton } from "@/ui/icon-button";
 import { Text } from "@/ui/text";
+import { ModalLoadingContent } from "@/ui/modal-loading-content";
 import { useBlockBack } from "./use-block-back";
 
 /**
@@ -16,6 +18,7 @@ export function SheetFrame({
   title,
   subtitle,
   closable = true,
+  loading = false,
   children,
 }: PropsWithChildren<{
   title: string;
@@ -25,8 +28,10 @@ export function SheetFrame({
    * close the sheet, and its result stays in view.
    */
   closable?: boolean | undefined;
+  loading?: boolean | undefined;
 }>): ReactElement {
   const router = useRouter();
+  const isLoading = useMinimumLoader(loading);
   const insets = useSafeAreaInsets();
   // A new options object renders the whole navigator again, so it changes only with `closable`.
   const options = useMemo(() => ({ gestureEnabled: closable }), [closable]);
@@ -55,12 +60,15 @@ export function SheetFrame({
           onPress={() => router.back()}
         />
       </View>
-      {children}
+      <ModalLoadingContent loading={isLoading} style={styles.content}>
+        {children}
+      </ModalLoadingContent>
     </View>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
+  content: { flex: 0 },
   root: {
     gap: theme.space.xl,
     paddingHorizontal: theme.space.xl,

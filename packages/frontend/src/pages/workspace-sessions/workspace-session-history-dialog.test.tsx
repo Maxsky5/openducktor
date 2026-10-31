@@ -30,6 +30,57 @@ const archivedRecord = (index: number): WorkspaceSession => ({
 });
 
 describe("Workspace Session archive refresh", () => {
+  test.each([0, 1, "removed worktree"] as const)(
+    "shows cached chats while optional restore settings load, records=%s",
+    async (records) => {
+      const config = Promise.withResolvers<ReturnType<typeof repoConfigSchema.parse>>();
+      const branches = Promise.withResolvers<[]>();
+      const connection = createTestClientConnection({
+        client: {
+          workspaceGetRepoConfig: () => config.promise,
+          gitGetBranches: () => branches.promise,
+        },
+      });
+      const count = records === "removed worktree" ? 1 : records;
+      connection.queryClient.setQueryData(
+        workspaceSessionQueryKeys.list("repo", true),
+        Array.from({ length: count }, (_, i): WorkspaceSession => ({
+          ...archivedRecord(i + 1),
+          ...(records === "removed worktree" && {
+            executionTarget: {
+              kind: "local_worktree",
+              workingDirectory: "/worktrees/archived",
+              branchName: "archived",
+              worktreeState: "removed",
+            },
+          }),
+        })),
+      );
+      const view = render(
+        <ClientConnectionProvider connection={connection}>
+          <WorkspaceSessionHistoryDialog workspaceId="repo" repoPath="/repo" onClose={() => {}} />
+        </ClientConnectionProvider>,
+      );
+      try {
+        expect(view.getByRole("dialog").hasAttribute("aria-busy")).toBe(false);
+        expect(view.getByRole("searchbox")).toBeDefined();
+        if (count) expect(view.getByRole("button", { name: "Restore Chat 1" })).toBeDefined();
+      } finally {
+        branches.resolve([]);
+        config.resolve(
+          repoConfigSchema.parse({
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            branchPrefix: "odt",
+          }),
+        );
+        view.unmount();
+        await connection.dispose();
+      }
+    },
+  );
+
   // This full render flow loads 100 archive rows and waits for two restores and list refreshes.
   test("refills the bounded archive after each restore without invalidating other lists", async () => {
     const client = createClientQueryClient();

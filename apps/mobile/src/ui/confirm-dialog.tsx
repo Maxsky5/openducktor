@@ -15,12 +15,14 @@ import { ModalFeedbackHost } from "@/feedback/feedback-host";
 import { sansWeight } from "@/theme/tokens";
 import { Button } from "./button";
 import { createQuestionSlot } from "./confirm-question";
+import type { IconName } from "./icon";
 import { Text } from "./text";
 
 type ConfirmOptions = {
   title: string;
   message: string;
   confirmLabel: string;
+  icon: IconName;
   /** The label of the choice that keeps things as they are. */
   cancelLabel?: string | undefined;
   destructive?: boolean | undefined;
@@ -133,6 +135,7 @@ function ConfirmDialog({
           <View style={styles.action}>
             <Button
               label={question.confirmLabel}
+              icon={question.icon}
               variant={question.destructive ? "destructive" : "filled"}
               onPress={() => onAnswer(true)}
               fill

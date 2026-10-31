@@ -108,6 +108,7 @@ const worktreeRecord = (id: string): WorkspaceSession => ({
   },
 });
 
+// Cancel and reopen each show a 500 ms loader.
 test.each([
   [true, "primary"],
   [false, "menu"],
@@ -136,11 +137,12 @@ test.each([
       const trigger = await openArchive(view, "Second", entry);
       expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
       expect(requests).toEqual([]);
-      fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(await view.findByRole("button", { name: "Cancel" }));
       expect(view.queryByRole("dialog")).toBeNull();
       await waitFor(() => expect(document.activeElement === trigger).toBe(true));
       expect(requests).toEqual([]);
       await openArchive(view, "Second", entry);
+      await view.findByRole("button", { name: "Archive chat" });
       await view.findByText(/This worktree has local changes/, {}, { timeout: 800 });
       await act(async () => {
         view.store.replaceSession(
@@ -162,7 +164,7 @@ test.each([
       ).toBeTruthy();
       expect(view.getByRole("switch").getAttribute("aria-checked")).toBe("true");
       if (!removeWorktree) fireEvent.click(view.getByRole("switch"));
-      const submit = view.getByRole("button", { name: "Archive chat" });
+      const submit = await view.findByRole("button", { name: "Archive chat" });
       await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
       fireEvent.click(submit);
       await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
@@ -726,7 +728,7 @@ test("an archive started before Back updates its workspace while the next worksp
     await view.findByRole("heading", { name: "First" });
     const back = view.getByRole("button", { name: "Back" });
     await openArchive(view, "First", "primary");
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
     await view.findByRole("button", { name: "Archiving…" });
     expect(requests).toHaveLength(1);
     expect(requests[0]?.workspaceId).toBe(first.workspaceId);
@@ -1619,7 +1621,7 @@ test("keeps a missing session URL as unavailable and clears it after the final a
     );
     await openArchive(view, "First");
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+      fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
     });
     await view.findByText("No active sessions.", {}, { timeout: 800 });
     await waitFor(
@@ -1687,7 +1689,7 @@ test("a worktree archive keeps confirmation pending until the host succeeds", as
     await openArchive(view, "Second");
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
     expect(view.getByRole("button", { name: "Session actions", hidden: true })).toBeTruthy();
-    const submit = view.getByRole("button", { name: "Archive chat" });
+    const submit = await view.findByRole("button", { name: "Archive chat" });
     await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
     fireEvent.click(submit);
     await waitFor(() => expect(requests.length === 1).toBe(true), { timeout: 800 });
@@ -1745,9 +1747,9 @@ test("a failed direct archive does not show its error in the next worktree dialo
   const view = renderSessions(hostClient);
   try {
     await openArchive(view, "First");
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
     await view.findByText("Stop failed: runtime disconnected", {}, { timeout: 800 });
-    fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(await view.findByRole("button", { name: "Cancel" }));
     await openArchive(view, "Second");
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
     expect(view.queryByRole("alert")).toBeNull();
@@ -1759,7 +1761,7 @@ test("a failed direct archive does not show its error in the next worktree dialo
         removeWorktree: false,
       },
     ]);
-    const submit = view.getByRole("button", { name: "Archive chat" });
+    const submit = await view.findByRole("button", { name: "Archive chat" });
     await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
     fireEvent.click(submit);
     await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
@@ -1807,7 +1809,7 @@ test("running archive needs confirmation and keeps the session when Stop fails",
     await openArchive(view, "Second");
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
     expect(requests).toHaveLength(0);
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
     await view.findByText("Stop failed: runtime disconnected", {}, { timeout: 800 });
     expect(view.getByRole("button", { name: "Archive chat" }).hasAttribute("disabled")).toBe(false);
     expect(requests).toEqual([
@@ -1847,7 +1849,7 @@ test("failed selected-chat archive keeps the dirty draft", async () => {
     await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
     fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
     await openArchive(view, "First");
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
     expect(view.getByTestId("draft").textContent).toBe("draft.ts");
     fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
     await waitFor(() => expect(rejectArchive).toBeDefined());
@@ -1893,7 +1895,7 @@ test.each([true, false])(
       fireEvent.click(view.getByRole("button", { name: "Edit draft" }));
       expect(view.getByTestId("draft").textContent).toBe("draft.ts");
       await openArchive(view, "First");
-      fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+      fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
       expect(view.getByTestId("draft").textContent).toBe("draft.ts");
       fireEvent.click(view.getByRole("button", { name: "Discard draft" }));
       expect(view.getByRole("heading", { name: "First", level: 2, hidden: true })).toBeTruthy();
@@ -1944,7 +1946,7 @@ test("an archive in flight disables repeat actions until the host succeeds", asy
   try {
     await openArchive(view, "Second");
     expect(calls).toBe(0);
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Archive chat" }));
     const pending = await view.findByRole("button", { name: "Archiving…" });
     expect(pending.hasAttribute("disabled")).toBe(true);
     expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(true);

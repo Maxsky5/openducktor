@@ -76,9 +76,9 @@ export function RepositoryConfigurationSection({
     isSaving ||
     isLoadingSelectedRepoBranches ||
     defaultTargetBranchOptions.length === 0;
-  let defaultTargetBranchPlaceholder = "Select branch...";
+  let defaultTargetBranchPlaceholder = "Select a branch";
   if (isLoadingSelectedRepoBranches) {
-    defaultTargetBranchPlaceholder = "Loading branches...";
+    defaultTargetBranchPlaceholder = "Loading branches…";
   } else if (selectedRepoBranchesError) {
     defaultTargetBranchPlaceholder = "Branches unavailable";
   }
@@ -126,9 +126,9 @@ export function RepositoryConfigurationSection({
         <FolderPickerDialog
           open={isFolderPickerOpen}
           onOpenChange={setIsFolderPickerOpen}
-          title="Select Worktree Base Path"
+          title="Choose a worktree folder"
           description="Choose the directory where OpenDucktor should create managed worktrees for this repository."
-          confirmLabel="Use This Path"
+          confirmLabel="Use this folder"
           {...(folderPickerInitialPath
             ? {
                 initialPath: folderPickerInitialPath,
@@ -147,9 +147,9 @@ export function RepositoryConfigurationSection({
         <FolderPickerDialog
           open={isRepoPathPickerOpen}
           onOpenChange={setIsRepoPathPickerOpen}
-          title="Rebind Repository Path"
-          description="Choose the current repository folder for this workspace. The workspace ID stays the same while the live repository path changes."
-          confirmLabel="Use This Repository"
+          title="Change repository folder"
+          description="Choose this workspace's repository folder. Its ID stays the same."
+          confirmLabel="Use this repository"
           initialPath={selectedRepoConfig.repoPath}
           requireGitRepo
           onConfirm={async (path) => {
@@ -180,8 +180,7 @@ function RepositoryWorkspaceIdentitySection({
       <div className="grid gap-1">
         <p className="text-sm font-medium text-foreground">Workspace identity</p>
         <p className="text-xs text-muted-foreground">
-          The workspace ID is durable and immutable. You can rename the workspace and rebind its
-          live repository path here.
+          The workspace ID stays the same. You can change its name and repository folder.
         </p>
       </div>
 
@@ -242,7 +241,7 @@ function RepositoryWorkspaceIdentitySection({
             onClick={() => void onPickRepoPath()}
           >
             <FolderOpen className="size-4" />
-            Rebind
+            Change folder
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -268,7 +267,7 @@ function RepositoryWorktreeBasePathSection({
 }): ReactElement {
   return (
     <div className="grid gap-2">
-      <Label htmlFor="repo-worktree-path">Worktree base path override (optional)</Label>
+      <Label htmlFor="repo-worktree-path">Custom worktree folder (optional)</Label>
       <div className="flex items-center gap-2">
         <Input
           id="repo-worktree-path"
@@ -300,7 +299,7 @@ function RepositoryWorktreeBasePathSection({
         Leave this blank to use the default worktree location for this repository.
       </p>
       <div className="rounded-md border border-border bg-muted/50 p-3">
-        <p className="text-xs font-medium text-foreground">Effective worktree path</p>
+        <p className="text-xs font-medium text-foreground">Worktree location</p>
         <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
           {selectedRepoEffectiveWorktreeBasePath ?? "Not available"}
         </p>
@@ -366,7 +365,7 @@ function RepositoryBranchSettingsSection({
           options={defaultTargetBranchOptions}
           disabled={isDefaultTargetBranchPickerDisabled}
           placeholder={defaultTargetBranchPlaceholder}
-          searchPlaceholder="Search branch..."
+          searchPlaceholder="Search branches…"
           triggerAriaLabelledBy={defaultTargetBranchLabelId}
           onValueChange={(nextBranch) =>
             onUpdateSelectedRepoConfig((repoConfig) => ({

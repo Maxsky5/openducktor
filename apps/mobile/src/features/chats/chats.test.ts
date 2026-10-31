@@ -203,6 +203,24 @@ describe("archive consent", () => {
     ).toMatchObject({ removeWorktree: false, worktreeConfirmation: undefined });
   });
 
+  test("a refresh of the ready archive preview blocks confirmation until it settles", () => {
+    const cached = preview({ hasUncommittedChanges: true });
+    const form = (isFetching: boolean) =>
+      archiveChatForm({
+        record: worktreeChat,
+        wantsWorktreeRemoval: true,
+        preview: { ...cached, isFetching },
+        isArchiving: false,
+      });
+    expect(form(false).canArchive).toBe(true);
+    expect(form(true).canArchive).toBe(false);
+    expect(form(false)).toMatchObject({
+      canArchive: true,
+      removeWorktree: true,
+      warnings: [{ kind: "local_changes" }],
+    });
+  });
+
   test("a chat that is archiving cannot archive again", () => {
     expect(
       archiveChatForm({

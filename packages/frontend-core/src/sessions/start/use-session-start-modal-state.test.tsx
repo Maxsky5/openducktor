@@ -1393,6 +1393,42 @@ describe("useSessionStartModalState", () => {
     queryClient.clear();
   });
 
+  test("shows cached model choices while host status loads", async () => {
+    const props = createBaseProps();
+    delete props.initialCatalog;
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      }),
+      runtimeCatalogFor(CATALOG),
+    );
+    const harness = createHookHarness(props, {
+      queryClient,
+      hostRuntimeStatusContext: createHostRuntimeStatusContextValue({ isLoading: true }),
+    });
+    try {
+      await harness.mount();
+      await harness.run((state) =>
+        state.openStartModal({
+          source: "task_action",
+          taskId: "TASK-CACHED-CATALOG",
+          role: "spec",
+          launchActionId: "spec_initial",
+          postStartAction: "kickoff",
+          title: "Start Spec Session",
+        }),
+      );
+      expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
+      expect(harness.getLatest().isCatalogLoading).toBe(false);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("allows a workflow model choice while a stale catalog refreshes", async () => {
     const queryClient = new QueryClient();
     const runtimeRef = {

@@ -33,7 +33,7 @@ export function ComposerAttachButton({
       items={[
         {
           id: "photos",
-          title: "Photo Library",
+          title: "Photo library",
           icon: "image",
           disabled: !picking.canPickPhotos,
           command: true,

@@ -49,7 +49,9 @@ describe("onboarding notifications", () => {
       AGENT_NOTIFICATION_KIND_VALUES.length + BUILTIN_NOTIFICATION_KINDS.length,
     );
     expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
-    expect(screen.getByRole("radiogroup", { name: "Delivery for Permission Prompt" })).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", { name: "Delivery for Permission request" }),
+    ).toBeTruthy();
   });
 
   test("saves notification changes before opening the workspace step", async () => {
@@ -63,7 +65,7 @@ describe("onboarding notifications", () => {
     await enterNotificationsStage();
     await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Session idle" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
 
     await screen.findByRole("heading", { name: "Open your first workspace" });
@@ -86,7 +88,7 @@ describe("onboarding notifications", () => {
 
     renderOnboarding({ client, runtimes, saveSettingsSnapshot });
     await enterNotificationsStage();
-    fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Session idle" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     });
@@ -116,7 +118,7 @@ describe("onboarding notifications", () => {
 
     renderOnboarding({ client, runtimes, saveSettingsSnapshot });
     await enterNotificationsStage();
-    fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Session idle" }));
 
     const continueButton = screen.getByRole("button", { name: "Continue to workspace" });
     fireEvent.click(continueButton);

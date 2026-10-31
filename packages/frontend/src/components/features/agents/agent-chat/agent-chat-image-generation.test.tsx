@@ -265,6 +265,8 @@ test("downloads and copies the PNG from the card and preview without another rea
       expect(screen.queryByRole("dialog")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Open generated image preview" }));
       const dialog = await screen.findByRole("dialog", { name: "Generated image" });
+      fireEvent.load(within(dialog).getByRole("img", { hidden: true }));
+      await within(dialog).findByRole("button", { name: "Copy generated image" });
       expect(
         within(dialog).getByRole("link", { name: "Download generated image" }).getAttribute("href"),
       ).toBe(download.getAttribute("href"));

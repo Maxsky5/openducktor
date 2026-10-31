@@ -43,13 +43,13 @@ export const taskDetailsWorkflowActions = (
 export const TASK_DOCUMENT_SECTION_COPY = {
   description: { title: "Description", empty: "No description yet." },
   spec: { title: "Specification", empty: "No specification yet." },
-  plan: { title: "Implementation Plan", empty: "No implementation plan yet." },
-  qa: { title: "QA Reports", empty: "No QA report yet." },
+  plan: { title: "Implementation plan", empty: "No implementation plan yet." },
+  qa: { title: "QA reports", empty: "No QA report yet." },
 } as const;
 
 /** The titles and empty texts of the document panel of a session. It shows the latest QA report. */
 export const SESSION_DOCUMENT_PANEL_COPY = {
   spec: { title: "Specification", empty: "No spec document yet." },
-  plan: { title: "Implementation Plan", empty: "No implementation plan yet." },
-  qa: { title: "QA Report", empty: "No QA report yet." },
+  plan: { title: "Implementation plan", empty: "No implementation plan yet." },
+  qa: { title: "QA report", empty: "No QA report yet." },
 } as const;

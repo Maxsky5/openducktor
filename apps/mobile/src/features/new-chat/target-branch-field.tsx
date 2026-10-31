@@ -12,7 +12,7 @@ import { FormField, SelectTrigger } from "@/ui/form-rows";
 
 type CreateForm = ReturnType<typeof useWorkspaceSessionCreate>;
 
-const HINT = "The Git panel and diffs of this chat compare with this branch.";
+const HINT = "Compare this chat's changes with this branch.";
 
 const targetLabel = (target: GitTargetBranch): string =>
   target.branch === UPSTREAM_TARGET_BRANCH ? "Tracked upstream" : canonicalTargetBranch(target);
@@ -54,7 +54,7 @@ export function TargetBranchField({
       />
       <BranchPickerSheet
         visible={open}
-        title="Target Branch"
+        title="Target branch"
         hint={HINT}
         choices={choices}
         error={branches.error}

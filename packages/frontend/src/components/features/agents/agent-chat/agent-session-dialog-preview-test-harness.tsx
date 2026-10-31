@@ -32,6 +32,7 @@ import {
 } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { runtimeSessionHistoryRefQueryOptions } from "@openducktor/frontend-core/queries/agent-session-history";
 import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -100,6 +101,17 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     client.setQueryData(taskWorktreeQueryOptions({ repoPath: "/repo", taskId }).queryKey, () => ({
       workingDirectory: `/repo/${taskId}`,
     }));
+  // These file-preview cases start with cached transcript policies and complete histories.
+  const policiesReady = Promise.all(
+    Object.values(dialogTargets).map((target) =>
+      client.ensureQueryData(
+        runtimeSessionHistoryRefQueryOptions(
+          { ...target, repoPath: "/repo", sessionScope: target.sessionScope ?? null },
+          () => client.ensureQueryData(settingsSnapshotQueryOptions()),
+        ),
+      ),
+    ),
+  );
   let createEditor: Parameters<typeof pierre.EditProvider>[0]["createEditor"];
   const spies = [
     spyOn(workers, "DiffWorkerProvider").mockImplementation(({ children }) => <>{children}</>),
@@ -247,6 +259,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
           title: `Conversation ${target.externalSessionId}`,
         }),
       );
+      await policiesReady;
       await frames.flushFrames();
     },
     close() {

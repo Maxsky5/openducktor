@@ -670,7 +670,7 @@ function ArtifactContentView({
         ) : null}
         {!children && !error ? (
           <p role="status" className="p-4 text-sm text-muted-foreground">
-            Loading artifact...
+            Loading artifact…
           </p>
         ) : null}
         {children}
@@ -699,7 +699,7 @@ function ArtifactContentFooter({
       ) : null}
       {isUpdating ? (
         <span role="status" className="shrink-0 text-xs text-muted-foreground">
-          Updating preview...
+          Updating preview…
         </span>
       ) : null}
       {artifact && !isUpdating ? <ArtifactMetadata artifact={artifact} /> : null}

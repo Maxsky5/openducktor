@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
-import { Activity } from "react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { Activity, type ReactElement } from "react";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { MediaPreviewDialog } from "./media-preview-dialog";
 
@@ -12,8 +12,79 @@ const baseProps = {
   description: "Preview of the screenshots.",
 };
 
+function renderDuringExitAnimation(element: ReactElement) {
+  const nativeGetComputedStyle = globalThis.getComputedStyle;
+  const animation = spyOn(globalThis, "getComputedStyle").mockImplementation((element) => {
+    const style = nativeGetComputedStyle(element);
+    const slot = element.getAttribute("data-slot");
+    if (slot !== "dialog-content" && slot !== "dialog-positioner") return style;
+    // Happy DOM styles do not stay live when Radix changes data-state.
+    return Object.create(style, {
+      animationName: {
+        get: () => (element.getAttribute("data-state") === "open" ? "modal-open" : "modal-close"),
+      },
+      getPropertyValue: { value: style.getPropertyValue.bind(style) },
+    });
+  });
+  try {
+    return render(element);
+  } finally {
+    // Radix retains the style object. Other tests must see the real global before any await.
+    animation.mockRestore();
+  }
+}
+
 describe("MediaPreviewDialog", () => {
-  test("hides the portal and pauses a retained video when its chat hides", () => {
+  test.each(["blob:ready", "data:image/png;base64,AAAA"])(
+    "shows prepared media immediately for %s",
+    (src) => {
+      const view = render(
+        <MediaPreviewDialog
+          {...baseProps}
+          open
+          media={[{ id: "ready", kind: "image", src, alt: "Ready image" }]}
+          actions={<button type="button">Copy image</button>}
+        />,
+      );
+      try {
+        expect(view.getByRole("dialog").hasAttribute("aria-busy")).toBe(false);
+        expect(view.getByRole("img", { name: "Ready image" })).toBeDefined();
+        expect(view.getByRole("button", { name: "Copy image" })).toBeDefined();
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
+  test("waits for every preview to load or fail and keeps a fast loader for 500 ms", async () => {
+    const startedAt = performance.now();
+    const view = render(
+      <MediaPreviewDialog
+        {...baseProps}
+        open
+        media={[
+          { id: "first", kind: "image", src: "https://example.invalid/first.png", alt: "First" },
+          { id: "second", kind: "image", src: "https://example.invalid/second.png", alt: "Second" },
+        ]}
+      />,
+    );
+    try {
+      expect(view.queryAllByRole("img").length).toBe(0);
+      const [first, second] = view.getByRole("dialog").querySelectorAll("img");
+      if (!first || !second) throw new Error("Expected two pending images.");
+      fireEvent.load(first);
+      expect(view.queryAllByRole("img").length).toBe(0);
+      fireEvent.error(second);
+      expect(view.queryAllByRole("img").length).toBe(0);
+      await view.findByRole("img", { name: "First" });
+      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
+      expect(view.getByRole("img", { name: "First" })).toBeDefined();
+      expect(view.getByRole("alert").textContent).toBe("Preview unavailable.");
+    } finally {
+      view.unmount();
+    }
+  });
+  test("hides the portal, pauses a retained video, and restores its ready preview", async () => {
     const media = [
       { id: "video", kind: "video" as const, src: "blob:video", ariaLabel: "Preview video" },
     ];
@@ -27,16 +98,94 @@ describe("MediaPreviewDialog", () => {
     if (!video) throw new Error("Expected the video.");
     const pause = spyOn(video, "pause").mockImplementation(() => {});
     try {
+      fireEvent.loadedData(video);
+      await waitFor(() => expect(view.queryByRole("status") === null).toBe(true));
       view.rerender(dialog("hidden"));
       expect(view.queryByRole("dialog")).toBeNull();
       expect(pause).toHaveBeenCalledTimes(1);
       view.rerender(dialog("visible"));
       expect(view.getByRole("dialog").querySelector("video")).toBe(video);
+      expect(view.queryByRole("status") === null).toBe(true);
+      expect(view.getByRole("heading", { name: "Screenshots" })).toBeDefined();
     } finally {
       view.unmount();
       pause.mockRestore();
     }
   });
+
+  test.each(["Activity", "close animation"])(
+    "keeps a loaded image usable after %s",
+    async (retention) => {
+      const media = [
+        { id: "image", kind: "image" as const, src: "blob:retained", alt: "Retained image" },
+      ];
+      const dialog = (open: boolean, mode: "visible" | "hidden" = "visible") => (
+        <Activity mode={mode}>
+          <MediaPreviewDialog
+            {...baseProps}
+            open={open}
+            media={media}
+            actions={<button type="button">Copy image</button>}
+          />
+        </Activity>
+      );
+      const view =
+        retention === "close animation"
+          ? renderDuringExitAnimation(dialog(true))
+          : render(dialog(true));
+      try {
+        const image = view.getByRole("dialog").querySelector("img");
+        if (!image) throw new Error("Expected a pending image.");
+        fireEvent.load(image);
+        await view.findByRole("button", { name: "Copy image" });
+        view.rerender(retention === "Activity" ? dialog(true, "hidden") : dialog(false));
+        view.rerender(dialog(true));
+        expect(view.getByRole("dialog").querySelector("img") === image).toBe(true);
+        expect(view.queryByRole("status") === null).toBe(true);
+        expect(view.getByRole("img", { name: "Retained image" })).toBeDefined();
+        expect(view.getByRole("button", { name: "Copy image" })).toBeDefined();
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
+  // Each case completes two 500 ms loading intervals.
+  test.each(["new node", "new source"])(
+    "waits for media again after a %s",
+    async (change) => {
+      const dialog = (open: boolean, src = "https://example.invalid/first.png") => (
+        <MediaPreviewDialog
+          {...baseProps}
+          open={open}
+          media={[{ id: "image", kind: "image", src, alt: "Current image" }]}
+        />
+      );
+      const view = render(dialog(true));
+      try {
+        const first = view.getByRole("dialog").querySelector("img");
+        if (!first) throw new Error("Expected a pending image.");
+        fireEvent.load(first);
+        await view.findByRole("img", { name: "Current image" });
+        if (change === "new node") {
+          view.rerender(dialog(false));
+          view.rerender(dialog(true));
+        } else {
+          view.rerender(dialog(true, "https://example.invalid/second.png"));
+        }
+        const current = view.getByRole("dialog").querySelector("img");
+        if (!current) throw new Error("Expected the current image.");
+        expect(current === first).toBe(change === "new source");
+        expect(view.getByRole("status")).toBeDefined();
+        expect(view.queryByRole("img")).toBeNull();
+        fireEvent.load(current);
+        await view.findByRole("img", { name: "Current image" });
+      } finally {
+        view.unmount();
+      }
+    },
+    2_000,
+  );
 
   test("renders images and videos in order", () => {
     const view = render(
@@ -105,12 +254,12 @@ describe("MediaPreviewDialog", () => {
     ];
     const view = render(<MediaPreviewDialog {...baseProps} open media={media} />);
     try {
-      fireEvent.error(view.getByRole("img"));
+      fireEvent.error(view.getByRole("img", { hidden: true }));
       expect(view.getByText("Screenshot 1 is unavailable.")).toBeDefined();
       expect(view.queryByRole("img")).toBeNull();
       view.rerender(<MediaPreviewDialog {...baseProps} open={false} media={media} />);
       view.rerender(<MediaPreviewDialog {...baseProps} open media={media} />);
-      expect(view.getByRole("img")).toBeDefined();
+      expect(view.getByRole("img", { hidden: true })).toBeDefined();
     } finally {
       view.unmount();
     }
@@ -134,9 +283,9 @@ describe("MediaPreviewDialog", () => {
       />,
     );
     try {
-      fireEvent.error(view.getByRole("img"));
+      fireEvent.error(view.getByRole("img", { hidden: true }));
       expect(failures).toEqual(["data:image/png;base64,AAAA"]);
-      expect(view.getByRole("img")).toBeDefined();
+      expect(view.getByRole("img", { hidden: true })).toBeDefined();
     } finally {
       view.unmount();
     }

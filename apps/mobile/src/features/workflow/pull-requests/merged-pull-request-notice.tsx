@@ -18,11 +18,7 @@ import {
   MergedPullRequestConfirm,
   type MergedPullRequestLink,
 } from "./merged-pull-request-confirm";
-import { titleCase } from "../start-session/start-form-model";
 import { PullRequestLinkButton } from "./pull-request-link-button";
-
-/** The confirm label of the desktop copy, in the title case of mobile buttons. */
-const LINK_LABEL = titleCase(COPY.confirmLabel);
 
 /**
  * The merged pull request that Detect PR found in the selected workspace, as a compact notice. It
@@ -85,7 +81,7 @@ export function MergedPullRequestNotice({ taskId }: { taskId?: string }): ReactE
           </View>
           <View style={styles.actions}>
             <Button
-              label={linking ? COPY.confirmPendingLabel : LINK_LABEL}
+              label={linking ? COPY.confirmPendingLabel : COPY.confirmLabel}
               size="sm"
               variant="tinted"
               icon="check"

@@ -49,6 +49,7 @@ export function FolderPickerDialogSession({
       }}
     >
       <DialogContent
+        loading={controller.isInitialLoad && controller.requestedPath === initialPath}
         className="my-0 h-[calc(100dvh-2rem)] max-w-4xl px-5 pb-8 pt-6 sm:px-6"
         {...(controller.canDismiss ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {

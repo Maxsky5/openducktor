@@ -8,7 +8,7 @@ import type { HostClient } from "@openducktor/host-client";
 import { useHostClient } from "@openducktor/frontend-core";
 import { createArtifactSaveGuard } from "@openducktor/frontend-core/queries/artifacts";
 import { useQueryClient } from "@tanstack/react-query";
-import { File as FileIcon, LoaderCircle, Upload } from "lucide-react";
+import { File as FileIcon, LoaderCircle, Save, Trash2, Upload } from "lucide-react";
 import { type FormEvent, type ReactElement, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,14 +30,14 @@ export type ArtifactAction =
   | { kind: "rename" | "replace" | "delete"; artifact: FreeTaskArtifact };
 
 const actionLabels = {
-  create: { title: "Add artifact", submit: "Add artifact", pending: "Adding..." },
-  rename: { title: "Rename artifact", submit: "Rename", pending: "Renaming..." },
+  create: { title: "Add artifact", submit: "Add artifact", pending: "Adding…" },
+  rename: { title: "Rename artifact", submit: "Rename", pending: "Renaming…" },
   replace: {
     title: "Replace artifact content",
     submit: "Replace content",
-    pending: "Replacing...",
+    pending: "Replacing…",
   },
-  delete: { title: "Delete artifact", submit: "Delete artifact", pending: "Deleting..." },
+  delete: { title: "Delete artifact", submit: "Delete artifact", pending: "Deleting…" },
 };
 
 export function ArtifactActionDialog({
@@ -64,6 +64,9 @@ export function ArtifactActionDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const labels = actionLabels[action.kind];
+  const ConfirmIcon = { create: Upload, rename: Save, replace: Upload, delete: Trash2 }[
+    action.kind
+  ];
   const isFileTooLarge = file !== null && file.size > TASK_ARTIFACT_MAX_FILE_BYTES;
   const canSubmit = canManage && !isSaving && !isFileTooLarge && isFormComplete(action, name, file);
   const submit = async (event: FormEvent) => {
@@ -175,7 +178,15 @@ export function ArtifactActionDialog({
                 variant={action.kind === "delete" ? "destructive" : "default"}
                 disabled={!canSubmit}
               >
-                {isSaving ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
+                {isSaving ? (
+                  <LoaderCircle
+                    className="animate-spin"
+                    data-icon="inline-start"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ConfirmIcon data-icon="inline-start" aria-hidden="true" />
+                )}
                 {isSaving ? labels.pending : labels.submit}
               </Button>
             </DialogFooter>

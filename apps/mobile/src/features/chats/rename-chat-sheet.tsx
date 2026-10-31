@@ -29,7 +29,7 @@ import type { ChatSheetParams } from "./chat-sheet-params";
 import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
 
-const TITLE = "Rename Chat";
+const TITLE = "Rename chat";
 
 function RenameChatForm({
   workspaceId,
@@ -101,6 +101,7 @@ function RenameChatForm({
           />
           <Button
             label={RENAME_CHAT_TEXT.save}
+            icon="save"
             size="lg"
             fill
             command

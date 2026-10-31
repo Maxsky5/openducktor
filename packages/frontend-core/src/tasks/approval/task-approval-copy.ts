@@ -24,9 +24,9 @@ export const TASK_APPROVAL_MODE_OPTIONS: ReadonlyArray<{
   value: TaskApprovalMode;
   label: string;
 }> = [
-  { value: "direct_merge", label: "Direct Merge" },
-  { value: "pull_request", label: "Pull Request" },
-  { value: "close_task", label: "Close Task" },
+  { value: "direct_merge", label: "Direct merge" },
+  { value: "pull_request", label: "Pull request" },
+  { value: "close_task", label: "Close task" },
 ];
 
 export const TASK_APPROVAL_MERGE_METHOD_OPTIONS: ReadonlyArray<{
@@ -36,18 +36,18 @@ export const TASK_APPROVAL_MERGE_METHOD_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "merge_commit",
-    label: "Merge Commit",
-    description: "Preserve the full branch history with a merge commit.",
+    label: "Merge commit",
+    description: "Keep the branch history with a merge commit.",
   },
   {
     value: "squash",
     label: "Squash",
-    description: "Collapse the builder branch into a single commit.",
+    description: "Combine the Builder branch changes into one commit.",
   },
   {
     value: "rebase",
     label: "Rebase",
-    description: "Replay builder commits directly onto the target branch.",
+    description: "Apply the Builder commits on top of the target branch.",
   },
 ];
 
@@ -58,14 +58,13 @@ export const TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "manual",
-    label: "Write Manually",
-    description: "Provide the pull request title and description yourself.",
+    label: "Write manually",
+    description: "Write the pull request title and description.",
   },
   {
     value: "generate_ai",
-    label: "Generate With AI",
-    description:
-      "Choose a Builder session to fork, then let Builder create or update the pull request automatically.",
+    label: "Ask Builder",
+    description: "Let Builder create or update the pull request.",
   },
 ];
 
@@ -73,29 +72,28 @@ export const TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS: ReadonlyArray<{
 export const TASK_APPROVAL_COPY = {
   uncommittedChangesTitle: "Uncommitted changes",
   approvalFailedTitle: "Approval failed",
-  approvalContextErrorTitle: "Direct Merge and Pull Request are unavailable",
-  approvalContextErrorNote: "Close Task does not merge code, so it stays available.",
-  approvalActionLabel: "Approval Action",
+  approvalContextErrorTitle: "Merge and pull request options are unavailable",
+  approvalContextErrorNote: "You can still close the task without merging code.",
+  approvalActionLabel: "Approval action",
   approvalActionAccessibilityLabel: "Approval action",
-  mergeMethodLabel: "Merge Method",
-  squashCommitMessageLabel: "Squash Commit Message",
+  mergeMethodLabel: "Merge method",
+  squashCommitMessageLabel: "Squash commit message",
   squashCommitMessagePlaceholder: "e.g. feat: add Microsoft login",
   squashCommitMessageRequired: "Enter the squash commit message before merging locally.",
-  pullRequestDraftLabel: "Pull Request Draft",
-  pullRequestTitleLabel: "Pull Request Title",
-  pullRequestDescriptionLabel: "Pull Request Description",
-  generatePullRequestNotice:
-    "OpenDucktor asks you to choose a Builder session to fork. That session then creates or updates the pull request.",
+  pullRequestDraftLabel: "Pull request draft",
+  pullRequestTitleLabel: "Pull request title",
+  pullRequestDescriptionLabel: "Pull request description",
+  generatePullRequestNotice: "Next, choose the Builder session to fork.",
   openExistingPullRequest: "Open existing pull request",
   cancel: "Cancel",
-  recoveryFailedTitle: "Recovery action failed",
-  resetImplementation: "Reset Implementation",
-  completionFailedTitle: "Direct merge completion failed",
+  recoveryFailedTitle: "Could not finish this action",
+  resetImplementation: "Reset implementation",
+  completionFailedTitle: "Could not finish the merge",
   localMergeReadyTitle: "Local merge ready",
   nextStepTitle: "Next step",
-  localBranchLabel: "Local Branch",
-  remoteToUpdateLabel: "Remote To Update",
-  finishLater: "Finish Later",
+  localBranchLabel: "Local branch",
+  remoteToUpdateLabel: "Push to",
+  finishLater: "Finish later",
 } as const;
 
 /** The approval modes that the provider supports. A mode that cannot run now is disabled. */
@@ -127,8 +125,7 @@ export const taskApprovalUncommittedChangesMessage = (uncommittedFileCount: numb
 export const taskApprovalSquashCommitHint = (
   targetBranch: GitTargetBranch | null,
 ): TaskApprovalTextWithCode => ({
-  before:
-    "OpenDucktor prefills this from the oldest commit unique to the builder branch. Edit it before creating the single squash commit on ",
+  before: "Edit this message before combining the branch changes into one commit on ",
   code: targetBranch?.branch ?? "the target branch",
   after: ".",
 });
@@ -166,11 +163,11 @@ export const getTaskApprovalSubmitState = (
     hasSquashCommitMessageSubmitError &&
     (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
 
-  let confirmLabel = "Merge Locally";
+  let confirmLabel = "Merge locally";
   if (model.mode === "pull_request" && model.pullRequestDraftMode === "manual") {
-    confirmLabel = "Create Pull Request";
+    confirmLabel = "Create pull request";
   } else if (model.mode === "pull_request") {
-    confirmLabel = "Start PR Generation";
+    confirmLabel = "Choose Builder session";
   }
 
   return {
@@ -223,18 +220,18 @@ export const getDirectMergeCompletionContextError = (
   >,
 ): string | null => {
   if (model.targetBranch === null)
-    return "Missing target branch for direct-merge completion. Refresh approval context and retry.";
+    return "Close and reopen Approve task to load the target branch.";
   return model.publishTarget && !model.publicationPreview
-    ? "Missing publication destinations. Refresh approval context before publishing."
+    ? "Close and reopen Approve task to load the push details."
     : null;
 };
 
 export const taskApprovalLocalMergeReadyText = (
   localBranchName: string,
 ): TaskApprovalTextWithCode => ({
-  before: "The direct merge is already applied on this machine for ",
+  before: "The code is already merged into ",
   code: localBranchName,
-  after: " on this task.",
+  after: " on this computer.",
 });
 
 export const taskApprovalCompletionNextStepText = (
@@ -259,10 +256,10 @@ export const directMergeCompletionButtonLabel = (
   model: Pick<TaskApprovalCompletionModalModel, "isSubmitting" | "publishTarget">,
 ): string => {
   const publishTargetBranchName = model.publishTarget?.branch ?? "";
-  if (model.isSubmitting && model.publishTarget) return `Publishing ${publishTargetBranchName}`;
-  if (model.isSubmitting) return "Completing Direct Merge";
-  if (model.publishTarget) return `Push ${publishTargetBranchName} And Mark Done`;
-  return "Mark Task Done";
+  if (model.isSubmitting && model.publishTarget) return `Pushing ${publishTargetBranchName}…`;
+  if (model.isSubmitting) return "Completing merge…";
+  if (model.publishTarget) return `Push ${publishTargetBranchName} and mark done`;
+  return "Mark task done";
 };
 
 export const directMergeCompletionStageDescription = (

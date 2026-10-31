@@ -56,7 +56,7 @@ export function useTaskCloseConfirmDialog({
     onSucceeded,
   });
   const impact = useTaskCloseImpact({ task, enabled: dialog.open });
-  const isPreparing = useTaskCloseLoader(impact);
+  const isPreparing = useTaskCloseLoader(impact, removeWorktree);
   return {
     openDialog: () => {
       resetChoice();

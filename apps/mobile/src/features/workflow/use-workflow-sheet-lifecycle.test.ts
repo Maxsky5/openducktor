@@ -7,13 +7,14 @@ import { useWorkflowSheetLifecycle } from "./use-workflow-sheet-lifecycle";
 /** A sheet whose action opens a step when `opens` is true, as a start opens its choices. */
 const renderSheet = ({ ready, opens }: { ready: boolean; opens: boolean }) => {
   const calls = { run: 0, close: 0 };
+  const loading: boolean[] = [];
   const close = () => {
     calls.close += 1;
   };
   const hook = renderHook(
     ({ isReady }: { isReady: boolean }) => {
       const [open, setOpen] = useState(false);
-      const triggered = useWorkflowSheetLifecycle({
+      const state = useWorkflowSheetLifecycle({
         ready: isReady,
         run: () => {
           calls.run += 1;
@@ -22,14 +23,25 @@ const renderSheet = ({ ready, opens }: { ready: boolean; opens: boolean }) => {
         anyOpen: open,
         close,
       });
-      return { triggered, setOpen };
+      loading.push(state.loading);
+      return { ...state, setOpen };
     },
     { initialProps: { isReady: ready } },
   );
-  return { calls, ...hook };
+  return { calls, loading, ...hook };
 };
 
 describe("useWorkflowSheetLifecycle", () => {
+  test("never marks ready local setup as loading", () => {
+    const { loading, result, unmount } = renderSheet({ ready: true, opens: true });
+    try {
+      expect(result.current.triggered).toBe(true);
+      expect(loading).not.toContain(true);
+    } finally {
+      unmount();
+    }
+  });
+
   test("waits until it is ready, then runs the action once", () => {
     const { calls, result, rerender } = renderSheet({ ready: false, opens: true });
     expect(calls).toEqual({ run: 0, close: 0 });

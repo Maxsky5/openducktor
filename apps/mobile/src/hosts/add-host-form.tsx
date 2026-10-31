@@ -48,7 +48,7 @@ function ScanCard({ onPress, disabled }: { onPress: () => void; disabled: boolea
       disabled={disabled}
       radius={theme.radius.xl}
       accessibilityRole="button"
-      accessibilityLabel="Scan QR Code"
+      accessibilityLabel="Scan QR code"
       accessibilityHint="Opens the camera to scan the code that Remote control shows on the host."
       style={styles.scan}
     >
@@ -56,7 +56,7 @@ function ScanCard({ onPress, disabled }: { onPress: () => void; disabled: boolea
         <Icon name="qr-code" size={20} colorValue={theme.desktop.selectedAccent} />
       </View>
       <View style={styles.scanText}>
-        <Text weight="medium">Scan QR Code</Text>
+        <Text weight="medium">Scan QR code</Text>
         <Text variant="subhead" tone="tertiary">
           On your computer, open Settings, Remote control, and show the QR code.
         </Text>
@@ -205,6 +205,7 @@ export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
       <Animated.View layout={SETTLE} style={styles.actions}>
         <Button
           label={connecting ? "Connecting…" : "Connect to host"}
+          icon="server"
           size="lg"
           loading={connecting}
           disabled={!canConnect && !connecting}

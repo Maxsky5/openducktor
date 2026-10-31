@@ -105,14 +105,17 @@ export const TerminalView = memo(function TerminalView({
         });
         return;
       }
-      void confirm({ title: "Open this link?", message: href, confirmLabel: "Open" }).then(
-        (confirmed) => {
-          if (!confirmed) return;
-          Linking.openURL(href).catch((cause) =>
-            feedback.show("error", "The link did not open.", { description: errorMessage(cause) }),
-          );
-        },
-      );
+      void confirm({
+        title: "Open this link?",
+        message: href,
+        confirmLabel: "Open",
+        icon: "external-link",
+      }).then((confirmed) => {
+        if (!confirmed) return;
+        Linking.openURL(href).catch((cause) =>
+          feedback.show("error", "The link did not open.", { description: errorMessage(cause) }),
+        );
+      });
     },
     [confirm, feedback],
   );

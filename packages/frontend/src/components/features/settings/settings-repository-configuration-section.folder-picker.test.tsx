@@ -86,10 +86,10 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /pick worktree base path/i }));
     });
-    await screen.findByText("/tmp/worktrees");
+    const confirm = await screen.findByRole("button", { name: /use this folder/i });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /use this path/i }));
+      fireEvent.click(confirm);
     });
 
     await waitFor(() => {
@@ -132,15 +132,16 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
 
   try {
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /rebind/i }));
+      fireEvent.click(screen.getByRole("button", { name: /change folder/i }));
     });
 
-    const manualPathInput = await screen.findByLabelText("Open path");
+    const loadPath = await screen.findByRole("button", { name: /load path/i });
+    const manualPathInput = screen.getByLabelText("Open path");
     await act(async () => {
       fireEvent.change(manualPathInput, {
         target: { value: "/tmp/rebound-repo" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(loadPath);
     });
 
     await screen.findByText("Git repo");

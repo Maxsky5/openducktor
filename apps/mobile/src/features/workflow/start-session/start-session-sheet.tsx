@@ -11,17 +11,17 @@ import { type ReactElement, useCallback, useState } from "react";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import type { StartSessionSheetAction } from "@/navigation/routes";
 import { useConfirmDiscard } from "@/ui/confirm-discard";
-import { EmptyState, LoadingState } from "@/ui/states";
+import { EmptyState } from "@/ui/states";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
-import { RepoSettingsFailure } from "./repo-settings-failure";
+import { RepoSettingsFailure, RepoSettingsRefreshNotice } from "./repo-settings-failure";
 import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { SessionStartSheet } from "./session-start-sheet";
 
-const TITLE = "Start Session";
+const TITLE = "Start session";
 
 /** The flow call of each start action. The type makes a new action add its call here. */
 const START_ACTIONS = {
@@ -45,7 +45,7 @@ export function StartSessionRoute(): ReactElement {
       <GroupedSheet title={TITLE}>
         <EmptyState
           icon="link-off"
-          title="Unknown Action"
+          title="Action unavailable"
           message="Close this sheet and start the action from the task again."
         />
       </GroupedSheet>
@@ -96,7 +96,7 @@ function StartSessionContent({
     if (task) runStartRequest(request, task.id, flow, feedback);
   };
   // The sheet closes when the start choices close.
-  const triggered = useWorkflowSheetLifecycle({
+  const { triggered, loading } = useWorkflowSheetLifecycle({
     ready: task !== null && settings.ready && settings.error === null,
     run,
     anyOpen: modal?.open === true,
@@ -110,7 +110,7 @@ function StartSessionContent({
       <GroupedSheet title={TITLE}>
         <EmptyState
           icon="search-x"
-          title="Task Not Found"
+          title="Task not found"
           message={`${taskId} is no longer in this workspace.`}
         />
       </GroupedSheet>
@@ -125,14 +125,17 @@ function StartSessionContent({
   }
   if (!modal) {
     return (
-      <GroupedSheet title={TITLE}>
-        <LoadingState label="Preparing the session start" />
-      </GroupedSheet>
+      <GroupedSheet title={TITLE} loading={loading} loadingLabel="Loading repository settings…" />
     );
   }
   return (
     <SessionStartSheet
       model={modal}
+      notice={
+        settings.refreshError ? (
+          <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
+        ) : null
+      }
       branchesFailure={branchesFailure}
       onClose={choicesClose.close}
       onEdit={choicesClose.markEdited}
@@ -180,8 +183,8 @@ const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
       return;
     }
     void confirmDiscard({
-      title: "Discard the Session Start?",
-      message: "Your choices are not saved.",
+      title: "Discard changes?",
+      message: "Your choices have not been saved.",
     }).then((confirmed) => {
       if (!confirmed) return;
       allowRemoval();

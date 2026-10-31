@@ -66,7 +66,11 @@ const deferred = <T,>() => {
   });
   return { promise, resolve };
 };
-const renderImport = (overrides: Partial<HostClient> = {}, strict = false) => {
+const renderImport = (
+  overrides: Partial<HostClient> = {},
+  strict = false,
+  runtimeContext = context,
+) => {
   const Wrapper = strict ? StrictMode : Fragment;
   const calls: WorkspaceSessionExternalListInput[] = [];
   const releases: string[] = [];
@@ -90,7 +94,7 @@ const renderImport = (overrides: Partial<HostClient> = {}, strict = false) => {
   const view = render(
     <Wrapper>
       <ClientConnectionProvider connection={connection}>
-        <RuntimeDefinitionsContext value={context}>
+        <RuntimeDefinitionsContext value={runtimeContext}>
           <WorkspaceSessionImportDialog
             workspaceId="workspace"
             onClose={() => {
@@ -108,6 +112,25 @@ const choose = async (view: ReturnType<typeof renderImport>, label: string) => {
   fireEvent.click(view.getByRole("button", { name: "Runtime" }));
   fireEvent.click(await view.findByRole("option", { name: new RegExp(label) }));
 };
+
+test.each([false, true])("opens the import form while runtimes load, cached=%s", (cached) => {
+  const view = renderImport({}, false, {
+    ...context,
+    runtimeDefinitions: cached ? definitions : [],
+    availableRuntimeDefinitions: cached ? definitions : [],
+    isLoadingRuntimeDefinitions: true,
+  });
+  try {
+    expect(view.getByRole("dialog").hasAttribute("aria-busy")).toBe(false);
+    expect(view.getByRole("button", { name: "Runtime" })).toBeDefined();
+    fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+    expect(view.closed()).toBe(1);
+    expect(view.calls).toEqual([]);
+  } finally {
+    view.unmount();
+    view.client.clear();
+  }
+});
 
 test("waits for runtime choice and debounces metadata search", async () => {
   const view = renderImport();

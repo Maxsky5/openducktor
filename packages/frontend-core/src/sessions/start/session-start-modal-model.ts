@@ -125,8 +125,8 @@ const sessionStartBlockedReason = (
   if (!model.hasRuntimeSettingsSnapshot && model.runtimeSettingsError !== null) {
     return "The runtime settings did not load.";
   }
-  if (model.isKickoffPromptLoading === true) return "Loading the kickoff prompt…";
-  if (model.kickoffPromptError) return "The kickoff prompt did not load.";
+  if (model.isKickoffPromptLoading === true) return "Loading the first message…";
+  if (model.kickoffPromptError) return "Could not load the first message.";
   if (!reuse && model.selectionCatalogError !== null) return "The models did not load.";
   if (!reuse && model.isSelectionCatalogLoading) return "Loading the models…";
   if (model.showTargetBranchSelector && !model.selectedTargetBranch) {

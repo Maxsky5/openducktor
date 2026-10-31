@@ -14,10 +14,16 @@ import { useTaskApprovalReads } from "@openducktor/frontend-core/tasks/approval/
 import { useTaskResetFlow } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { Button } from "@/ui/button";
-import { EmptyState, LoadingState } from "@/ui/states";
+import { EmptyState } from "@/ui/states";
+import { ModalLoadingContent } from "@/ui/modal-loading-content";
+import { FormLead } from "@/ui/form-rows";
+import { Text } from "@/ui/text";
 import { Callout } from "@/ui/callout";
 import { ResetImplementationConfirmation } from "../confirm/task-confirmations";
-import { RepoSettingsFailure } from "../start-session/repo-settings-failure";
+import {
+  RepoSettingsFailure,
+  RepoSettingsRefreshNotice,
+} from "../start-session/repo-settings-failure";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
@@ -25,7 +31,7 @@ import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
 import { ApprovalStep, CompletionStep, ConflictStep, MissingWorktreeStep } from "./approval-views";
 
-const TITLE = "Approve Task";
+const TITLE = "Approve task";
 
 /** Approve Task: Direct Merge, Pull Request, or Close Task, with the conflict and publish steps. */
 export function ApproveTaskRoute(): ReactElement {
@@ -109,7 +115,7 @@ function ApproveTaskContent({
   const modal = approval.taskApprovalModal;
   // The approval can start the pull request or conflict Builder, so it waits for the current
   // repository settings. The sheet closes when no step stays open.
-  const triggered = useWorkflowSheetLifecycle({
+  const { triggered, loading } = useWorkflowSheetLifecycle({
     ready: task !== null && settings.ready && settings.error === null,
     run: () => {
       if (task) approval.openTaskApproval(task.id);
@@ -127,7 +133,7 @@ function ApproveTaskContent({
       <GroupedSheet title={TITLE}>
         <EmptyState
           icon="search-x"
-          title="Task Not Found"
+          title="Task not found"
           message={`${taskId} is no longer in this workspace.`}
         />
       </GroupedSheet>
@@ -141,7 +147,17 @@ function ApproveTaskContent({
     );
   }
   if (start?.open) {
-    return <SessionStartSheet model={start} branchesFailure={branchesFailure} />;
+    return (
+      <SessionStartSheet
+        model={start}
+        branchesFailure={branchesFailure}
+        notice={
+          settings.refreshError ? (
+            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
+          ) : null
+        }
+      />
+    );
   }
   if (resetImplementationModal) {
     // The confirmation opens above the sheet; the sheet keeps its frame below it.
@@ -157,18 +173,24 @@ function ApproveTaskContent({
   }
   return (
     <ApprovalFlowSheet
+      loading={loading}
       conflict={conflict}
       modal={modal}
-      providerNotice={
-        providerFailure ? (
-          <ProviderFailureNotice
-            description={providerFailure.description}
-            onRetry={() => {
-              setProviderFailure(null);
-              providerFailure.retry();
-            }}
-          />
-        ) : null
+      notice={
+        <>
+          {settings.refreshError ? (
+            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
+          ) : null}
+          {providerFailure ? (
+            <ProviderFailureNotice
+              description={providerFailure.description}
+              onRetry={() => {
+                setProviderFailure(null);
+                providerFailure.retry();
+              }}
+            />
+          ) : null}
+        </>
       }
     />
   );
@@ -178,13 +200,15 @@ type ApprovalFlow = ReturnType<typeof useTaskApprovalFlow>;
 
 /** The conflict step while Git reports a conflict, else the approval steps once they load. */
 function ApprovalFlowSheet({
+  loading,
   conflict,
   modal,
-  providerNotice,
+  notice,
 }: {
   conflict: ApprovalFlow["taskGitConflictDialog"];
   modal: ApprovalFlow["taskApprovalModal"];
-  providerNotice: ReactElement | null;
+  notice: ReactElement | null;
+  loading: boolean;
 }): ReactElement {
   if (conflict?.open && conflict.conflict) {
     return (
@@ -199,44 +223,37 @@ function ApprovalFlowSheet({
   }
   if (!modal) {
     return (
-      <GroupedSheet title={TITLE}>
-        <LoadingState label="Preparing the approval" />
-      </GroupedSheet>
+      <GroupedSheet title={TITLE} loading={loading} loadingLabel="Loading repository settings…" />
     );
   }
-  return (
-    <GroupedSheet
-      title={getTaskApprovalModalHeader(modal).title}
-      onClose={() => modal.onOpenChange(false)}
-      closable={!modal.isSubmitting}
-    >
-      <ApprovalStage modal={modal} providerNotice={providerNotice} />
-    </GroupedSheet>
-  );
+  return <ApprovalStage modal={modal} notice={notice} />;
 }
 
 /** The open step of the approval: the approval, a missing worktree, or the completion. */
 function ApprovalStage({
   modal,
-  providerNotice,
+  notice,
 }: {
   modal: NonNullable<ApprovalFlow["taskApprovalModal"]>;
-  providerNotice: ReactElement | null;
+  notice: ReactElement | null;
 }): ReactElement {
   const { impact, isPreparing, mergeCheck } = useTaskApprovalReads(modal);
+  const header = getTaskApprovalModalHeader(modal);
+  let content: ReactElement;
   switch (modal.stage) {
     case "approval":
-      return (
+      content = (
         <ApprovalStep
           model={modal}
-          notice={providerNotice}
+          notice={notice}
           impact={impact}
           isPreparing={isPreparing}
           mergeCheck={mergeCheck}
         />
       );
+      break;
     case "missing_builder_worktree":
-      return (
+      content = (
         <MissingWorktreeStep
           model={modal}
           impact={impact.close}
@@ -244,9 +261,36 @@ function ApprovalStage({
           mergeCheck={mergeCheck}
         />
       );
+      break;
     case "complete_direct_merge":
-      return <CompletionStep model={modal} impact={impact.worktree} isPreparing={isPreparing} />;
+      content = <CompletionStep model={modal} impact={impact.worktree} isPreparing={isPreparing} />;
+      break;
   }
+  return (
+    <GroupedSheet
+      title={header.title}
+      onClose={() => modal.onOpenChange(false)}
+      closable={!modal.isSubmitting}
+      intro={
+        <>
+          {header.description ? <FormLead text={header.description} /> : null}
+          <Text variant="body" weight="medium" numberOfLines={2}>
+            {modal.taskTitle}
+          </Text>
+          <Text variant="mono" tone="tertiary">
+            {modal.taskId}
+          </Text>
+        </>
+      }
+    >
+      <ModalLoadingContent
+        loading={isPreparing && !modal.isSubmitting}
+        label="Loading task details…"
+      >
+        {content}
+      </ModalLoadingContent>
+    </GroupedSheet>
+  );
 }
 
 /**
@@ -265,7 +309,7 @@ function ProviderFailureNotice({
       tone="warning"
       title="The Git provider did not load"
       message={`${description} Pull Request is not available until the provider loads.`}
-      action={<Button label="Try Again" size="sm" variant="gray" onPress={onRetry} />}
+      action={<Button icon="refresh" label="Retry" size="sm" variant="gray" onPress={onRetry} />}
     />
   );
 }

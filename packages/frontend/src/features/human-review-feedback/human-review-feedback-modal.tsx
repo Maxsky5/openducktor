@@ -1,3 +1,4 @@
+import { LoaderCircle, MessageSquareWarning } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,14 +38,14 @@ export function HumanReviewFeedbackModal({
         }
       }}
     >
-      <DialogContent className="max-w-2xl overflow-visible">
-        <DialogHeader>
+      <DialogContent className="max-w-xl overflow-hidden p-0">
+        <DialogHeader className="px-6 py-5 pr-14">
           <DialogTitle>{HUMAN_REVIEW_FEEDBACK_COPY.title}</DialogTitle>
           <DialogDescription>{HUMAN_REVIEW_FEEDBACK_COPY.description}</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-6 overflow-visible pt-2 pb-4">
-          <div className="space-y-3">
+        <DialogBody className="min-h-0 overflow-y-auto px-6 pb-6">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="human-review-feedback-message">
               {HUMAN_REVIEW_FEEDBACK_COPY.messageLabel}
             </Label>
@@ -59,7 +60,7 @@ export function HumanReviewFeedbackModal({
           </div>
         </DialogBody>
 
-        <DialogFooter className="mt-0 justify-between border-t border-border pt-6">
+        <DialogFooter className="mt-0 justify-between border-t border-border px-6 py-4">
           <Button
             type="button"
             variant="outline"
@@ -68,7 +69,17 @@ export function HumanReviewFeedbackModal({
           >
             {HUMAN_REVIEW_FEEDBACK_COPY.cancelLabel}
           </Button>
-          <Button type="button" disabled={confirmDisabled} onClick={() => void model.onConfirm()}>
+          <Button
+            type="button"
+            aria-busy={model.isSubmitting}
+            disabled={confirmDisabled}
+            onClick={() => void model.onConfirm()}
+          >
+            {model.isSubmitting ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <MessageSquareWarning data-icon="inline-start" />
+            )}
             {HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel}
           </Button>
         </DialogFooter>

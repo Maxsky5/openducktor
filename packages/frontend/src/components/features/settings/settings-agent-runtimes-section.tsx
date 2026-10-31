@@ -230,7 +230,7 @@ function PolicyValueDropdown<T extends string | boolean>({
         options={options}
         disabled={disabled}
         triggerAriaLabelledBy={labelId}
-        searchPlaceholder="Search options..."
+        searchPlaceholder="Search options…"
         emptyText="No option found."
         triggerClassName="h-10"
         wrapOptionLabels
@@ -559,7 +559,7 @@ function RoleOverrideDropdown<Field extends CodexPolicyField>({
       options={options}
       disabled={disabled}
       triggerAriaLabelledBy={labelId}
-      searchPlaceholder="Search options..."
+      searchPlaceholder="Search options…"
       emptyText="No option found."
       triggerClassName="h-10"
       wrapOptionLabels
@@ -681,7 +681,7 @@ export function AgentRuntimesSection({
   return (
     <div className="@container/runtime-settings grid gap-4 p-4">
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Agent Runtimes</h3>
+        <h3 className="text-sm font-semibold text-foreground">Agent runtimes</h3>
         <p className="text-xs text-muted-foreground">
           Disabled runtimes are not started automatically and must be enabled before new agent
           sessions can use them.
@@ -707,7 +707,7 @@ export function AgentRuntimesSection({
       {runtimeDefinitionsError ? (
         <div className="flex items-center justify-between gap-3 text-sm" role="alert">
           <span className="text-destructive">
-            Failed to load runtime definitions: {runtimeDefinitionsError}
+            Could not load runtimes: {runtimeDefinitionsError}
           </span>
           <Button
             type="button"
@@ -715,13 +715,13 @@ export function AgentRuntimesSection({
             disabled={disabled || isLoadingRuntimeDefinitions}
             onClick={() => {
               void onRetryRuntimeDefinitions().catch((error) => {
-                toast.error("Failed to load runtime definitions", {
+                toast.error("Could not load runtimes", {
                   description: errorMessage(error),
                 });
               });
             }}
           >
-            Retry runtime definitions
+            Reload runtimes
           </Button>
         </div>
       ) : null}

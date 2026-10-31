@@ -26,7 +26,7 @@ export function SessionStartKickoffField({
     <>
       {loading ? (
         <p role="status" className="text-sm text-muted-foreground">
-          Loading kickoff prompt...
+          Loading first message…
         </p>
       ) : null}
       {error ? (
@@ -47,13 +47,13 @@ export function SessionStartKickoffField({
               onCheckedChange={draft.setEnabled}
             />
             <label htmlFor="customize-kickoff" className="text-sm font-medium">
-              Customize kickoff prompt
+              Customize first message
             </label>
           </div>
           {draft.enabled ? (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="kickoff-prompt" className="text-sm font-medium">
-                Kickoff prompt
+                First message
               </label>
               <Textarea
                 id="kickoff-prompt"

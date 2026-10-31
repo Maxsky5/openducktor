@@ -1,4 +1,4 @@
-import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
+import { ArrowLeft, Flag, Loader2, RotateCcw, SquarePlus, Save } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useRef } from "react";
 import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
 import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
@@ -98,7 +98,7 @@ function TaskDocumentFooterActions({
 }): ReactElement {
   const isSaving = controller.isSavingDocument === controller.activeDocumentSection;
   const section = controller.activeDocumentSection;
-  let saveLabel = "Saving...";
+  let saveLabel = "Saving…";
   if (!isSaving) saveLabel = section ? `Save ${workflowArtifactShortLabel(section)}` : "Save";
 
   return (
@@ -115,7 +115,7 @@ function TaskDocumentFooterActions({
       </Button>
       <Button
         type="button"
-        className="cursor-pointer"
+        className="-order-1 cursor-pointer sm:order-none"
         onClick={() => void controller.saveActiveDocument()}
         disabled={
           controller.isFormDisabled ||
@@ -127,11 +127,7 @@ function TaskDocumentFooterActions({
           !controller.isActiveDocumentDirty
         }
       >
-        {isSaving ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <WandSparkles className="size-4" />
-        )}
+        {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
         {saveLabel}
       </Button>
     </>
@@ -143,10 +139,10 @@ function TaskSubmitFooterActions({
 }: {
   controller: TaskCreateModalController;
 }): ReactElement {
-  const SubmitIcon = controller.mode === "create" ? Flag : WandSparkles;
-  let submitLabel = controller.mode === "create" ? "Create Task" : "Save Changes";
+  const SubmitIcon = controller.mode === "create" ? Flag : Save;
+  let submitLabel = controller.mode === "create" ? "Create task" : "Save changes";
   if (controller.isSubmitting) {
-    submitLabel = controller.mode === "create" ? "Creating..." : "Saving...";
+    submitLabel = controller.mode === "create" ? "Creating…" : "Saving…";
   }
 
   return (
@@ -165,7 +161,7 @@ function TaskSubmitFooterActions({
       ) : null}
       <Button
         type="button"
-        className="cursor-pointer"
+        className="-order-1 cursor-pointer sm:order-none"
         onClick={() => void controller.submit()}
         disabled={
           controller.isFormDisabled ||
@@ -281,8 +277,8 @@ function TaskCreateModalSectionContent({
 
 const createDescription = (destination: TaskCreateDestination | null): string =>
   destination
-    ? `Create a task in ${destination.workspaceName} with the fields Planner and Builder rely on.`
-    : "Create a structured task with the fields Planner and Builder rely on.";
+    ? `Create a task in ${destination.workspaceName}.`
+    : "Add a task and describe the work to do.";
 
 export function TaskCreateModal({
   open,
@@ -307,6 +303,12 @@ export function TaskCreateModal({
     <>
       <Dialog open={open} onOpenChange={controller.onDialogOpenChange}>
         <DialogContent
+          loading={
+            controller.activeDocument?.isLoading === true &&
+            !controller.activeDocument.loaded &&
+            !controller.isBusy
+          }
+          loadingLabel="Loading document…"
           className="grid max-h-[92vh] max-w-6xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0"
           onOpenAutoFocus={() => {
             openerRef.current =
@@ -318,15 +320,15 @@ export function TaskCreateModal({
               openerRef.current?.focus();
           }}
         >
-          <DialogHeader className="border-b border-border px-5 py-4">
-            <DialogTitle className="flex items-center gap-2 text-2xl">
-              <Sparkles className="size-5 text-primary" />
-              {controller.mode === "create" ? "Create Task" : "Edit Task"}
+          <DialogHeader className="border-b border-border px-5 py-4 pr-14">
+            <DialogTitle className="flex items-center gap-2">
+              <SquarePlus className="size-4 text-muted-foreground" aria-hidden="true" />
+              {controller.mode === "create" ? "Create task" : "Edit task"}
             </DialogTitle>
             <DialogDescription>
               {controller.mode === "create"
                 ? createDescription(controller.destination)
-                : `Update ${task?.id ?? "task"} task details and workflow artifacts.`}
+                : `Edit the details and documents of ${task?.id ?? "this task"}.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -359,9 +361,11 @@ export function TaskCreateModal({
               Close
             </Button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex w-full min-w-0 flex-col gap-2 [&>button]:w-full sm:w-auto sm:flex-row sm:items-center sm:[&>button]:w-auto">
               {controller.footerError ? (
-                <p className="text-sm text-destructive-muted">{controller.footerError}</p>
+                <p className="-order-2 text-sm text-destructive-muted sm:order-none">
+                  {controller.footerError}
+                </p>
               ) : null}
 
               <TaskCreateModalFooterActions controller={controller} />

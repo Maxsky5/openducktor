@@ -310,9 +310,9 @@ function OpenRepositoryModalSession({
       <FolderPickerDialog
         open={creation.pickerOpen}
         onOpenChange={(nextOpen) => (nextOpen ? creation.openPicker() : creation.closePicker())}
-        title="Open Repository"
+        title="Open repository"
         description="Choose an existing Git repository on disk."
-        confirmLabel="Choose This Folder"
+        confirmLabel="Use this folder"
         requireGitRepo
         onConfirm={creation.confirmRepo}
       />

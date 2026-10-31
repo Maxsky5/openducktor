@@ -92,7 +92,7 @@ export function ScanHostScreen(): ReactElement {
     content = (
       <EmptyState
         icon={denied ? "camera-off" : "camera"}
-        title={denied ? "Camera Access Is Off" : "Allow Camera Access"}
+        title={denied ? "Camera access is off" : "Allow camera access"}
         message={
           denied
             ? "Allow camera access for OpenDucktor in Settings, or type the host address."
@@ -101,11 +101,11 @@ export function ScanHostScreen(): ReactElement {
         action={
           <View style={styles.actions}>
             {denied ? (
-              <Button label="Open Settings" onPress={() => void Linking.openSettings()} />
+              <Button label="Open settings" onPress={() => void Linking.openSettings()} />
             ) : (
-              <Button label="Allow Camera" onPress={() => void requestPermission()} />
+              <Button label="Allow camera" onPress={() => void requestPermission()} />
             )}
-            <Button label="Type Address" variant="outline" onPress={close} />
+            <Button label="Enter address" variant="outline" onPress={close} />
           </View>
         }
       />
@@ -113,9 +113,9 @@ export function ScanHostScreen(): ReactElement {
   } else if (cameraError !== null) {
     content = (
       <ErrorState
-        title="Camera Did Not Start"
+        title="Could not start the camera"
         message={`${cameraError} Type the host address instead.`}
-        action={<Button label="Type Address" variant="outline" onPress={close} />}
+        action={<Button label="Enter address" variant="outline" onPress={close} />}
       />
     );
   } else {

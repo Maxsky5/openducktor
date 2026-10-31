@@ -1,6 +1,5 @@
 import type { SessionStartWorkflowResult } from "../../sessions/start/session-start-workflow";
 import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
-import { createSessionStartKickoffResolver } from "../../sessions/start/session-start-kickoff";
 import type { GitBranch } from "@openducktor/contracts";
 import {
   defaultSessionLaunchActionForRole,
@@ -8,7 +7,6 @@ import {
   type BuiltinRoleId as AgentRole,
   type BuiltinTaskCard as TaskCard,
 } from "@openducktor/workflows";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { SessionStartModalModel } from "../../sessions/start/session-start-modal-model";
@@ -143,7 +141,6 @@ export function useTaskSessionStartFlow({
   onBackgroundTransfer,
 }: UseTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
   const { feedback, startupAttempts } = useClientConnection();
-  const queryClient = useQueryClient();
   const isCurrentContext = useSessionStartContext(activeWorkspaceId);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
@@ -199,12 +196,10 @@ export function useTaskSessionStartFlow({
       return runSessionStartRequest(
         buildSessionStartModalRequest({
           source: "task_action",
-          resolveKickoffPrompt: createSessionStartKickoffResolver({
-            queryClient,
-            workspaceId: activeWorkspaceId,
-            task: selectedTask,
-            request: intent,
-          }),
+          kickoff:
+            intent.postStartAction === "kickoff"
+              ? { workspaceId: activeWorkspaceId, task: selectedTask, request: intent }
+              : undefined,
           request: intent,
           selectedModel: null,
           taskSessions,
@@ -237,7 +232,6 @@ export function useTaskSessionStartFlow({
     },
     [
       isCurrentContext,
-      queryClient,
       openStartedSession,
       runSessionStartWorkflow,
       runSessionStartRequest,

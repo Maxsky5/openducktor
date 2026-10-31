@@ -38,7 +38,7 @@ export function RepositoryModelPickerField({
 
   return (
     <div className="grid min-w-0 gap-1">
-      <Label className="text-xs">Runtime and Model</Label>
+      <Label className="text-xs">Runtime and model</Label>
       <ModelPicker
         runtimes={runtimes}
         value={value}

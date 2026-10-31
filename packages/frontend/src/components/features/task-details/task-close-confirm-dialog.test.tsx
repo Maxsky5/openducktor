@@ -27,7 +27,11 @@ const buildImpact = (overrides: Partial<TaskCloseImpact> = {}): TaskCloseImpact 
 
 const renderDialog = (props: Partial<Parameters<typeof TaskCloseConfirmDialog>[0]> = {}) =>
   render(
-    <QueryProvider>
+    <QueryProvider
+      connection={createTestClientConnection({
+        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+      })}
+    >
       <TaskCloseConfirmDialog
         open
         onOpenChange={() => {}}
@@ -48,10 +52,9 @@ describe("TaskCloseConfirmDialog", () => {
   test("shows one loader in place of the content until the reads end", () => {
     const { unmount } = renderDialog({ isPreparing: true, confirmDisabled: true });
 
-    expect(screen.getByText("Add login")).toBeDefined();
-    expect(screen.getByText("Loading the task")).toBeDefined();
-    expect(screen.queryByText("Not merged: 2 commits are not in origin/main.")).toBeNull();
-    expect(screen.queryByText("/worktrees/TASK-1")).toBeNull();
+    expect(screen.getByRole("status")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Close task" })).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
 
     unmount();
   });
@@ -65,6 +68,7 @@ describe("TaskCloseConfirmDialog", () => {
     // The merge status card already says that the branch is not merged.
     expect(screen.queryByText("The task branch is not detected as merged.")).toBeNull();
     expect(screen.queryByText(/Branch commits that are not in/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Worktree details" }));
     expect(screen.getByText("/worktrees/TASK-1")).toBeDefined();
     expect(screen.getByText("odt/TASK-1")).toBeDefined();
     expect(screen.getByText("3 uncommitted files")).toBeDefined();
@@ -74,11 +78,9 @@ describe("TaskCloseConfirmDialog", () => {
     expect(
       screen.getByText("1 active agent session will be stopped before closing."),
     ).toBeDefined();
+    expect(screen.getByText("Closing does not merge code or change a pull request.")).toBeDefined();
     expect(
-      screen.getByText("Close Task merges no code and changes no pull request."),
-    ).toBeDefined();
-    expect(
-      screen.getByText(/moves to Done with its artifacts, session history, and pull request link/),
+      screen.getByText(/Keep artifacts, session history and the pull request link/),
     ).toBeDefined();
 
     unmount();
@@ -87,12 +89,12 @@ describe("TaskCloseConfirmDialog", () => {
   test("names the task in the header with a copyable ID, and does not focus the copy control", () => {
     const { unmount } = renderDialog();
 
-    const dialog = screen.getByRole("dialog", { name: "Close Task" });
-    // The task line is the description of the dialog.
+    const dialog = screen.getByRole("dialog", { name: "Close task" });
+    // The description states the outcome; the task line stays visible below it.
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(
       document.getElementById(dialog.getAttribute("aria-describedby") ?? "")?.textContent,
-    ).toContain("Add login");
+    ).toContain("Move to Done and keep the task's history.");
     expect(screen.getByRole("button", { name: "Copy task ID" })).toBeDefined();
     expect(screen.queryByText("Move this task to Done.")).toBeNull();
     // Focus on the copy control would open its tooltip, so the dialog takes the focus.
@@ -103,17 +105,18 @@ describe("TaskCloseConfirmDialog", () => {
 
   test("keeps the same cleanup rows when the choice changes", () => {
     const onRemoveWorktreeChange = mock((_removeWorktree: boolean) => {});
-    const cleanupText = () =>
-      screen.getByRole("switch", { name: "Remove worktree and branch" }).closest(".rounded-lg")
-        ?.textContent;
     const view = renderDialog({ removeWorktree: true });
-    const removedText = cleanupText();
+    expect(screen.getByText(/3 uncommitted files/).parentElement?.textContent).toContain(
+      "will be lost.",
+    );
     view.unmount();
 
     const { unmount } = renderDialog({ removeWorktree: false, onRemoveWorktreeChange });
 
-    // The rows do not change with the choice, so the card keeps its size.
-    expect(cleanupText()).toBe(removedText);
+    expect(screen.getByText(/3 uncommitted files/).parentElement?.textContent).toContain(
+      "will be kept.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Worktree details" }));
     expect(screen.getByText("/worktrees/TASK-1")).toBeDefined();
     fireEvent.click(screen.getByRole("switch", { name: "Remove worktree and branch" }));
     expect(onRemoveWorktreeChange).toHaveBeenCalledWith(true);
@@ -128,9 +131,7 @@ describe("TaskCloseConfirmDialog", () => {
     });
 
     expect(screen.getByText("Cleanup failed")).toBeDefined();
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Closing Task/ }).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Closing…/ }).disabled).toBe(true);
 
     unmount();
   });

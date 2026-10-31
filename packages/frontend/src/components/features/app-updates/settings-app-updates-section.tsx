@@ -21,7 +21,7 @@ function SettingsAppUpdatesContent({
     ? {
         badgeVariant: "secondary" as const,
         label: "Loading update status",
-        description: "Reading update status.",
+        description: "Loading update information.",
       }
     : getAppUpdateStatusDisplay(controller.state ?? state);
   const visibleState = controller.state ?? state;
@@ -29,13 +29,6 @@ function SettingsAppUpdatesContent({
     isLoadingInitialState ||
     controller.actionInFlight !== null ||
     visibleState.status === "checking";
-  const downloadedCheckUnavailable =
-    visibleState.status === "downloaded" && visibleState.installRequested === true;
-  const checkUnavailable =
-    visibleState.status === "disabled" ||
-    visibleState.status === "downloading" ||
-    downloadedCheckUnavailable;
-
   return (
     <div className="rounded-md border border-border bg-card p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -52,13 +45,13 @@ function SettingsAppUpdatesContent({
           type="button"
           variant="outline"
           size="sm"
-          disabled={disabled || isBusy || checkUnavailable}
+          disabled={disabled || isBusy || !canCheck(visibleState)}
           onClick={() => {
             void controller.checkFromSettings();
           }}
         >
           <RefreshCw className={isBusy ? "animate-spin" : undefined} />
-          Check for Updates
+          Check for updates
         </Button>
       </div>
 
@@ -90,4 +83,9 @@ export function SettingsAppUpdatesSection({
   disabled,
 }: SettingsAppUpdatesSectionProps): ReactElement {
   return <SettingsAppUpdatesContent disabled={disabled} state={initialState} />;
+}
+
+function canCheck(state: AppUpdateState): boolean {
+  if (state.status === "downloaded") return state.installRequested !== true;
+  return state.status !== "disabled" && state.status !== "downloading";
 }

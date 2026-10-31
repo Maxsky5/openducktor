@@ -296,7 +296,8 @@ function DamagedHostsSection({
       title: `Remove ${entry.label ?? "this damaged host"}?`,
       message:
         "The app deletes this damaged host and all data that it stored for it, including unsent drafts. Work on the host continues.",
-      confirmLabel: "Remove Host",
+      confirmLabel: "Remove host",
+      icon: "trash-2",
       destructive: true,
     });
     if (!confirmed) return;
@@ -335,7 +336,7 @@ function NoOtherHosts({ onAddHost }: { onAddHost: () => void }): ReactElement {
       </Text>
       {/* A button hugs the start edge, so a wrapper lets this box center it. */}
       <View>
-        <Button label="Add Host" icon="plus" variant="outline" size="sm" onPress={onAddHost} />
+        <Button label="Add host" icon="plus" variant="outline" size="sm" onPress={onAddHost} />
       </View>
     </View>
   );
@@ -436,7 +437,8 @@ export function SavedHostsList({
       title: `Remove ${host.label}?`,
       message:
         "The app deletes this host and all data that it stored for it, including unsent drafts. Work on the host continues.",
-      confirmLabel: "Remove Host",
+      confirmLabel: "Remove host",
+      icon: "trash-2",
       destructive: true,
     });
     if (!confirmed) return;

@@ -17,7 +17,7 @@ export function SettingsGitSection({
   return (
     <div className="grid gap-4 p-4">
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Git Defaults</h3>
+        <h3 className="text-sm font-semibold text-foreground">Git defaults</h3>
         <p className="text-xs text-muted-foreground">
           Set the default direct-merge behavior and the cleanup that runs when a task closes.
         </p>
@@ -36,7 +36,7 @@ export function SettingsGitSection({
         >
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="merge_commit" disabled={disabled}>
-              Merge Commit
+              Merge commit
             </TabsTrigger>
             <TabsTrigger value="squash" disabled={disabled}>
               Squash

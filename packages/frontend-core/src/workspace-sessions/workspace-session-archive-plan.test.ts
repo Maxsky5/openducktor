@@ -190,6 +190,6 @@ test("removes nothing while the worktree check runs", () => {
 test("a missing worktree with a branch restores from the default branch", () => {
   expect(worktreeArchiveNotice(false, settled({ worktreeExists: false }))).toEqual({
     kind: "keep",
-    text: "The worktree is missing. Restoring this chat creates a fresh worktree from the default branch.",
+    text: "The worktree is missing. Restoring this chat creates a new worktree from the chat's target branch.",
   });
 });

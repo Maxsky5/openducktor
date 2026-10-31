@@ -100,7 +100,7 @@ export const ContextUsageIndicator = memo(function ContextUsageIndicator({
           importantForAccessibility="no-hide-descendants"
         >
           <Text variant="caption2" style={styles.tooltipTitle}>
-            Session Context
+            Session context
           </Text>
           <View style={styles.meterLine}>
             <View style={styles.meter}>

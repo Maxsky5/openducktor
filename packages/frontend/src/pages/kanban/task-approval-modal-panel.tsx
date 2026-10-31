@@ -1,4 +1,5 @@
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
+import { DialogLoadingContext } from "@/components/ui/dialog-loading-context";
 import type { TaskApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import { useTaskApprovalReads } from "@openducktor/frontend-core/tasks/approval/use-task-approval-reads";
 import { TaskApprovalApprovalStage } from "./task-approval-approval-stage";
@@ -8,9 +9,13 @@ import { TaskApprovalMissingBuilderWorktreeStage } from "./task-approval-missing
 /** The approval modal content, with one loader until the reads of the approval end. */
 export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalModel }): ReactElement {
   const { impact, isPreparing, mergeCheck } = useTaskApprovalReads(model);
+  const loading = useMemo(
+    () => ({ loading: isPreparing && !model.isSubmitting, label: "Loading task details…" }),
+    [isPreparing, model.isSubmitting],
+  );
 
   return (
-    <>
+    <DialogLoadingContext value={loading}>
       {model.stage === "approval" ? (
         <TaskApprovalApprovalStage
           model={model}
@@ -34,6 +39,6 @@ export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalMode
           isPreparing={isPreparing}
         />
       ) : null}
-    </>
+    </DialogLoadingContext>
   );
 }

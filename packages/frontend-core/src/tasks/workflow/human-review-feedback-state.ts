@@ -46,13 +46,12 @@ export const buildHumanReviewFeedbackModalModel = ({
 
 /** The text of the Request Changes feedback step. */
 export const HUMAN_REVIEW_FEEDBACK_COPY = {
-  title: "Send Human Feedback",
-  description:
-    "Describe the changes you want the Builder to make. The next step will use the standard session-start flow to choose whether to reuse an existing Builder session or start a new one.",
+  title: "Request changes",
+  description: "Tell Builder what to change. Next, choose the session to continue the work.",
   messageLabel: "Your feedback",
   messagePlaceholder: "Describe the changes you want the Builder to make.",
   cancelLabel: "Cancel",
-  confirmLabel: "Request Changes",
+  confirmLabel: "Request changes",
 } as const;
 
 /** Request Changes needs feedback text and waits while its start runs. */

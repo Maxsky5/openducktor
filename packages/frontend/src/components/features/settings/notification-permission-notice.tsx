@@ -42,7 +42,7 @@ export function NotificationPermissionNotice({
           <p className="mt-1 text-sm leading-5">{description}</p>
           {capability?.supported && !capability.canGuaranteeSilent ? (
             <p className="mt-1 text-sm leading-5">
-              This platform cannot guarantee silent OS delivery.
+              System notifications may still make a sound on this device.
             </p>
           ) : null}
         </div>
@@ -91,7 +91,7 @@ const warningStyle = {
 const getNotice = (capability: NotificationOsCapability | undefined): Notice => {
   if (capability?.supported && capability.permission === "granted") {
     return {
-      title: "OS notifications are on",
+      title: "System notifications are on",
       className: "border-success-border bg-success-surface text-success-surface-foreground",
       iconClassName:
         "border-success-border bg-background/60 text-success-muted dark:bg-background/30",
@@ -105,8 +105,8 @@ const getNotice = (capability: NotificationOsCapability | undefined): Notice => 
       ...warningStyle,
       title:
         capability.permission === "denied"
-          ? "OS notifications are off"
-          : "OS notifications are unavailable",
+          ? "System notifications are off"
+          : "System notifications are unavailable",
       icon: CircleAlert,
       role: "alert",
     };
@@ -115,14 +115,14 @@ const getNotice = (capability: NotificationOsCapability | undefined): Notice => 
   if (capability?.permission === "prompt") {
     return {
       ...warningStyle,
-      title: "Turn on OS notifications",
+      title: "Turn on system notifications",
       icon: BellRing,
       role: "status",
     };
   }
 
   return {
-    title: capability ? "OS notifications are available" : "Checking OS notifications",
+    title: capability ? "System notifications are available" : "Checking system notifications",
     className: "border-border bg-muted/40 text-foreground",
     iconClassName: "border-border bg-background text-muted-foreground",
     icon: BellRing,

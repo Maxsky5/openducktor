@@ -9,20 +9,23 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/ui/button";
 import { useConfirmDiscard } from "@/ui/confirm-discard";
-import { TextField } from "@/ui/fields";
-import { EmptyState, LoadingState } from "@/ui/states";
+import { EmptyState } from "@/ui/states";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
-import { RepoSettingsFailure } from "../start-session/repo-settings-failure";
+import {
+  RepoSettingsFailure,
+  RepoSettingsRefreshNotice,
+} from "../start-session/repo-settings-failure";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { requestChangesRemove } from "./request-changes-remove";
+import { RequestChangesFeedbackField } from "./request-changes-feedback-field";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
 
-const TITLE = "Request Changes";
+const TITLE = "Request changes";
 
 /**
  * Request Changes: the feedback for the Builder, then the session start choices of the Builder
@@ -51,7 +54,7 @@ function RequestChangesContent({
   const feedback = flow.humanReviewFeedbackModal;
   const start = flow.sessionStartModal;
   // The sheet closes when neither step is open: after a start that stays, or a cancel.
-  const triggered = useWorkflowSheetLifecycle({
+  const { triggered, loading } = useWorkflowSheetLifecycle({
     ready: task !== null && settings.ready && settings.error === null,
     run: () => {
       if (task) flow.onHumanRequestChanges(task.id);
@@ -65,8 +68,8 @@ function RequestChangesContent({
   const hasUnsentFeedback = remove === "confirm_discard";
   const discardFeedback = () => {
     void confirmDiscard({
-      title: "Discard the Feedback?",
-      message: "Your feedback is not sent.",
+      title: "Discard feedback?",
+      message: "Your feedback has not been sent.",
     }).then((confirmed) => {
       if (confirmed) feedback?.onOpenChange(false);
     });
@@ -81,14 +84,24 @@ function RequestChangesContent({
       <GroupedSheet title={TITLE}>
         <EmptyState
           icon="search-x"
-          title="Task Not Found"
+          title="Task not found"
           message={`${taskId} is no longer in this workspace.`}
         />
       </GroupedSheet>
     );
   }
   if (start?.open) {
-    return <SessionStartSheet model={start} branchesFailure={branchesFailure} />;
+    return (
+      <SessionStartSheet
+        model={start}
+        branchesFailure={branchesFailure}
+        notice={
+          settings.refreshError ? (
+            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
+          ) : null
+        }
+      />
+    );
   }
   if (settings.error && !triggered) {
     return (
@@ -99,9 +112,7 @@ function RequestChangesContent({
   }
   if (!feedback) {
     return (
-      <GroupedSheet title={TITLE}>
-        <LoadingState label="Preparing Request Changes" />
-      </GroupedSheet>
+      <GroupedSheet title={TITLE} loading={loading} loadingLabel="Loading repository settings…" />
     );
   }
   const submitBlocked = isHumanReviewFeedbackConfirmDisabled(feedback);
@@ -120,6 +131,7 @@ function RequestChangesContent({
             label={COPY.confirmLabel}
             size="lg"
             loading={feedback.isSubmitting}
+            icon="message-square-warning"
             disabled={submitBlocked}
             onPress={() => void feedback.onConfirm()}
             fill
@@ -127,6 +139,9 @@ function RequestChangesContent({
         }
       >
         <FormBody>
+          {settings.refreshError ? (
+            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
+          ) : null}
           <View style={styles.lead}>
             <FormLead text={COPY.description} />
             <Text variant="footnote" tone="secondary" numberOfLines={2}>
@@ -136,15 +151,10 @@ function RequestChangesContent({
               {`  ${task.title}`}
             </Text>
           </View>
-          <TextField
-            label={COPY.messageLabel}
+          <RequestChangesFeedbackField
             value={feedback.message}
             onChangeText={feedback.onMessageChange}
-            placeholder={COPY.messagePlaceholder}
-            multiline
             editable={!feedback.isSubmitting}
-            autoFocus
-            style={styles.message}
           />
         </FormBody>
       </ActionForm>
@@ -154,5 +164,4 @@ function RequestChangesContent({
 
 const styles = StyleSheet.create((theme) => ({
   lead: { gap: theme.space.sm },
-  message: { minHeight: 192, maxHeight: 360, textAlignVertical: "top" },
 }));

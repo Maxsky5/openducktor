@@ -112,7 +112,7 @@ function ImagePreview({
   if (!url)
     return (
       <p role="status" className="text-sm text-muted-foreground">
-        Loading image...
+        Loading image…
       </p>
     );
   return (

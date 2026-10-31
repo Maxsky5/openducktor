@@ -3,8 +3,10 @@ import { FlashList } from "@shopify/flash-list";
 import {
   type ComponentRef,
   type ReactElement,
-  type Ref,
+  type RefObject,
   useCallback,
+  useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -15,10 +17,11 @@ import { focusWithKeyboard } from "./focus-with-keyboard";
 import { InPlaceSheet } from "./in-place-sheet";
 import type { IconName } from "./icon";
 import { SearchField } from "./search-field";
-import { EmptyState, ErrorState, LoadingState } from "./states";
+import { EmptyState, ErrorState } from "./states";
 import { Text } from "./text";
 import { type OptionChoice, type OptionPickerRow, optionPickerRows } from "./option-picker-model";
 import { PickerRow } from "./picker-row";
+import { ModalLoadingContext } from "./modal-loading-context";
 
 const keyOf = (row: OptionPickerRow): string => row.value;
 
@@ -50,6 +53,7 @@ export type OptionPickerSheetProps = {
 };
 
 function OptionList({
+  visible,
   choices,
   selected,
   hint,
@@ -62,13 +66,18 @@ function OptionList({
   onChoose,
 }: Omit<
   OptionPickerSheetProps,
-  "visible" | "title" | "error" | "errorTitle" | "loadingLabel" | "onRetry" | "onSelect" | "onClose"
+  "title" | "error" | "errorTitle" | "loadingLabel" | "onRetry" | "onSelect" | "onClose"
 > & {
   choices: readonly OptionChoice[];
-  searchRef: Ref<ComponentRef<typeof TextInput>>;
+  searchRef: RefObject<ComponentRef<typeof TextInput> | null>;
   onChoose: (value: string) => void;
 }): ReactElement {
   const [query, setQuery] = useState("");
+  const loading = useContext(ModalLoadingContext);
+  // The native helper waits for window focus; the loader can outlast the sheet's onShow event.
+  useEffect(() => {
+    if (visible && autoFocus && !loading) focusWithKeyboard(searchRef.current);
+  }, [visible, autoFocus, loading, searchRef]);
   // FlashList changes its state during render, so its rows must not come from a deferred render.
   const rows = useMemo(
     () => optionPickerRows(choices, selected, query),
@@ -98,7 +107,7 @@ function OptionList({
           onChangeText={setQuery}
           placeholder={searchPlaceholder}
           accessibilityLabel={searchPlaceholder}
-          autoFocus={autoFocus}
+          autoFocus={visible && autoFocus && !loading}
         />
         {hint ? (
           <Text variant="footnote" tone="tertiary">
@@ -117,7 +126,7 @@ function OptionList({
           ListEmptyComponent={
             <EmptyState
               icon={searching ? "search-x" : emptyIcon}
-              title={searching ? "No Results" : "Nothing to Choose"}
+              title={searching ? "No results" : "No options available"}
               message={searching ? `Nothing matches “${query.trim()}”.` : emptyMessage}
             />
           }
@@ -137,7 +146,7 @@ export function OptionPickerSheet({
   choices,
   error = null,
   errorTitle = "The list did not load",
-  loadingLabel = "Loading",
+  loadingLabel = "Loading options…",
   onRetry,
   onSelect,
   onClose,
@@ -150,33 +159,33 @@ export function OptionPickerSheet({
     },
     [onClose, onSelect],
   );
-  // Android opens the keyboard for a field only in a focused window. The field of an open list
-  // attaches before the sheet window has the focus, so it asks again when the sheet has opened. A
-  // list that loads later focuses its field when it attaches.
   const search = useRef<ComponentRef<typeof TextInput>>(null);
-  const { autoFocus } = list;
-  const focusSearch = useCallback(() => {
-    if (autoFocus) focusWithKeyboard(search.current);
-  }, [autoFocus]);
   // The modal keeps its content while it slides out, and drops it after it closes, so the next
   // open starts with an empty search.
-  let content: ReactElement;
+  let content: ReactElement | null = null;
   if (choices) {
-    content = <OptionList {...list} choices={choices} searchRef={search} onChoose={choose} />;
+    content = (
+      <OptionList
+        {...list}
+        visible={visible}
+        choices={choices}
+        searchRef={search}
+        onChoose={choose}
+      />
+    );
   } else if (error) {
     content = <ErrorState title={errorTitle} message={errorMessage(error)} onRetry={onRetry} />;
-  } else {
-    content = <LoadingState label={loadingLabel} />;
   }
   return (
     <InPlaceSheet
+      loading={choices === undefined && error === null}
+      loadingLabel={loadingLabel}
       visible={visible}
       title={title}
       onClose={onClose}
       scrolls={false}
       padded={false}
       background="surface"
-      onShow={focusSearch}
     >
       {content}
     </InPlaceSheet>

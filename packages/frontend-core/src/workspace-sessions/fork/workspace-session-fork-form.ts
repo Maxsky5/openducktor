@@ -21,6 +21,7 @@ export const FORK_CHAT_TEXT = {
   newWorktree: "New worktree",
   newWorktreeDescription: "Start from the last commit in the source folder.",
   sourceFolder: "Source folder",
+  loadingDefaults: "Loading branch defaults…",
   uncommittedChanges: "Uncommitted changes in the source folder do not go to the new worktree.",
   confirm: "Fork chat",
   confirming: "Forking chat…",
@@ -57,6 +58,7 @@ export const workspaceSessionForkInput = ({
   destination,
   worktree,
   branchPrefix,
+  defaultsReady,
 }: {
   workspaceId: string;
   record: WorkspaceSession;
@@ -64,7 +66,9 @@ export const workspaceSessionForkInput = ({
   destination: WorkspaceSessionForkDestination;
   worktree: WorkspaceSessionWorktreeInput;
   branchPrefix: string | undefined;
+  defaultsReady: boolean;
 }): WorkspaceSessionForkInput | null => {
+  if (destination === "new_worktree" && !defaultsReady) return null;
   const parsed = workspaceSessionForkInputSchema.safeParse({
     workspaceId,
     sessionId: record.id,

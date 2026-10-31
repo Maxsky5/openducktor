@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { AgentKickoffTemplateId } from "@openducktor/workflows";
 import {
   FEEDBACK_MESSAGE_REQUIRED_ERROR,
@@ -14,61 +14,50 @@ const CONTEXT_FREE_TEMPLATES: AgentKickoffTemplateId[] = [
 ];
 
 describe("resolveSessionStartKickoffPromptContext", () => {
-  test.each(CONTEXT_FREE_TEMPLATES)("returns no context for %s", async (templateId) => {
-    const loadRepoDefaultTargetBranch = mock(async () => ({
-      remote: "origin",
-      branch: "main",
-    }));
-
-    await expect(
+  test.each(CONTEXT_FREE_TEMPLATES)("returns no context for %s", (templateId) => {
+    expect(
       resolveSessionStartKickoffPromptContext({
         templateId,
-        loadRepoDefaultTargetBranch,
+        repoDefaultTargetBranch: { remote: "origin", branch: "main" },
       }),
-    ).resolves.toEqual({});
-    expect(loadRepoDefaultTargetBranch).not.toHaveBeenCalled();
+    ).toEqual({});
   });
 
-  test("maps human review feedback to its prompt placeholder", async () => {
-    await expect(
+  test("maps human review feedback to its prompt placeholder", () => {
+    expect(
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_after_human_request_changes",
         message: "  Address every review comment.  ",
-        loadRepoDefaultTargetBranch: mock(async () => null),
+        repoDefaultTargetBranch: null,
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       extraPlaceholders: {
         humanFeedback: "Address every review comment.",
       },
     });
   });
 
-  test("rejects missing human review feedback", async () => {
-    await expect(
+  test("rejects missing human review feedback", () => {
+    expect(() =>
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_after_human_request_changes",
         message: "   ",
-        loadRepoDefaultTargetBranch: mock(async () => null),
+        repoDefaultTargetBranch: null,
       }),
-    ).rejects.toThrow(FEEDBACK_MESSAGE_REQUIRED_ERROR);
+    ).toThrow(FEEDBACK_MESSAGE_REQUIRED_ERROR);
   });
 
-  test("maps the selected pull request target into nested Git context", async () => {
-    const loadRepoDefaultTargetBranch = mock(async () => ({
-      remote: "origin",
-      branch: "main",
-    }));
-
-    await expect(
+  test("maps the selected pull request target into nested Git context", () => {
+    expect(
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_pull_request_generation",
         taskTargetBranch: {
           remote: "upstream",
           branch: "release/2026.04",
         },
-        loadRepoDefaultTargetBranch,
+        repoDefaultTargetBranch: { remote: "origin", branch: "main" },
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       git: {
         targetBranch: {
           remote: "upstream",
@@ -76,19 +65,15 @@ describe("resolveSessionStartKickoffPromptContext", () => {
         },
       },
     });
-    expect(loadRepoDefaultTargetBranch).not.toHaveBeenCalled();
   });
 
-  test("uses the repository default for pull request context when the task has no target", async () => {
-    await expect(
+  test("uses the repository default for pull request context when the task has no target", () => {
+    expect(
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_pull_request_generation",
-        loadRepoDefaultTargetBranch: mock(async () => ({
-          remote: "upstream",
-          branch: "develop",
-        })),
+        repoDefaultTargetBranch: { remote: "upstream", branch: "develop" },
       }),
-    ).resolves.toEqual({
+    ).toEqual({
       git: {
         targetBranch: {
           remote: "upstream",

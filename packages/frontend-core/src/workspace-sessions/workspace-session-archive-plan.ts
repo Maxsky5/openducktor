@@ -16,8 +16,8 @@ export const ARCHIVE_CHAT_TEXT = {
     "Archiving stops this chat's terminals, development servers, and its running session. Your chat history stays available in Archived chats.",
   repositoryFilesStay: "Your repository files will stay on disk.",
   removeWorktree: "Remove worktree and branch",
-  checkingChanges: "Checking worktree changes…",
-  checkingWorktree: "Checking the worktree…",
+  checkingChanges: "Loading worktree details…",
+  checkingWorktree: "Loading worktree details…",
   retryCheck: "Retry check",
   confirm: "Archive chat",
   confirming: "Archiving…",
@@ -126,7 +126,7 @@ export const worktreeArchiveNotice = (
       text =
         preview.data.branchName === null
           ? "The worktree is missing. Restore the worktree at this path before restoring the chat."
-          : "The worktree is missing. Restoring this chat creates a fresh worktree from the default branch.";
+          : "The worktree is missing. Restoring this chat creates a new worktree from the chat's target branch.";
     }
     return { kind: "keep", text };
   }

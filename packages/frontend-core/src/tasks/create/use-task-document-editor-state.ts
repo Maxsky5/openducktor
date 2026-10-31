@@ -1,3 +1,5 @@
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { TASK_DOCUMENT_STALE_TIME_MS, documentQueryKeys } from "../../queries/documents";
 import { byDocumentCode, type BuiltinDocumentCode } from "@openducktor/workflows";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type { DocumentEditorView } from "./task-composer-types";
@@ -26,6 +28,7 @@ type TaskDocumentPayload = {
 type UseTaskDocumentEditorStateArgs = {
   open: boolean;
   taskId: string | null;
+  repoPath: string | null;
   activeSection: TaskDocumentSection | null;
   loadDocument: (taskId: string, code: TaskDocumentSection) => Promise<TaskDocumentPayload>;
   loadTimeoutMs?: number;
@@ -46,6 +49,8 @@ const DOCUMENT_LOAD_TIMEOUT_MS = 15000;
 type TaskDocumentEditorContext = {
   open: boolean;
   taskId: string | null;
+  repoPath: string | null;
+  queryClient: QueryClient;
 };
 
 type TaskDocumentEditorLocalState = {
@@ -97,15 +102,29 @@ type TaskDocumentEditorAction =
       updatedAt: string;
     };
 
-const createInitialDocumentState = (): TaskDocumentEditorState =>
-  byDocumentCode(() => ({
-    serverMarkdown: "",
-    draftMarkdown: "",
-    updatedAt: null,
-    isLoading: false,
-    loaded: false,
-    error: null,
-  }));
+const createInitialDocumentState = (context: TaskDocumentEditorContext): TaskDocumentEditorState =>
+  byDocumentCode((code) => {
+    const query =
+      context.open && context.repoPath && context.taskId
+        ? context.queryClient.getQueryCache().find({
+            queryKey: documentQueryKeys.document(context.repoPath, context.taskId, code),
+            exact: true,
+          })
+        : undefined;
+    // Match fetchQuery: fresh documents need no read or preparation frame.
+    const cached =
+      query && !query.isStaleByTime(TASK_DOCUMENT_STALE_TIME_MS)
+        ? context.queryClient.getQueryData<TaskDocumentPayload>(query.queryKey)
+        : undefined;
+    return {
+      serverMarkdown: cached?.markdown ?? "",
+      draftMarkdown: cached?.markdown ?? "",
+      updatedAt: cached?.updatedAt ?? null,
+      isLoading: false,
+      loaded: cached !== undefined,
+      error: cached?.error ?? null,
+    };
+  });
 
 const createInitialViewState = (): TaskDocumentViewState => byDocumentCode(() => "split");
 
@@ -113,7 +132,7 @@ const createTaskDocumentEditorLocalState = (
   context: TaskDocumentEditorContext,
 ): TaskDocumentEditorLocalState => ({
   context,
-  documents: createInitialDocumentState(),
+  documents: createInitialDocumentState(context),
   views: createInitialViewState(),
 });
 
@@ -167,7 +186,6 @@ const taskDocumentEditorReducer = (
         documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
           ...section,
           isLoading: false,
-          loaded: false,
           error: action.error,
         })),
       };
@@ -235,13 +253,15 @@ const toErrorMessage = (cause: unknown): string =>
 export function useTaskDocumentEditorState({
   open,
   taskId,
+  repoPath,
   activeSection,
   loadDocument,
   loadTimeoutMs = DOCUMENT_LOAD_TIMEOUT_MS,
 }: UseTaskDocumentEditorStateArgs): UseTaskDocumentEditorStateResult {
+  const queryClient = useQueryClient();
   const editorContext = useMemo<TaskDocumentEditorContext>(
-    () => ({ open, taskId }),
-    [open, taskId],
+    () => ({ open, taskId, repoPath, queryClient }),
+    [open, taskId, repoPath, queryClient],
   );
   const [localState, dispatchLocalState] = useReducer(
     taskDocumentEditorReducer,

@@ -8,7 +8,7 @@ import {
   type ModelPickerView,
   selectableModelPickerCatalog,
 } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   buildModelPickerRows,
   type ModelPickerListRow,
@@ -20,6 +20,7 @@ import {
 } from "./model-picker-rows";
 
 export type ModelPicker = {
+  loading: boolean;
   query: string;
   setQuery: (query: string) => void;
   /** True while the list shows search results. */
@@ -53,22 +54,48 @@ const selectedPickerValue = (
  * picker can choose from.
  */
 export function useModelPicker({
+  visible,
   runtimes,
   selection,
   favorites,
   lock,
 }: {
+  visible: boolean;
   runtimes: readonly ModelPickerRuntime[];
   selection: AgentModelSelection | null;
   favorites: readonly AgentModelFavorite[] | null;
   lock: ModelPickerLock | null;
 }): ModelPicker {
-  const [query, setQuery] = useState("");
   const lockedRuntimeKind = lock?.runtimeKind ?? null;
   const singleRuntimeKind = runtimes.length === 1 ? (runtimes[0]?.descriptor.kind ?? null) : null;
   const selectionRuntimeKind = selection?.runtimeKind ?? null;
-  const [view, setView] = useState<ModelPickerView>(() =>
-    openingModelPickerView({ runtimes, favorites, lock, selectionRuntimeKind }),
+  const [state, setState] = useState(() => ({
+    visible,
+    query: "",
+    view: openingModelPickerView({ runtimes, favorites, lock, selectionRuntimeKind }),
+    prepared: false,
+  }));
+  // Keep the closing list intact. Only a new opening resets its search and chosen tab.
+  if (state.visible !== visible) {
+    setState(
+      visible
+        ? {
+            visible,
+            query: "",
+            prepared: false,
+            view: openingModelPickerView({ runtimes, favorites, lock, selectionRuntimeKind }),
+          }
+        : { ...state, visible },
+    );
+  }
+  const { query, view } = state;
+  const setQuery = useCallback(
+    (query: string) => setState((current) => ({ ...current, query })),
+    [],
+  );
+  const setView = useCallback(
+    (view: ModelPickerView) => setState((current) => ({ ...current, view })),
+    [],
   );
   const searching = query.trim().length > 0;
   const tabs = useMemo(
@@ -108,5 +135,22 @@ export function useModelPicker({
       }),
     [lockedRuntimeKind, runtimes, searching, view],
   );
-  return { query, setQuery, searching, view, setView, tabs, shownRuntimes, rows };
+  const choices = lock
+    ? runtimes.filter((runtime) => runtime.descriptor.kind === lock.runtimeKind)
+    : runtimes;
+  const pending =
+    choices.length > 0 && choices.every((runtime) => runtime.resource.status === "loading");
+  // Once shown, tabs, search, and retries keep the same list frame visible.
+  if (visible && !pending && !state.prepared) setState({ ...state, prepared: true });
+  return {
+    loading: visible && pending && !state.prepared,
+    query,
+    setQuery,
+    searching,
+    view,
+    setView,
+    tabs,
+    shownRuntimes,
+    rows,
+  };
 }

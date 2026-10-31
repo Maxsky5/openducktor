@@ -160,7 +160,7 @@ function LifecycleDialog({
             </p>
           ) : null}
         </DialogBody>
-        <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 justify-between gap-2 border-t border-border pt-5">
           <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>
@@ -208,9 +208,9 @@ export function WorkspaceCloseDialog({
   return (
     <LifecycleDialog
       title="Close workspace"
-      description={`Hide ${workspace.workspaceName} from the workspace rail?`}
+      description={`Close ${workspace.workspaceName}?`}
       actionLabel="Close workspace"
-      pendingActionLabel="Closing..."
+      pendingActionLabel="Closing…"
       actionIcon={EyeOff}
       submitting={submit.submitting}
       error={submit.error}
@@ -224,7 +224,9 @@ export function WorkspaceCloseDialog({
           <EyeOff aria-hidden="true" className="size-4" />
         </span>
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="font-medium text-foreground">Only the workspace rail entry is hidden.</p>
+          <p className="font-medium text-foreground">
+            Hide this workspace from the sidebar. You can reopen it later.
+          </p>
           <p className="text-xs leading-5 text-muted-foreground">
             Tasks, sessions, repository files, branches, and task worktrees stay on disk. You can
             reopen this workspace later.
@@ -257,7 +259,7 @@ export function WorkspaceRemoveDialog({
       title="Remove workspace"
       description={`Permanently remove ${workspace.workspaceName} and its task data? This cannot be undone.`}
       actionLabel="Remove workspace"
-      pendingActionLabel="Removing..."
+      pendingActionLabel="Removing…"
       actionIcon={Trash2}
       destructive
       submitting={submit.submitting}
@@ -326,7 +328,7 @@ export function WorkspaceRemovalRecoveryDialog({
       title="Workspace removal did not finish"
       description={`Finish removing ${removal.workspace.workspaceName} from OpenDucktor.`}
       actionLabel="Retry removal"
-      pendingActionLabel="Removing..."
+      pendingActionLabel="Removing…"
       actionIcon={Trash2}
       destructive
       submitting={submit.submitting}

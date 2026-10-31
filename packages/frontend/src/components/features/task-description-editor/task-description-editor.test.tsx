@@ -172,7 +172,7 @@ describe("TaskDescriptionEditor", () => {
 
   test.each([
     ["Inline math", "LaTeX formula", "x^2", "Insert formula"],
-    ["Link", "Link destination", "https://example.com", "Insert link"],
+    ["Link", "Web address", "https://example.com", "Insert link"],
   ])("locks an open %s dialog and keeps its draft", async (button, field, draft, save) => {
     const onChange = mock((_value: string) => {});
     const props = { ...createProps(), markdown: "Draft", onChange };

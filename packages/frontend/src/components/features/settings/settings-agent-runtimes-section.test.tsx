@@ -97,10 +97,8 @@ describe("AgentRuntimesSection", () => {
     );
 
     try {
-      expect(
-        screen.getByText(/Failed to load runtime definitions: Definitions failed/i),
-      ).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Retry runtime definitions" }));
+      expect(screen.getByText(/Could not load runtimes: Definitions failed/i)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Reload runtimes" }));
       await waitFor(() => expect(retryRuntimeDefinitions).toHaveBeenCalledTimes(1));
     } finally {
       renderer.unmount();
@@ -293,7 +291,7 @@ describe("AgentRuntimesSection", () => {
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Browse" }).disabled).toBe(
         false,
       );
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking…" }).disabled).toBe(
         true,
       );
     } finally {

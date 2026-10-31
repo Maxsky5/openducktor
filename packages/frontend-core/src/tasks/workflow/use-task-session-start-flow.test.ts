@@ -149,7 +149,7 @@ describe("useTaskSessionStartFlow", () => {
       await harness.waitFor((flow) => flow.sessionStartModal !== null);
       expect(harness.getLatest().sessionStartModal).toMatchObject({
         open: true,
-        title: "Start QA Session",
+        title: "Start QA session",
         allowRunInBackground: true,
       });
       expect(args.runSessionStartWorkflow).not.toHaveBeenCalled();

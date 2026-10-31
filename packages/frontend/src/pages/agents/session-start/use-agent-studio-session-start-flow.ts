@@ -7,8 +7,6 @@ import {
 } from "@openducktor/workflows";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
-import { useQueryClient } from "@tanstack/react-query";
-import { createSessionStartKickoffResolver } from "@openducktor/frontend-core/sessions/start/session-start-kickoff";
 import type { GitBranch } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
@@ -88,7 +86,6 @@ export function useAgentStudioSessionStartFlow({
   runSessionStartWorkflow,
   scheduleQueryUpdate,
 }: UseAgentStudioSessionStartFlowArgs) {
-  const queryClient = useQueryClient();
   const { startupAttempts } = useClientConnection();
   const contextKey = `${workspaceId}:${taskId}:${role}`;
   const isCurrentContext = useSessionStartContext(contextKey);
@@ -128,12 +125,10 @@ export function useAgentStudioSessionStartFlow({
       return runInternalSessionStartRequest(
         buildSessionStartModalRequest({
           source: "agent_studio",
-          resolveKickoffPrompt: createSessionStartKickoffResolver({
-            queryClient,
-            workspaceId,
-            task: request.taskId === taskId ? selectedTask : null,
-            request,
-          }),
+          kickoff:
+            request.postStartAction === "kickoff"
+              ? { workspaceId, task: request.taskId === taskId ? selectedTask : null, request }
+              : undefined,
           request,
           requestedRuntimeKind: isSameTaskAndRole
             ? (selectionForNewSession?.runtimeKind ?? selectedSessionIdentity?.runtimeKind ?? null)
@@ -153,7 +148,6 @@ export function useAgentStudioSessionStartFlow({
       );
     },
     [
-      queryClient,
       workspaceId,
       loadedSession,
       role,

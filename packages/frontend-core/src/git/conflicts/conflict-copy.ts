@@ -67,7 +67,7 @@ const COPY_BY_OPERATION = {
 export const getGitConflictCopy = (operation: GitConflictOperation | null): GitConflictCopy =>
   operation === null
     ? {
-        title: "Git conflict operation unavailable",
+        title: "Git conflict needs attention",
         inProgressLabel: "Git conflict detected",
         operationLabel: "unidentified Git operation",
         abortLabel: "Abort unavailable",
@@ -83,22 +83,22 @@ export const getGitConflictTitle = (conflict: GitConflict): string =>
 
 /** Why Abort cannot run: Git did not report the operation or the directory of the conflict. */
 export const CONFLICT_ABORT_UNAVAILABLE_MESSAGE =
-  "Restore the Git conflict operation and directory before aborting.";
+  "The Git operation or its folder is unknown. Check the repository with git status before trying to abort it.";
 
 /** The title of a failed Git refresh after a successful abort. */
 export const CONFLICT_ABORT_REFRESH_FAILED_TITLE = "Conflict aborted but refresh failed";
 
 /** Why an agent cannot receive a conflict whose operation Git did not report. */
 export const UNIDENTIFIED_GIT_CONFLICT_ASK_BLOCKED_REASON =
-  "Git did not report the conflict operation. Restore the operation information before asking for assistance.";
+  "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.";
 
 /** The output of a conflict whose operation Git did not report. */
 export const UNIDENTIFIED_GIT_CONFLICT_OUTPUT =
-  "Git did not report the conflict operation. Restore the operation information before asking for assistance or aborting.";
+  "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.";
 
 /** The description of a conflict whose operation Git did not report. */
 export const UNIDENTIFIED_GIT_CONFLICT_DESCRIPTION =
-  "Git reports unmerged files. Restore the operation information before asking for assistance or aborting.";
+  "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.";
 
 /**
  * The conflict that unmerged files show when Git reports no conflict operation, or null when no

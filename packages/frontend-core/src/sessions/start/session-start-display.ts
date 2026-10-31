@@ -42,13 +42,13 @@ export const sessionStartVariantPlaceholder = ({
   variantCount: number;
 }): string => {
   if (isSelectionCatalogLoading) {
-    return "Checking compatibility...";
+    return "Loading effort options…";
   }
   if (!hasSelectedModel) {
-    return "Select model first";
+    return "Select a model first";
   }
   if (!supportsVariants) {
-    return "Effort handled by runtime";
+    return "Runtime sets effort";
   }
   if (variantCount === 0) {
     return "This model has no effort options";
@@ -84,7 +84,7 @@ export const sessionStartModelReadOnlyReason = (isStarting: boolean): string =>
     : "Reuse mode keeps the source session runtime and model.";
 
 export const sessionStartModelPlaceholder = (isSelectionCatalogLoading: boolean): string =>
-  isSelectionCatalogLoading ? "Loading models..." : "Select a model";
+  isSelectionCatalogLoading ? "Loading models…" : "Select a model";
 
 export const sessionStartTargetBranchPlaceholder = (branchCount: number): string =>
-  branchCount > 0 ? "Select branch..." : "Branches unavailable";
+  branchCount > 0 ? "Select a branch" : "Branches unavailable";

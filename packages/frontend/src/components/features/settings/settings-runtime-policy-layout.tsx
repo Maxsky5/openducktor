@@ -11,7 +11,7 @@ export function RuntimePolicyCard({ title, children }: { title: string; children
       <div className="flex flex-col gap-1">
         <h4 className="text-base font-semibold text-foreground">{title}</h4>
         <p className="text-sm text-muted-foreground">
-          Configure the default value, then opt into role-specific overrides only when needed.
+          Set a default for every role. Override it for a role that needs a different value.
         </p>
       </div>
       {children}

@@ -32,6 +32,7 @@ export function useTaskStartFlow(workspace: WorkspaceRecord) {
     repoSettings,
     repoSettingsReady,
     repoSettingsError,
+    repoSettingsRefreshError,
     retryRepoSettings,
     branches,
     branchesFailure,
@@ -103,9 +104,10 @@ export function useTaskStartFlow(workspace: WorkspaceRecord) {
     () => ({
       ready: repoSettingsReady,
       error: repoSettingsError ? errorMessage(repoSettingsError) : null,
+      refreshError: repoSettingsRefreshError ? errorMessage(repoSettingsRefreshError) : null,
       retry: retryRepoSettings,
     }),
-    [repoSettingsError, repoSettingsReady, retryRepoSettings],
+    [repoSettingsError, repoSettingsRefreshError, repoSettingsReady, retryRepoSettings],
   );
   return {
     flow,

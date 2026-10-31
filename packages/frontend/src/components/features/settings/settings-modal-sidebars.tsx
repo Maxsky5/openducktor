@@ -22,8 +22,8 @@ export function SettingsSidebar({
   onChange,
 }: SettingsSidebarProps): ReactElement {
   return (
-    <aside className="border-r border-border bg-muted/50 p-3">
-      <div className="space-y-1">
+    <aside className="min-h-0 border-b border-border bg-muted/50 p-2 sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3">
+      <div className="flex gap-1 overflow-x-auto sm:flex-col sm:overflow-visible">
         {SETTINGS_SECTIONS.map((entry) => {
           if (entry.id === "remote-access" && !getShellBridge().remoteAccess) return null;
           const Icon = entry.icon;
@@ -33,7 +33,7 @@ export function SettingsSidebar({
               key={entry.id}
               type="button"
               variant={section === entry.id ? "accent" : "ghost"}
-              className="w-full justify-between"
+              className="shrink-0 justify-between sm:w-full"
               disabled={disabled}
               onClick={() => onChange(entry.id)}
               title={
@@ -92,21 +92,21 @@ export function RepositorySidebar({
   ]);
 
   return (
-    <aside className="space-y-3 border-r border-border bg-muted p-3">
+    <aside className="flex min-h-0 flex-col gap-3 border-b border-border bg-muted p-3 lg:overflow-y-auto lg:border-b-0 lg:border-r">
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Repository</Label>
         <RepositorySelector
           workspaces={workspaces}
           value={selectedWorkspaceId ?? ""}
           placeholder={workspaces.length > 0 ? "Select repository" : "No repository configured"}
-          searchPlaceholder="Search repository..."
+          searchPlaceholder="Search repositories…"
           disabled={disabled || workspaces.length === 0}
           errorCountByWorkspaceId={repoErrorCountByWorkspaceId}
           onValueChange={onSelectWorkspaceId}
         />
       </div>
 
-      <div className="space-y-1">
+      <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {REPOSITORY_SECTIONS.map((entry) => {
           const sectionErrorCount = sectionErrorCountById.get(entry.id) ?? 0;
           return (
@@ -114,7 +114,7 @@ export function RepositorySidebar({
               key={entry.id}
               type="button"
               variant={selectedRepositorySection === entry.id ? "accent" : "ghost"}
-              className="w-full justify-between"
+              className="shrink-0 justify-between lg:w-full"
               disabled={disabled}
               onClick={() => onSelectSection(entry.id)}
               title={

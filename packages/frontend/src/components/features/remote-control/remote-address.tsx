@@ -106,7 +106,7 @@ export function RemoteAddress({
           >
             <Button type="button" variant="outline" size="sm" disabled={pending !== null}>
               <QrCode data-icon="inline-start" />
-              {pending === "qr" ? "Creating QR code..." : "Show QR code"}
+              {pending === "qr" ? "Creating QR code…" : "Show QR code"}
             </Button>
           </DialogTrigger>
         </div>

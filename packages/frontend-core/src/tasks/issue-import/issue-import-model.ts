@@ -1,7 +1,8 @@
-import type { SourceIssue } from "@openducktor/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import type { IssueItemsListResult, SourceIssue } from "@openducktor/contracts";
+import { type QueryKey, queryOptions } from "@tanstack/react-query";
 import { connectionHost } from "../../connection/client-connection";
 import { issueItemsQueryKeys } from "../../queries/issue-items";
+import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "../../queries/skipped-query";
 import type { IssueImportProvider } from "./issue-import-provider";
 import { issueImportSourceLabel } from "./issue-import-provider";
 import type { ImportOutcome, IssueReview } from "./issue-import-state";
@@ -18,9 +19,9 @@ export const ISSUE_IMPORT_ISSUE_TYPES = [
 
 export const ISSUE_IMPORT_LABELS = {
   back: "Back",
-  reviewTasks: "Review Tasks",
+  reviewTasks: "Review tasks",
   importSelected: "Import selected",
-  importing: "Importing...",
+  importing: "Importing…",
   openRepositorySettings: "Open repository settings",
   retry: "Retry",
   previousPage: "Previous",
@@ -32,7 +33,7 @@ export const ISSUE_IMPORT_LABELS = {
   priority: "Priority",
   labels: "Labels",
   refreshItem: "Refresh item",
-  refreshingItem: "Refreshing...",
+  refreshingItem: "Refreshing…",
   linked: "Linked",
   openSourceFailed: "Failed to open source item",
 } as const;
@@ -69,21 +70,27 @@ export const issueImportListQueryOptions = ({
   cursor,
 }: {
   repoPath: string;
-  provider: IssueImportProvider;
+  provider: IssueImportProvider | null;
   search: string;
   cursor: string | undefined;
 }) =>
-  queryOptions({
-    queryKey: [
-      ...issueItemsQueryKeys.repo(repoPath),
-      provider.config.id,
-      provider.config.repository,
-      provider.config.settings?.areaPath,
-      search,
-      cursor,
-    ],
-    queryFn: ({ client }) => connectionHost(client).issueItemsList({ repoPath, search, cursor }),
-  });
+  provider === null
+    ? skippedQueryOptions<IssueItemsListResult>({
+        queryKey: [...issueItemsQueryKeys.repo(repoPath), SKIPPED_QUERY_KEY_SEGMENT],
+        staleTime: Number.POSITIVE_INFINITY,
+      })
+    : queryOptions<IssueItemsListResult, Error, IssueItemsListResult, QueryKey>({
+        queryKey: [
+          ...issueItemsQueryKeys.repo(repoPath),
+          provider.config.id,
+          provider.config.repository,
+          provider.config.settings?.areaPath,
+          search,
+          cursor,
+        ],
+        queryFn: ({ client }) =>
+          connectionHost(client).issueItemsList({ repoPath, search, cursor }),
+      });
 
 /**
  * The selected items, with the task link that the current result page shows. Another client can
@@ -115,8 +122,8 @@ export const issueImportTitle = (providerId: string): string =>
 
 export const issueImportStepDescription = (step: IssueImportStep): string =>
   step === "select"
-    ? "Choose open source items. Your selections stay when you search or change pages."
-    : "Review each Task before import.";
+    ? "Choose items to import. Your selections stay when you search or change pages."
+    : "Review each task before importing.";
 
 /** The search field of a provider that can search, or null when it lists items only. */
 export const issueImportSearchField = (

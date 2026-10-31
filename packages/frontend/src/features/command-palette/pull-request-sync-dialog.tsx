@@ -68,6 +68,8 @@ export function PullRequestSyncDialog({
       }}
     >
       <DialogContent
+        loading={checks.some((entry) => entry.status === "pending")}
+        loadingLabel="Loading Git providers…"
         className="max-w-lg overflow-hidden p-0 outline-none"
         onCloseAutoFocus={onCloseAutoFocus}
       >
@@ -160,7 +162,7 @@ function batchChoice(checks: ReturnType<typeof useSyncChecks>) {
     return { targets: [], description: "Could not check all workspaces" };
   }
   if (checks.some((entry) => entry.status === "pending")) {
-    return { targets: [], description: "Checking workspaces..." };
+    return { targets: [], description: "Loading workspaces…" };
   }
   const targets = checks.filter((entry) => entry.hint === null).map((entry) => entry.workspace);
   return {
@@ -175,7 +177,7 @@ function providerHint(
 ): string | null {
   const readError = gitProviderReadError(error);
   if (readError) return readError;
-  if (context === undefined) return "Checking Git provider...";
+  if (context === undefined) return "Loading Git provider…";
   if (context === null) {
     return "No Git provider is configured. Set one up in Git provider settings.";
   }

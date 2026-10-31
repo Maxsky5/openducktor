@@ -1,11 +1,14 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useContext, useMemo } from "react";
 import type * as React from "react";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { cn } from "@/lib/utils";
 import type { DialogMotion } from "./dialog-presence";
 import { observeDialogResize } from "./dialog-resize";
 import { DialogRoot, useDialogOpen } from "./dialog-root";
+import { DialogLoadingContent } from "./dialog-loading";
+import { DialogLoadingContext } from "./dialog-loading-context";
 
 function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogRoot {...props} data-slot="dialog" />;
@@ -43,6 +46,8 @@ function DialogContent({
   motion = "animated",
   children,
   closeButton,
+  loading,
+  loadingLabel = "Loading…",
   ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -52,8 +57,16 @@ function DialogContent({
   /** Use the same value in `useDialogPresence`. "instant" also resizes the dialog at once. */
   motion?: DialogMotion;
   closeButton?: React.ReactNode;
+  /** Loads the body and its actions for at least 500 ms while the header stays visible. */
+  loading?: boolean | undefined;
+  loadingLabel?: string | undefined;
 }) {
   const isOpen = useDialogOpen("DialogContent", "Dialog");
+  const isLoading = useMinimumLoader(loading === true, isOpen);
+  const loadingState = useMemo(
+    () => (loading === undefined ? null : { loading: isLoading, label: loadingLabel }),
+    [loading, isLoading, loadingLabel],
+  );
   const setContentRef = useCallback(
     (element: HTMLDivElement | null) => {
       if (!element) return;
@@ -79,7 +92,7 @@ function DialogContent({
   );
   const renderedCloseButton =
     closeButton === undefined ? (
-      <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-sm p-1 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+      <DialogPrimitive.Close className="absolute right-3 top-3 z-20 flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
         <X className="size-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -111,8 +124,9 @@ function DialogContent({
           {...props}
           aria-hidden={!isOpen}
           inert={!isOpen}
+          aria-busy={isLoading || undefined}
         >
-          {children}
+          <DialogLoadingContext value={loadingState}>{children}</DialogLoadingContext>
           {renderedCloseButton}
         </DialogPrimitive.Content>
       </div>
@@ -120,37 +134,73 @@ function DialogContent({
   );
 }
 
-function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex-1", className)} {...props} />;
+function DialogBody({ className, children, ...props }: React.ComponentProps<"div">) {
+  const state = useContext(DialogLoadingContext);
+  const loading = state?.loading === true;
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn("min-w-0 flex-1", className, loading && "px-6")}
+      {...props}
+      aria-busy={loading || undefined}
+    >
+      {state ? (
+        <DialogLoadingContent loading={loading} label={state.label}>
+          {children}
+        </DialogLoadingContent>
+      ) : (
+        children
+      )}
+    </div>
+  );
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("sticky top-0 z-10 flex shrink-0 flex-col gap-1.5 bg-popover", className)}
+      data-slot="dialog-header"
+      className={cn("sticky top-0 z-10 flex shrink-0 flex-col gap-1.5 bg-popover pr-8", className)}
       {...props}
     />
   );
 }
 
-function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
+function DialogFooter({ className, style, ...props }: React.ComponentProps<"div">) {
+  const loading = useContext(DialogLoadingContext)?.loading === true;
   return (
     <div
+      data-slot="dialog-footer"
       className={cn(
-        "sticky bottom-0 z-10 mt-6 flex shrink-0 justify-end gap-2 bg-popover",
+        "sticky bottom-0 z-10 mt-6 flex shrink-0 flex-col-reverse justify-end gap-2 bg-popover [&_button]:min-h-11 sm:flex-row sm:[&_button]:min-h-9",
         className,
       )}
       {...props}
+      inert={loading}
+      aria-hidden={loading || undefined}
+      style={{ ...style, display: loading ? "none" : style?.display }}
     />
   );
 }
 
-function DialogTitle(props: React.ComponentProps<typeof DialogPrimitive.Title>) {
-  return <DialogPrimitive.Title className="text-lg font-semibold" {...props} />;
+function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+  return (
+    <DialogPrimitive.Title
+      className={cn("text-lg font-semibold leading-6", className)}
+      {...props}
+    />
+  );
 }
 
-function DialogDescription(props: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  return <DialogPrimitive.Description className="text-sm text-muted-foreground" {...props} />;
+function DialogDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+  return (
+    <DialogPrimitive.Description
+      className={cn("text-sm leading-6 text-muted-foreground", className)}
+      {...props}
+    />
+  );
 }
 
 export {

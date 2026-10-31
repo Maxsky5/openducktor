@@ -119,6 +119,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   },
   setSelectedWorkspaceId: () => {},
   retrySelectedRepoBranchesLoad: () => {},
+  retrySettings: () => {},
   retryRuntimeDefinitions: async () => [],
   checkRuntimeExecutablesAgain: async () => {},
   detectSelectedRepoGithubRepository: async () => null,
@@ -370,7 +371,7 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("General Settings");
+    expect(html).toContain("General settings");
     expect(html).not.toContain("Open a task tab for background sessions");
   });
 
@@ -399,8 +400,8 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Chat Settings");
-    expect(html).toContain("Show Thinking Messages");
+    expect(html).toContain("Chat settings");
+    expect(html).toContain("Show thinking messages");
     expect(html).not.toContain("Reusable prompts");
   });
 
@@ -439,7 +440,7 @@ describe("settings modal content", () => {
     expect(html).toContain("Appearance");
     expect(html).toContain("Preferred Open In tool");
     expect(html).toContain("Theme");
-    expect(html).toContain("Horizontal Scrollbars");
+    expect(html).toContain("Horizontal scrollbars");
     expect(html).toContain("System default");
     expect(html).toContain("Show");
     expect(html).toContain("Hide");
@@ -543,10 +544,10 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Kanban Settings");
+    expect(html).toContain("Kanban settings");
     expect(html).toContain("Done tasks visible for");
     expect(html).toContain("Empty columns");
-    expect(html).toContain("Choose whether empty lanes stay visible");
+    expect(html).toContain("Show empty columns, hide them");
     expect(html).toContain('value="7"');
   });
 
@@ -572,7 +573,7 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("General Settings");
+    expect(html).toContain("General settings");
   });
 
   test("renders autopilot section when section is autopilot", () => {
@@ -627,7 +628,7 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Global Prompt Overrides");
+    expect(html).toContain("Global prompt overrides");
   });
 
   test("renders git section when section is git", () => {
@@ -652,7 +653,7 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Git Defaults");
+    expect(html).toContain("Git defaults");
   });
 
   test("shows loading state when settings are loading", () => {

@@ -87,11 +87,11 @@ const useDiscardConfirmation = (
   useEffect(() => {
     if (!pendingDiscardIntent) return;
     void confirmDiscard({
-      title: "Discard Changes?",
+      title: "Discard changes?",
       message:
         pendingDiscardIntent.type === "close-modal"
-          ? "Your edits are not saved."
-          : "The document has edits that are not saved.",
+          ? "Your changes have not been saved."
+          : "Your changes to this document have not been saved.",
     }).then((confirmed) => {
       if (confirmed) void discardActions.current.confirmDiscard();
       else discardActions.current.clearPendingDiscardIntent();
@@ -167,7 +167,7 @@ const useEditorClose = (
   confirmDiscard: ConfirmDiscard,
   allowRemoval: RefObject<() => void>,
 ) => {
-  const { close, isBusy, isActiveDocumentDirty, mode } = controller;
+  const { close, isBusy, isActiveDocumentDirty } = controller;
   const dirty =
     controller.isTaskDraftDirty || Object.values(controller.dirtyDocuments).some(Boolean);
   const requestClose = useCallback(() => {
@@ -177,12 +177,12 @@ const useEditorClose = (
       return;
     }
     void confirmDiscard({
-      title: mode === "create" ? "Discard the New Task?" : "Discard Changes?",
-      message: "Your edits are not saved.",
+      title: "Discard changes?",
+      message: "Your changes have not been saved.",
     }).then((confirmed) => {
       if (confirmed) void close();
     });
-  }, [close, confirmDiscard, dirty, isActiveDocumentDirty, mode]);
+  }, [close, confirmDiscard, dirty, isActiveDocumentDirty]);
   const disablePrevention = usePreventRemove(dirty || isBusy, () => {
     if (!isBusy) requestClose();
   });
@@ -196,14 +196,14 @@ const useEditorClose = (
 const primaryActionLabel = (controller: EditorController): string | null => {
   if (controller.isTypeStepVisible) return null;
   if (controller.activeDocumentSection === "spec") {
-    return controller.isSavingDocument ? "Saving Spec" : "Save Spec";
+    return controller.isSavingDocument ? "Saving spec…" : "Save spec";
   }
   if (controller.activeDocumentSection === "plan") {
-    return controller.isSavingDocument ? "Saving Plan" : "Save Plan";
+    return controller.isSavingDocument ? "Saving plan…" : "Save plan";
   }
   if (controller.mode === "create")
-    return controller.isSubmitting ? "Creating Task" : "Create Task";
-  return controller.isSubmitting ? "Saving Changes" : "Save Changes";
+    return controller.isSubmitting ? "Creating task…" : "Create task";
+  return controller.isSubmitting ? "Saving changes…" : "Save changes";
 };
 
 /**
@@ -258,7 +258,13 @@ export function TaskEditorSheet({
 
   return (
     <SheetScreen
-      title={mode === "create" ? "Create Task" : "Edit Task"}
+      loading={
+        controller.activeDocument?.isLoading === true &&
+        !controller.activeDocument.loaded &&
+        !controller.isBusy
+      }
+      loadingLabel="Loading document…"
+      title={mode === "create" ? "Create task" : "Edit task"}
       onClose={requestClose}
       closable={!isBusy}
     >
@@ -322,7 +328,7 @@ function EditorSaveButton({
   return (
     <Button
       label={label}
-      icon={controller.mode === "create" && isTaskSection ? "flag" : "wand-sparkles"}
+      icon={controller.mode === "create" && isTaskSection ? "flag" : "save"}
       size="lg"
       loading={isTaskSection ? controller.isSubmitting : controller.isSavingDocument !== null}
       command
@@ -395,7 +401,7 @@ function EditIntro({
   return (
     <>
       <Text variant="callout" tone="tertiary">
-        {`Update ${taskId ?? "task"} metadata and long-form markdown documents.`}
+        {`Edit the details and documents of ${taskId ?? "this task"}.`}
       </Text>
       <EditSectionSwitcher
         section={controller.editSection}
@@ -455,12 +461,8 @@ function DocumentSection({
   return (
     <DocumentEditor
       key={section}
-      title={spec ? "Specification" : "Implementation Plan"}
-      subtitle={
-        spec
-          ? "Edit the canonical specification markdown for this task."
-          : "Edit the implementation plan markdown for this task."
-      }
+      title={spec ? "Specification" : "Implementation plan"}
+      subtitle={spec ? "Edit the task's spec." : "Edit the task's implementation plan."}
       placeholder={spec ? "# Purpose\n\nDescribe expected outcome..." : "## Milestones\n\n- ..."}
       markdown={controller.activeDraft}
       view={controller.views[section] === "preview" ? "preview" : "write"}
@@ -555,7 +557,7 @@ const IssueTypeField = memo(function IssueTypeField({
   onChange: (() => void) | null;
 }): ReactElement {
   return (
-    <FormField label="Issue Type" required>
+    <FormField label="Issue type" required>
       <IssueTypeSummary issueType={issueType} disabled={disabled} onChange={onChange} />
     </FormField>
   );
@@ -683,7 +685,7 @@ const DescriptionField = memo(function DescriptionField({
       toolbar={
         <>
           <ToolbarButton
-            label="Photo Library"
+            label="Photo library"
             icon="image-plus"
             command
             disabled={!editable}

@@ -73,7 +73,7 @@ describe("MergedPullRequestConfirmDialog", () => {
     try {
       expect(
         screen.getByText(
-          "This branch is already merged. Linking the Pull Request closes the task in one step.",
+          "This pull request is already merged. Link it to this task and move the task to Done.",
         ),
       ).toBeTruthy();
       expect(screen.queryByText(/GitHub/)).toBeNull();
@@ -130,7 +130,7 @@ describe("MergedPullRequestConfirmDialog", () => {
       expect(confirm.disabled).toBe(true);
 
       failRead = false;
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
       await waitFor(() => {
         expect(confirm.disabled).toBe(false);
       });

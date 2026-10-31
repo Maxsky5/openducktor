@@ -4,6 +4,7 @@ import {
   type ReactNode,
   type Ref,
   useLayoutEffect,
+  useContext,
   useState,
 } from "react";
 import { useWindowDimensions, View } from "react-native";
@@ -21,6 +22,7 @@ import { Text } from "./text";
 import { KEYBOARD_DISMISS_ON_DRAG } from "./keyboard-dismiss";
 import { useAnnounce } from "./use-announce";
 import { useCompactHeight } from "./use-wide-layout";
+import { ModalLoadingContext } from "./modal-loading-context";
 
 type FormFooterProps = {
   /** Why the primary action is disabled, or null when it is enabled. */
@@ -51,10 +53,13 @@ export function FormFooter({
   const sheet = useSheetClose();
   const compact = useCompactHeight();
   const claimFooter = sheet?.claimFooter;
+  const loading = useContext(ModalLoadingContext);
   // Before the first paint, so the header never shows its own close control for a frame.
-  useLayoutEffect(() => claimFooter?.(), [claimFooter]);
+  useLayoutEffect(() => {
+    if (!loading) return claimFooter?.();
+  }, [claimFooter, loading]);
   const bottom = Math.max(insets.bottom, compact ? theme.space.sm : theme.space.lg);
-  useAnnounce(note);
+  useAnnounce(loading ? null : note);
   if (!sheet && !note && !primary && !secondary) return null;
   const cancel = sheet ? (
     <Button

@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
 import { ErrorState } from "@/ui/states";
+import { Callout } from "@/ui/callout";
+import { Button } from "@/ui/button";
 
 /**
  * The repository settings did not load, so a start cannot use the default runtime, model, effort,
@@ -14,9 +16,33 @@ export function RepoSettingsFailure({
 }): ReactElement {
   return (
     <ErrorState
-      title="Repository Settings Did Not Load"
+      title="Could not load repository settings"
       message={`${message} The start needs the default models of the repository.`}
       onRetry={onRetry}
+    />
+  );
+}
+
+export function RepoSettingsRefreshNotice({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => Promise<void>;
+}): ReactElement {
+  return (
+    <Callout
+      tone="warning"
+      title="Repository settings could not refresh"
+      message={message}
+      action={
+        <Button
+          label="Retry settings"
+          icon="refresh"
+          variant="outline"
+          onPress={() => void onRetry()}
+        />
+      }
     />
   );
 }

@@ -15,17 +15,17 @@ export const ISSUE_TYPE_CHOICES: readonly IssueTypeChoice[] = [
   {
     value: "feature",
     label: ISSUE_TYPE_LABELS.feature,
-    description: "User-facing capability or workflow improvement.",
+    description: "Add or improve a feature.",
   },
   {
     value: "bug",
     label: ISSUE_TYPE_LABELS.bug,
-    description: "Unexpected behavior, regression, or production defect.",
+    description: "Fix something that does not work.",
   },
   {
     value: "task",
     label: ISSUE_TYPE_LABELS.task,
-    description: "Standard implementation work item.",
+    description: "General work or upkeep.",
   },
 ];
 
@@ -58,9 +58,9 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
 
 export const issueTypeGuidance = (issueType: IssueType): string => {
   if (issueType === "bug") {
-    return "Capture reproduction context, impact, and a concrete fix target.";
+    return "Describe how to reproduce the bug, what it affects and what should happen.";
   }
-  return "Define enough detail for Planner/Builder automation to execute with minimal ambiguity.";
+  return "Describe the work and how you will know it is done.";
 };
 
 /** The labels of the tasks, once each, in alphabetical order. */

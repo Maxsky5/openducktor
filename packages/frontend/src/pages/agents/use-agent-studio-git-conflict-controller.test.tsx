@@ -177,7 +177,7 @@ describe("useAgentStudioGitConflictController", () => {
         targetBranch: "",
         conflictedFiles: ["AGENTS.md"],
         output:
-          "Git did not report the conflict operation. Restore the operation information before asking for assistance or aborting.",
+          "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.",
         workingDir: "/tmp/worktree/task-10",
       });
       expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(0);

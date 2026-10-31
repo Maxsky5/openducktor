@@ -260,6 +260,7 @@ test.each(
     };
     try {
       let dialog = await openArchive();
+      fireEvent.click(dialog.getByRole("button", { name: "Working folder" }));
       expect(dialog.getByText(record.executionTarget.workingDirectory)).toBeTruthy();
       expect(archive).not.toHaveBeenCalled();
       fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));

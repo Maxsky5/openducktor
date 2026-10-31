@@ -52,6 +52,8 @@ export function useWorkspaceSessionCreateModel(
   const selection = draftSelection ?? catalogDefault;
   const runtimeKind = selection?.runtimeKind ?? null;
   const catalog = resources.find((entry) => entry.runtimeKind === runtimeKind)?.catalog ?? null;
+  const requiredRuntime = runtimeKind ?? defaultSelection?.runtimeKind;
+  const requiredCatalog = resources.find((entry) => entry.runtimeKind === requiredRuntime);
   const runtimes = useMemo(
     () =>
       availableRuntimeDefinitions.map((descriptor): ModelPickerRuntime => ({
@@ -118,7 +120,9 @@ export function useWorkspaceSessionCreateModel(
     supportsProfiles:
       availableRuntimeDefinitions.find((entry) => entry.kind === runtimeKind)?.capabilities
         .optionalSurfaces.supportsProfiles ?? false,
-    isLoading: resources.some((entry) => entry.isLoading),
+    isLoading: requiredCatalog
+      ? requiredCatalog.isLoading
+      : resources.length > 0 && resources.every((entry) => entry.isLoading),
     ...options,
     ...actions,
     speed,

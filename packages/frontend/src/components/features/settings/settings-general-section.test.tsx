@@ -5,6 +5,6 @@ import { GeneralSettingsSection } from "./settings-general-section";
 
 test("general settings retain app updates without the obsolete background-tab preference", () => {
   const html = renderToStaticMarkup(createElement(GeneralSettingsSection, { disabled: false }));
-  expect(html).toContain("General Settings");
+  expect(html).toContain("General settings");
   expect(html).not.toContain("task tab");
 });

@@ -140,7 +140,7 @@ describe("artifact action dialog", () => {
         await waitFor(() => expect(rename).toHaveBeenCalledTimes(1));
         expect(isDisabled(name)).toBe(true);
         expect(isDisabled(within(dialog).getByRole("button", { name: "Cancel" }))).toBe(true);
-        expect(isDisabled(within(dialog).getByRole("button", { name: "Renaming..." }))).toBe(true);
+        expect(isDisabled(within(dialog).getByRole("button", { name: "Renaming…" }))).toBe(true);
         expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
         await act(async () => rejectSave(new Error(message)));
         await waitFor(() => expect(within(dialog).getByRole("alert").textContent).toBe(visible));

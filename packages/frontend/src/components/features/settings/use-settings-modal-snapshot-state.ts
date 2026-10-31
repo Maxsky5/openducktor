@@ -1,112 +1,57 @@
 import type { SettingsRepoConfig, SettingsSnapshot } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useCallback, useMemo, useReducer } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import {
   chooseInitialSettingsWorkspaceId,
   type SettingsWorkspaceSelectionPolicy,
 } from "./settings-workspace-selection";
-
-type UseSettingsModalSnapshotStateArgs = {
-  open: boolean;
-  workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy;
-  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
-};
-
-type SettingsModalSnapshotState = {
-  loadedSnapshot: SettingsSnapshot | null;
-  snapshotDraft: SettingsSnapshot | null;
-  setSnapshotDraft: (updater: SettingsSnapshotDraftUpdater) => void;
-  selectedWorkspaceId: string | null;
-  setSelectedWorkspaceId: (next: string) => void;
-  workspaceIds: string[];
-  selectedRepoConfig: SettingsRepoConfig | null;
-  isLoadingSettings: boolean;
-  settingsError: string | null;
-  clearSettingsError: () => void;
-  requiredWorkspaceSelectionUnresolved: boolean;
-  requiredWorkspaceRepoPath: string | null;
-};
 
 export type SettingsSnapshotDraftUpdater = (
   current: SettingsSnapshot | null,
 ) => SettingsSnapshot | null;
 
 type SettingsSnapshotState = {
+  policy: SettingsWorkspaceSelectionPolicy | null;
   loadedSnapshot: SettingsSnapshot | null;
   snapshotDraft: SettingsSnapshot | null;
   selectedWorkspaceId: string | null;
-  isLoadingSettings: boolean;
-  settingsError: string | null;
+  readError: string | null;
 };
 
 type SettingsSnapshotAction =
   | { type: "closed" }
-  | { type: "loadingStarted" }
-  | {
-      type: "loaded";
-      snapshot: SettingsSnapshot;
-      workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy;
-    }
-  | { type: "loadFailed"; error: string }
-  | { type: "loadingFinished" }
+  | { type: "opened"; snapshot: SettingsSnapshot | null; policy: SettingsWorkspaceSelectionPolicy }
   | { type: "draftUpdated"; updater: SettingsSnapshotDraftUpdater }
-  | { type: "workspaceSelected"; workspaceId: string | null }
-  | { type: "errorCleared" };
+  | { type: "readSettled"; error: string | null }
+  | { type: "workspaceSelected"; workspaceId: string | null };
 
-const initialSettingsSnapshotState: SettingsSnapshotState = {
+const CLOSED: SettingsSnapshotState = {
+  policy: null,
   loadedSnapshot: null,
   snapshotDraft: null,
   selectedWorkspaceId: null,
-  isLoadingSettings: false,
-  settingsError: null,
+  readError: null,
 };
 
-const settingsSnapshotReducer = (
-  state: SettingsSnapshotState,
-  action: SettingsSnapshotAction,
-): SettingsSnapshotState => {
-  switch (action.type) {
-    case "closed":
-      return initialSettingsSnapshotState;
-    case "loadingStarted":
-      return { ...state, isLoadingSettings: true, settingsError: null };
-    case "loaded":
-      return {
-        ...state,
-        loadedSnapshot: action.snapshot,
-        snapshotDraft: action.snapshot,
-        selectedWorkspaceId: chooseInitialSettingsWorkspaceId(
-          action.snapshot,
-          action.workspaceSelectionPolicy,
-        ),
-      };
-    case "loadFailed":
-      return {
-        ...state,
-        loadedSnapshot: null,
-        snapshotDraft: null,
-        selectedWorkspaceId: null,
-        settingsError: action.error,
-      };
-    case "loadingFinished":
-      return { ...state, isLoadingSettings: false };
-    case "draftUpdated":
-      return { ...state, snapshotDraft: action.updater(state.snapshotDraft) };
-    case "workspaceSelected":
-      return { ...state, selectedWorkspaceId: action.workspaceId };
-    case "errorCleared":
-      return { ...state, settingsError: null };
-  }
-};
-
-export const useSettingsModalSnapshotState = ({
+/** Each opening gets a draft from the cached snapshot before its first visible render. */
+export function useSettingsModalSnapshotState({
   open,
   workspaceSelectionPolicy,
-  loadSettingsSnapshot,
-}: UseSettingsModalSnapshotStateArgs): SettingsModalSnapshotState => {
-  const [state, dispatch] = useReducer(settingsSnapshotReducer, initialSettingsSnapshotState);
-  const { loadedSnapshot, snapshotDraft, selectedWorkspaceId, isLoadingSettings, settingsError } =
-    state;
+}: {
+  open: boolean;
+  workspaceSelectionPolicy: SettingsWorkspaceSelectionPolicy;
+}) {
+  const query = useQuery({
+    ...settingsSnapshotQueryOptions(),
+    enabled: open,
+    refetchOnMount: false,
+  });
+  const [state, dispatch] = useReducer(settingsSnapshotReducer, CLOSED);
+  const action = settingsReadAction(state, open, workspaceSelectionPolicy, query);
+  if (action) dispatch(action);
+  const { loadedSnapshot, snapshotDraft, selectedWorkspaceId } = state;
   const setSnapshotDraft = useCallback(
     (updater: SettingsSnapshotDraftUpdater) => dispatch({ type: "draftUpdated", updater }),
     [],
@@ -114,88 +59,86 @@ export const useSettingsModalSnapshotState = ({
   const setSelectedWorkspaceId = useCallback((next: string): void => {
     dispatch({ type: "workspaceSelected", workspaceId: next });
   }, []);
-  const clearSettingsError = useCallback((): void => {
-    dispatch({ type: "errorCleared" });
-  }, []);
-
-  const workspaceIds = useMemo(() => {
-    if (!snapshotDraft) {
-      return [];
-    }
-    return Object.keys(snapshotDraft.workspaces).sort();
-  }, [snapshotDraft]);
-
-  const selectedRepoConfig = useMemo(() => {
-    if (!snapshotDraft || !selectedWorkspaceId) {
-      return null;
-    }
-    return snapshotDraft.workspaces[selectedWorkspaceId] ?? null;
-  }, [selectedWorkspaceId, snapshotDraft]);
-
-  useEffect(() => {
-    if (!open) {
-      dispatch({ type: "closed" });
-      return;
-    }
-
-    let cancelled = false;
-    dispatch({ type: "loadingStarted" });
-
-    void loadSettingsSnapshot()
-      .then((snapshot) => {
-        if (cancelled) {
-          return;
-        }
-
-        dispatch({ type: "loaded", snapshot, workspaceSelectionPolicy });
-      })
-      .catch((cause: unknown) => {
-        if (cancelled) {
-          return;
-        }
-
-        dispatch({ type: "loadFailed", error: errorMessage(cause) });
-      })
-      .finally(() => {
-        if (!cancelled) {
-          dispatch({ type: "loadingFinished" });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadSettingsSnapshot, open, workspaceSelectionPolicy]);
-
-  if (
-    snapshotDraft &&
-    (!selectedWorkspaceId || snapshotDraft.workspaces[selectedWorkspaceId] === undefined)
-  ) {
-    const fallbackWorkspaceId = chooseInitialSettingsWorkspaceId(
-      snapshotDraft,
-      workspaceSelectionPolicy,
-    );
-    if (fallbackWorkspaceId !== selectedWorkspaceId) {
-      dispatch({ type: "workspaceSelected", workspaceId: fallbackWorkspaceId });
-    }
+  const { refetch } = query;
+  const retrySettings = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+  const selection = useMemo(
+    () => getWorkspaceSelection(snapshotDraft, selectedWorkspaceId, workspaceSelectionPolicy),
+    [snapshotDraft, selectedWorkspaceId, workspaceSelectionPolicy],
+  );
+  if (snapshotDraft && !selection.selectedRepoConfig) {
+    const workspaceId = chooseInitialSettingsWorkspaceId(snapshotDraft, workspaceSelectionPolicy);
+    if (workspaceId !== selectedWorkspaceId) dispatch({ type: "workspaceSelected", workspaceId });
   }
-
   return {
     loadedSnapshot,
     snapshotDraft,
     setSnapshotDraft,
     selectedWorkspaceId,
     setSelectedWorkspaceId,
-    workspaceIds,
-    selectedRepoConfig,
-    isLoadingSettings,
-    settingsError,
-    clearSettingsError,
-    requiredWorkspaceSelectionUnresolved:
-      workspaceSelectionPolicy.kind === "required" &&
-      snapshotDraft !== null &&
-      selectedWorkspaceId === null,
-    requiredWorkspaceRepoPath:
-      workspaceSelectionPolicy.kind === "required" ? workspaceSelectionPolicy.repoPath : null,
+    ...selection,
+    isLoadingSettings: open && query.isPending && state.readError === null,
+    settingsError: open ? state.readError : null,
+    retrySettings,
   };
-};
+}
+
+function settingsReadAction(
+  state: SettingsSnapshotState,
+  open: boolean,
+  policy: SettingsWorkspaceSelectionPolicy,
+  query: Pick<UseQueryResult<SettingsSnapshot>, "data" | "error" | "isPending">,
+): SettingsSnapshotAction | null {
+  if (!open) return state.policy === null ? null : { type: "closed" };
+  if (state.policy !== policy || (state.loadedSnapshot === null && query.data !== undefined)) {
+    return { type: "opened", snapshot: query.data ?? null, policy };
+  }
+  // A failed read stays visible while Retry has no result yet.
+  const error = query.error ? errorMessage(query.error) : null;
+  if (!query.isPending && state.readError !== error) return { type: "readSettled", error };
+  return null;
+}
+
+function settingsSnapshotReducer(
+  state: SettingsSnapshotState,
+  action: SettingsSnapshotAction,
+): SettingsSnapshotState {
+  switch (action.type) {
+    case "closed":
+      return CLOSED;
+    case "opened":
+      return {
+        policy: action.policy,
+        loadedSnapshot: action.snapshot,
+        snapshotDraft: action.snapshot,
+        selectedWorkspaceId: action.snapshot
+          ? chooseInitialSettingsWorkspaceId(action.snapshot, action.policy)
+          : null,
+        readError: state.readError,
+      };
+    case "readSettled":
+      return { ...state, readError: action.error };
+    case "draftUpdated":
+      return { ...state, snapshotDraft: action.updater(state.snapshotDraft) };
+    case "workspaceSelected":
+      return { ...state, selectedWorkspaceId: action.workspaceId };
+  }
+}
+
+function getWorkspaceSelection(
+  draft: SettingsSnapshot | null,
+  workspaceId: string | null,
+  policy: SettingsWorkspaceSelectionPolicy,
+) {
+  const selectedRepoConfig: SettingsRepoConfig | null = workspaceId
+    ? (draft?.workspaces[workspaceId] ?? null)
+    : null;
+  return {
+    selectedRepoConfig,
+    workspaceIds: draft ? Object.keys(draft.workspaces).sort() : [],
+    requiredWorkspaceSelectionUnresolved:
+      policy.kind === "required" && draft !== null && workspaceId === null,
+    requiredWorkspaceRepoPath: policy.kind === "required" ? policy.repoPath : null,
+  };
+}

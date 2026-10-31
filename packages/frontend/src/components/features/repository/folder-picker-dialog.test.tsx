@@ -166,6 +166,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog();
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       await screen.findByText("repo-one");
       expect(screen.getByText("Git repo")).toBeTruthy();
 
@@ -211,6 +212,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ onConfirm, selectionMode: "file" });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }));
 
@@ -250,6 +252,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ onConfirm, selectionMode: "file" });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "next" }));
 
@@ -304,6 +307,7 @@ describe("FolderPickerDialog", () => {
     });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
       expect(requestCount).toBe(1);
       expect(
@@ -354,6 +358,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       await screen.findByText("/Users/dev");
       expect(
         screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
@@ -403,6 +408,7 @@ describe("FolderPickerDialog", () => {
     });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
       fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
@@ -458,6 +464,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ initialPath: "/Users/dev" });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       const nextButton = await screen.findByRole("button", { name: "next" });
       const manualPath = screen.getByLabelText<HTMLInputElement>("Open path");
       const filter = screen.getByLabelText<HTMLInputElement>("Filter directories");
@@ -579,6 +586,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev/projects" });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       await screen.findByText("/Users/dev/projects");
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
@@ -668,6 +676,7 @@ describe("FolderPickerDialog", () => {
     );
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       await screen.findByText(/only git repositories can be opened/i);
       const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: /open repository/i,
@@ -716,6 +725,7 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ onConfirm });
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       await screen.findByText("/Users/dev");
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
       expect(
@@ -785,6 +795,7 @@ describe("FolderPickerDialog", () => {
     );
 
     try {
+      await screen.findByRole("textbox", { name: "Open path" });
       await screen.findByText("/Users/dev");
 
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));

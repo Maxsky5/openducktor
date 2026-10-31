@@ -4,7 +4,8 @@ import type { TaskCloseImpact, TaskWorktreeImpact } from "./use-task-close-impac
 
 /** The fixed text of a task close and its cleanup choice. Every client shows the same text. */
 export const TASK_CLOSE_COPY = {
-  title: "Close Task",
+  title: "Close task",
+  description: "Move to Done and keep the task's history.",
   failureTitle: "Close failed",
   removeWorktreeLabel: "Remove worktree and branch",
   noCleanupTargets: "No task worktree or local branch remains.",
@@ -13,21 +14,15 @@ export const TASK_CLOSE_COPY = {
   retry: "Retry",
   /** What a close does not do, and what it keeps. */
   closeNotes: [
-    "Close Task merges no code and changes no pull request.",
-    "The task moves to Done with its artifacts, session history, and pull request link. Artifacts other than the spec, plan, and QA reports become read-only.",
+    "Keep artifacts, session history and the pull request link.",
+    "Artifacts you added become read-only. Spec, plan and QA reports stay editable.",
+    "Closing does not merge code or change a pull request.",
   ],
-} as const;
-
-/** The text of the one loader that a task confirmation shows until its reads end. */
-export const TASK_READS_LOADING_COPY = {
-  title: "Loading the task",
-  description:
-    "OpenDucktor reads the worktree, the running work, and the merge status of the task.",
 } as const;
 
 /** The label of the Confirm control of a close. */
 export const taskCloseConfirmLabel = (isPending: boolean): string =>
-  isPending ? "Closing Task" : "Close Task";
+  isPending ? "Closing…" : "Close task";
 
 /** The failed read of the global setting that the cleanup choice starts from. */
 export const settingsReadErrorMessage = (error: string): string =>
@@ -41,7 +36,7 @@ export const cleanupTargetLabel = (kind: "worktree" | "branch", count: number): 
 
 export const uncommittedFilesText = (count: number): string => plural(count, "uncommitted file");
 
-/** What a close stops and keeps: the running terminals and sessions, then the close note. */
+/** The running terminals and sessions that a close stops. */
 export const taskCloseEffectLines = (
   impact: Pick<TaskCloseImpact, "terminalCount" | "activeSessionCount">,
 ): string[] => {
@@ -55,15 +50,14 @@ export const taskCloseEffectLines = (
   if (impact.activeSessionCount) {
     lines.push(formatActiveSessionStopMessage(impact.activeSessionCount, "close"));
   }
-  lines.push(...TASK_CLOSE_COPY.closeNotes);
   return lines;
 };
 
 /** The fixed text of the worktree removal of a closed task. */
 export const TASK_REMOVE_WORKTREE_COPY = {
-  title: "Remove Worktree",
+  title: "Remove worktree",
   failureTitle: "Remove failed",
-  keepNote: "The task record, its artifacts, session history, and pull request data stay.",
+  keepNote: "The task, its artifacts, session history and pull request link stay available.",
 } as const;
 
 export const taskRemoveWorktreeDescription = (taskId: string): string =>
@@ -71,7 +65,7 @@ export const taskRemoveWorktreeDescription = (taskId: string): string =>
 
 /** The label of the Confirm control of a worktree removal. */
 export const taskRemoveWorktreeConfirmLabel = (isPending: boolean): string =>
-  isPending ? "Removing Worktree" : "Remove Worktree";
+  isPending ? "Removing…" : "Remove worktree";
 
 /** What a worktree removal can lose and stops, then what it keeps. */
 export const taskRemoveWorktreeEffectLines = (

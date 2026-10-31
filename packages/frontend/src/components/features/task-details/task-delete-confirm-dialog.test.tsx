@@ -40,19 +40,16 @@ describe("TaskDeleteConfirmDialog", () => {
   test("names the task by its title and its ID", () => {
     renderDialog(0);
 
-    expect(
-      screen.getByText("Delete “Fix login” (task-1)? This cannot be undone.").textContent,
-    ).toBe("Delete “Fix login” (task-1)? This cannot be undone.");
+    expect(screen.getByRole("heading", { name: "Delete task" })).toBeDefined();
+    expect(screen.getByText("Fix login")).toBeDefined();
+    expect(screen.getByText("task-1")).toBeDefined();
+    expect(screen.getByText("This cannot be undone.")).toBeDefined();
   });
 
   test("uses standard spacing and hides terminal copy when no terminals will stop", () => {
     const rendered = renderDialog(0);
 
     expect(screen.queryByText(/running task terminals|associated terminal/i)).toBeNull();
-    const body = screen.getByText(
-      "This action permanently removes the task and all its workflow and free artifacts.",
-    ).parentElement?.parentElement;
-    expect(body?.className).toContain("py-4");
     const cancelButton = screen.getByRole("button", { name: "Cancel" });
     expect(cancelButton.parentElement?.className).toContain("justify-between");
 
@@ -62,7 +59,7 @@ describe("TaskDeleteConfirmDialog", () => {
   test("warns when task terminals will be terminated", () => {
     const rendered = renderDialog(2);
 
-    expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
+    expect(screen.getByText(/Close 2 terminals/i)).toBeDefined();
 
     rendered.unmount();
   });
@@ -78,9 +75,7 @@ describe("TaskDeleteConfirmDialog", () => {
   test("says how many active sessions will be stopped before deletion", () => {
     const rendered = renderDialog(0, 2);
 
-    expect(
-      screen.getByText("2 active agent sessions will be stopped before deletion."),
-    ).toBeDefined();
+    expect(screen.getByText("Stop 2 running agent sessions")).toBeDefined();
 
     rendered.unmount();
   });
@@ -88,12 +83,10 @@ describe("TaskDeleteConfirmDialog", () => {
   test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
     const rendered = renderDialog(0, null, "host unavailable");
 
-    expect(
-      screen.getByText(
-        /Unable to check how many active sessions will be stopped: host unavailable/,
-      ),
-    ).toBeDefined();
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Delete" }).disabled).toBe(true);
+    expect(screen.getByText(/Could not check running sessions: host unavailable/)).toBeDefined();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Delete task" }).disabled).toBe(
+      true,
+    );
 
     rendered.unmount();
   });
@@ -144,14 +137,12 @@ describe("TaskDeleteConfirmDialog", () => {
     );
   });
 
-  test("shows session-specific copy while the host stop preview is loading", () => {
+  test("hides incomplete copy and actions while the host stop preview is loading", () => {
     const rendered = renderDialog(0, null, null, true);
 
-    expect(screen.getByText("Checking active agent sessions before deletion.")).toBeDefined();
+    expect(screen.getByRole("status")).toBeDefined();
     expect(screen.queryByText(/Checking linked task worktree cleanup impact/)).toBeNull();
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
-      true,
-    );
+    expect(screen.queryByRole("button", { name: "Checking…" })).toBeNull();
 
     rendered.unmount();
   });

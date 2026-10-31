@@ -1,4 +1,12 @@
-import { AlertTriangle, FolderGit2, GitMerge, Loader2, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  FolderGit2,
+  GitMerge,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import {
   type TaskCloseMergeCheck,
@@ -19,6 +27,7 @@ import {
 import type { TaskMergeStatusView } from "@openducktor/frontend-core/tasks/presentation/task-merge-status";
 import { Button } from "@/components/ui/button";
 import { SwitchCard } from "@/components/ui/switch-card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 type TaskCloseConfirmContentProps = {
@@ -39,6 +48,7 @@ export function TaskCloseConfirmContent({
   disabled,
   mergeCheck,
 }: TaskCloseConfirmContentProps): ReactElement {
+  const activity = taskCloseEffectLines(impact);
   return (
     <div className="grid gap-4 text-sm">
       {impact.mergeStatus ? (
@@ -52,11 +62,24 @@ export function TaskCloseConfirmContent({
         disabled={disabled}
       />
 
-      <div className="space-y-1 text-muted-foreground">
-        {taskCloseEffectLines(impact).map((line) => (
-          <p key={line}>{line}</p>
-        ))}
-      </div>
+      <section className="flex flex-col gap-2.5" aria-label="After closing">
+        <h3 className="text-xs font-medium text-muted-foreground">After closing</h3>
+        <ul className="flex flex-col gap-2.5">
+          {TASK_CLOSE_COPY.closeNotes.map((line) => (
+            <li key={line} className="flex items-start gap-2.5 leading-5">
+              <Check className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+      {activity.length > 0 ? (
+        <div className="flex flex-col gap-1 text-xs leading-5 text-muted-foreground">
+          {activity.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
+      ) : null}
 
       <TaskReadError read={impact} />
     </div>
@@ -109,10 +132,7 @@ export function TaskReadError({ read }: { read: TaskReadState }): ReactElement |
   );
 }
 
-/**
- * The cleanup choice with the worktrees and branches that it removes. The rows do not change with
- * the choice, so the card keeps its size. The Archive chat dialog uses the same card.
- */
+/** The cleanup choice, its loss warning, and details of the worktrees and branches. */
 function TaskCleanupCard({
   impact,
   removeWorktree,
@@ -147,44 +167,60 @@ export function TaskCleanupTargets({
 }: {
   impact: TaskWorktreeImpact;
   removes: boolean;
-}): ReactElement {
+}): ReactElement | null {
   const { worktreePaths, branchNames, uncommittedFileCount } = impact;
+  if (impact.error) return null;
   if (worktreePaths.length === 0 && branchNames.length === 0) {
     return <p className="text-sm text-muted-foreground">{TASK_CLOSE_COPY.noCleanupTargets}</p>;
   }
   return (
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-sm">
-      {worktreePaths.length > 0 ? (
-        <TaskCleanupTarget
-          label={cleanupTargetLabel("worktree", worktreePaths.length)}
-          values={worktreePaths}
-        />
-      ) : null}
-      {branchNames.length > 0 ? (
-        <TaskCleanupTarget
-          label={cleanupTargetLabel("branch", branchNames.length)}
-          values={branchNames}
-        />
-      ) : null}
+    <div className="flex flex-col gap-2">
       {uncommittedFileCount > 0 ? (
-        <>
-          <dt className="text-muted-foreground">{TASK_CLOSE_COPY.changesLabel}</dt>
-          {/* Only the color changes with the choice, so the row keeps its size. */}
-          <dd
-            className={cn(
-              "flex items-center gap-1.5",
-              removes ? "text-warning-muted" : "text-foreground",
-            )}
-          >
-            <AlertTriangle
-              className={cn("size-3.5 shrink-0", removes ? "opacity-100" : "opacity-0")}
-              aria-hidden="true"
+        <p
+          className={cn(
+            "flex items-start gap-2 text-xs leading-5",
+            removes ? "text-warning-muted" : "text-muted-foreground",
+          )}
+        >
+          {removes ? (
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          ) : null}
+          <span>
+            <span>{uncommittedFilesText(uncommittedFileCount)}</span>
+            {removes ? " will be lost." : " will be kept."}
+          </span>
+        </p>
+      ) : (
+        <p className="text-xs leading-5 text-muted-foreground">No uncommitted changes.</p>
+      )}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="group -ml-2 h-7 gap-1.5">
+            <ChevronDown
+              className="transition-transform group-data-[state=open]:rotate-180"
+              data-icon="inline-start"
             />
-            {uncommittedFilesText(uncommittedFileCount)}
-          </dd>
-        </>
-      ) : null}
-    </dl>
+            Worktree details
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <dl className="grid grid-cols-1 gap-1 pt-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-2">
+            {worktreePaths.length > 0 ? (
+              <TaskCleanupTarget
+                label={cleanupTargetLabel("worktree", worktreePaths.length)}
+                values={worktreePaths}
+              />
+            ) : null}
+            {branchNames.length > 0 ? (
+              <TaskCleanupTarget
+                label={cleanupTargetLabel("branch", branchNames.length)}
+                values={branchNames}
+              />
+            ) : null}
+          </dl>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   );
 }
 

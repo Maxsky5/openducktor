@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import type { CustomAgentRole } from "@openducktor/contracts";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -143,6 +144,7 @@ export function SettingsCustomAgentRolesSection({
                   setDeleteRoleId(null);
                 }}
               >
+                <Trash2 data-icon="inline-start" />
                 Delete role
               </Button>
             </DialogFooter>

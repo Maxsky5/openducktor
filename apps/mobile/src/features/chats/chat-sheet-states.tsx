@@ -17,12 +17,12 @@ function ChatSheetState({ read }: { read: ChatSheetRead }): ReactElement {
     return (
       <EmptyState
         icon="circle-alert"
-        title="Link Not Valid"
+        title="Invalid chat link"
         message="Close this sheet and select the chat again."
       />
     );
   }
-  return <EmptyState icon="message-square-off" title="Chat Not Available" message={read.reason} />;
+  return <EmptyState icon="message-square-off" title="Chat unavailable" message={read.reason} />;
 }
 
 /** A compact chat sheet that shows a state before its chat is known. */

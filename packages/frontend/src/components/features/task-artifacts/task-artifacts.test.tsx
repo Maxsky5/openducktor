@@ -229,7 +229,7 @@ describe("task artifacts collection", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       view.rerender(selectedView("spec"));
-      expect(screen.queryByText("Loading artifact...")).toBeNull();
+      expect(screen.queryByText("Loading artifact…")).toBeNull();
       expect(screen.getByText("hello")).toBeTruthy();
       expect(read).toHaveBeenCalledTimes(2);
       const preview = screen.getByText("hello");
@@ -240,7 +240,7 @@ describe("task artifacts collection", () => {
           exact: true,
         });
       });
-      expect(await screen.findByText("Updating preview...")).toBeTruthy();
+      expect(await screen.findByText("Updating preview…")).toBeTruthy();
       expect(preview.isSameNode(screen.getByText("hello"))).toBe(true);
     } finally {
       pendingDocument.resolve({ markdown: "hello", updatedAt: null });
@@ -294,7 +294,7 @@ describe("task artifacts collection", () => {
         expect(preview.isConnected).toBe(false);
         expect(screen.queryByRole("region", { name: "Specification preview" })).toBeNull();
         expect(screen.queryByText("hello")).toBeNull();
-        expect(screen.queryByText("Loading artifact...")).toBeNull();
+        expect(screen.queryByText("Loading artifact…")).toBeNull();
         expect(screen.queryByRole("button", { name: "Copy artifact content" })).toBeNull();
         expect(screen.queryByRole("button", { name: "Expand" })).toBeNull();
       } finally {
@@ -308,7 +308,7 @@ describe("task artifacts collection", () => {
     const workflow: TaskArtifact = {
       artifactId: workflowArtifactId("task-1", "qaReport"),
       taskId: "task-1",
-      name: "QA Report",
+      name: "QA report",
       revision: 1,
       updatedAt: null,
       classification: "workflow",
@@ -320,7 +320,7 @@ describe("task artifacts collection", () => {
     });
     try {
       expect(await screen.findByText("hello")).toBeTruthy();
-      expect(screen.getByRole("heading", { name: "QA Report" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "QA report" })).toBeTruthy();
       expect(view.readWorkflow).toHaveBeenCalledWith("/repo", "task-1", "qaReport");
       expect(view.read).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "All artifacts" }));
@@ -335,7 +335,7 @@ describe("task artifacts collection", () => {
     const workflow: TaskArtifact = {
       artifactId: workflowArtifactId("task-1", "plan"),
       taskId: "task-1",
-      name: "Implementation Plan",
+      name: "Implementation plan",
       revision: 1,
       updatedAt: null,
       classification: "workflow",
@@ -397,7 +397,7 @@ describe("task artifacts collection", () => {
       const workflow: TaskArtifact = {
         artifactId: "imported-plan",
         taskId: "task-1",
-        name: "Implementation Plan",
+        name: "Implementation plan",
         revision: 1,
         updatedAt: null,
         classification: "workflow",
@@ -445,14 +445,14 @@ describe("task artifacts collection", () => {
       expect(await screen.findByRole("heading", { name: "Renamed notes" })).toBeTruthy();
       expect(preview.isSameNode(screen.queryByText("hello"))).toBe(true);
       expect(scrollContainer.scrollTop).toBe(120);
-      expect(screen.getByText("Updating preview...")).toBeTruthy();
+      expect(screen.getByText("Updating preview…")).toBeTruthy();
       expect(screen.getByLabelText("Download").getAttribute("aria-disabled")).toBe("true");
       expect(screen.getByLabelText("Download").getAttribute("href")).toBeNull();
       act(() => pendingRead.resolve({ ...content(renamed), version: "v2" }));
       await waitFor(() =>
         expect(screen.getByLabelText("Download").getAttribute("aria-disabled")).toBe("false"),
       );
-      expect(screen.queryByText("Updating preview...")).toBeNull();
+      expect(screen.queryByText("Updating preview…")).toBeNull();
       expect(preview.isSameNode(screen.getByText("hello"))).toBe(true);
       expect(scrollContainer.scrollTop).toBe(120);
       expect(screen.getByRole("link", { name: "Download" }).getAttribute("href")).toBeTruthy();
@@ -517,7 +517,7 @@ describe("task artifacts collection", () => {
           exact: true,
         });
       });
-      expect(await screen.findByText("Updating preview...")).toBeTruthy();
+      expect(await screen.findByText("Updating preview…")).toBeTruthy();
       expect(inlinePreview.isConnected).toBe(true);
       expect(within(dialog).getByText("hello")).toBeTruthy();
       act(() =>

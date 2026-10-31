@@ -825,7 +825,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       expect(screen.getByText("src/first.ts")).toBeTruthy();
       expect(screen.getByText("const first = true;")).toBeTruthy();
       expect(screen.queryByText("Loading...")).toBeNull();
-      expect(screen.queryByText("Loading file...")).toBeNull();
+      expect(screen.queryByText("Loading file…")).toBeNull();
       expect(firstCodeViewItem()?.edit).toBe(false);
     },
   );
@@ -903,7 +903,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByText("src/first.ts")).toBeNull();
     expect(screen.queryByText("const first = true;")).toBeNull();
     expect(screen.getByText("src/second.ts")).toBeTruthy();
-    expect(screen.getByText("Loading file...")).toBeTruthy();
+    expect(screen.getByText("Loading file…")).toBeTruthy();
     expect(screen.queryByText("Loading...")).toBeNull();
   });
 
@@ -923,7 +923,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       expect(screen.queryByText("src/first.ts")).toBeNull();
       expect(screen.queryByText("const first = true;")).toBeNull();
       expect(screen.getByText("src/second.ts")).toBeTruthy();
-      expect(screen.getByText("Loading file...")).toBeTruthy();
+      expect(screen.getByText("Loading file…")).toBeTruthy();
       expect(screen.queryByText("Loading...")).toBeNull();
     },
   );
@@ -1571,7 +1571,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await screen.findByRole("dialog", { name: "Review latest file" });
       expect(screen.getByLabelText("Latest file contents").textContent).toBe("const first = true;");
       await runAsyncUiAction(() =>
-        fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+        fireEvent.click(screen.getByRole("button", { name: "Allow overwrite on save" })),
       );
       await waitFor(() =>
         expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
@@ -1618,7 +1618,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     );
     await screen.findByRole("dialog", { name: "Review latest file" });
     await runAsyncUiAction(() =>
-      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+      fireEvent.click(screen.getByRole("button", { name: "Allow overwrite on save" })),
     );
     await runAsyncUiAction(() =>
       fireEvent.click(screen.getByRole("button", { name: "Save file" })),
@@ -1775,7 +1775,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       "const external = true;",
     );
     await runAsyncUiAction(() =>
-      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+      fireEvent.click(screen.getByRole("button", { name: "Allow overwrite on save" })),
     );
     await waitForDirtyFile();
     await runAsyncUiAction(() =>
@@ -1827,7 +1827,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     );
     await screen.findByRole("dialog", { name: "Review latest file" });
     await runAsyncUiAction(() =>
-      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+      fireEvent.click(screen.getByRole("button", { name: "Allow overwrite on save" })),
     );
     await waitForCleanFile();
 
@@ -2213,7 +2213,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole("button", { name: "Keep editing" }).hasAttribute("disabled")).toBe(
       true,
     );
-    expect(screen.getByRole("button", { name: "Working..." }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Working…" }).hasAttribute("disabled")).toBe(true);
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onKeepEditing).not.toHaveBeenCalled();
     expect(onDiscard).not.toHaveBeenCalled();

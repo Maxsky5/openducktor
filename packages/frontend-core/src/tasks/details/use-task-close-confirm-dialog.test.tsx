@@ -6,6 +6,7 @@ import { enableReactActEnvironment } from "../../test-support/react-act-environm
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import {
   createSettingsSnapshotFixture,
+  createDeferred,
   createTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
@@ -19,6 +20,60 @@ const task = createTaskCardFixture({ id: "TASK-1", title: "Add login", status: "
 type HeldRead = { read: Promise<void> | null; release: () => void };
 
 describe("useTaskCloseConfirmDialog", () => {
+  test.each([
+    { choice: true, mergePending: false },
+    { choice: false, mergePending: false },
+    { choice: null, mergePending: false },
+    { choice: false, mergePending: true },
+  ])("only waits for required close data: %j", async ({ choice, mergePending }) => {
+    const settings = createDeferred<ReturnType<typeof createSettingsSnapshotFixture>>();
+    const mergeStatus = createDeferred<{ repoPath: string; tasks: [] }>();
+    const connection = createTestClientConnection({
+      client: {
+        taskWorktreeCleanupImpactGet: async () => ({
+          worktreePaths: [],
+          branchNames: [],
+          uncommittedFileCount: 0,
+          mergeCandidate: false,
+          branchOid: null,
+        }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
+        taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
+        taskMergeStatusGet: async (repoPath: string) =>
+          mergePending ? mergeStatus.promise : { repoPath, tasks: [] },
+        workspaceGetSettingsSnapshot: () => settings.promise,
+      },
+    });
+    const harness = createHookHarness(
+      useTaskCloseConfirmDialog,
+      {
+        task: { ...task, removeWorktreeOnClose: choice },
+        enabled: true,
+        initiallyOpen: true,
+        run: mock(async () => {}),
+        onSucceeded: () => {},
+      },
+      { wrapper: createActiveWorkspaceWrapper(connection) },
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.dialog.impact.isReady);
+      if (choice === null) {
+        expect(harness.getLatest().dialog.isPreparing).toBe(true);
+        expect(harness.getLatest().dialog.confirmDisabled).toBe(true);
+        await harness.run(() => settings.resolve(createSettingsSnapshotFixture()));
+      }
+      await harness.waitFor((state) => !state.dialog.isPreparing, 800);
+      expect(harness.getLatest().dialog.confirmDisabled).toBe(false);
+      if (choice !== null) expect(harness.getLatest().dialog.removeWorktree).toBe(choice);
+    } finally {
+      settings.resolve(createSettingsSnapshotFixture());
+      mergeStatus.resolve({ repoPath: "/repo", tasks: [] });
+      await harness.unmount();
+      await connection.dispose();
+    }
+  });
+
   test("keeps the shown impact while it closes, and shows the loader again when it reopens", async () => {
     const held: HeldRead = { read: null, release: () => {} };
     const impactGet = mock(async () => {

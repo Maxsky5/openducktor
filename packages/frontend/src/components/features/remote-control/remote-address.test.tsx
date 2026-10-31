@@ -88,7 +88,7 @@ test("opens QR inside the host dialog and returns focus when it closes", async (
     const showQr = screen.getByRole("button", { name: "Show QR code" });
     showQr.focus();
     fireEvent.click(showQr);
-    await screen.findByRole("button", { name: "Creating QR code..." });
+    await screen.findByRole("button", { name: "Creating QR code…" });
     expect(screen.queryByRole("dialog", { name: "Host address" })).toBeNull();
     await act(async () => {
       image.resolve(imageUrl);

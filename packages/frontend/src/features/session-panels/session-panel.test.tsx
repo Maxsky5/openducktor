@@ -81,7 +81,7 @@ test("an inactive panel root closes its terminal confirmation and keeps its cont
   }
   const view = renderWithConnection(<Harness isActive />);
   const content = view.getByTestId("kept-content");
-  const dialog = view.getByRole("dialog", { name: "Terminate and close bun run dev?" });
+  const dialog = view.getByRole("dialog", { name: "Stop and close bun run dev?" });
   view.rerender(<Harness isActive={false} />);
   expect(dialog.isConnected).toBe(false);
   expect(content.isConnected).toBe(true);
@@ -117,7 +117,7 @@ test("a hidden panel root closes its terminal confirmation before its content tu
     </SessionViewContext>
   );
   const view = renderWithConnection(root(true));
-  expect(view.getByRole("dialog", { name: "Terminate and close bun run dev?" })).toBeDefined();
+  expect(view.getByRole("dialog", { name: "Stop and close bun run dev?" })).toBeDefined();
   view.rerender(root(false));
   expect(view.queryAllByRole("dialog")).toHaveLength(0);
   expect(cancel).toHaveBeenCalled();

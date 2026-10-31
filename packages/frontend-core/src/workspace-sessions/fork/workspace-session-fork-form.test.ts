@@ -46,6 +46,7 @@ test("builds the fork request of each destination", () => {
       destination,
       worktree: { mode: "from_name", name, branchName: null },
       branchPrefix: "odt",
+      defaultsReady: true,
     });
   expect(input("same_folder")).toEqual({
     workspaceId: "alpha",

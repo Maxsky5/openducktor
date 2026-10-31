@@ -27,7 +27,7 @@ export function NewTaskRoute(): ReactElement {
     return <TaskEditorSheet workspace={selectedWorkspace} task={null} />;
   }
   return (
-    <GroupedSheet title="Create Task">
+    <GroupedSheet title="Create task">
       <SelectedWorkspaceGate>{() => <OtherWorkspaceState />}</SelectedWorkspaceGate>
     </GroupedSheet>
   );
@@ -43,7 +43,7 @@ export function EditTaskRoute(): ReactElement {
     return <EditTaskContent taskId={taskId} />;
   }
   return (
-    <GroupedSheet title="Edit Task">
+    <GroupedSheet title="Edit task">
       <SelectedWorkspaceGate>{() => <OtherWorkspaceState />}</SelectedWorkspaceGate>
     </GroupedSheet>
   );
@@ -55,20 +55,20 @@ function EditTaskContent({ taskId }: { taskId: string }): ReactElement {
   const task = useEditedTask(tasks.find((entry) => entry.id === taskId) ?? null);
   if (!selectedWorkspace) {
     return (
-      <GroupedSheet title="Edit Task">
+      <GroupedSheet title="Edit task">
         <OtherWorkspaceState />
       </GroupedSheet>
     );
   }
   if (!task) {
     return (
-      <GroupedSheet title="Edit Task">
+      <GroupedSheet title="Edit task">
         {isLoadingTasks ? (
           <LoadingState label="Loading the task" />
         ) : (
           <EmptyState
             icon="search-x"
-            title="Task Not Found"
+            title="Task not found"
             message={`${taskId} is no longer in this workspace. Close this sheet.`}
           />
         )}

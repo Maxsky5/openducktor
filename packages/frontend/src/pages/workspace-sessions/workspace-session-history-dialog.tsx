@@ -37,11 +37,12 @@ export function WorkspaceSessionHistoryDialog({
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   const archived = useQuery(workspaceSessionListQueryOptions(workspaceId, true));
-  const repoConfig = useQuery(repoConfigQueryOptions(workspaceId));
+  const needsTarget = archived.data?.some(isArchivedWorktreeRemoved) ?? false;
+  const repoConfig = useQuery({ ...repoConfigQueryOptions(workspaceId), enabled: needsTarget });
   const defaultTarget = repoConfig.data?.defaultTargetBranch ?? null;
   const branches = useQuery({
     ...repoBranchesQueryOptions(repoPath),
-    enabled: archived.data?.some(isArchivedWorktreeRemoved) ?? false,
+    enabled: needsTarget,
   });
   const [filter, setFilter] = useState("");
   const filteredSessions = archived.data
@@ -56,35 +57,41 @@ export function WorkspaceSessionHistoryDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
+      <DialogContent
+        loading={archived.isPending}
+        loadingLabel="Loading archived chats…"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader>
           <DialogTitle>{ARCHIVED_CHATS_TEXT.title}</DialogTitle>
           <DialogDescription>{ARCHIVED_CHATS_TEXT.description}</DialogDescription>
         </DialogHeader>
-        <Input
-          type="search"
-          aria-label={ARCHIVED_CHATS_TEXT.filterLabel}
-          placeholder={ARCHIVED_CHATS_TEXT.filterPlaceholder}
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          className="mt-4 shrink-0"
-        />
-        <DialogBody className="mt-4 flex max-h-96 flex-col gap-2 overflow-y-auto p-1">
-          <ArchivedListProblems archived={archived} branches={branches} restore={restore} />
-          {filteredSessions?.map((record) => (
-            <ArchivedSessionRow
-              key={record.id}
-              workspaceId={workspaceId}
-              record={record}
-              defaultTarget={defaultTarget}
-              branches={branches}
-              restore={restore}
-              listFetching={archived.isFetching}
-            />
-          ))}
-          {isArchiveSettled ? (
-            <ArchivedListEnd total={archived.data.length} shown={filteredSessions?.length ?? 0} />
-          ) : null}
+        <DialogBody className="mt-4 flex min-h-0 flex-col gap-4">
+          <Input
+            type="search"
+            aria-label={ARCHIVED_CHATS_TEXT.filterLabel}
+            placeholder={ARCHIVED_CHATS_TEXT.filterPlaceholder}
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            className="shrink-0"
+          />
+          <div className="flex max-h-96 flex-col gap-2 overflow-y-auto p-1">
+            <ArchivedListProblems archived={archived} branches={branches} restore={restore} />
+            {filteredSessions?.map((record) => (
+              <ArchivedSessionRow
+                key={record.id}
+                workspaceId={workspaceId}
+                record={record}
+                defaultTarget={defaultTarget}
+                branches={branches}
+                restore={restore}
+                listFetching={archived.isFetching}
+              />
+            ))}
+            {isArchiveSettled ? (
+              <ArchivedListEnd total={archived.data.length} shown={filteredSessions?.length ?? 0} />
+            ) : null}
+          </div>
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -174,6 +181,7 @@ function ArchivedListProblems({
             disabled={archived.isFetching}
             onClick={() => void archived.refetch()}
           >
+            <RotateCcw />
             Retry
           </Button>
         </div>
@@ -182,6 +190,7 @@ function ArchivedListProblems({
         <div role="alert">
           <p className="text-sm text-destructive">{errorMessage(branches.error)}</p>
           <Button variant="ghost" onClick={() => void branches.refetch()}>
+            <RotateCcw />
             Retry branches
           </Button>
         </div>

@@ -99,7 +99,7 @@ describe("RepositoryAgentsSection", () => {
       }),
     );
 
-    expect(html).toContain("Default Model");
+    expect(html).toContain("Default model");
     expect(html).toContain(
       "Used for new chats and for workflow sessions that have no role default.",
     );
@@ -179,7 +179,7 @@ describe("RepositoryAgentsSection", () => {
       }),
     );
 
-    expect(html).toContain("Agent Profile");
+    expect(html).toContain("Agent profile");
     expect(html).toContain("Not supported by runtime");
     expect(html).toContain("disabled");
     expect(html).toContain("o3");

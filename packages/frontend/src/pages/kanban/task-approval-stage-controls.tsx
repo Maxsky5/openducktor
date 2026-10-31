@@ -4,10 +4,9 @@ import type { ReactElement } from "react";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 
-export const SECTION_LABEL_CLASS =
-  "text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground";
+export const SECTION_LABEL_CLASS = "text-xs font-medium text-muted-foreground";
 
-/** The scrolling body of a stage. The modal has a fixed height, so a long stage scrolls. */
+/** A long stage scrolls above its actions. */
 export const STAGE_BODY_CLASS = "min-h-0 flex-1 overflow-y-auto";
 
 /** The content of a stage, inside its body. */
@@ -43,6 +42,7 @@ export function SegmentedTabs<TValue extends string>({
             key={option.value}
             active={isActive}
             size="lg"
+            className="h-11 px-1 text-xs sm:h-9 sm:px-3 sm:text-sm"
             role="tab"
             disabled={disabled || option.disabled}
             onClick={() => onChange(option.value)}

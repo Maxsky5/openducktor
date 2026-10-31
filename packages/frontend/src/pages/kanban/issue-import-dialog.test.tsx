@@ -191,7 +191,7 @@ describe("Issue import dialog", () => {
       );
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
       fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 2" }));
-      fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
       await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
       expect(success).toHaveBeenCalledWith("2 Tasks created");
@@ -236,7 +236,7 @@ describe("Issue import dialog", () => {
       await act(async () => {
         await queryClient.invalidateQueries({ queryKey: issueItemsQueryKeys.repo("/repo") });
       });
-      fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
       await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
       expect(
@@ -270,7 +270,7 @@ describe("Issue import dialog", () => {
       </ClientConnectionProvider>,
     );
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 132" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     const description = within(reviewCard("Issue 132")).getByRole("button", {
       name: "Description",
     });
@@ -370,7 +370,7 @@ describe("Issue import dialog", () => {
     expect(screen.queryByText("Already linked to Task TASK-132")).toBeNull();
     fireEvent.click(within(linkedCheckbox.closest("li")!).getByText("Issue 132"));
     expect(linkedCheckbox.getAttribute("data-state")).toBe("unchecked");
-    expect(screen.getByRole("button", { name: "Review Tasks" }).hasAttribute("disabled")).toBe(
+    expect(screen.getByRole("button", { name: "Review tasks" }).hasAttribute("disabled")).toBe(
       true,
     );
     view.unmount();
@@ -398,7 +398,7 @@ describe("Issue import dialog", () => {
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     fireEvent.click(within(reviewCard("Issue 1")).getByRole("button", { name: "Description" }));
     expect(within(reviewCard("Issue 1")).getByText("Details").tagName).toBe("STRONG");
     expect(within(reviewCard("Issue 1")).getByRole("link", { name: "View image" })).toBeDefined();
@@ -426,6 +426,7 @@ describe("Issue import dialog", () => {
       },
     },
   ]) {
+    // Each provider configuration opens a modal with its own 500 ms loader.
     test(`loads the new issue list when the configured ${scenario.name} changes`, async () => {
       const list = mock(async () => ({
         items: [issue(list.mock.calls.length === 1 ? "1" : "2")],
@@ -456,7 +457,7 @@ describe("Issue import dialog", () => {
       expect(screen.queryByRole("checkbox", { name: "Select Issue 1" })).toBeNull();
       expect(list).toHaveBeenCalledTimes(2);
       view.unmount();
-    });
+    }, 2000);
   }
 
   test("keeps comma-bearing source labels intact while editing labels", async () => {
@@ -479,7 +480,7 @@ describe("Issue import dialog", () => {
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     expect(within(reviewCard("Issue 1")).getByText("ui,ux")).toBeDefined();
     replaceReviewLabel("Issue 1", "backend", "api");
     const labelInput = within(reviewCard("Issue 1")).getByRole("textbox");
@@ -518,7 +519,7 @@ describe("Issue import dialog", () => {
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
@@ -549,13 +550,13 @@ describe("Issue import dialog", () => {
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 2" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     chooseIssueType("Issue 1", "Bug");
     replaceReviewLabel("Issue 1", "triage", "frontend");
     fireEvent.click(within(reviewCard("Issue 2")).getByRole("button", { name: "Priority" }));
     fireEvent.click(screen.getByRole("option", { name: /P1 · High/ }));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
 
     expect(
       within(reviewCard("Issue 1")).getByRole("button", { name: "Issue type" }).textContent,
@@ -594,7 +595,7 @@ describe("Issue import dialog", () => {
       );
 
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-      fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
       chooseIssueType("Issue 1", "Bug");
       replaceReviewLabel("Issue 1", "triage", "reviewed");
       fireEvent.click(screen.getByRole("button", { name: "Back" }));
@@ -604,7 +605,7 @@ describe("Issue import dialog", () => {
           : screen.getByRole("button", { name: "Remove Issue 1" }),
       );
       fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 1" }));
-      fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
 
       expect(
         within(reviewCard("Issue 1")).getByRole("button", { name: "Issue type" }).textContent,
@@ -636,7 +637,7 @@ describe("Issue import dialog", () => {
     );
     const view = render(renderDialog(true));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     chooseIssueType("Issue 1", "Bug");
 
     view.rerender(renderDialog(false));
@@ -675,7 +676,7 @@ describe("Issue import dialog", () => {
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     chooseIssueType("Issue 1", "Bug");
     replaceReviewLabel("Issue 1", "triage", "reviewed");
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
@@ -683,7 +684,7 @@ describe("Issue import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
 
     expect(screen.queryByText("Provider request failed. Retry.")).toBeNull();
     expect(
@@ -719,9 +720,9 @@ describe("Issue import dialog", () => {
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
-    await screen.findByRole("button", { name: "Importing..." });
+    await screen.findByRole("button", { name: "Importing…" });
     expect(screen.getByRole("button", { name: "Remove" }).hasAttribute("disabled")).toBe(true);
 
     finishImport({ results: [] });
@@ -748,7 +749,7 @@ describe("Issue import dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 2" }));
     expect(screen.getByText("Selected (2)")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     expect(within(reviewCard("Issue 1")).getByText("triage")).toBeDefined();
     expect(within(reviewCard("Issue 2")).getByText("triage")).toBeDefined();
     view.unmount();
@@ -804,7 +805,7 @@ describe("Issue import dialog", () => {
     ).toBe("checked");
     expect(screen.getByText("Selected (2)")).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     chooseIssueType("Issue 1", "Bug");
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
     await screen.findByText("Created Task TASK-1");
@@ -863,7 +864,7 @@ describe("Issue import dialog", () => {
       target: { value: "other" },
     });
     await screen.findByRole("checkbox", { name: "Select Issue 2" });
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     chooseIssueType("Issue 1", "Bug");
     replaceReviewLabel("Issue 1", "triage", "reviewed");
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
@@ -911,7 +912,7 @@ describe("Issue import dialog", () => {
       </ClientConnectionProvider>,
     );
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
     await screen.findByText("Changed since review.");
     fireEvent.click(screen.getByRole("button", { name: "Refresh item" }));
@@ -947,7 +948,7 @@ describe("Issue import dialog", () => {
     linked = true;
     await queryClient.invalidateQueries({ queryKey: issueItemsQueryKeys.repo("/repo") });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Review Tasks" }).hasAttribute("disabled")).toBe(
+      expect(screen.getByRole("button", { name: "Review tasks" }).hasAttribute("disabled")).toBe(
         true,
       ),
     );

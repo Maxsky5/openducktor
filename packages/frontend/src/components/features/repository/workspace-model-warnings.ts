@@ -29,7 +29,7 @@ export const getModelWarnings = (
     ),
   );
   const entries = [
-    ["Default Model", draft.defaultModel],
+    ["Default model", draft.defaultModel],
     ...BUILTIN_ROLE_IDS.map(
       (role) => [BUILTIN_MODEL_DEFAULT_ROLE_LABELS[role], draft.agentDefaults[role]] as const,
     ),

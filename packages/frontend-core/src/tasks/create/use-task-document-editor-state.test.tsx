@@ -1,5 +1,10 @@
 import "../../test-support/dom-environment";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { renderHook } from "@testing-library/react";
+import { createElement, type PropsWithChildren } from "react";
+import { ClientConnectionProvider } from "../../connection/client-connection-react";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { documentQueryKeys, loadTaskDocumentFromQuery } from "../../queries/documents";
 import { createHookHarness as createSharedHookHarness } from "../../test-support/react-hook-harness";
 import { useTaskDocumentEditorState } from "./use-task-document-editor-state";
 
@@ -29,12 +34,16 @@ const createDeferred = <T,>(): Deferred<T> => {
 };
 
 const createHookHarness = (initialProps: HookArgs) => {
-  return createSharedHookHarness(useTaskDocumentEditorState, initialProps);
+  const connection = createTestClientConnection();
+  const wrapper = ({ children }: PropsWithChildren) =>
+    createElement(ClientConnectionProvider, { connection }, children);
+  return createSharedHookHarness(useTaskDocumentEditorState, initialProps, { wrapper });
 };
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   open: true,
   taskId: "task-1",
+  repoPath: "/repo",
   activeSection: "spec",
   loadDocument: async (_taskId, code) => ({
     markdown: code === "spec" ? "# Spec" : "## Plan",
@@ -44,6 +53,39 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useTaskDocumentEditorState", () => {
+  test("opens a cached task document before any load render", async () => {
+    const read = mock(async () => ({ markdown: "# From host", updatedAt: null }));
+    const connection = createTestClientConnection({ client: { workflowArtifactGet: read } });
+    connection.queryClient.setQueryData(documentQueryKeys.document("/repo", "task-1", "spec"), {
+      markdown: "# Cached spec",
+      updatedAt: "2026-10-31T12:00:00Z",
+    });
+    const props = {
+      ...createBaseProps(),
+      repoPath: "/repo",
+      loadDocument: (taskId: string, code: "spec" | "plan" | "qaReport") =>
+        loadTaskDocumentFromQuery(connection.queryClient, "/repo", taskId, code),
+    };
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(ClientConnectionProvider, { connection }, children);
+    const loading: boolean[] = [];
+    const view = renderHook(
+      () => {
+        const state = useTaskDocumentEditorState(props);
+        loading.push(state.documents.spec.isLoading);
+        return state;
+      },
+      { wrapper },
+    );
+    try {
+      expect(view.result.current.documents.spec.draftMarkdown).toBe("# Cached spec");
+      expect(loading).not.toContain(true);
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      await connection.dispose();
+    }
+  });
   beforeEach(() => {
     console.error = (...args: unknown[]): void => {
       originalConsoleError(...args);

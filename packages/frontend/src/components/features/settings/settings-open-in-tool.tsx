@@ -68,7 +68,7 @@ export function SettingsOpenInTool({
             disabled={disabled || toolsQuery.isError || tools.length === 0}
             triggerAriaLabelledBy={labelId}
             triggerAriaDescribedBy={descriptionId}
-            searchPlaceholder="Search tools..."
+            searchPlaceholder="Search apps…"
             onValueChange={(value) =>
               onUpdateSystem(() => ({
                 preferredOpenInToolId: systemOpenInToolIdSchema.parse(value),

@@ -1,3 +1,4 @@
+import { Check, LoaderCircle } from "lucide-react";
 import { type ReactElement, type ReactNode, useCallback, useState } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
@@ -128,7 +129,12 @@ export function OnboardingPage({ onComplete, headerActions }: OnboardingPageProp
               disabled={runtimeSetup.isSaving}
               onClick={() => void runtimeSetup.saveRuntimes(true)}
             >
-              {runtimeSetup.isSaving ? "Saving..." : "Continue without a coding agent"}
+              {runtimeSetup.isSaving ? (
+                <LoaderCircle className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Check data-icon="inline-start" />
+              )}
+              {runtimeSetup.isSaving ? "Saving…" : "Continue without a coding agent"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,4 @@
+import { Save, Sigma } from "lucide-react";
 import katex from "katex";
 import { type ChangeEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ const validateFormula = (latex: string, kind: TaskDescriptionMathKind): string |
     return "Enter a LaTeX formula.";
   }
   if (latex.includes("$")) {
-    return "Enter the formula without dollar delimiters; Markdown delimiters are added for you.";
+    return "Leave out the $ signs. OpenDucktor adds them for you.";
   }
   if (kind === "inline" && /[\r\n]/.test(latex)) {
     return "Inline formulas must stay on one line.";
@@ -93,9 +94,7 @@ export function TaskDescriptionMathDialog({
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>
-              Enter LaTeX without Markdown dollar delimiters. Select an existing formula to edit it.
-            </DialogDescription>
+            <DialogDescription>Write a LaTeX formula without $ signs.</DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4 space-y-2 overflow-visible">
             <Label htmlFor="task-description-latex">LaTeX formula</Label>
@@ -133,6 +132,7 @@ export function TaskDescriptionMathDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={disabled}>
+              {editing ? <Save data-icon="inline-start" /> : <Sigma data-icon="inline-start" />}
               {editing ? "Save formula" : "Insert formula"}
             </Button>
           </DialogFooter>

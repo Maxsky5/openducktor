@@ -142,8 +142,7 @@ export function useSessionStartModalRunner({
 
   const { kickoffPrompt, isKickoffPromptLoading, kickoffPromptError, onRetryKickoffPrompt } =
     useSessionStartKickoffPrompt({
-      requestId: intent?.requestId,
-      resolveKickoffPrompt: intent?.resolveKickoffPrompt,
+      kickoff: intent?.kickoff,
       selectedTargetBranch,
     });
 

@@ -1,9 +1,11 @@
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import {
   type ComponentRef,
   type PropsWithChildren,
   type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -18,11 +20,14 @@ import { useFeedbackStore } from "@/app-shell/app-services";
 import { IconButton } from "@/ui/icon-button";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
+import { ModalLoadingContent } from "@/ui/modal-loading-content";
 import { SheetCloseContext } from "./sheet-close";
 import { useBlockBack } from "./use-block-back";
 
 export type SheetScreenProps = PropsWithChildren<{
   title: string;
+  /** Context that stays visible while the body loads. */
+  intro?: ReactNode;
   /** Closes the sheet. The default goes back. */
   onClose?: (() => void) | undefined;
   /** The close control label on iOS: "Cancel" for a form, "Done" for a viewer. */
@@ -39,6 +44,9 @@ export type SheetScreenProps = PropsWithChildren<{
    * are full-screen dialogs on Android, without a handle.
    */
   draggable?: boolean | undefined;
+  /** Preparation reads. The frame reveals the form and its actions together after 500 ms. */
+  loading?: boolean | undefined;
+  loadingLabel?: string | undefined;
 }>;
 
 function TextAction({
@@ -78,17 +86,21 @@ function TextAction({
  */
 export function SheetScreen({
   title,
+  intro,
   onClose,
   closeLabel = "Cancel",
   closable = true,
   background = "sheet",
   draggable = false,
+  loading = false,
+  loadingLabel,
   children,
 }: SheetScreenProps): ReactElement {
   const router = useRouter();
   const focused = useIsFocused();
   const feedback = useFeedbackStore();
   useLayoutEffect(() => (focused ? feedback.coverStartup() : undefined), [feedback, focused]);
+  const isLoading = useMinimumLoader(loading);
   // The close control calls the latest handler, so the screen options change only when the
   // header shows something new. Each new options object renders the whole navigator again.
   const closeHandler = useRef(onClose);
@@ -109,7 +121,7 @@ export function SheetScreen({
     () => ({ close, closable, claimFooter }),
     [claimFooter, closable, close],
   );
-  const headerClose = footers === 0;
+  const headerClose = footers === 0 || isLoading;
   const options = useMemo<NativeStackNavigationOptions>(() => {
     if (Platform.OS !== "ios") return { title, gestureEnabled: closable };
     if (!headerClose) {
@@ -143,12 +155,20 @@ export function SheetScreen({
   }, [closable, close, closeLabel, headerClose, title]);
   useBlockBack(!closable);
   styles.useVariants({ background });
+  const content = (
+    <>
+      {intro ? <View style={styles.intro}>{intro}</View> : null}
+      <ModalLoadingContent loading={isLoading} label={loadingLabel}>
+        {children}
+      </ModalLoadingContent>
+    </>
+  );
   if (Platform.OS === "ios") {
     return (
       <SheetCloseContext value={sheetClose}>
         <View style={styles.root}>
           <Stack.Screen options={options} />
-          {children}
+          {content}
         </View>
       </SheetCloseContext>
     );
@@ -172,7 +192,7 @@ export function SheetScreen({
             />
           ) : null}
         </View>
-        {children}
+        {content}
       </AndroidSheetFrame>
     </SheetCloseContext>
   );
@@ -233,4 +253,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingRight: theme.space.lg,
   },
   title: { flex: 1 },
+  intro: {
+    gap: theme.space.xs,
+    paddingHorizontal: theme.layout.screenPadding,
+    paddingBottom: theme.space.md,
+  },
 }));

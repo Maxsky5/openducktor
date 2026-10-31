@@ -56,4 +56,23 @@ describe("useMinimumLoader", () => {
 
     expect(view.result.current).toBe(false);
   });
+
+  test("keeps pending content hidden during close and starts a fresh interval on reopen", () => {
+    jest.useFakeTimers();
+    setSystemTime(Date.UTC(2026, 9, 27, 10, 0, 0));
+    const view = renderHook(({ pending, active }) => useMinimumLoader(pending, active), {
+      initialProps: { pending: true, active: true },
+    });
+    act(() => jest.advanceTimersByTime(400));
+    view.rerender({ pending: true, active: false });
+    expect(view.result.current).toBe(true);
+    view.rerender({ pending: true, active: true });
+    act(() => jest.advanceTimersByTime(100));
+    view.rerender({ pending: false, active: true });
+    expect(view.result.current).toBe(true);
+    act(() => jest.advanceTimersByTime(399));
+    expect(view.result.current).toBe(true);
+    act(() => jest.advanceTimersByTime(1));
+    expect(view.result.current).toBe(false);
+  });
 });

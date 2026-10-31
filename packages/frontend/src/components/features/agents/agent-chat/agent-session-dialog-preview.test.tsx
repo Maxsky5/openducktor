@@ -267,7 +267,7 @@ test("nested conflict and discard dialogs keep focus and the draft in the conver
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Code editor");
     fireEvent.click(review);
     await screen.findByRole("dialog", { name: "Review latest file" });
-    fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Allow overwrite on save" }));
     fireEvent.click(await screen.findByRole("button", { name: "Close file preview" }));
     const discard = await screen.findByRole("dialog", { name: "Discard unsaved changes?" });
     expect(discard.contains(document.activeElement)).toBe(true);

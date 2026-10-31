@@ -2,8 +2,16 @@ import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { Folder, FolderGit2, GitBranch, LoaderCircle } from "lucide-react";
-import type { ReactElement } from "react";
+import {
+  Folder,
+  FolderGit2,
+  GitBranch,
+  LoaderCircle,
+  MessageSquarePlus,
+  RefreshCw,
+} from "lucide-react";
+import type { PropsWithChildren, ReactElement } from "react";
+import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import { WorkspaceSessionModelFields } from "./workspace-session-model-fields";
 import {
   NO_CUSTOM_AGENT_ROLE,
@@ -79,7 +87,6 @@ export function WorkspaceSessionCreateDialog({
   const { create, startupAttemptId, editChoices, dismissStartup } = form;
   const startup = useStartupDialogAttempt(startupAttemptId);
   const { attempt } = startup;
-  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
   const showingProgress = startupShowsProgress(attempt);
   const starting =
     create.isPending || startupIsPending(attempt) || Boolean(startupAttemptId && !showingProgress);
@@ -93,10 +100,56 @@ export function WorkspaceSessionCreateDialog({
   };
   useStartupDialogClose(startup, open, close);
   return (
+    <ChatDialogFrame
+      open={open}
+      attempt={attempt}
+      starting={starting}
+      onClose={close}
+      onCloseAutoFocus={onCloseAutoFocus}
+    >
+      {startupAttemptId && showingProgress ? (
+        <StartupDialogProgress
+          open={open}
+          startupAttemptId={startupAttemptId}
+          onClose={close}
+          onEditChoices={editChoices}
+          onRepairSavedSession={form.repairSavedSession}
+        />
+      ) : (
+        <WorkspaceSessionCreateForm
+          form={form}
+          model={model}
+          repoConfig={repoConfig}
+          workspace={workspace}
+          onClose={close}
+          starting={starting}
+        />
+      )}
+    </ChatDialogFrame>
+  );
+}
+
+function ChatDialogFrame({
+  open,
+  attempt,
+  starting,
+  onClose,
+  onCloseAutoFocus,
+  children,
+}: PropsWithChildren<{
+  open: boolean;
+  attempt: StartupAttempt | null;
+  starting: boolean;
+  onClose: () => void;
+  onCloseAutoFocus: ((event: Event) => void) | undefined;
+}>): ReactElement {
+  const showingProgress = startupShowsProgress(attempt);
+  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
+  return (
     <Dialog
       open={open}
       onOpenChange={(open) => {
-        if (!open && !starting) close();
+        if (!open && !starting) onClose();
       }}
     >
       <DialogContent
@@ -120,28 +173,11 @@ export function WorkspaceSessionCreateDialog({
           <DialogTitle>New chat</DialogTitle>
           <DialogDescription className={cn(showingProgress && "sr-only")}>
             {showingProgress
-              ? "Follow session startup progress."
+              ? "See progress as the session starts."
               : "Choose where the agent works and how it starts."}
           </DialogDescription>
         </DialogHeader>
-        {startupAttemptId && showingProgress ? (
-          <StartupDialogProgress
-            open={open}
-            startupAttemptId={startupAttemptId}
-            onClose={close}
-            onEditChoices={editChoices}
-            onRepairSavedSession={form.repairSavedSession}
-          />
-        ) : (
-          <WorkspaceSessionCreateForm
-            form={form}
-            model={model}
-            repoConfig={repoConfig}
-            workspace={workspace}
-            onClose={close}
-            starting={starting}
-          />
-        )}
+        {children}
       </DialogContent>
     </Dialog>
   );
@@ -214,6 +250,7 @@ function WorkspaceSessionCreateForm({
                 {errorMessage(repoConfig.error)}
               </p>
               <Button type="button" variant="ghost" onClick={() => void repoConfig.refetch()}>
+                <RefreshCw data-icon="inline-start" />
                 Retry repository defaults
               </Button>
             </div>
@@ -243,6 +280,7 @@ function WorkspaceSessionCreateForm({
               <div role="alert">
                 <p className="text-sm text-destructive">{errorMessage(roles.error)}</p>
                 <Button type="button" variant="ghost" onClick={() => void roles.refetch()}>
+                  <RefreshCw data-icon="inline-start" />
                   Retry roles
                 </Button>
               </div>
@@ -309,7 +347,11 @@ function WorkspaceSessionCreateForm({
             Cancel
           </Button>
           <Button type="submit" disabled={starting || input === null} aria-busy={starting}>
-            {starting && <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />}
+            {starting ? (
+              <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />
+            ) : (
+              <MessageSquarePlus data-icon="inline-start" />
+            )}
             {starting ? "Creating chat…" : "Create chat"}
           </Button>
         </DialogFooter>

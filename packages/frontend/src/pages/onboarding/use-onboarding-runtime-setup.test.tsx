@@ -55,7 +55,7 @@ describe("useOnboardingRuntimeSetup", () => {
     expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
     expect(screen.queryByText("Unavailable")).toBeNull();
     expect(screen.queryByText("Enter a path, then check it.")).toBeNull();
-    expect(screen.getAllByText("Validating saved executable path...")).toHaveLength(
+    expect(screen.getAllByText("Checking executable path…")).toHaveLength(
       runtimeDefinitions.length,
     );
     for (const input of screen.getAllByRole("textbox", { name: "Executable path" })) {
@@ -118,7 +118,7 @@ describe("useOnboardingRuntimeSetup", () => {
       }),
     );
     await screen.findByText("/Users/dev/.local/bin");
-    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
+    fireEvent.click(await screen.findByRole<HTMLButtonElement>("button", { name: "Cancel" }));
   });
 
   test("shows and retries a settings snapshot failure before a draft exists", async () => {
@@ -1013,9 +1013,7 @@ describe("useOnboardingRuntimeSetup", () => {
     fireEvent.click(confirmButton);
 
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving..." }).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving…" }).disabled).toBe(true);
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }).disabled).toBe(true);
 
     await act(async () => save.resolve());
@@ -1033,7 +1031,7 @@ describe("useOnboardingRuntimeSetup", () => {
     fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
     await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
-    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
+    fireEvent.click(await screen.findByRole<HTMLButtonElement>("button", { name: "Cancel" }));
 
     expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
     expect(

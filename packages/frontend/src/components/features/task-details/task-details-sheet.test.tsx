@@ -750,7 +750,7 @@ describe("TaskDetailsSheet", () => {
       fireEvent.click(closeTask);
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
-      expect(screen.getByRole("dialog", { name: "Close Task" })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "Close task" })).toBeTruthy();
       expect(onOpenChange).not.toHaveBeenCalledWith(false);
     } finally {
       unmount();
