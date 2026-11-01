@@ -1,4 +1,14 @@
-import { expect, pauseClock, playOnFakeClock, reload, runUntil, shownText, test } from "./fixtures";
+import {
+  advance,
+  expect,
+  pauseClock,
+  playOnFakeClock,
+  reload,
+  runUntil,
+  scrollToPlay,
+  shownText,
+  test,
+} from "./fixtures";
 
 test("with motion allowed, the opening view is flat on first paint and after a scroll", async ({
   page,
@@ -51,8 +61,7 @@ test("when motion is allowed, one control pauses and resumes every product view"
   await reload(page);
   const hero = page.locator('[data-scene="hero"]');
   // On a phone, the opening view starts below the line where a view starts to move.
-  await hero.scrollIntoViewIfNeeded();
-  await expect(hero).toHaveAttribute("data-motion", "running");
+  await scrollToPlay(hero);
   await page.getByRole("button", { name: "Pause animations" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "paused");
   await expect(hero).toHaveAttribute("data-motion", "paused");
@@ -67,8 +76,7 @@ test("when motion is allowed, one control pauses and resumes every product view"
   await expect(hero).toHaveAttribute("data-motion", "paused");
   // The duck parade of the closing section follows the same control.
   const parade = page.locator("[data-parade]");
-  await parade.scrollIntoViewIfNeeded();
-  await expect(parade).toHaveAttribute("data-motion", "running");
+  await scrollToPlay(parade);
   await page.getByRole("button", { name: "Pause animations" }).click();
   await expect(parade).toHaveAttribute("data-motion", "paused");
 });
@@ -117,7 +125,7 @@ test("each product view plays one loop, ends on its static frame, and cross fade
     const scene = page.locator(`[data-scene="${id}"]`);
     const stage = scene.locator("[data-stage]");
     const cover = scene.locator("[data-stage-cover]");
-    await scene.scrollIntoViewIfNeeded();
+    await scrollToPlay(scene);
     await runUntil(page, async () => (await cover.count()) > 0, 60);
     // The cover holds the last frame of the loop. The stage holds the first frame of the next loop.
     await expect(cover, id).toHaveAttribute("aria-hidden", "true");
@@ -149,7 +157,7 @@ test("on a phone, each product view plays one loop without a page error", async 
   await playOnFakeClock(page);
   for (const id of scenes) {
     const scene = page.locator(`[data-scene="${id}"]`);
-    await scene.scrollIntoViewIfNeeded();
+    await scrollToPlay(scene);
     await runUntil(page, async () => (await scene.locator("[data-stage-cover]").count()) > 0, 60);
     await expect(scene.locator("[data-stage-cover]"), id).toHaveCount(1);
   }
@@ -162,8 +170,8 @@ test("a switch to reduced motion while the views play puts back their static fra
   const hero = '[data-scene="hero"] [data-stage]';
   const still = await shownText(page, hero);
   await playOnFakeClock(page);
-  await page.locator('[data-scene="hero"]').scrollIntoViewIfNeeded();
-  await page.clock.runFor(3000);
+  await scrollToPlay(page.locator('[data-scene="hero"]'));
+  await advance(page, 3000);
   expect(await shownText(page, hero)).not.toBe(still);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(page.locator("[data-motion]")).toHaveCount(0);
@@ -176,19 +184,18 @@ test("the pause control freezes the views", async ({ page }) => {
   await playOnFakeClock(page);
   const scene = page.locator('[data-scene="hero"]');
   const stage = scene.locator("[data-stage]");
-  await scene.scrollIntoViewIfNeeded();
-  await page.clock.runFor(2000);
+  await scrollToPlay(scene);
+  await advance(page, 2000);
   // Before a click, Playwright scrolls the sticky header button to its place at the top of the
   // page, so the test shows the view again after each click.
   const show = async (motion: string): Promise<void> => {
     await scene.scrollIntoViewIfNeeded();
-    await page.clock.runFor(100);
     await expect(scene).toHaveAttribute("data-motion", motion);
   };
   await page.getByRole("button", { name: "Pause animations" }).click();
   await show("paused");
   const frame = await stage.innerHTML();
-  await page.clock.runFor(3000);
+  await advance(page, 3000);
   expect(await stage.innerHTML()).toBe(frame);
   // CSS pulses the glow and the ring of a running dot. The control pauses them too.
   const pulses = await stage
@@ -200,7 +207,7 @@ test("the pause control freezes the views", async ({ page }) => {
   expect(pulses).toEqual(["paused", "paused"]);
   await page.getByRole("button", { name: "Play animations" }).click();
   await show("running");
-  await page.clock.runFor(1000);
+  await advance(page, 1000);
   expect(await stage.innerHTML()).not.toBe(frame);
 });
 
@@ -223,14 +230,13 @@ for (const size of [
     await page.setViewportSize(size);
     await reload(page);
     const scene = page.locator('[data-scene="autopilot"]');
-    await scene.scrollIntoViewIfNeeded();
-    await expect(scene).toHaveAttribute("data-motion", "running");
+    await scrollToPlay(scene);
     await pauseClock(page);
     const lanes = new Set<string>();
     let notifications = 0;
     // One loop of the scene is shorter than 29 seconds.
     for (let step = 0; step < 290; step++) {
-      await page.clock.runFor(100);
+      await advance(page, 100);
       // The live stage only: a loop ends with a fading copy of its last frame over the stage.
       const frame = await scene.locator("[data-stage]").evaluate((root) => {
         const area = (a: DOMRect, b: DOMRect) =>
@@ -281,7 +287,7 @@ test("the chat opens a new task and starts its Builder in the background", async
   test.setTimeout(120_000);
   await playOnFakeClock(page);
   const scene = page.locator('[data-scene="chat"]');
-  await scene.scrollIntoViewIfNeeded();
+  await scrollToPlay(scene);
   const stage = scene.locator("[data-stage]");
   // The task details of the new task slide in over the chat.
   await runUntil(page, async () => (await stage.locator("[data-sheet]").count()) > 0, 40);
@@ -306,7 +312,7 @@ test("the opening view answers a question in the session preview of the sidebar"
   test.setTimeout(180_000);
   await playOnFakeClock(page);
   const scene = page.locator('[data-scene="hero"]');
-  await scene.scrollIntoViewIfNeeded();
+  await scrollToPlay(scene);
   const stage = scene.locator("[data-stage]");
   const waiting = stage.locator('[data-nav-list="needs_you"] [data-nav-entry="empty-build"]');
   // The Builder asks its question, and the preview of its session opens with it.

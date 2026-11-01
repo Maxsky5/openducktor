@@ -1,11 +1,13 @@
 import { commands } from "../src/content/site";
 import {
+  advance,
   clipboard,
   desktopInstalls,
   expect,
   installs,
   playOnFakeClock,
   reload,
+  scrollToPlay,
   test,
 } from "./fixtures";
 
@@ -34,8 +36,7 @@ test("each install method has a terminal with its command and a copy button", as
 test("the desktop terminals show only their command, and they do not move", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await reload(page);
-  await page.locator("[data-install]").scrollIntoViewIfNeeded();
-  await expect(page.locator("[data-install]")).toHaveAttribute("data-motion", "running");
+  await scrollToPlay(page.locator("[data-install]"));
   for (const [, title, , command] of desktopInstalls) {
     const screen = page
       .getByRole("article", { name: title, exact: true })
@@ -68,20 +69,19 @@ test("the browser version terminal types its command, then prints the start log"
   await playOnFakeClock(page);
   const scene = page.locator("[data-install]");
   const ready = scene.locator(".t-log").filter({ hasText: "OpenDucktor web is ready:" });
-  await scene.scrollIntoViewIfNeeded();
-  await page.clock.runFor(100);
-  await expect(scene).toHaveAttribute("data-motion", "running");
+  await scrollToPlay(scene);
+  await advance(page, 100);
   await expect(ready).toHaveAttribute("data-pending");
   // The part of the command that is not typed yet keeps its place, but it does not show.
   const rest = scene.locator("[data-rest]");
   await expect(rest).not.toBeEmpty();
   await expect(rest).toHaveCSS("visibility", "hidden");
   // The command takes less than a second to type. The host takes longer to get ready.
-  await page.clock.runFor(1000);
+  await advance(page, 1000);
   await expect(scene.locator("[data-typed]")).toHaveText(commands.browser);
   await expect(rest).toBeEmpty();
   await expect(ready).toHaveAttribute("data-pending");
-  await page.clock.runFor(4000);
+  await advance(page, 4000);
   await expect(scene.locator("[data-pending]:not(:empty)")).toHaveCount(0);
   await expect(ready).not.toHaveAttribute("data-pending");
   await expect(scene.locator(".t-log").last()).toContainText("Backend: http://127.0.0.1:14327");
@@ -96,8 +96,8 @@ test("the install terminals keep their size, and the pause control shows the sta
   await playOnFakeClock(page);
   const before = await heights();
   // While the browser version terminal types, the text that comes later hides but keeps its place.
-  await page.locator("[data-install]").scrollIntoViewIfNeeded();
-  await page.clock.runFor(500);
+  await scrollToPlay(page.locator("[data-install]"));
+  await advance(page, 500);
   const hidden = page.locator("[data-install] [data-pending]:not(:empty)");
   await expect(hidden).not.toHaveCount(0);
   expect(await heights()).toEqual(before);

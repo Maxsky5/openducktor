@@ -1,7 +1,7 @@
-import { test as base, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import { commands } from "../src/content/site";
 
-export { expect } from "@playwright/test";
+export { expect };
 
 /** Each test starts on the home page, in the theme of its project. */
 export const test = base.extend({
@@ -60,6 +60,25 @@ export async function playOnFakeClock(page: Page): Promise<void> {
   await pauseClock(page);
 }
 
+/**
+ * Moves the fake clock forward by `ms` in steps of at most 250 ms. GSAP sets each frame from the
+ * clock time, so one animation frame per step shows the same state as a frame every 16 ms, and it
+ * costs a part of the time of `runFor`. GSAP treats a gap above 500 ms as lag, so a step stays
+ * below it.
+ */
+export async function advance(page: Page, ms: number): Promise<void> {
+  for (let left = ms; left > 0; left -= 250) await page.clock.fastForward(Math.min(left, 250));
+}
+
+/**
+ * Scrolls a view into its play zone and waits until it plays. The page scrolls smoothly in real
+ * time, but `advance` moves the fake clock at once, so a test waits for the scroll first.
+ */
+export async function scrollToPlay(view: Locator): Promise<void> {
+  await view.scrollIntoViewIfNeeded();
+  await expect(view).toHaveAttribute("data-motion", "running");
+}
+
 /** Runs the fake clock in steps until `done` is true. `limit` is in seconds of scene time. */
 export async function runUntil(
   page: Page,
@@ -67,7 +86,7 @@ export async function runUntil(
   limit: number,
 ): Promise<void> {
   for (let time = 0; time < limit * 1000 && !(await done()); time += 250) {
-    await page.clock.runFor(250);
+    await advance(page, 250);
   }
 }
 

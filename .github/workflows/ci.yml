@@ -155,26 +155,9 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      # `bun run --sequential` does not pass arguments to the scripts, so the loop runs each
-      # workspace. The oxlint rule tests use the Node test runner, which does not take the `--shard`
-      # option of Bun. They take two seconds, so the first shard runs all of them.
       - name: Test workspaces
-        shell: bash
-        env:
-          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
-        run: |
-          for workspace in $(node -p "require('./package.json').workspaces.join(' ')"); do
-            if [ "$workspace" = tools/oxlint/anti-slop ]; then continue; fi
-            echo "Testing $workspace"
-            (cd "$workspace" && bun run test --shard="$SHARD")
-          done
-          bun run test:scripts --shard="$SHARD"
+        run: bun run scripts/test-shard.ts ${{ matrix.shard }}/${{ strategy.job-total }}
 
-      - name: Test oxlint rules
-        if: matrix.shard == 1
-        run: bun run test:anti-slop
-
-  # GitHub runs at most five macOS jobs of the repository at the same time, so macOS has two shards.
   tests-macos:
     name: Tests (macOS, ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: macos-15
