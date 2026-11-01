@@ -21,8 +21,7 @@ import { inlineDiffPreview, previewLines, truncateForDisplay } from "../transcri
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useDisclosure } from "./disclosure";
 import { fileEditBody } from "./file-edit-body";
-import { Collapse } from "./collapse";
-import { DisclosureMarker } from "./row-parts";
+import { DisclosureMarker, Reveal } from "./row-parts";
 
 const STATUS_LABELS = {
   modified: "Modified",
@@ -94,6 +93,9 @@ export const FileEditView = memo(function FileEditView({
   // A write input is not an applied change yet, so it has no status badge, as on desktop.
   const writeInput = data.kind === "write-input";
   const open = hasContent && disclosure.open;
+  // A transcript renders many file edits, so the header picks a plain style entry instead of a
+  // stylesheet variant, which runs native code on each render.
+  const headerStyle = [styles.header, open ? styles.openHeader : null];
   const header = (
     <>
       {hasContent ? (
@@ -130,18 +132,20 @@ export const FileEditView = memo(function FileEditView({
           accessibilityLabel={label}
           accessibilityHint={disclosure.open ? "Hides the changes." : "Shows the changes."}
           accessibilityState={{ expanded: disclosure.open }}
-          style={styles.header}
+          style={headerStyle}
         >
           {header}
         </Touchable>
       ) : (
-        <View style={styles.header} accessible accessibilityRole="text" accessibilityLabel={label}>
+        <View style={headerStyle} accessible accessibilityRole="text" accessibilityLabel={label}>
           {header}
         </View>
       )}
-      <Collapse key={resetKey} open={open} animate={disclosure.pressed} style={styles.content}>
-        <FileEditContent data={data} />
-      </Collapse>
+      {open ? (
+        <Reveal animate={disclosure.pressed}>
+          <FileEditContent data={data} />
+        </Reveal>
+      ) : null}
     </View>
   );
 });
@@ -283,7 +287,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.space.md,
     paddingVertical: theme.space.sm,
   },
-  content: { borderTopWidth: 1, borderTopColor: theme.desktop.border },
+  openHeader: { borderBottomWidth: 1, borderBottomColor: theme.desktop.border },
   path: {
     flex: 1,
     minWidth: 0,

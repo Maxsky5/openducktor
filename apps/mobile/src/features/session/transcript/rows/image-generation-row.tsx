@@ -41,8 +41,7 @@ import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useRowVisible } from "../transcript-visibility";
 import { type Disclosure, useDisclosure } from "./disclosure";
-import { Collapse } from "./collapse";
-import { CopyControl, DisclosureMarker } from "./row-parts";
+import { CopyControl, DisclosureMarker, Reveal } from "./row-parts";
 
 // Reads of one session share host image batches, as on desktop.
 const readInBatch = createGeneratedImageBatcher<Base64Resource>();
@@ -263,55 +262,49 @@ function ImageDetails({
   return (
     <View>
       <GhostToggle label="Image details" disclosure={details} />
-      <Collapse
-        key={`${rowKey}:image-details`}
-        open={details.open}
-        animate={details.pressed}
-        style={styles.details}
-      >
-        {part.savedPath !== undefined ? (
-          <View style={styles.detail}>
-            <Text style={styles.detailLabel}>Saved file</Text>
-            <View style={styles.pathLine}>
-              <Text selectable style={styles.path}>
-                {part.savedPath}
-              </Text>
-              <CopyControl
-                text={part.savedPath}
-                what="Path"
-                accessibilityLabel="Copy generated image path"
-                color={muted}
-              />
+      {details.open ? (
+        <Reveal animate={details.pressed} style={styles.details}>
+          {part.savedPath !== undefined ? (
+            <View style={styles.detail}>
+              <Text style={styles.detailLabel}>Saved file</Text>
+              <View style={styles.pathLine}>
+                <Text selectable style={styles.path}>
+                  {part.savedPath}
+                </Text>
+                <CopyControl
+                  text={part.savedPath}
+                  what="Path"
+                  accessibilityLabel="Copy generated image path"
+                  color={muted}
+                />
+              </View>
             </View>
-          </View>
-        ) : null}
-        {part.transparentBackground !== undefined ? (
-          <View style={styles.background}>
-            <Text style={styles.detailLabel}>Background</Text>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {part.transparentBackground ? "Transparent" : "Opaque"}
-              </Text>
+          ) : null}
+          {part.transparentBackground !== undefined ? (
+            <View style={styles.background}>
+              <Text style={styles.detailLabel}>Background</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {part.transparentBackground ? "Transparent" : "Opaque"}
+                </Text>
+              </View>
             </View>
-          </View>
-        ) : null}
-        {part.revisedPrompt ? (
-          <View>
-            <GhostToggle label="View prompt" icon="text-align-start" disclosure={prompt} />
-            <Collapse
-              key={`${rowKey}:image-prompt`}
-              open={prompt.open}
-              animate={prompt.pressed}
-              style={styles.prompt}
-            >
-              <Text style={styles.detailLabel}>Generation prompt</Text>
-              <Text selectable style={styles.text}>
-                {part.revisedPrompt}
-              </Text>
-            </Collapse>
-          </View>
-        ) : null}
-      </Collapse>
+          ) : null}
+          {part.revisedPrompt ? (
+            <View>
+              <GhostToggle label="View prompt" icon="text-align-start" disclosure={prompt} />
+              {prompt.open ? (
+                <Reveal animate={prompt.pressed} style={styles.prompt}>
+                  <Text style={styles.detailLabel}>Generation prompt</Text>
+                  <Text selectable style={styles.text}>
+                    {part.revisedPrompt}
+                  </Text>
+                </Reveal>
+              ) : null}
+            </View>
+          ) : null}
+        </Reveal>
+      ) : null}
     </View>
   );
 }

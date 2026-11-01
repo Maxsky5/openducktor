@@ -51,19 +51,6 @@ const RowLayoutContext = createContext<(() => void) | null>(null);
 
 export const RowLayoutProvider = RowLayoutContext;
 
-/** Measures the list row again, or null outside the transcript list. */
-export const useRowLayout = (): (() => void) | null => use(RowLayoutContext);
-
-/**
- * True while the transcript list of a row is on screen. A list that waits off screen shows each
- * change at once, so it does no animation work.
- */
-const ListShownContext = createContext(true);
-
-export const ListShownProvider = ListShownContext;
-
-export const useListShown = (): boolean => use(ListShownContext);
-
 /**
  * The open state of a part that the reader opens with a press, as a desktop `<details>`. The part
  * follows `defaultOpen` until the reader presses it, so a part that gets content later, such as a

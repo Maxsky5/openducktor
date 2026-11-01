@@ -18,8 +18,7 @@ import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useRowVisible } from "../transcript-visibility";
 import { useDisclosure } from "./disclosure";
-import { Collapse } from "./collapse";
-import { DisclosureMarker, PreText, ToolTiming } from "./row-parts";
+import { DisclosureMarker, PreText, Reveal, ToolTiming } from "./row-parts";
 import { FullDetails } from "./tool-details";
 
 /**
@@ -112,20 +111,16 @@ export const ComputerUseRow = memo(function ComputerUseRow({
           <Text style={styles.pillText}>{screenshotLabel}</Text>
         </Touchable>
       ) : null}
-      <Collapse
-        key={rowKey}
-        open={hasDetails && disclosure.open}
-        animate={disclosure.pressed}
-        gap={theme.space.sm}
-        style={styles.details}
-      >
-        <ComputerUseSections
-          meta={meta}
-          code={code}
-          errorText={errorText}
-          outputText={outputText}
-        />
-      </Collapse>
+      {hasDetails && disclosure.open ? (
+        <Reveal animate={disclosure.pressed} style={styles.details}>
+          <ComputerUseSections
+            meta={meta}
+            code={code}
+            errorText={errorText}
+            outputText={outputText}
+          />
+        </Reveal>
+      ) : null}
       {screenshotsOpen
         ? screenshots.map((image, index) => (
             <Screenshot

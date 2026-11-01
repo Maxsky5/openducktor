@@ -37,7 +37,6 @@ import {
   transcriptListItems,
 } from "./transcript-list-items";
 import type { ListPlace } from "./transcript-list-slots";
-import { ListShownProvider } from "./rows/disclosure";
 import { TranscriptNotice } from "./transcript-notice";
 import { TranscriptNoticeContext } from "./transcript-notice-context";
 import { TranscriptRow } from "./transcript-row";
@@ -212,30 +211,28 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
     >
       <TranscriptRowsProvider value={context}>
-        <ListShownProvider value={shown}>
-          <FlashList
-            ref={listRef}
-            data={items}
-            maintainVisibleContentPosition={kind === "latest" ? FOLLOW_LATEST : KEEP_POSITION}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            getItemType={getItemType}
-            onScroll={onScroll}
-            onContentSizeChange={onContentSizeChange}
-            onViewableItemsChanged={onViewableItemsChanged}
-            onScrollEndDrag={onRestShown}
-            onMomentumScrollEnd={onRestShown}
-            // As on desktop, no scroll bar: the list measures rows as they come near.
-            showsVerticalScrollIndicator={false}
-            // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
-            // transcript, and Android gives their taps to the list below them too.
-            keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-            keyboardShouldPersistTaps="always"
-            accessibilityLabel="Transcript"
-            accessibilityActions={accessibilityActions}
-            onAccessibilityAction={onAccessibilityAction}
-          />
-        </ListShownProvider>
+        <FlashList
+          ref={listRef}
+          data={items}
+          maintainVisibleContentPosition={kind === "latest" ? FOLLOW_LATEST : KEEP_POSITION}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          getItemType={getItemType}
+          onScroll={onScroll}
+          onContentSizeChange={onContentSizeChange}
+          onViewableItemsChanged={onViewableItemsChanged}
+          onScrollEndDrag={onRestShown}
+          onMomentumScrollEnd={onRestShown}
+          // As on desktop, no scroll bar: the list measures rows as they come near.
+          showsVerticalScrollIndicator={false}
+          // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
+          // transcript, and Android gives their taps to the list below them too.
+          keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+          keyboardShouldPersistTaps="always"
+          accessibilityLabel="Transcript"
+          accessibilityActions={accessibilityActions}
+          onAccessibilityAction={onAccessibilityAction}
+        />
       </TranscriptRowsProvider>
     </View>
   );
