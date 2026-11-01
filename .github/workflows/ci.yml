@@ -39,22 +39,12 @@ jobs:
           blocking: warning
           version: "0.9.14"
 
-  typescript-workspace-quality:
-    name: TypeScript Workspace Quality (${{ matrix.label }})
-    runs-on: ${{ matrix.runner }}
+  # docs/testing.md describes the jobs of each platform and their required check.
+  checks-linux:
+    name: Checks (Linux)
+    runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Linux
-            runner: ubuntu-latest
-          - label: macOS
-            runner: macos-15
-          - label: Windows
-            runner: windows-latest
-
-    steps:
+    steps: &checks-steps
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -69,12 +59,60 @@ jobs:
       - name: Typecheck workspaces
         run: bun run typecheck
 
-      - name: Test workspaces
-        run: bun run test
+      # `expo export` bundles the JavaScript of the mobile app. Metro transforms each module only
+      # once: a build reads the transforms of the last build on main and writes the transforms that
+      # it uses to a new directory, so the saved cache holds no stale entries.
+      - name: Restore the Metro cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/metro-cache
+          key: metro-${{ runner.os }}-${{ github.sha }}
+          restore-keys: metro-${{ runner.os }}-
 
+      - name: Build the mobile app
+        shell: bash
+        env:
+          EXPO_METRO_CACHE_RESTORE_DIR: ${{ runner.temp }}/metro-cache-restored
+          EXPO_METRO_CACHE_OUTPUT_DIR: ${{ runner.temp }}/metro-cache
+        run: |
+          mkdir -p "$EXPO_METRO_CACHE_OUTPUT_DIR"
+          mv "$EXPO_METRO_CACHE_OUTPUT_DIR" "$EXPO_METRO_CACHE_RESTORE_DIR"
+          mkdir "$EXPO_METRO_CACHE_OUTPUT_DIR"
+          bun run --filter @openducktor/mobile build
+
+      - name: Save the Metro cache
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/metro-cache
+          key: metro-${{ runner.os }}-${{ github.sha }}
+
+  checks-macos:
+    name: Checks (macOS)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps: *checks-steps
+
+  checks-windows:
+    name: Checks (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps: *checks-steps
+
+  build-linux:
+    name: Build (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps: &build-steps
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      # The Marketing website workflow builds the site when its inputs change. The Checks job
+      # builds the mobile app.
       - name: Build workspaces
-        # The Marketing website workflow builds the site when its inputs change.
-        run: bun run --filter '*' --filter '!@openducktor/marketing-website' build
+        run: bun run --filter '*' --filter '!@openducktor/marketing-website' --filter '!@openducktor/mobile' build
 
       # Dry run of the release deploy, which runs on Linux. It needs no Cloudflare credentials.
       - name: Check the web client headers and Cloudflare upload
@@ -86,6 +124,91 @@ jobs:
 
       - name: Check built workers in Node, Bun, and Electron
         run: bun run test:workers
+
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps: *build-steps
+
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps: *build-steps
+
+  # Each shard runs every workspace suite in sequence on a part of its test files.
+  tests-linux:
+    name: Tests (Linux, ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps: &tests-steps
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      - name: Test workspaces
+        run: bun run scripts/test-shard.ts ${{ matrix.shard }}/${{ strategy.job-total }}
+
+  tests-macos:
+    name: Tests (macOS, ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: macos-15
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps: *tests-steps
+
+  tests-windows:
+    name: Tests (Windows, ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps: *tests-steps
+
+  quality-linux:
+    name: TypeScript Workspace Quality (Linux)
+    needs: [checks-linux, build-linux, tests-linux]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps: &quality-steps
+      - name: Require every job of the platform to pass
+        shell: bash
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "::error::A job of this platform ended with the result '$result'. Fix that job."
+              exit 1
+            fi
+          done
+
+  quality-macos:
+    name: TypeScript Workspace Quality (macOS)
+    needs: [checks-macos, build-macos, tests-macos]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps: *quality-steps
+
+  quality-windows:
+    name: TypeScript Workspace Quality (Windows)
+    needs: [checks-windows, build-windows, tests-windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps: *quality-steps
 
   mobile-changes:
     name: Mobile Changes
@@ -100,7 +223,7 @@ jobs:
           fetch-depth: 0
 
       # Only native inputs can break a native build: the native modules, the config plugins, the app
-      # config and assets, the dependencies, and the CI files. The quality jobs check the JavaScript
+      # config and assets, the dependencies, and the CI files. The Checks jobs check the JavaScript
       # bundle. A manual run has no base commit, so it builds the app.
       - name: Compare the native inputs with the base commit
         id: diff

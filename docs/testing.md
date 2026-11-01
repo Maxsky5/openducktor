@@ -47,13 +47,16 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - Inject native modules through their interfaces, such as the network module of `src/platform/native-remote-transport.ts`. Do not mock modules.
 - Use `apps/mobile/src/test-support/simulated-remote-host.ts` for flows that need a remote host: discovery, negotiation, the event stream, refusals, unreachable hosts, and release. Add a helper to it when a mobile test needs more host behavior.
 - `packages/openducktor-web/src/mobile-host-session.integration.test.ts` starts a real TypeScript host with Remote control on and connects the mobile host session owner to it. Run it through the package `test` script, so the test preload gives the host a temporary config directory.
-- The `Build workspaces` step of the quality jobs bundles the JavaScript of the app with `expo export`.
+- The `Checks` jobs of `ci.yml` bundle the JavaScript of the app with `expo export` on Linux, macOS, and Windows. They read and write the Metro transform cache through `EXPO_METRO_CACHE_RESTORE_DIR` and `EXPO_METRO_CACHE_OUTPUT_DIR`. Only pushes to `main` save that cache.
 - The native CI jobs run only when a change reaches a native input that the `mobile-changes` job of `ci.yml` lists. On a pull request, `Mobile Native Projects` runs `expo prebuild` for both platforms, which runs the config plugins. After a merge to `main` and on each manual run, `Mobile iOS Build` and `Mobile Android Build` compile Debug builds of the iOS app for the simulator and of the Android app, for `arm64` only.
 - Check native behavior, gestures, layout, and performance on real iOS and Android devices with release builds against a real host. See [Device validation](../apps/mobile/README.md#device-validation).
 
 ## Parallel runs
 
-- The root `bun run test` and CI run workspace suites in sequence.
+- [test-shard.ts](../scripts/test-shard.ts) runs every workspace suite and the root script suite in sequence with `bun test --shard`, so it runs a part of the files of each suite. A suite with another test runner, such as the Node runner of the oxlint rules, runs all its files in the first shard. It runs every suite before it reports the failed ones.
+- The root `bun run test` runs the only shard, `1/1`. CI splits the tests of each platform into shards. The matrix of each `Tests` job in `ci.yml` sets the shard count. macOS has fewer shards, because GitHub runs at most five macOS jobs of the repository at the same time.
+- The `TypeScript Workspace Quality` job of a platform is its required check. It runs also when a run is cancelled, and it passes only when the `Checks`, `Build`, and `Tests` jobs of that platform pass.
+- On Windows, CI puts `TMP` and `TEMP` on the `D:` drive, because temp trees there are faster than on `C:`.
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
 - `packages/frontend-core` runs with `bun test --parallel`, so each file has its own global. Its tests run without DOM globals. A test file that renders React or reads browser APIs imports `test-support/dom-environment` first. Keep pure tests without it, so they prove that the package runs without a DOM.
 - The host suite uses two workers to limit process load on Windows CI.
@@ -73,6 +76,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - Await a hook harness call or another `act()` flow directly. Do not wrap it in `expect(...).resolves`, because Bun can then delay the end of `act()` by hundreds of milliseconds.
 - Await a Promise that waits for a timer before you assert its result. Do not use `expect(promise).rejects` or `.resolves` for it: on Windows, Bun can stop timers while the matcher waits, and the test hangs.
 - Run flake checks in sequence.
+- Load each module of a test file when the file loads. A dynamic `import()` in a test body, or the first render of a `React.lazy` component, counts against the time limit of that test. Its time depends on the files that ran before it in the same worker, so it changes with the CI shard. Load a lazy module with a top-level `await import(...)`.
 - Bun starts the next test while the body of a timed-out test continues to run. The late steps of that body can overlap the `act()` calls of the next test and remove its spies and globals.
 - A harness or test wrapper that installs spies, globals, or a rendered tree must wait in `onTestFinished` until the test body ends, and then remove them. Use [restoreAfterTestBody](../packages/frontend/src/test-utils/restore-after-test-body.ts) for this. An `afterEach` hook cannot wait for the body.
 - [createDialogPreviewHarness](../packages/frontend/src/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness.tsx) shows this pattern for a harness, and `previewTest` in [task-execution-file-preview.test.tsx](../packages/frontend/src/components/features/agents/task-execution-file-preview.test.tsx) shows it for a test wrapper.

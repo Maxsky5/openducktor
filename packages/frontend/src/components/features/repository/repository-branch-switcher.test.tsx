@@ -8,6 +8,7 @@ import {
 } from "@/components/layout/workspace-preview-transition-guard";
 import { WorkspaceBranchStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
+import { RepositoryBranchSwitcher } from "./repository-branch-switcher";
 
 const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
 let branchSelectorSpy: { mockRestore(): void };
@@ -88,13 +89,6 @@ const createDeferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-const importRepositoryBranchSwitcher = async (): Promise<
-  typeof import("./repository-branch-switcher").RepositoryBranchSwitcher
-> => {
-  const { RepositoryBranchSwitcher } = await import("./repository-branch-switcher");
-  return RepositoryBranchSwitcher;
-};
-
 const BranchStateProvider = ({ children }: PropsWithChildren) => {
   const currentBranchState = useSyncExternalStore(
     (listener) => {
@@ -136,9 +130,7 @@ function HoldBranchSwitch({
   return null;
 }
 
-const renderRepositoryBranchSwitcherMarkup = (
-  RepositoryBranchSwitcher: typeof import("./repository-branch-switcher").RepositoryBranchSwitcher,
-): string =>
+const renderRepositoryBranchSwitcherMarkup = (): string =>
   renderToStaticMarkup(
     <BranchStateProvider>
       <RepositoryBranchSwitcher />
@@ -189,21 +181,18 @@ describe("RepositoryBranchSwitcher", () => {
   test("shows degraded sync status when branch probe failures are active", async () => {
     branchSyncDegraded = true;
     resetBranchState();
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
-    const html = renderRepositoryBranchSwitcherMarkup(RepositoryBranchSwitcher);
+    const html = renderRepositoryBranchSwitcherMarkup();
 
     expect(html).toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
   test("hides degraded sync status when branch probe health is restored", async () => {
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
-    const html = renderRepositoryBranchSwitcherMarkup(RepositoryBranchSwitcher);
+    const html = renderRepositoryBranchSwitcherMarkup();
 
     expect(html).not.toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
   test("keeps the selector enabled while the cached repository branch changes", async () => {
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher />
@@ -246,7 +235,6 @@ describe("RepositoryBranchSwitcher", () => {
       activeBranch: null,
       isLoadingBranches: true,
     });
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher />
@@ -268,7 +256,6 @@ describe("RepositoryBranchSwitcher", () => {
       activeBranch: null,
       isLoadingBranches: false,
     });
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher />
@@ -286,8 +273,7 @@ describe("RepositoryBranchSwitcher", () => {
   test("uses the active branch name on the first render", async () => {
     activeBranchName = "feature/desloppify";
     resetBranchState();
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
-    const html = renderRepositoryBranchSwitcherMarkup(RepositoryBranchSwitcher);
+    const html = renderRepositoryBranchSwitcherMarkup();
 
     expect(html).toContain('data-branch-value="feature/desloppify"');
   });
@@ -300,7 +286,6 @@ describe("RepositoryBranchSwitcher", () => {
         { name: "release", isCurrent: false, isRemote: false },
       ],
     });
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher layout="inline" />
@@ -336,7 +321,6 @@ describe("RepositoryBranchSwitcher", () => {
   test("disables the inline branch chip and names the placeholder while branches load", async () => {
     branchSelectorSpy.mockRestore();
     updateBranchState({ branches: [], activeBranch: null, isLoadingBranches: true });
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher layout="inline" />
@@ -356,7 +340,6 @@ describe("RepositoryBranchSwitcher", () => {
   });
 
   test("keeps the current branch when the preview guard cancels", async () => {
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <DenyBranchSwitch />
@@ -372,7 +355,6 @@ describe("RepositoryBranchSwitcher", () => {
   });
 
   test("waits for the preview guard before switching branches", async () => {
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     let applySwitch: (() => void | Promise<void | boolean>) | null = null;
     let switchOptions: Parameters<ReturnType<typeof useWorkspacePreviewTransitionGuard>["run"]>[2];
     const rendered = render(
@@ -397,7 +379,6 @@ describe("RepositoryBranchSwitcher", () => {
   });
 
   test("tells the preview guard whether checkout switched the branch", async () => {
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     let applySwitch: (() => void | Promise<void | boolean>) | null = null;
     const rendered = render(
       <BranchStateProvider>
@@ -422,7 +403,6 @@ describe("RepositoryBranchSwitcher", () => {
     const deferred = createDeferred<void>();
     switchBranch.mockImplementation(() => deferred.promise);
     resetBranchState();
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
 
     const rendered = render(
       <BranchStateProvider>
@@ -483,7 +463,6 @@ describe("RepositoryBranchSwitcher", () => {
       branchName === "feature/repo-a" ? repoASwitch.promise : repoBSwitch.promise,
     );
     resetBranchState();
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher />
@@ -551,7 +530,6 @@ describe("RepositoryBranchSwitcher", () => {
     const deferred = createDeferred<void>();
     switchBranch.mockImplementationOnce(() => deferred.promise);
     resetBranchState();
-    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
         <RepositoryBranchSwitcher />

@@ -14,9 +14,6 @@ on:
 permissions:
   contents: read
 
-env:
-  BUN_VERSION: 1.4.3
-
 jobs:
   changes:
     if: github.event_name != 'release' || !github.event.release.prerelease
@@ -68,6 +65,7 @@ jobs:
             packages/frontend/src/styles.css \
             packages/frontend/src/assets/openducktor-mark.svg \
             packages/openducktor-web/package.json \
+            .github/actions/ \
             .github/workflows/ci.yml \
             .github/workflows/marketing-website.yml \
             package.json \
@@ -95,19 +93,16 @@ jobs:
     env:
       MARKETING_BUILD_TARGET: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
       MARKETING_SITE_ORIGIN: ${{ vars.MARKETING_SITE_ORIGIN }}
+    outputs:
+      commit: ${{ steps.checkout.outputs.commit }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # A release event checks out its tag. The site of a release is the site of main.
           ref: ${{ github.event_name == 'release' && 'main' || '' }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - name: Build the static site
         run: bun run --filter @openducktor/marketing-website build
         env:
@@ -117,21 +112,6 @@ jobs:
       # asset size limit of Cloudflare on the built files.
       - name: Check the Cloudflare Workers upload
         run: bun run --filter @openducktor/marketing-website worker:check
-      - name: Check the built site in Chromium
-        working-directory: apps/marketing-website
-        run: |
-          bunx playwright install --with-deps chromium
-          bun run test:browser
-      - name: Upload the browser test report
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: marketing-browser-report
-          path: |
-            apps/marketing-website/playwright-report/
-            apps/marketing-website/test-results/
-          if-no-files-found: ignore
-          retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: marketing-site
@@ -139,8 +119,50 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  deploy:
+  # The long scenes take minutes, so several runners share the Chromium tests of the built site.
+  browser:
+    name: browser (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: marketing-browser-${{ github.event.pull_request.number || 'main' }}-${{ matrix.shard }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      # The tests come from the commit of the built site, also when main moves after the build.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: marketing-site
+          path: apps/marketing-website/dist
+      - name: Check the built site in Chromium
+        working-directory: apps/marketing-website
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: |
+          bunx playwright install --with-deps chromium
+          bun run test:browser --shard="$SHARD"
+      - name: Upload the browser test report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: marketing-browser-report-${{ matrix.shard }}
+          path: |
+            apps/marketing-website/playwright-report/
+            apps/marketing-website/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deploy:
+    needs: [build, browser]
     # Only internal pull requests to main get previews. Validation covers every PR target branch.
     # Production comes only from main, or from a release, whose build checks out main.
     if: >-
@@ -166,9 +188,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      # Without an input, the action installs the Bun version of `packageManager` in package.json.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

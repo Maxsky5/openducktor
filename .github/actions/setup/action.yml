@@ -1,6 +1,8 @@
 name: Setup
 description: Install Node, Bun, and the workspace dependencies.
 
+# A cold install from the registry is faster than a restore of the Bun cache on every runner, and
+# the cache used most of the cache storage of the repository.
 runs:
   using: composite
   steps:
@@ -14,15 +16,16 @@ runs:
     # Bun links packages from its cache, so the cache must be on the volume of the checkout.
     - if: runner.os == 'Windows'
       shell: bash
-      run: |
-        mkdir -p D:/bun-cache
-        echo "BUN_INSTALL_CACHE_DIR=D:/bun-cache" >> "$GITHUB_ENV"
-
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ${{ runner.os == 'Windows' && 'D:/bun-cache' || '~/.bun/install/cache' }}
-        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-        restore-keys: ${{ runner.os }}-bun-
+      run: echo "BUN_INSTALL_CACHE_DIR=D:/bun-cache" >> "$GITHUB_ENV"
 
     - shell: bash
       run: bun install --frozen-lockfile
+
+    # The temp trees of the later steps, such as the Git repositories of the host tests, are about
+    # a third faster on the D: drive than on the C: drive.
+    - if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        mkdir -p D:/tmp
+        echo 'TMP=D:\tmp' >> "$GITHUB_ENV"
+        echo 'TEMP=D:\tmp' >> "$GITHUB_ENV"

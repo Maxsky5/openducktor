@@ -25,6 +25,10 @@ import {
   SessionViewShownContext,
 } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
+// The terminal layer loads the viewport lazily. A load here keeps the xterm import out of the time
+// limit of the first test that shows a terminal.
+await import("@/features/terminals/terminal-viewport");
+
 const scopeKey = "task";
 const tab: TerminalTab = {
   tabId: "shell",
