@@ -3,7 +3,9 @@ import {
   type PropsWithChildren,
   type ReactElement,
   use,
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { Modal, Pressable, View } from "react-native";
@@ -28,6 +30,7 @@ type ConfirmOptions = {
 export type Confirm = (options: ConfirmOptions) => Promise<boolean>;
 
 const ConfirmContext = createContext<Confirm | null>(null);
+const NavigationConfirmContext = createContext<Confirm | null>(null);
 
 /** The confirmation of the current screen. */
 export const useConfirm = (): Confirm => {
@@ -36,18 +39,39 @@ export const useConfirm = (): Confirm => {
   return confirm;
 };
 
+/** A confirmation that can follow the caller to another screen. */
+export const useNavigationConfirm = (): Confirm => {
+  const confirm = use(NavigationConfirmContext);
+  if (!confirm) throw new Error("A navigation confirmation needs the host above its navigator.");
+  return confirm;
+};
+
 /**
- * Hosts the confirmation dialog of one screen. Each navigator wraps its screens in a host, so the
- * dialog opens over the screen that asks, also over a form sheet. A new question answers an open
- * one with false, and so does a screen that closes.
+ * Screens own their dialogs so questions open over form sheets. A navigation host keeps a question
+ * alive while its caller leaves a screen. Replacing a question or releasing its host answers false.
  */
-export function ConfirmDialogHost({ children }: PropsWithChildren): ReactElement {
+export function ConfirmDialogHost({
+  children,
+  scope = "screen",
+}: PropsWithChildren<{ scope?: "screen" | "navigation" }>): ReactElement {
   const [question, setQuestion] = useState<ConfirmOptions | null>(null);
   const [slot] = useState(() => createQuestionSlot<ConfirmOptions>(setQuestion));
+  const mounted = useRef(true);
   const { answer } = slot;
-  useEffect(() => slot.dispose, [slot]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      slot.dispose();
+    };
+  }, [slot]);
+  const confirm = useCallback<Confirm>(
+    (options) => (mounted.current ? slot.ask(options) : Promise.resolve(false)),
+    [slot],
+  );
+  const Context = scope === "navigation" ? NavigationConfirmContext : ConfirmContext;
   return (
-    <ConfirmContext value={slot.ask}>
+    <Context value={confirm}>
       {children}
       <Modal
         visible={question !== null}
@@ -69,7 +93,7 @@ export function ConfirmDialogHost({ children }: PropsWithChildren): ReactElement
           ) : null}
         </GestureHandlerRootView>
       </Modal>
-    </ConfirmContext>
+    </Context>
   );
 }
 

@@ -5,7 +5,7 @@ import {
 } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import { useCallback, useMemo, useState } from "react";
-import { type Confirm, useConfirm } from "@/ui/confirm-dialog";
+import { type Confirm, useNavigationConfirm } from "@/ui/confirm-dialog";
 import { closeTerminalTab } from "./terminal-close";
 
 /** Asks before a close stops a running process tree. The texts match the desktop dialog. */
@@ -32,7 +32,7 @@ export const useTerminalClose = (
   } = {},
 ) => {
   const { feedback } = useClientConnection();
-  const confirm = useConfirm();
+  const confirm = useNavigationConfirm();
   const [unknownByTabId, setUnknownByTabId] = useState<ReadonlyMap<string, string>>(new Map());
   const close = useCallback(
     async (tab: TerminalTab): Promise<void> => {

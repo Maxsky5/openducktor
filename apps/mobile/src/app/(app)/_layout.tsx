@@ -13,6 +13,7 @@ import { useSwipeBackNativeProps } from "@/navigation/swipe-back";
 import { WorkspaceModelCatalogs } from "@/composition/workspace-model-catalogs";
 import { sessionRouteOptions } from "@/features/session/header/session-route-options";
 import { useAppTheme } from "@/theme/app-theme-context";
+import { ConfirmDialogHost } from "@/ui/confirm-dialog";
 
 /** Sessions, tasks, and work views are pushed screens. The other routes are sheets. */
 const isPushedScreen = (name: string): boolean =>
@@ -24,7 +25,7 @@ export default function AppLayout(): ReactElement {
   const { colors } = useAppTheme();
   const swipeBack = useSwipeBackNativeProps(isPushedScreen);
   return (
-    <>
+    <ConfirmDialogHost scope="navigation">
       <WorkspaceModelCatalogs />
       <Stack
         screenOptions={withAndroidHeader(theme, isPushedScreen)}
@@ -52,6 +53,6 @@ export default function AppLayout(): ReactElement {
           options={{ presentation: "fullScreenModal", title: "Scan QR Code", headerShown: false }}
         />
       </Stack>
-    </>
+    </ConfirmDialogHost>
   );
 }
