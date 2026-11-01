@@ -90,7 +90,7 @@ The website tests check that each source file has 400 lines or fewer, and that e
 
 For focused work, run the website's `test` and `typecheck` scripts. Browser review must cover light and dark appearances, 320-pixel width, keyboard navigation, disabled JavaScript, reduced motion, the pause control, successful and failed copy operations, each product view and scene, the visible theme switch, and unknown routes. Validate Cloudflare routing locally with `bun run worker:dev` after a preview build. Live deployment also requires the account, domain, token, and GitHub setup above; local checks cannot prove those are configured.
 
-The `browser` jobs of the website workflow run Chromium regressions against the built files. To run them locally, use these commands from `apps/marketing-website`:
+The `browser` jobs of the website workflow run Chromium regressions against the built files. The tests move the fake clock with `advance` from `browser-tests/fixtures.ts`, which steps with `page.clock.fastForward` because GSAP sets each frame from the clock time. Use `scrollToPlay` before the clock moves after a scroll, because the page scrolls smoothly in real time. To run the tests locally, use these commands from `apps/marketing-website`:
 
 ```sh
 bunx playwright install chromium
