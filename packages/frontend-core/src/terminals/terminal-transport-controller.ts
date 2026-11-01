@@ -4,6 +4,8 @@ import {
   TERMINAL_PROTOCOL_MAX_INPUT_BYTES,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
+  type TerminalListFilter,
+  type TerminalListMessage,
   isTerminalClientMessage,
 } from "@openducktor/contracts";
 import type {
@@ -51,6 +53,14 @@ export const createTerminalTransportController = (
   const terminalChannels = createTerminalTransportChannelRegistry();
   const activity = createTerminalActivityStore();
   const activityListeners = new Set<() => void>();
+  const lists = new Map<
+    string,
+    {
+      filter: TerminalListFilter;
+      listener: (message: TerminalListMessage, payload: Uint8Array) => void;
+      ready: boolean;
+    }
+  >();
   // Each attach captures a finite snapshot boundary. Later output does not extend recovery.
   const recoveries = new Map<
     string,
@@ -145,6 +155,21 @@ export const createTerminalTransportController = (
       throw new Error("Terminal transport received a client-directed frame.");
     }
     if (
+      decoded.message.type === "list_snapshot_start" ||
+      decoded.message.type === "list_snapshot_end" ||
+      decoded.message.type === "list_updated" ||
+      decoded.message.type === "list_removed"
+    ) {
+      const list = lists.get(decoded.message.subscriptionId);
+      if (list) {
+        list.listener(decoded.message, decoded.payload);
+        if (decoded.message.type === "list_snapshot_start") list.ready = false;
+        if (decoded.message.type === "list_snapshot_end") list.ready = true;
+        notifyRecovery();
+      }
+      return;
+    }
+    if (
       decoded.message.type === "activity_snapshot_start" ||
       decoded.message.type === "activity_snapshot_end" ||
       decoded.message.type === "activity_updated" ||
@@ -230,7 +255,13 @@ export const createTerminalTransportController = (
     const pending = Promise.resolve().then(() =>
       bridge.connect(
         (frame) => {
-          if (!isDisposed() && generation === connectionGeneration) handleFrame(frame);
+          if (!isDisposed() && generation === connectionGeneration) {
+            try {
+              handleFrame(frame);
+            } catch (cause) {
+              transitionToDisconnected({ cause });
+            }
+          }
         },
         (state) => {
           if (connectionState.status === "disposed" || generation !== connectionGeneration) return;
@@ -272,6 +303,17 @@ export const createTerminalTransportController = (
     });
     if (activityListeners.size > 0)
       attachments.push(send({ version: TERMINAL_PROTOCOL_VERSION, type: "observe_activity" }));
+    for (const [subscriptionId, list] of lists) {
+      list.ready = false;
+      attachments.push(
+        send({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "observe_list",
+          subscriptionId,
+          filter: list.filter,
+        }),
+      );
+    }
     try {
       await Promise.all(attachments);
       reconnectAttempt = 0;
@@ -284,7 +326,8 @@ export const createTerminalTransportController = (
   const connect = (): Promise<void> => establishConnection(true);
   const stopRecovery = bridge.subscribeRecovery?.((signal) => {
     const required = terminalChannels.activeTerminalIds();
-    if (required.length === 0) return Promise.resolve();
+    const requiredLists = [...lists.keys()];
+    if (required.length === 0 && requiredLists.length === 0) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
       let established = false;
       const finish = (cause?: unknown) => {
@@ -316,6 +359,7 @@ export const createTerminalTransportController = (
           )
             return;
         }
+        if (requiredLists.some((id) => lists.get(id)?.ready === false)) return;
         finish();
       };
       const timer = setTimeout(
@@ -357,6 +401,30 @@ export const createTerminalTransportController = (
   return {
     connect,
     readActivity: activity.read,
+    subscribeList(
+      filter: TerminalListFilter,
+      listener: (message: TerminalListMessage, payload: Uint8Array) => void,
+    ): () => void {
+      const subscriptionId = globalThis.crypto.randomUUID();
+      lists.set(subscriptionId, { filter, listener, ready: false });
+      if (connectionState.status === "connected")
+        void send({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "observe_list",
+          subscriptionId,
+          filter,
+        }).catch(reportTransportFailure);
+      return () => {
+        lists.delete(subscriptionId);
+        notifyRecovery();
+        if (connectionState.status === "connected")
+          void send({
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "unobserve_list",
+            subscriptionId,
+          }).catch(reportTransportFailure);
+      };
+    },
     subscribeActivity(listener: () => void): () => void {
       const first = activityListeners.size === 0;
       activityListeners.add(listener);
@@ -467,6 +535,7 @@ export const createTerminalTransportController = (
       terminalChannels.clear();
       activity.clear();
       activityListeners.clear();
+      lists.clear();
       onStateChange("disconnected");
       await closeConnection(connectionToClose);
     },

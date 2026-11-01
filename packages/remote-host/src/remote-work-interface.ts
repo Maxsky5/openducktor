@@ -188,23 +188,28 @@ export const createRemoteWorkInterface = (
     }
     const capabilities = HOST_CAPABILITIES;
     const missing = hello.requiredCapabilities.filter((name) => !capabilities.includes(name));
-    if (missing.length)
+    if (missing.length) {
+      const legacyTerminal = missing.every((name) => name === "terminal.v2");
       return {
         status: "rejected",
         failure: {
           ...failure(
             "capability_missing",
             `Required capabilities are unavailable: ${missing.join(", ")}.`,
-            "Update the host or use supported capabilities.",
+            legacyTerminal
+              ? "Update the client to a release that supports terminal.v3."
+              : "Update the host or use supported capabilities.",
           ),
           host: descriptor,
           client: hello,
+          updateSide: legacyTerminal ? "client" : "host",
           missingCapabilities: missing.map((name) => ({
             name,
             reason: "This host does not implement this capability.",
           })),
         },
       };
+    }
     if (connections.size >= MAX_CONNECTIONS)
       return {
         status: "rejected",
@@ -416,7 +421,7 @@ export const createRemoteWorkInterface = (
             failure(
               "invalid_protocol",
               "Terminal protocol and negotiated connection tag must agree.",
-              "Offer terminal.v2 and the current connection ID.",
+              "Update the client and host, then offer terminal.v3 and the current connection ID.",
             ),
             cors,
           );

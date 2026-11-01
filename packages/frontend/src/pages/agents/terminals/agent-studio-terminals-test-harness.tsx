@@ -1,4 +1,4 @@
-import type { TerminalSummary } from "@openducktor/contracts";
+import type { TerminalSummary, TerminalCreateResponse } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { HostClient } from "@openducktor/host-client";
 import { render } from "@testing-library/react";
@@ -53,7 +53,7 @@ export const createTerminalTestDependencies = (): TerminalTestDependencies => {
       systemGetPlatform: async () => "darwin",
       terminalList: async ({ filter }) => {
         const taskId = filter.kind === "task" ? filter.taskId : "unassociated";
-        return { hostInstanceId: "host-1", terminals: [summaryForTask(taskId)] };
+        return { hostInstanceId: "host-1", revision: 1, terminals: [summaryForTask(taskId)] };
       },
       taskWorktreeGet: async (_repoPath, taskId) => ({
         workingDirectory: `/repo/worktrees/${taskId}`,
@@ -193,3 +193,13 @@ export const bottomEntryId = (panels: SessionPanelsModel, terminalId: string): s
   if (!tab) throw new Error(`Expected a bottom tab for ${terminalId}.`);
   return tab.id;
 };
+
+export const createdTerminal = (
+  summary: TerminalSummary,
+  terminals = [summary],
+  revision = 2,
+): TerminalCreateResponse => ({
+  ref: { terminalId: summary.terminalId },
+  summary,
+  list: { hostInstanceId: "host-1", revision, terminals },
+});

@@ -90,7 +90,8 @@ describe("terminal schemas", () => {
   });
 
   test("distinguishes a completed close from a required confirmation", () => {
-    expect(terminalCloseResponseSchema.parse({ closed: true })).toEqual({ closed: true });
+    const closed = { closed: true, list: { hostInstanceId: "host", revision: 1, terminals: [] } };
+    expect(terminalCloseResponseSchema.parse(closed)).toEqual(closed);
     expect(
       terminalCloseResponseSchema.parse({ closed: false, confirmationRequired: true }),
     ).toEqual({ closed: false, confirmationRequired: true });

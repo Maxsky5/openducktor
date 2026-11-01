@@ -1,4 +1,3 @@
-import type { TerminalCloseResponse } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   type TerminalTab,
@@ -36,7 +35,7 @@ export const closeTerminalTab = async (
   if (runsCommand && !(await confirmTerminate(label))) return { kind: "kept" };
   onClosing?.();
   try {
-    let result: TerminalCloseResponse = await model.onClose(tab, runsCommand);
+    let result = await model.onClose(tab, runsCommand);
     if (!result.closed) {
       if (!(await confirmTerminate(label))) return { kind: "kept" };
       result = await model.onClose(tab, true);

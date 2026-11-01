@@ -53,7 +53,7 @@ export const createTerminalCommandHandlers = (
           ),
         )
         .pipe(
-          Effect.as({ closed: true } satisfies TerminalCloseResponse),
+          Effect.map((list) => ({ closed: true, list }) satisfies TerminalCloseResponse),
           Effect.catchIf(
             (failure) => failure.code === "confirmation_required",
             () =>

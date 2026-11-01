@@ -35,6 +35,7 @@ const createTerminalServiceFixture = (
   resize: () => unexpectedTerminalOperation("resize"),
   write: () => unexpectedTerminalOperation("write"),
   observeActivity: () => unexpectedTerminalOperation("observeActivity"),
+  observeList: () => unexpectedTerminalOperation("observeList"),
   ...overrides,
 });
 

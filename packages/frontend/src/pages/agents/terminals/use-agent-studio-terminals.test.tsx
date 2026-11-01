@@ -4,6 +4,8 @@ import {
   TERMINAL_PROTOCOL_VERSION,
   type TerminalActivityMessage,
   type TerminalSummary,
+  type TerminalCreateResponse,
+  type TerminalCloseResponse,
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { act, waitFor } from "@testing-library/react";
@@ -16,6 +18,7 @@ import {
   requireTab,
   selectedBottomTerminal,
   summaryForTask,
+  createdTerminal,
   type TerminalTestDependencies,
 } from "./agent-studio-terminals-test-harness";
 
@@ -85,7 +88,11 @@ describe("useAgentStudioTerminals", () => {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalList: async () => ({
+          hostInstanceId: "host-1",
+          revision: 1,
+          terminals: [...terminals],
+        }),
         terminalCreate: async ({ context }) => {
           createCalls += 1;
           const terminal: TerminalSummary = {
@@ -93,7 +100,7 @@ describe("useAgentStudioTerminals", () => {
             terminalId: "terminal-created",
           };
           terminals.push(terminal);
-          return { ref: { terminalId: terminal.terminalId }, summary: terminal };
+          return createdTerminal(terminal, [...terminals]);
         },
       },
     };
@@ -121,15 +128,12 @@ describe("useAgentStudioTerminals", () => {
 
   test("uses the worktree path while a new terminal is being created", async () => {
     const baseDependencies = createTerminalTestDependencies();
-    const create = Promise.withResolvers<{
-      ref: { terminalId: string };
-      summary: TerminalSummary;
-    }>();
+    const create = Promise.withResolvers<TerminalCreateResponse>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }),
         terminalCreate: async () => create.promise,
       },
     };
@@ -142,10 +146,9 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("creating"));
       expect(terminalTabLabel(requireTab(view.terminals().tabs[0]))).toBe("/repo/worktrees/task-a");
     } finally {
-      create.resolve({
-        ref: { terminalId: "terminal-created" },
-        summary: { ...summaryForTask("task-a"), terminalId: "terminal-created" },
-      });
+      create.resolve(
+        createdTerminal({ ...summaryForTask("task-a"), terminalId: "terminal-created" }),
+      );
       view.unmount();
     }
   });
@@ -154,15 +157,16 @@ describe("useAgentStudioTerminals", () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals: TerminalSummary[] = [];
     const closeCalls: Array<{ terminalId: string; confirmTerminate: boolean }> = [];
-    const create = Promise.withResolvers<{
-      ref: { terminalId: string };
-      summary: TerminalSummary;
-    }>();
+    const create = Promise.withResolvers<TerminalCreateResponse>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalList: async () => ({
+          hostInstanceId: "host-1",
+          revision: 1,
+          terminals: [...terminals],
+        }),
         terminalCreate: async () => {
           const created = await create.promise;
           terminals.push(created.summary);
@@ -175,7 +179,7 @@ describe("useAgentStudioTerminals", () => {
             terminals.length,
             ...terminals.filter((terminal) => terminal.terminalId !== input.terminalId),
           );
-          return { closed: true };
+          return { closed: true, list: { hostInstanceId: "host-1", revision: 3, terminals: [] } };
         },
       },
     };
@@ -191,10 +195,9 @@ describe("useAgentStudioTerminals", () => {
       await waitFor(() => expect(view.panels().bottom.tabs).toEqual([]));
       expect(view.panels().bottom.isVisible).toBe(false);
 
-      create.resolve({
-        ref: { terminalId: "terminal-abandoned" },
-        summary: { ...summaryForTask("task-a"), terminalId: "terminal-abandoned" },
-      });
+      create.resolve(
+        createdTerminal({ ...summaryForTask("task-a"), terminalId: "terminal-abandoned" }),
+      );
 
       await waitFor(() =>
         expect(closeCalls).toEqual([{ terminalId: "terminal-abandoned", confirmTerminate: true }]),
@@ -212,7 +215,7 @@ describe("useAgentStudioTerminals", () => {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }),
         terminalCreate: async () => {
           throw new HostTerminalClientError(
             {
@@ -257,7 +260,7 @@ describe("useAgentStudioTerminals", () => {
         ...baseDependencies.hostClient,
         terminalList: async () => {
           listCalls += 1;
-          return { hostInstanceId: "host-1", terminals: [first, second] };
+          return { hostInstanceId: "host-1", revision: 1, terminals: [first, second] };
         },
       },
     };
@@ -321,12 +324,16 @@ describe("useAgentStudioTerminals", () => {
   test("hides the bottom panel at once when its last terminal starts to close", async () => {
     const baseDependencies = createTerminalTestDependencies();
     const terminals = [summaryForTask("task-a")];
-    const close = Promise.withResolvers<{ closed: true }>();
+    const close = Promise.withResolvers<TerminalCloseResponse>();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalList: async () => ({
+          hostInstanceId: "host-1",
+          revision: 1,
+          terminals: [...terminals],
+        }),
         terminalClose: async () => {
           const result = await close.promise;
           terminals.splice(0, terminals.length);
@@ -347,7 +354,10 @@ describe("useAgentStudioTerminals", () => {
       expect(view.terminals().mountedTabs[0]?.tab.terminalId).toBe("terminal-task-a");
 
       await act(async () => {
-        close.resolve({ closed: true });
+        close.resolve({
+          closed: true,
+          list: { hostInstanceId: "host-1", revision: 3, terminals: [] },
+        });
         await close.promise;
       });
       await waitFor(() => expect(view.terminals().mountedTabs).toEqual([]));
@@ -367,7 +377,7 @@ describe("useAgentStudioTerminals", () => {
         ...baseDependencies.hostClient,
         terminalClose: async ({ confirmTerminate }) => {
           closeCalls.push(confirmTerminate);
-          return { closed: true };
+          return { closed: true, list: { hostInstanceId: "host-1", revision: 3, terminals: [] } };
         },
       },
       terminalBridge: {
@@ -437,7 +447,7 @@ describe("useAgentStudioTerminals", () => {
         terminalClose: async ({ confirmTerminate }) => {
           closeCalls.push(confirmTerminate);
           return confirmTerminate
-            ? { closed: true }
+            ? { closed: true, list: { hostInstanceId: "host-1", revision: 3, terminals: [] } }
             : { closed: false, confirmationRequired: true };
         },
       },
@@ -475,7 +485,11 @@ describe("useAgentStudioTerminals", () => {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalList: async () => ({
+          hostInstanceId: "host-1",
+          revision: 1,
+          terminals: [...terminals],
+        }),
       },
     };
     const view = renderTaskTerminalPanels(dependencies);

@@ -45,6 +45,12 @@ const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
 export type TerminalAttachInput = TerminalSessionAttachInput;
 
+export type TerminalListObserver = {
+  snapshot(list: TerminalListResponse): void;
+  updated(summary: TerminalSummary, revision: number): void;
+  removed(terminalId: string, revision: number): void;
+};
+
 export type TerminalCloseByTaskResult = { closedTerminalIds: string[] };
 
 export type TerminalService = {
@@ -52,6 +58,10 @@ export type TerminalService = {
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
   observeActivity(listener: (message: TerminalActivityMessage) => void): Effect.Effect<() => void>;
+  observeList(
+    filter: TerminalListFilter,
+    observer: TerminalListObserver,
+  ): Effect.Effect<() => void, TerminalServiceError>;
   inspectWorkspaceActivity(
     canonicalRepoPath: string,
   ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError>;
@@ -70,7 +80,7 @@ export type TerminalService = {
   restart(
     input: TerminalRestartRequest,
   ): Effect.Effect<TerminalRestartResponse, TerminalServiceError>;
-  close(input: TerminalCloseRequest): Effect.Effect<void, TerminalServiceError>;
+  close(input: TerminalCloseRequest): Effect.Effect<TerminalListResponse, TerminalServiceError>;
   closeByTaskScope(
     scope: TerminalTaskScope,
   ): Effect.Effect<TerminalCloseByTaskResult, TerminalServiceError>;
@@ -108,7 +118,11 @@ export const createTerminalService = ({
 }: CreateTerminalServiceInput): Effect.Effect<TerminalService & TerminalCommandService> =>
   Effect.sync(() => {
     const hostInstanceId = hostInstanceIdFactory();
-    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = { now, ptyPort };
+    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = {
+      hostInstanceId,
+      now,
+      ptyPort,
+    };
     if (scheduleTitleSettlement) {
       engineInput.scheduleTitleSettlement = scheduleTitleSettlement;
     }
@@ -125,6 +139,13 @@ export const createTerminalService = ({
       workspaceSessions,
     });
     const canonicalizeRepositoryPath = target.canonicalizeRepositoryPath;
+    const canonicalizeListFilter = (rawFilter: TerminalListFilter) =>
+      Effect.gen(function* () {
+        const filter = terminalListFilterSchema.parse(rawFilter);
+        return filter.kind === "task"
+          ? { ...filter, repoPath: yield* canonicalizeRepositoryPath(filter.repoPath, "list") }
+          : filter;
+      });
     const canonicalizeTaskScope = (
       scope: TerminalTaskScope,
     ): Effect.Effect<TerminalTaskScope, TerminalServiceError> =>
@@ -240,17 +261,18 @@ export const createTerminalService = ({
       readOutputTail: engine.readOutputTail,
       list: (rawFilter) =>
         Effect.gen(function* () {
-          const filter = terminalListFilterSchema.parse(rawFilter);
-          const canonicalFilter =
-            filter.kind === "task"
-              ? {
-                  ...filter,
-                  repoPath: yield* canonicalizeRepositoryPath(filter.repoPath, "list"),
-                }
-              : filter;
-          return { hostInstanceId, terminals: engine.list(canonicalFilter) };
+          const canonicalFilter = yield* canonicalizeListFilter(rawFilter);
+          return { hostInstanceId, ...engine.listSnapshot(canonicalFilter) };
         }),
       observeActivity: (listener) => Effect.sync(() => engine.observeActivity(listener)),
+      observeList: (rawFilter, observer) =>
+        Effect.gen(function* () {
+          const filter = yield* canonicalizeListFilter(rawFilter);
+          return engine.observeList(filter, {
+            ...observer,
+            snapshot: (list) => observer.snapshot({ hostInstanceId, ...list }),
+          });
+        }),
       inspectWorkspaceActivity: engine.inspectWorkspaceActivity,
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
@@ -295,7 +317,8 @@ export const createTerminalService = ({
       close: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalCloseRequestSchema.parse(rawInput);
-          yield* engine.close(input.terminalId, input.confirmTerminate);
+          const list = yield* engine.close(input.terminalId, input.confirmTerminate);
+          return { hostInstanceId, ...list };
         }),
       closeByTaskScope: (scope) =>
         Effect.gen(function* () {

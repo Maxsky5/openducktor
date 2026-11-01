@@ -34,7 +34,7 @@ describe("useTaskCloseConfirmDialog", () => {
     const connection = createTestClientConnection({
       client: {
         taskWorktreeCleanupImpactGet: impactGet,
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 1 }),
         taskMergeStatusGet: async (repoPath: string) => ({ repoPath, tasks: [] }),
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),

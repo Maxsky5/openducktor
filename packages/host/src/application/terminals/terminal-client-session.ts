@@ -1,12 +1,16 @@
 import {
+  encodeTerminalListSummary,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalClientMessage,
   type TerminalServerMessage,
+  type TerminalListMessage,
+  type TerminalSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TerminalService } from "./terminal-service";
 import { TerminalServiceError, terminalServiceErrorToFailure } from "./terminal-service-error";
 import { createSerialLane } from "../../effect/serial-gate";
+import { TERMINAL_LIMITS } from "./terminal-limits";
 
 export type TerminalClientSession = {
   handle(message: TerminalClientMessage, payload: Uint8Array): Effect.Effect<void>;
@@ -21,7 +25,7 @@ export const createTerminalClientSession = ({
   clientId: string;
   terminalService: Pick<
     TerminalService,
-    "acknowledge" | "attach" | "detach" | "resize" | "write" | "observeActivity"
+    "acknowledge" | "attach" | "detach" | "resize" | "write" | "observeActivity" | "observeList"
   >;
   send(message: TerminalServerMessage, payload: Uint8Array): void;
 }): TerminalClientSession => {
@@ -29,6 +33,7 @@ export const createTerminalClientSession = ({
   const operations = createSerialLane();
   let closed = false;
   let stopActivity: (() => void) | null = null;
+  const listObservers = new Map<string, () => void>();
   const attachmentId = (terminalId: string): string => `${clientId}:${terminalId}`;
   const sendFailure = (
     error: TerminalServiceError,
@@ -85,6 +90,90 @@ export const createTerminalClientSession = ({
         stopActivity = null;
       });
     }
+    if (message.type === "observe_list") {
+      if (
+        !listObservers.has(message.subscriptionId) &&
+        listObservers.size >= TERMINAL_LIMITS.listSubscriptionsPerClient
+      )
+        return sendFailure(
+          new TerminalServiceError({
+            code: "protocol_error",
+            operation: "list",
+            message:
+              "The terminal list subscription limit has been reached. Close unused terminal views, then reconnect.",
+          }),
+          message,
+        );
+      return Effect.gen(function* () {
+        const { subscriptionId, filter } = message;
+        listObservers.get(subscriptionId)?.();
+        listObservers.delete(subscriptionId);
+        let failed = false;
+        const deliver = (event: TerminalListMessage, summary?: TerminalSummary): void => {
+          if (failed) return;
+          try {
+            send(
+              event,
+              summary === undefined ? new Uint8Array() : encodeTerminalListSummary(summary),
+            );
+          } catch (cause) {
+            failed = true;
+            listObservers.get(subscriptionId)?.();
+            listObservers.delete(subscriptionId);
+            send(
+              {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "protocol_error",
+                failure: {
+                  code: "protocol_error",
+                  message: `Terminal list delivery failed. ${cause instanceof Error ? cause.message : String(cause)} Reconnect after you resolve the host error.`,
+                },
+              },
+              new Uint8Array(),
+            );
+          }
+        };
+        const updated = (summary: TerminalSummary, revision: number): void =>
+          deliver(
+            { version: TERMINAL_PROTOCOL_VERSION, type: "list_updated", subscriptionId, revision },
+            summary,
+          );
+        const stop = yield* terminalService.observeList(filter, {
+          snapshot: (list) => {
+            deliver({
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "list_snapshot_start",
+              subscriptionId,
+              hostInstanceId: list.hostInstanceId,
+              revision: list.revision,
+            });
+            for (const summary of list.terminals) updated(summary, list.revision);
+            deliver({
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "list_snapshot_end",
+              subscriptionId,
+            });
+          },
+          updated,
+          removed: (terminalId, revision) =>
+            deliver({
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "list_removed",
+              subscriptionId,
+              terminalId,
+              revision,
+            }),
+        });
+        if (failed) stop();
+        else listObservers.set(subscriptionId, stop);
+      }).pipe(Effect.catchTag("TerminalServiceError", (error) => sendFailure(error, message)));
+    }
+    if (message.type === "unobserve_list") {
+      return Effect.sync(() => {
+        listObservers.get(message.subscriptionId)?.();
+        listObservers.delete(message.subscriptionId);
+      });
+    }
     const id = attachmentId(message.terminalId);
     const operation = (() => {
       if (message.type === "attach") {
@@ -121,6 +210,8 @@ export const createTerminalClientSession = ({
         closed = true;
         stopActivity?.();
         stopActivity = null;
+        for (const stop of listObservers.values()) stop();
+        listObservers.clear();
         const terminalIds = [...attachedTerminalIds];
         let firstFailure: TerminalServiceError | undefined;
         for (const terminalId of terminalIds) {

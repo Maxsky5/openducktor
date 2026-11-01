@@ -1,8 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TerminalCloseResponse } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { remoteError } from "@openducktor/host-client/remote";
 import { closeTerminalTab, type TerminalCloseModel } from "./terminal-close";
+
+type CloseResult = Awaited<ReturnType<TerminalCloseModel["onClose"]>>;
 
 const tab: TerminalTab = {
   tabId: "tab:t-1",
@@ -23,7 +24,7 @@ const tab: TerminalTab = {
 };
 
 const closeModel = (
-  results: Array<TerminalCloseResponse | Error>,
+  results: Array<CloseResult | Error>,
   running: string[] = [],
 ): TerminalCloseModel & { calls: boolean[] } => {
   const calls: boolean[] = [];
@@ -44,7 +45,7 @@ describe("closeTerminalTab", () => {
   test.each([false, true])(
     "leaves the terminal before the host confirms close, running=%s",
     async (running) => {
-      const result = Promise.withResolvers<TerminalCloseResponse>();
+      const result = Promise.withResolvers<CloseResult>();
       const events: string[] = [];
       const model: TerminalCloseModel = {
         runningCommandTerminalIds: new Set(running ? ["t-1"] : []),

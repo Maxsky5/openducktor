@@ -50,7 +50,11 @@ const makeService = (actions: RepoAction[]) => {
             startedBy: input.startedBy,
           };
           return {
-            response: { ref: { terminalId: "terminal-1" }, summary },
+            response: {
+              ref: { terminalId: "terminal-1" },
+              summary,
+              list: { hostInstanceId: "host", revision: 1, terminals: [summary] },
+            },
             result: Effect.never,
           };
         }),

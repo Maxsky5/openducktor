@@ -581,7 +581,7 @@ function createChatTerminalClient(
         exit: null,
         startedBy: "user",
       };
-      return { hostInstanceId: "host", terminals: [summary] };
+      return { hostInstanceId: "host", revision: 1, terminals: [summary] };
     },
     ...overrides,
   };
@@ -942,7 +942,7 @@ test.each([true, false])(
       !hasTerminals &&
       input.filter.kind === "workspace_session" &&
       input.filter.sessionId === "Second"
-        ? { hostInstanceId: "host", terminals: [] }
+        ? { hostInstanceId: "host", revision: 1, terminals: [] }
         : listTerminals(input);
     // The resizable group takes a size change only when its panels have a size, as in a browser.
     const removePanelLayout = installPanelLayout();

@@ -32,7 +32,7 @@ const createHost = () => {
   const taskWorktreeGet = mock(async (_repoPath: string, taskId: string) => ({
     workingDirectory: `/worktrees/${taskId}`,
   }));
-  const terminalList = mock(async () => ({ hostInstanceId: "host-1", terminals: [] }));
+  const terminalList = mock(async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }));
 
   return {
     calls: {

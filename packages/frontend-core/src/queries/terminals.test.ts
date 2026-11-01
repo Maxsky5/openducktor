@@ -6,7 +6,7 @@ import { createTestClientConnection } from "../test-support/test-client-connecti
 
 test("a paused terminal read keeps its owner's cached list", () => {
   const filter = { kind: "task" as const, repoPath: "/repo", taskId: "task-1" };
-  const cached = { hostInstanceId: "host-1", terminals: [] };
+  const cached = { hostInstanceId: "host-1", revision: 1, terminals: [] };
   const client = new QueryClient();
   client.setQueryData(terminalQueryKeys.filter(filter), cached);
 
@@ -45,6 +45,7 @@ test.each(["host", "replacement-host"])(
     };
     connection.queryClient.setQueryData(options.queryKey, {
       hostInstanceId: "host",
+      revision: 1,
       terminals: [terminal, { ...terminal, terminalId: "removed" }],
     });
     const read = connection.queryClient.fetchQuery(options);
@@ -57,6 +58,7 @@ test.each(["host", "replacement-host"])(
     try {
       connection.queryClient.setQueryData(options.queryKey, {
         hostInstanceId: "host",
+        revision: 1,
         terminals: [
           { ...terminal, initialCommandResult: result },
           { ...terminal, terminalId: "removed", initialCommandResult: result },
@@ -64,6 +66,7 @@ test.each(["host", "replacement-host"])(
       });
       response.resolve({
         hostInstanceId,
+        revision: 2,
         terminals: [
           {
             ...terminal,
@@ -91,7 +94,7 @@ test.each(["host", "replacement-host"])(
         hostInstanceId === "host" ? result : undefined,
       );
     } finally {
-      response.resolve({ hostInstanceId, terminals: [] });
+      response.resolve({ hostInstanceId, revision: 1, terminals: [] });
       await read;
       await connection.dispose();
     }

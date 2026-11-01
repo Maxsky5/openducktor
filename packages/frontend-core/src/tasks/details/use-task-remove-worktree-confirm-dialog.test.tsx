@@ -35,7 +35,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
     const connection = createTestClientConnection({
       client: {
         taskWorktreeCleanupImpactGet: impactGet,
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },
     });
     const Wrapper = createActiveWorkspaceWrapper(connection);
@@ -83,7 +83,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
             branchOid: "tip",
           };
         },
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },
     });
     const Wrapper = createActiveWorkspaceWrapper(connection);
@@ -123,7 +123,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
             branchOid: null,
           };
         },
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },
     });
     const Wrapper = createActiveWorkspaceWrapper(connection);

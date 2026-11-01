@@ -4,10 +4,13 @@ import {
   terminalActivitySchema,
   terminalIdSchema,
   terminalLifecycleSchema,
+  terminalListFilterSchema,
+  terminalSummarySchema,
+  type TerminalSummary,
 } from "./terminal-schemas";
 
-export const TERMINAL_PROTOCOL_VERSION = 2 as const;
-export const TERMINAL_PROTOCOL_SUBPROTOCOL = "openducktor-terminal.v2";
+export const TERMINAL_PROTOCOL_VERSION = 3 as const;
+export const TERMINAL_PROTOCOL_SUBPROTOCOL = "openducktor-terminal.v3";
 export const TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
 export const TERMINAL_PROTOCOL_MAX_HEADER_BYTES = 64 * 1024;
 export const TERMINAL_PROTOCOL_MAX_INPUT_BYTES = 64 * 1024;
@@ -16,8 +19,22 @@ export const TERMINAL_PROTOCOL_MAX_ROWS = 300;
 
 const sequenceSchema = z.number().int().nonnegative();
 const protocolBaseSchema = z.object({ version: z.literal(TERMINAL_PROTOCOL_VERSION) });
+const subscriptionIdSchema = z.string().min(1).max(128);
 
 export const terminalClientMessageSchema = z.discriminatedUnion("type", [
+  protocolBaseSchema
+    .extend({
+      type: z.literal("observe_list"),
+      subscriptionId: subscriptionIdSchema,
+      filter: terminalListFilterSchema,
+    })
+    .strict(),
+  protocolBaseSchema
+    .extend({
+      type: z.literal("unobserve_list"),
+      subscriptionId: subscriptionIdSchema,
+    })
+    .strict(),
   protocolBaseSchema.extend({ type: z.literal("observe_activity") }).strict(),
   protocolBaseSchema.extend({ type: z.literal("unobserve_activity") }).strict(),
   protocolBaseSchema
@@ -48,6 +65,35 @@ export const terminalClientMessageSchema = z.discriminatedUnion("type", [
 export type TerminalClientMessage = z.infer<typeof terminalClientMessageSchema>;
 
 export const terminalServerMessageSchema = z.discriminatedUnion("type", [
+  protocolBaseSchema
+    .extend({
+      type: z.literal("list_snapshot_start"),
+      subscriptionId: subscriptionIdSchema,
+      hostInstanceId: z.string().min(1),
+      revision: sequenceSchema,
+    })
+    .strict(),
+  protocolBaseSchema
+    .extend({
+      type: z.literal("list_snapshot_end"),
+      subscriptionId: subscriptionIdSchema,
+    })
+    .strict(),
+  protocolBaseSchema
+    .extend({
+      type: z.literal("list_updated"),
+      subscriptionId: subscriptionIdSchema,
+      revision: sequenceSchema,
+    })
+    .strict(),
+  protocolBaseSchema
+    .extend({
+      type: z.literal("list_removed"),
+      subscriptionId: subscriptionIdSchema,
+      revision: sequenceSchema,
+      terminalId: terminalIdSchema,
+    })
+    .strict(),
   protocolBaseSchema.extend({ type: z.literal("activity_snapshot_start") }).strict(),
   protocolBaseSchema.extend({ type: z.literal("activity_snapshot_end") }).strict(),
   protocolBaseSchema
@@ -125,6 +171,12 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
+export type TerminalListMessage = Extract<
+  TerminalServerMessage,
+  {
+    type: "list_snapshot_start" | "list_snapshot_end" | "list_updated" | "list_removed";
+  }
+>;
 export type TerminalActivityMessage = Extract<
   TerminalServerMessage,
   {
@@ -147,6 +199,8 @@ export const isTerminalClientMessage = (
 ): message is TerminalClientMessage =>
   message.type === "observe_activity" ||
   message.type === "unobserve_activity" ||
+  message.type === "observe_list" ||
+  message.type === "unobserve_list" ||
   message.type === "attach" ||
   message.type === "input" ||
   message.type === "resize" ||
@@ -167,7 +221,10 @@ export type TerminalProtocolFrame = {
 
 const assertPayloadContract = (message: TerminalProtocolMessage, payloadLength: number): void => {
   const requiresPayload =
-    message.type === "input" || message.type === "output" || message.type === "screen_restore";
+    message.type === "input" ||
+    message.type === "output" ||
+    message.type === "screen_restore" ||
+    message.type === "list_updated";
   if (requiresPayload && payloadLength === 0) {
     throw new Error(`Terminal ${message.type} frame requires a non-empty binary payload.`);
   }
@@ -181,6 +238,15 @@ const assertPayloadContract = (message: TerminalProtocolMessage, payloadLength: 
     throw new Error("Terminal output sequence range must equal its binary payload length.");
   }
 };
+
+/** List metadata can include retained Action output, so it belongs in the bounded frame body. */
+export const encodeTerminalListSummary = (summary: TerminalSummary): Uint8Array =>
+  new TextEncoder().encode(JSON.stringify(terminalSummarySchema.parse(summary)));
+
+export const decodeTerminalListSummary = (payload: Uint8Array): TerminalSummary =>
+  terminalSummarySchema.parse(
+    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payload)),
+  );
 
 export const encodeTerminalProtocolFrame = ({
   message,

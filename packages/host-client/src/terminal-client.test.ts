@@ -21,14 +21,22 @@ describe("host client terminal operations", () => {
     }> = [];
     const client = createHostClient(async (command, input, resultSchema) => {
       calls.push({ command, input });
-      return resultSchema.parse({ ref: { terminalId: "terminal-1" }, summary });
+      return resultSchema.parse({
+        ref: { terminalId: "terminal-1" },
+        summary,
+        list: { hostInstanceId: "host-1", revision: 1, terminals: [summary] },
+      });
     });
     await expect(
       client.terminalCreate({
         workingDir: "/repo/worktree",
         context: { repoPath: "/repo", taskId: "task-1" },
       }),
-    ).resolves.toEqual({ ref: { terminalId: "terminal-1" }, summary });
+    ).resolves.toEqual({
+      ref: { terminalId: "terminal-1" },
+      summary,
+      list: { hostInstanceId: "host-1", revision: 1, terminals: [summary] },
+    });
     expect(calls).toEqual([
       {
         command: "terminal_create",
@@ -57,18 +65,23 @@ describe("host client terminal operations", () => {
   test("routes list, path input, and close commands", async () => {
     const client = createHostClient(async (command, _input, resultSchema) => {
       if (command === "terminal_list") {
-        return resultSchema.parse({ hostInstanceId: "host-1", terminals: [summary] });
+        return resultSchema.parse({ hostInstanceId: "host-1", revision: 1, terminals: [summary] });
       }
       if (command === "terminal_prepare_path_input") {
         return resultSchema.parse({ text: "'/tmp/image.png'" });
       }
-      if (command === "terminal_close") return resultSchema.parse({ closed: true });
+      if (command === "terminal_close")
+        return resultSchema.parse({
+          closed: true,
+          list: { hostInstanceId: "host-1", revision: 2, terminals: [] },
+        });
       throw new Error(`Unexpected ${command}`);
     });
     await expect(
       client.terminalList({ filter: { kind: "task", repoPath: "/repo", taskId: "task-1" } }),
     ).resolves.toEqual({
       hostInstanceId: "host-1",
+      revision: 1,
       terminals: [summary],
     });
     await expect(
@@ -76,7 +89,10 @@ describe("host client terminal operations", () => {
     ).resolves.toEqual({ text: "'/tmp/image.png'" });
     await expect(
       client.terminalClose({ terminalId: "terminal-1", confirmTerminate: true }),
-    ).resolves.toEqual({ closed: true });
+    ).resolves.toEqual({
+      closed: true,
+      list: { hostInstanceId: "host-1", revision: 2, terminals: [] },
+    });
   });
 
   test("preserves a typed close-confirmation outcome", async () => {

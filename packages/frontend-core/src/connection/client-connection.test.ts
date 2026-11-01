@@ -104,28 +104,29 @@ test.each(["stream", "command result", "command failure"])(
     const cases: { filter: TerminalListFilter; data?: TerminalListResponse; updated: boolean }[] = [
       {
         filter: { kind: "workspace_session", workspaceId: "workspace", sessionId: "child" },
-        data: { hostInstanceId: "host", terminals: [terminal] },
+        data: { hostInstanceId: "host", revision: 1, terminals: [terminal] },
         updated: true,
       },
       {
         filter: { kind: "task", repoPath: "/repo", taskId: "task" },
-        data: { hostInstanceId: "host", terminals: [taskTerminal] },
+        data: { hostInstanceId: "host", revision: 1, terminals: [taskTerminal] },
         updated: true,
       },
       {
         filter: { kind: "all" },
-        data: { hostInstanceId: "host", terminals: [terminal, taskTerminal] },
+        data: { hostInstanceId: "host", revision: 1, terminals: [terminal, taskTerminal] },
         updated: true,
       },
       {
         filter: { kind: "task", repoPath: "/repo", taskId: "other-host" },
-        data: { hostInstanceId: "other-host", terminals: [terminal] },
+        data: { hostInstanceId: "other-host", revision: 1, terminals: [terminal] },
         updated: false,
       },
       {
         filter: { kind: "task", repoPath: "/repo", taskId: "other-terminal" },
         data: {
           hostInstanceId: "host",
+          revision: 1,
           terminals: [{ ...terminal, terminalId: "other-terminal" }],
         },
         updated: false,

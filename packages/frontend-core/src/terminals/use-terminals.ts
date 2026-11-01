@@ -15,7 +15,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useHostClient } from "../connection/client-connection-react";
 import { platformQueryOptions } from "../queries/system";
-import { invalidateTerminalList, terminalListByFilterQueryOptions } from "../queries/terminals";
+import {
+  invalidateTerminalList,
+  terminalListByFilterQueryOptions,
+  cacheTerminalList,
+  watchTerminalList,
+  terminalQueryKeys,
+} from "../queries/terminals";
 import {
   EMPTY_TERMINAL_ACTIVITY,
   terminalActivityOwnerKey,
@@ -33,6 +39,8 @@ export type TerminalHostClient = Pick<
   HostClient,
   "terminalClose" | "terminalCreate" | "terminalRunAction"
 >;
+
+type TerminalCloseResult = TerminalCloseResponse | { closed: true };
 
 export type TerminalDependencies = {
   /** The terminal transport of the connection. One controller serves each bridge. */
@@ -76,7 +84,7 @@ export type TerminalSessionsModel = {
   onRetryDiscovery: () => void;
   onRetryCreate: (scopeKey: string, tabId: string, actionId: string | null) => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
-  onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResponse>;
+  onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResult>;
   onLifecycle: (scopeKey: string, terminalId: string, lifecycle: TerminalLifecycle) => void;
   onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
 };
@@ -133,6 +141,11 @@ export const useTerminals = (
   });
   const terminalQuery = useQuery<TerminalListResponse>(terminalOptions);
   const platformQuery = useQuery(platformQueryOptions());
+
+  useEffect(() => {
+    if (scopeKey === null || controller === null) return;
+    return watchTerminalList(queryClient, controller, listFilter);
+  }, [controller, listFilter, queryClient, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;
@@ -192,8 +205,17 @@ export const useTerminals = (
           context: scope.context,
           actionId,
         });
+        cacheTerminalList(queryClient, listFilter, created.list);
+        const summary = queryClient
+          .getQueryData<TerminalListResponse>(terminalQueryKeys.filter(listFilter))
+          ?.terminals.find((known) => known.terminalId === created.ref.terminalId);
+        if (!summary) {
+          cancelledCreates.delete(tabId);
+          dispatch({ type: "closeCompleted", scopeKey, tabId });
+          return;
+        }
         if (cancelledCreates.delete(tabId)) {
-          dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
+          dispatch({ type: "creationCompleted", scopeKey, tabId, summary });
           let closed = false;
           try {
             const closeResult = await hostClient.terminalClose({
@@ -201,14 +223,13 @@ export const useTerminals = (
               confirmTerminate: true,
             });
             closed = closeResult.closed;
+            if (closeResult.closed) cacheTerminalList(queryClient, listFilter, closeResult.list);
           } finally {
             dispatch({ type: closed ? "closeCompleted" : "closeRejected", scopeKey, tabId });
-            await invalidateTerminalList(queryClient, listFilter);
           }
           return;
         }
-        dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
-        await invalidateTerminalList(queryClient, listFilter);
+        dispatch({ type: "creationCompleted", scopeKey, tabId, summary });
       } catch (cause) {
         if (cancelledCreates.delete(tabId)) {
           dispatch({ type: "closeCompleted", scopeKey, tabId });
@@ -257,7 +278,7 @@ export const useTerminals = (
     [dispatch],
   );
   const closeTerminal = useCallback(
-    async (tab: TerminalTab, confirmTerminate: boolean): Promise<TerminalCloseResponse> => {
+    async (tab: TerminalTab, confirmTerminate: boolean): Promise<TerminalCloseResult> => {
       if (!scopeKey) throw new Error("Terminal scope is unavailable.");
       if (!tab.terminalId) {
         if (tab.requestState === "creating") {
@@ -289,11 +310,11 @@ export const useTerminals = (
         dispatch({ type: "closeRejected", scopeKey, tabId: tab.tabId });
         return closeResult;
       }
+      cacheTerminalList(queryClient, listFilter, closeResult.list);
       dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
-      if (scope) await invalidateTerminalList(queryClient, listFilter);
       return closeResult;
     },
-    [cancelledCreates, dispatch, controller, hostClient, listFilter, queryClient, scope, scopeKey],
+    [cancelledCreates, dispatch, controller, hostClient, listFilter, queryClient, scopeKey],
   );
   const changeLifecycle = useCallback(
     (ownerScopeKey: string, terminalId: string, lifecycle: TerminalLifecycle): void => {
@@ -307,7 +328,7 @@ export const useTerminals = (
     },
     [dispatch],
   );
-  const isLoading = terminalQuery.isFetching || isScopeLoading;
+  const isLoading = terminalQuery.isLoading || isScopeLoading;
   const openTabs = visibleState.tabs.filter((tab) => !closingTabIds.has(tab.tabId));
   const discoveryError = terminalQuery.isError ? terminalQuery.error.message : scopeError;
   const startBlockedReason = terminalStartBlockedReason({
@@ -320,6 +341,10 @@ export const useTerminals = (
   const createTerminal = useCallback(
     (action?: RepoAction): string | null => {
       if (startBlockedReason !== null) return null;
+      const current = readState();
+      const closing = new Set(current.closingTabIds);
+      if (current.tabs.some((tab) => tab.requestState === "creating" && !closing.has(tab.tabId)))
+        return null;
       const tabId = `creating:${globalThis.crypto.randomUUID()}`;
       void startTerminal({
         tabId,
@@ -329,7 +354,7 @@ export const useTerminals = (
       });
       return tabId;
     },
-    [startBlockedReason, startTerminal],
+    [readState, startBlockedReason, startTerminal],
   );
 
   return useMemo(

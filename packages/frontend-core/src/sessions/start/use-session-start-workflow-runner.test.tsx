@@ -326,7 +326,7 @@ test.each(["completed", "failed", "disconnected"] as const)(
     const terminalKey = terminalQueryKeys.task({ repoPath: "/repo", taskId: "task" });
     const otherTerminalKey = terminalQueryKeys.task({ repoPath: "/repo", taskId: "other-task" });
     for (const key of [terminalKey, otherTerminalKey])
-      queryClient.setQueryData(key, { hostInstanceId: "host-1", terminals: [] });
+      queryClient.setQueryData(key, { hostInstanceId: "host-1", revision: 1, terminals: [] });
     let unmount: (() => void) | undefined;
     try {
       for (const read of [...reads, ...otherReads])

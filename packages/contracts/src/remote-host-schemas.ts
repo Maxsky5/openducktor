@@ -6,7 +6,7 @@ export const REMOTE_BASELINE_CAPABILITIES = [
   "host.work.v1",
   "host.events.v1",
   "agent.live.v1",
-  "terminal.v2",
+  "terminal.v3",
   "work.resources.v1",
 ] as const;
 /**
