@@ -62,8 +62,7 @@ export const useTranscriptListJumps = ({
   const jumpTo = useCallback(
     (target: TranscriptListKind) => {
       if (kind === target && isNearListStart(kind, place())) {
-        if (kind === "latest") void list.current?.scrollToEnd({ animated: false });
-        else void list.current?.scrollToIndex({ index: 0, animated: false });
+        void list.current?.scrollToIndex({ index: 0, animated: false });
         return;
       }
       show(target);
@@ -94,9 +93,14 @@ export const useTranscriptListJumps = ({
         );
         return;
       }
-      void list.current?.scrollToIndex({ index: listIndex, animated: false });
+      // The top of the screen is the view position 1 of the inverted list, and 0 of the other.
+      void list.current?.scrollToIndex({
+        index: listIndex,
+        viewPosition: kind === "latest" ? 1 : 0,
+        animated: false,
+      });
     },
-    [feedback, items, list, rows, topRow],
+    [feedback, items, kind, list, rows, topRow],
   );
   // Screen readers move between turns through the actions of the list.
   const onAccessibilityAction = useCallback(

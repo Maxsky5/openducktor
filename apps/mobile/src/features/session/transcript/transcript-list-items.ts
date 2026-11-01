@@ -4,12 +4,16 @@ import type { MessagePartItem } from "./transcript-message-parts";
 /**
  * The end of the transcript that a list starts at. A list measures the rows that it mounts and
  * estimates the others, so only the start of a list has an exact place. The `latest` list is
- * starts at the latest message, at the bottom of the screen. The `first` list starts at the first
- * message, at the top. Both show the rows in the same order.
+ * inverted: it starts at the latest message, at the bottom of the screen. The `first` list starts
+ * at the first message, at the top.
  */
 export type TranscriptListKind = "latest" | "first";
 
-/** The space under the latest message. */
+/**
+ * The space under the latest message. In the `latest` list it is the first item, so while the
+ * reader is at the latest message, the list keeps it in place: new rows and a growing reply push
+ * the rows above up, and the latest message stays in view.
+ */
 export type BottomEdgeItem = { readonly kind: "bottom_edge"; readonly key: string };
 
 /**
@@ -40,10 +44,12 @@ const BOTTOM_EDGE: BottomEdgeItem = { kind: "bottom_edge", key: "transcript:bott
 const TOP_EDGE: TopEdgeItem = { kind: "top_edge", key: "transcript:top-edge" };
 
 /**
- * The items of a list in content order, with an edge item at each end. A long answer or
- * reasoning text shows as its parts.
+ * The items of a list in its content order, with an edge item at each end. A long answer or
+ * reasoning text shows as its parts. The inverted list shows its items from the bottom of the
+ * screen, so it takes the rows and the parts of each message in reverse order.
  */
 export const transcriptListItems = (
+  kind: TranscriptListKind,
   rows: readonly AgentChatTranscriptRow[],
   partsOf: MessagePartsOf,
 ): TranscriptListItems => {
@@ -58,25 +64,44 @@ export const transcriptListItems = (
   const addRow = (rowIndex: number): void => {
     const row = rows[rowIndex];
     if (row === undefined) return;
+    const start = items.length;
     const parts = partsOf(row);
-    topItemOfRow[rowIndex] = items.length;
-    if (parts === null) add(row, rowIndex);
-    else for (const part of parts) add(part, rowIndex);
+    if (parts === null) {
+      add(row, rowIndex);
+    } else if (kind === "latest") {
+      for (let index = parts.length - 1; index >= 0; index -= 1) add(parts[index]!, rowIndex);
+    } else {
+      for (const part of parts) add(part, rowIndex);
+    }
+    // The top of a row is its first part, which the inverted list adds last.
+    topItemOfRow[rowIndex] = kind === "latest" ? items.length - 1 : start;
   };
-  add(TOP_EDGE, 0);
-  for (let index = 0; index < rows.length; index += 1) addRow(index);
-  add(BOTTOM_EDGE, lastRow);
+  if (kind === "latest") {
+    add(BOTTOM_EDGE, lastRow);
+    for (let index = rows.length - 1; index >= 0; index -= 1) addRow(index);
+    add(TOP_EDGE, 0);
+  } else {
+    add(TOP_EDGE, 0);
+    for (let index = 0; index < rows.length; index += 1) addRow(index);
+    add(BOTTOM_EDGE, lastRow);
+  }
   return { items, rowOfItem, topItemOfRow };
 };
 
 /**
  * The transcript index of the row at the top of the screen, from the list indices in view, or
- * null when no row is in view.
+ * null when no row is in view. Both lists show the rows in transcript order from the top of the
+ * screen, so it is the lowest row in view.
  */
 export const topRowIndex = (
   list: TranscriptListItems,
   visibleListIndices: readonly number[],
 ): number | null => {
-  if (visibleListIndices.length === 0 || list.topItemOfRow.length === 0) return null;
-  return list.rowOfItem[Math.min(...visibleListIndices)] ?? null;
+  if (list.topItemOfRow.length === 0) return null;
+  let top: number | null = null;
+  for (const index of visibleListIndices) {
+    const row = list.rowOfItem[index];
+    if (row !== undefined && (top === null || row < top)) top = row;
+  }
+  return top;
 };

@@ -84,8 +84,8 @@ const useShownRows = (
  * The transcript of the open session as FlashList chats. A list measures only the rows that it
  * mounts, so only its start has an exact place. A jump to an end shows a list that waits, hidden,
  * at that end, so the jump shows its rows in the next frame. The list that leaves goes back to its
- * start. The transcript opens on a list at the latest message, and mounts the other lists in idle
- * time.
+ * start. The transcript opens on a `latest` list at the latest message, and mounts the other
+ * lists in idle time.
  */
 export function TranscriptList({
   rows,

@@ -7,12 +7,9 @@
 const TOP_THRESHOLD_FRACTION = 0.2;
 
 /**
- * The share of the viewport height that still counts as the bottom. While the reader is this near
- * the bottom, the `latest` list scrolls new content into view.
+ * The height of the space under the latest message. While it is in view, the reader is at the
+ * bottom of the transcript.
  */
-export const FOLLOW_THRESHOLD_FRACTION = 0.1;
-
-/** The height of the space under the latest message. */
 export const BOTTOM_EDGE_HEIGHT = 16;
 
 export type TranscriptFollowState = {
@@ -50,9 +47,9 @@ export const initialTranscriptFollowState = (contentKey: string | null): Transcr
   contentKey,
 });
 
-/** True while the reader is near the bottom, so the list follows new content. */
-export const isAtTranscriptBottom = (distanceFromBottom: number, viewportHeight: number): boolean =>
-  distanceFromBottom <= viewportHeight * FOLLOW_THRESHOLD_FRACTION;
+/** True while the space under the latest message is in view, so the list follows new content. */
+export const isAtTranscriptBottom = (distanceFromBottom: number): boolean =>
+  distanceFromBottom < BOTTOM_EDGE_HEIGHT;
 
 /** True when `distance` from the first message is within the top threshold of the viewport. */
 export const isNearTranscriptTop = (distance: number, viewportHeight: number): boolean =>
@@ -65,7 +62,7 @@ export const reduceTranscriptFollow = (
 ): TranscriptFollowState => {
   switch (event.type) {
     case "scrolled": {
-      const atBottom = isAtTranscriptBottom(event.distanceFromBottom, event.viewportHeight);
+      const atBottom = isAtTranscriptBottom(event.distanceFromBottom);
       const atTop = isNearTranscriptTop(event.distanceFromTop, event.viewportHeight);
       const hasNewActivity = atBottom ? false : state.hasNewActivity;
       if (
