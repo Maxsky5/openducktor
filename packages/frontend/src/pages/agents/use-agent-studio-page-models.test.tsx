@@ -1,7 +1,7 @@
 import { MemoryRouter } from "react-router";
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { createAgentChatSendFixture } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -50,10 +50,11 @@ import {
   buildAgentStudioSelectedSessionContext,
 } from "./selected-session/selected-session-context";
 
-type UseAgentStudioPageModelsHook =
-  (typeof import("./use-agent-studio-page-models"))["useAgentStudioPageModels"];
-
 enableReactActEnvironment();
+
+// A load in a test hook counts against the 1000 ms limit of the hook.
+const { useAgentStudioPageModels } = await import("./use-agent-studio-page-models");
+type UseAgentStudioPageModelsHook = typeof useAgentStudioPageModels;
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0] & { sessions: AgentSessionSummary[] };
 const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
@@ -91,12 +92,6 @@ type HookArgsOverrides = {
   chatSettings?: Partial<NonNullable<HookArgs["chatSettings"]>> | null;
   composer?: Partial<HookArgs["composer"]>;
 };
-
-let useAgentStudioPageModels: UseAgentStudioPageModelsHook;
-
-beforeAll(async () => {
-  ({ useAgentStudioPageModels } = await import("./use-agent-studio-page-models"));
-});
 
 const createTask = () =>
   createTaskCardFixture({
