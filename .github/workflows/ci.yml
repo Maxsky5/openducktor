@@ -39,10 +39,7 @@ jobs:
           blocking: warning
           version: "0.9.14"
 
-  # Each platform runs its checks, its build, and its test shards on separate runners at the same
-  # time. The jobs of each platform share their steps through YAML anchors. The
-  # `TypeScript Workspace Quality` job of a platform is the required check: it passes only when all
-  # jobs of its platform pass.
+  # The `TypeScript Workspace Quality` job of a platform is the required check of all its jobs.
   checks-linux:
     name: Checks (Linux)
     runs-on: ubuntu-latest

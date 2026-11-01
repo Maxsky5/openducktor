@@ -53,8 +53,8 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 
 ## Parallel runs
 
-- The root `bun run test` runs workspace suites in sequence.
-- CI splits the tests of each platform into shards: three on Linux, two on macOS, and four on Windows. GitHub runs at most five macOS jobs of the repository at the same time. Each `Tests` job runs [test-shard.ts](../scripts/test-shard.ts), which runs every workspace suite and the root script suite in sequence with `bun test --shard`, so each job runs a part of the files of each suite. A suite with another test runner, such as the Node runner of the oxlint rules, runs all its files in the first shard. The job runs every suite before it reports the failed ones.
+- [test-shard.ts](../scripts/test-shard.ts) runs every workspace suite and the root script suite in sequence with `bun test --shard`, so it runs a part of the files of each suite. A suite with another test runner, such as the Node runner of the oxlint rules, runs all its files in the first shard. It runs every suite before it reports the failed ones.
+- The root `bun run test` runs the only shard, `1/1`. CI splits the tests of each platform into shards: three on Linux, two on macOS, and four on Windows. GitHub runs at most five macOS jobs of the repository at the same time.
 - The `TypeScript Workspace Quality` job of a platform passes only when the `Checks`, `Build`, and `Tests` jobs of that platform pass.
 - On Windows, CI puts `TMP` and `TEMP` on the `D:` drive, because temp trees there are faster than on `C:`.
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.

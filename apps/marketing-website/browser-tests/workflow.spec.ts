@@ -3,7 +3,7 @@ import {
   playOnFakeClock,
   reload,
   runUntil,
-  scrollToPlay,
+  scrollIntoPlayZone,
   shownText,
   steps,
   test,
@@ -86,7 +86,7 @@ test("each workflow step ends on its static frame, and the next step starts ther
   const chapters = page.locator(".chapters");
   const cover = chapters.locator("[data-stage-cover]");
   const stage = chapters.locator("[data-chapter-panel]:not([hidden]) [data-stage]");
-  await scrollToPlay(chapters);
+  await scrollIntoPlayZone(chapters);
   for (const [index, id] of steps.entries()) {
     const next = steps[(index + 1) % steps.length];
     await runUntil(page, async () => (await cover.count()) > 0, 90);
@@ -134,7 +134,7 @@ test("while the Spec agent waits for your answer, the sidebar and the workspace 
   test.skip(testInfo.project.name !== "desktop-light", "One project plays the long scenes.");
   test.setTimeout(120_000);
   await playOnFakeClock(page);
-  await scrollToPlay(page.locator(".chapters"));
+  await scrollIntoPlayZone(page.locator(".chapters"));
   const stage = page.locator("#workflow-panel-spec [data-stage]");
   const input = stage.locator('[data-rail-tile="fieldnotes"] [data-rail-badge="input"]');
   const waiting = stage.locator('[data-nav-count="needs_you"]');

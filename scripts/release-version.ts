@@ -118,7 +118,8 @@ function expandWorkspacePattern(pattern: string): string[] {
   });
 }
 
-function collectWorkspacePackageJsonPaths(): string[] {
+/** The root package.json and the package.json of each workspace, relative to the current directory. */
+export function collectWorkspacePackageJsonPaths(): string[] {
   return [
     "package.json",
     ...readRootWorkspacePatterns().flatMap((pattern) => expandWorkspacePattern(pattern)),

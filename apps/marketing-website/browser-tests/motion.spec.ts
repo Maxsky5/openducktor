@@ -5,7 +5,7 @@ import {
   playOnFakeClock,
   reload,
   runUntil,
-  scrollToPlay,
+  scrollIntoPlayZone,
   shownText,
   test,
 } from "./fixtures";
@@ -61,7 +61,7 @@ test("when motion is allowed, one control pauses and resumes every product view"
   await reload(page);
   const hero = page.locator('[data-scene="hero"]');
   // On a phone, the opening view starts below the line where a view starts to move.
-  await scrollToPlay(hero);
+  await scrollIntoPlayZone(hero);
   await page.getByRole("button", { name: "Pause animations" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "paused");
   await expect(hero).toHaveAttribute("data-motion", "paused");
@@ -69,14 +69,13 @@ test("when motion is allowed, one control pauses and resumes every product view"
   await expect(play).toHaveAttribute("aria-pressed", "true");
   // On a phone, the local section is taller than the screen, so the test scrolls to the view.
   const local = page.locator('[data-scene="local"]');
-  await local.scrollIntoViewIfNeeded();
-  await expect(local).toHaveAttribute("data-motion", "paused");
+  await scrollIntoPlayZone(local, "paused");
   await play.click();
   await expect(local).toHaveAttribute("data-motion", "running");
   await expect(hero).toHaveAttribute("data-motion", "paused");
   // The duck parade of the closing section follows the same control.
   const parade = page.locator("[data-parade]");
-  await scrollToPlay(parade);
+  await scrollIntoPlayZone(parade);
   await page.getByRole("button", { name: "Pause animations" }).click();
   await expect(parade).toHaveAttribute("data-motion", "paused");
 });
@@ -125,7 +124,7 @@ test("each product view plays one loop, ends on its static frame, and cross fade
     const scene = page.locator(`[data-scene="${id}"]`);
     const stage = scene.locator("[data-stage]");
     const cover = scene.locator("[data-stage-cover]");
-    await scrollToPlay(scene);
+    await scrollIntoPlayZone(scene);
     await runUntil(page, async () => (await cover.count()) > 0, 60);
     // The cover holds the last frame of the loop. The stage holds the first frame of the next loop.
     await expect(cover, id).toHaveAttribute("aria-hidden", "true");
@@ -157,7 +156,7 @@ test("on a phone, each product view plays one loop without a page error", async 
   await playOnFakeClock(page);
   for (const id of scenes) {
     const scene = page.locator(`[data-scene="${id}"]`);
-    await scrollToPlay(scene);
+    await scrollIntoPlayZone(scene);
     await runUntil(page, async () => (await scene.locator("[data-stage-cover]").count()) > 0, 60);
     await expect(scene.locator("[data-stage-cover]"), id).toHaveCount(1);
   }
@@ -170,7 +169,7 @@ test("a switch to reduced motion while the views play puts back their static fra
   const hero = '[data-scene="hero"] [data-stage]';
   const still = await shownText(page, hero);
   await playOnFakeClock(page);
-  await scrollToPlay(page.locator('[data-scene="hero"]'));
+  await scrollIntoPlayZone(page.locator('[data-scene="hero"]'));
   await advance(page, 3000);
   expect(await shownText(page, hero)).not.toBe(still);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -184,16 +183,12 @@ test("the pause control freezes the views", async ({ page }) => {
   await playOnFakeClock(page);
   const scene = page.locator('[data-scene="hero"]');
   const stage = scene.locator("[data-stage]");
-  await scrollToPlay(scene);
+  await scrollIntoPlayZone(scene);
   await advance(page, 2000);
   // Before a click, Playwright scrolls the sticky header button to its place at the top of the
   // page, so the test shows the view again after each click.
-  const show = async (motion: string): Promise<void> => {
-    await scene.scrollIntoViewIfNeeded();
-    await expect(scene).toHaveAttribute("data-motion", motion);
-  };
   await page.getByRole("button", { name: "Pause animations" }).click();
-  await show("paused");
+  await scrollIntoPlayZone(scene, "paused");
   const frame = await stage.innerHTML();
   await advance(page, 3000);
   expect(await stage.innerHTML()).toBe(frame);
@@ -206,7 +201,7 @@ test("the pause control freezes the views", async ({ page }) => {
     );
   expect(pulses).toEqual(["paused", "paused"]);
   await page.getByRole("button", { name: "Play animations" }).click();
-  await show("running");
+  await scrollIntoPlayZone(scene);
   await advance(page, 1000);
   expect(await stage.innerHTML()).not.toBe(frame);
 });
@@ -230,7 +225,7 @@ for (const size of [
     await page.setViewportSize(size);
     await reload(page);
     const scene = page.locator('[data-scene="autopilot"]');
-    await scrollToPlay(scene);
+    await scrollIntoPlayZone(scene);
     await pauseClock(page);
     const lanes = new Set<string>();
     let notifications = 0;
@@ -287,7 +282,7 @@ test("the chat opens a new task and starts its Builder in the background", async
   test.setTimeout(120_000);
   await playOnFakeClock(page);
   const scene = page.locator('[data-scene="chat"]');
-  await scrollToPlay(scene);
+  await scrollIntoPlayZone(scene);
   const stage = scene.locator("[data-stage]");
   // The task details of the new task slide in over the chat.
   await runUntil(page, async () => (await stage.locator("[data-sheet]").count()) > 0, 40);
@@ -312,7 +307,7 @@ test("the opening view answers a question in the session preview of the sidebar"
   test.setTimeout(180_000);
   await playOnFakeClock(page);
   const scene = page.locator('[data-scene="hero"]');
-  await scrollToPlay(scene);
+  await scrollIntoPlayZone(scene);
   const stage = scene.locator("[data-stage]");
   const waiting = stage.locator('[data-nav-list="needs_you"] [data-nav-entry="empty-build"]');
   // The Builder asks its question, and the preview of its session opens with it.

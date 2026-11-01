@@ -7,7 +7,7 @@ import {
   installs,
   playOnFakeClock,
   reload,
-  scrollToPlay,
+  scrollIntoPlayZone,
   test,
 } from "./fixtures";
 
@@ -36,7 +36,7 @@ test("each install method has a terminal with its command and a copy button", as
 test("the desktop terminals show only their command, and they do not move", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await reload(page);
-  await scrollToPlay(page.locator("[data-install]"));
+  await scrollIntoPlayZone(page.locator("[data-install]"));
   for (const [, title, , command] of desktopInstalls) {
     const screen = page
       .getByRole("article", { name: title, exact: true })
@@ -69,7 +69,7 @@ test("the browser version terminal types its command, then prints the start log"
   await playOnFakeClock(page);
   const scene = page.locator("[data-install]");
   const ready = scene.locator(".t-log").filter({ hasText: "OpenDucktor web is ready:" });
-  await scrollToPlay(scene);
+  await scrollIntoPlayZone(scene);
   await advance(page, 100);
   await expect(ready).toHaveAttribute("data-pending");
   // The part of the command that is not typed yet keeps its place, but it does not show.
@@ -96,7 +96,7 @@ test("the install terminals keep their size, and the pause control shows the sta
   await playOnFakeClock(page);
   const before = await heights();
   // While the browser version terminal types, the text that comes later hides but keeps its place.
-  await scrollToPlay(page.locator("[data-install]"));
+  await scrollIntoPlayZone(page.locator("[data-install]"));
   await advance(page, 500);
   const hidden = page.locator("[data-install] [data-pending]:not(:empty)");
   await expect(hidden).not.toHaveCount(0);
