@@ -1,10 +1,9 @@
 import type { RepoAction } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
-import { Stack, useNavigation } from "expo-router";
-import type { NativeStackNavigationProp } from "expo-router/native-stack";
-import { type ParamListBase, StackActions } from "expo-router/react-navigation";
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import { Stack, useFocusEffect, useNavigation } from "expo-router";
+import { StackActions } from "expo-router/react-navigation";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
@@ -46,17 +45,14 @@ export function TerminalsScreen(): ReactElement {
 }
 
 function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
-  const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
+  const navigation = useNavigation();
   // Tablets and wide landscape show the terminal list and the selected terminal side by side.
   const wide = useWideLayout();
   const liveModel = useOwnerTerminals(owner);
   const [departingModel, setDepartingModel] = useState<TerminalSessionsModel | null>(null);
-  // Keep the visible list and header stable until the native stack leaves this screen.
+  // Keep the departing list stable. Read live state again when the list gets focus.
   const model = departingModel ?? liveModel;
-  useEffect(
-    () => navigation.addListener("transitionEnd", () => setDepartingModel(null)),
-    [navigation],
-  );
+  useFocusEffect(useCallback(() => setDepartingModel(null), []));
   const ownerParams = useMemo(() => toWorkOwnerParams(owner.ref), [owner.ref]);
   const [selectedTabId, setSelectedTabId] = useState<string | null>(null);
 
