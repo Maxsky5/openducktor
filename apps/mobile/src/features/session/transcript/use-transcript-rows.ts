@@ -37,9 +37,15 @@ export const useTranscriptRowsContext = ({
   presentToolCall,
   onOpenSubagent,
   openFullView,
+  beforeRowResize,
 }: Pick<
   TranscriptRowsContextValue,
-  "visibleRows" | "rowState" | "presentToolCall" | "onOpenSubagent" | "openFullView"
+  | "visibleRows"
+  | "rowState"
+  | "presentToolCall"
+  | "onOpenSubagent"
+  | "openFullView"
+  | "beforeRowResize"
 >): TranscriptRowsContextValue => {
   const router = useRouter();
   const target = useSessionTarget();
@@ -106,8 +112,10 @@ export const useTranscriptRowsContext = ({
       onOpenDocument,
       onOpenArtifact,
       openFullView,
+      beforeRowResize,
     }),
     [
+      beforeRowResize,
       chatSettings?.expandFileDiffsByDefault,
       identity,
       modelCatalog,

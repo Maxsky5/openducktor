@@ -34,7 +34,7 @@ flowchart TD
 | Features | `src/features/` | The Sessions list, chats, tasks, workflow, the session screen, composer, the model picker, review, files, terminals, settings, diagnostics |
 | Rich content | `src/rich-content/` | Markdown, code, diffs, images, isolated WebView pages |
 | UI kit and theme | `src/ui/`, `src/theme/` | Components, semantic colors, the type ramp, motion tokens, light and dark themes |
-| Native modules | `modules/` | `openducktor-network` (HTTP), `openducktor-keyboard` (hardware Enter) |
+| Native modules | `modules/` | `openducktor-network` (HTTP), `openducktor-keyboard` (hardware Enter), `openducktor-scroll` (Android scroll redraw) |
 | Config plugins | `plugins/` | Android network security, Android release signing, iOS release signing |
 
 ### Design system
@@ -89,6 +89,13 @@ flowchart TD
 - One expo-network listener stays for the app process. The iOS module cannot restart its path monitor after its last listener goes.
 - Every control that sends a host command reads one command gate. The gate is open only while the connection state is `connected`. Draft editing stays available.
 - The app never resends a mutation, reply, message, or terminal input after an unknown outcome. It reads the current host state after the reconnect.
+
+### Transcript list
+
+- The `latest` transcript list is an inverted FlashList. Rows that mount while the reader scrolls toward earlier messages go to the far end of the list, so they move no row in view.
+- Do not replace it with the non-inverted FlashList chat setup (`maintainVisibleContentPosition` with `startRenderingFromBottom`). In that setup, each row that mounts above the screen moves all rows and the scroll. On Android, flings then drop frames and the transcript jumps.
+- A part that opens, closes, or loads its full text keeps the top of its row in place, and the rows under it move. The list keeps the item above the row in place with the `keepItemInPlace` method of the FlashList patch. At the latest message, the transcript keeps its bottom in view, as the pinned desktop transcript does.
+- `modules/openducktor-scroll` makes each Android transcript scroll view draw a scroll in the frame of the layout change that caused it. Without it, a row that keeps its place moves for one frame.
 
 ### Transport rules
 
@@ -184,7 +191,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 |---|---|
 | Navigation | `expo-router` (native stack, JavaScript tabs with the app tab bar in `src/navigation/tab-bar`), `react-native-screens`. The swipe back of `src/navigation/swipe-back-detector.tsx` reads a source module and the Fabric fields of `react-native-screens`, so `package.json` pins its exact version. Test the swipe back before you change it. |
 | Styles | `react-native-unistyles` v3 with `react-native-nitro-modules`. `AppSystemBars` in `src/ui/app-system-bars.tsx` sets the system bar icons: the React Native `StatusBar` for the status bar, because it also reaches open modals, and `react-native-edge-to-edge` for the Android navigation buttons. |
-| Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. Remove the patch when a release has the guard. |
+| Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. It also adds `keepItemInPlace`, which keeps a chosen item in place through the next layout change instead of the first visible item. See [Transcript list](#transcript-list). Remove each part when a release has it. |
 | Motion and gestures | `react-native-reanimated` 4, `react-native-worklets`, `react-native-gesture-handler` |
 | Keyboard | `react-native-keyboard-controller`, `modules/openducktor-keyboard` |
 | Storage | `react-native-mmkv` v4. The app stores no credential. Use Expo SecureStore for a later sensitive value. |

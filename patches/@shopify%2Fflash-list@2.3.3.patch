@@ -1,3 +1,22 @@
+diff --git a/dist/FlashListRef.d.ts b/dist/FlashListRef.d.ts
+index 08b83f3e9baf5cf5c2229237b9c0d12fab030a3b..2793c57c4f0e4901147b8de8b789e1b832b8df89 100644
+--- a/dist/FlashListRef.d.ts
++++ b/dist/FlashListRef.d.ts
+@@ -280,6 +280,14 @@ export interface FlashListRef<T> {
+      * listRef.current?.recomputeViewableItems();
+      */
+     recomputeViewableItems: () => void;
++    /**
++     * Keeps the item at this index in place through the next layout change, instead of the first
++     * visible item. Call it just before a change that resizes an item before it, such as a part
++     * that opens in an inverted list.
++     *
++     * @param index - The index of the item to keep in place
++     */
++    keepItemInPlace: (index: number) => void;
+     /**
+      * Disables item recycling in preparation for layout animations.
+      *
 diff --git a/dist/recyclerview/RecyclerView.js b/dist/recyclerview/RecyclerView.js
 index 6799c8a61bff4607633196097da35c7a6975f0b6..1c1c9cc9b8dcfedd4946abbc4c2f10f6cd1438f2 100644
 --- a/dist/recyclerview/RecyclerView.js
@@ -15,6 +34,84 @@ index 6799c8a61bff4607633196097da35c7a6975f0b6..1c1c9cc9b8dcfedd4946abbc4c2f10f6
          const width = Math.max(Math.min(layout.width, (_a = layout.maxWidth) !== null && _a !== void 0 ? _a : Infinity), (_b = layout.minWidth) !== null && _b !== void 0 ? _b : 0);
          const height = Math.max(Math.min(layout.height, (_c = layout.maxHeight) !== null && _c !== void 0 ? _c : Infinity), (_d = layout.minHeight) !== null && _d !== void 0 ? _d : 0);
          if (areDimensionsNotEqual(width, size.width) ||
+diff --git a/dist/recyclerview/hooks/useRecyclerViewController.js b/dist/recyclerview/hooks/useRecyclerViewController.js
+index 08724d1f33824ef563948cff17904d7f497739d4..7c6d20373c72afc82150454012750f6db304f3e9 100644
+--- a/dist/recyclerview/hooks/useRecyclerViewController.js
++++ b/dist/recyclerview/hooks/useRecyclerViewController.js
+@@ -30,6 +30,9 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+     // Track the first visible item for maintaining scroll position
+     const firstVisibleItemKey = useRef(undefined);
+     const firstVisibleItemLayout = useRef(undefined);
++    // True while the tracked item comes from keepItemInPlace, until the next offset correction.
++    // That item can be outside the engaged indices.
++    const isKeepingItem = useRef(false);
+     // Queue to store callbacks that should be executed after scroll offset updates
+     const pendingScrollCallbacks = useRef([]);
+     // Handle initial scroll position when the list first loads
+@@ -106,7 +109,7 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+                 const currentIndexOfFirstVisibleItem = (_a = recyclerViewManager
+                     .getEngagedIndices()
+                     .findValue((index) => recyclerViewManager.getDataKey(index) ===
+-                    firstVisibleItemKey.current)) !== null && _a !== void 0 ? _a : (hasDataChanged || recyclerViewManager.ignoreScrollEvents
++                    firstVisibleItemKey.current)) !== null && _a !== void 0 ? _a : (hasDataChanged || recyclerViewManager.ignoreScrollEvents || isKeepingItem.current
+                     ? data === null || data === void 0 ? void 0 : data.findIndex((item, index) => recyclerViewManager.getDataKey(index) ===
+                         firstVisibleItemKey.current)
+                     : undefined);
+@@ -141,8 +144,11 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+                                 };
+                             (_c = scrollViewRef.current) === null || _c === void 0 ? void 0 : _c.scrollTo(scrollToParams);
+                         }
+-                        if (hasDataChanged) {
++                        if (hasDataChanged || isKeepingItem.current) {
++                            // Render the items that the correction brings into view in the same frame.
+                             updateScrollOffsetWithCallback(recyclerViewManager.getAbsoluteLastScrollOffset() + diff, () => { });
++                        }
++                        if (hasDataChanged) {
+                             recyclerViewManager.ignoreScrollEvents = true;
+                             setTimeout(() => {
+                                 recyclerViewManager.ignoreScrollEvents = false;
+@@ -151,6 +157,7 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+                     }
+                 }
+             }
++            isKeepingItem.current = false;
+             computeFirstVisibleIndexForOffsetCorrection();
+         }
+         lastDataLengthRef.current = recyclerViewManager.getDataLength();
+@@ -441,6 +448,13 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+             recomputeViewableItems: () => {
+                 recyclerViewManager.recomputeViewableItems();
+             },
++            keepItemInPlace: (index) => {
++                firstVisibleItemKey.current = recyclerViewManager.getDataKey(index);
++                firstVisibleItemLayout.current = {
++                    ...recyclerViewManager.getLayout(index),
++                };
++                isKeepingItem.current = true;
++            },
+             /**
+              * Disables item recycling in preparation for layout animations.
+              */
+diff --git a/src/FlashListRef.ts b/src/FlashListRef.ts
+index 07bac2aa20ea35ee3e85f0295a54569bc175da59..ad0e228371b48479e6da304fb4513969629035c7 100644
+--- a/src/FlashListRef.ts
++++ b/src/FlashListRef.ts
+@@ -295,6 +295,15 @@ export interface FlashListRef<T> {
+    */
+   recomputeViewableItems: () => void;
+ 
++  /**
++   * Keeps the item at this index in place through the next layout change, instead of the first
++   * visible item. Call it just before a change that resizes an item before it, such as a part
++   * that opens in an inverted list.
++   *
++   * @param index - The index of the item to keep in place
++   */
++  keepItemInPlace: (index: number) => void;
++
+   /**
+    * Disables item recycling in preparation for layout animations.
+    *
 diff --git a/src/recyclerview/RecyclerView.tsx b/src/recyclerview/RecyclerView.tsx
 index 3c25e7e893004932b8a13072e01fe2a940d365d4..52bdd7bd142f5071f7cd8dafff3be822b640d4cd 100644
 --- a/src/recyclerview/RecyclerView.tsx
@@ -32,3 +129,66 @@ index 3c25e7e893004932b8a13072e01fe2a940d365d4..52bdd7bd142f5071f7cd8dafff3be822
        const width = Math.max(
          Math.min(layout.width, layout.maxWidth ?? Infinity),
          layout.minWidth ?? 0
+diff --git a/src/recyclerview/hooks/useRecyclerViewController.tsx b/src/recyclerview/hooks/useRecyclerViewController.tsx
+index 3689830d995ff4f11c9fba6b3f54d9962d481726..5cd04683412b16f01ad8d787396997d5274ec6af 100644
+--- a/src/recyclerview/hooks/useRecyclerViewController.tsx
++++ b/src/recyclerview/hooks/useRecyclerViewController.tsx
+@@ -57,6 +57,9 @@ export function useRecyclerViewController<T>(
+   // Track the first visible item for maintaining scroll position
+   const firstVisibleItemKey = useRef<string | undefined>(undefined);
+   const firstVisibleItemLayout = useRef<RVLayout | undefined>(undefined);
++  // True while the tracked item comes from keepItemInPlace, until the next offset correction.
++  // That item can be outside the engaged indices.
++  const isKeepingItem = useRef(false);
+ 
+   // Queue to store callbacks that should be executed after scroll offset updates
+   const pendingScrollCallbacks = useRef<(() => void)[]>([]);
+@@ -154,7 +157,9 @@ export function useRecyclerViewController<T>(
+                 recyclerViewManager.getDataKey(index) ===
+                 firstVisibleItemKey.current
+             ) ??
+-          (hasDataChanged || recyclerViewManager.ignoreScrollEvents
++          (hasDataChanged ||
++          recyclerViewManager.ignoreScrollEvents ||
++          isKeepingItem.current
+             ? data?.findIndex(
+                 (item, index) =>
+                   recyclerViewManager.getDataKey(index) ===
+@@ -196,11 +201,14 @@ export function useRecyclerViewController<T>(
+                   };
+               scrollViewRef.current?.scrollTo(scrollToParams);
+             }
+-            if (hasDataChanged) {
++            if (hasDataChanged || isKeepingItem.current) {
++              // Render the items that the correction brings into view in the same frame.
+               updateScrollOffsetWithCallback(
+                 recyclerViewManager.getAbsoluteLastScrollOffset() + diff,
+                 () => {}
+               );
++            }
++            if (hasDataChanged) {
+               recyclerViewManager.ignoreScrollEvents = true;
+               setTimeout(() => {
+                 recyclerViewManager.ignoreScrollEvents = false;
+@@ -210,6 +218,7 @@ export function useRecyclerViewController<T>(
+         }
+       }
+ 
++      isKeepingItem.current = false;
+       computeFirstVisibleIndexForOffsetCorrection();
+     }
+     lastDataLengthRef.current = recyclerViewManager.getDataLength();
+@@ -554,6 +563,13 @@ export function useRecyclerViewController<T>(
+       recomputeViewableItems: () => {
+         recyclerViewManager.recomputeViewableItems();
+       },
++      keepItemInPlace: (index: number) => {
++        firstVisibleItemKey.current = recyclerViewManager.getDataKey(index);
++        firstVisibleItemLayout.current = {
++          ...recyclerViewManager.getLayout(index),
++        };
++        isKeepingItem.current = true;
++      },
+       /**
+        * Disables item recycling in preparation for layout animations.
+        */
