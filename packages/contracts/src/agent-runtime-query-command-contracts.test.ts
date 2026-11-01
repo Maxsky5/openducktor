@@ -95,11 +95,12 @@ test("reads compact history and one full tool part as host reads", () => {
     toolType: "bash",
     status: "completed",
     output: "first characters",
-    detailsOmitted: true,
+    detailsOmitted: { output: true },
   };
   expect(loadSessionToolPart.responseSchema.parse(part)).toEqual(part);
   expect(
-    loadSessionToolPart.responseSchema.safeParse({ ...part, detailsOmitted: false }).success,
+    loadSessionToolPart.responseSchema.safeParse({ ...part, detailsOmitted: { output: false } })
+      .success,
   ).toBe(false);
 });
 

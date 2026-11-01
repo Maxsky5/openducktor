@@ -39,7 +39,7 @@ export const ToolInputDetails = ({
       </summary>
       {isOpen && visible ? (
         <div className="px-2 pb-2">
-          {meta.detailsOmitted ? (
+          {meta.detailsOmitted?.input ? (
             <FullToolPartDetails meta={meta}>{renderInput}</FullToolPartDetails>
           ) : (
             renderInput(meta)

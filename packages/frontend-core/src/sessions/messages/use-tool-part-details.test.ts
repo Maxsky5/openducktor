@@ -29,7 +29,7 @@ const cutMeta: ToolMeta = {
   input: { command: "cut" },
   output: "cut",
   observedStartedAtMs: 10,
-  detailsOmitted: true,
+  detailsOmitted: { input: true, output: true },
 };
 
 const fullPart: AgentToolPart = {

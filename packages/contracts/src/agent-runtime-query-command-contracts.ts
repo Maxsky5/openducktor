@@ -102,7 +102,7 @@ export type AgentRuntimeLoadSessionHistoryInput = z.infer<
 const historyCommandFields = {
   ...historyFields,
   /**
-   * `on_demand` cuts long tool details and marks each cut part with `detailsOmitted`. A remote
+   * `on_demand` cuts long tool details and marks the cut details in `detailsOmitted`. A remote
    * client sends it only to a host with `REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY`.
    */
   toolDetails: z.literal("on_demand").optional(),

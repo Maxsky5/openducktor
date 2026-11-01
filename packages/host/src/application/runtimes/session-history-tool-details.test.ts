@@ -39,7 +39,7 @@ const compactPart = (part: AgentToolPart): AgentToolPart => {
 };
 
 describe("withToolDetailsOnDemand", () => {
-  test("cuts long strings of a finished tool and marks the part", () => {
+  test("cuts long strings of a finished tool and marks the cut details", () => {
     expect(
       compactPart(
         toolPart({
@@ -65,7 +65,7 @@ describe("withToolDetailsOnDemand", () => {
           { kind: "text", text: preview },
           { kind: "file", file: { name: "shot.png", downloadUri: `data:${preview.slice(5)}` } },
         ],
-        detailsOmitted: true,
+        detailsOmitted: { input: true, output: true },
       }),
     );
   });
@@ -99,7 +99,7 @@ describe("withToolDetailsOnDemand", () => {
           toolType: "workflow",
           input: { content: preview },
           output: long,
-          detailsOmitted: true,
+          detailsOmitted: { input: true },
         }),
       );
     expect(
@@ -111,7 +111,7 @@ describe("withToolDetailsOnDemand", () => {
         tool: "odt_read_task_artifacts",
         toolType: "workflow",
         output: preview,
-        detailsOmitted: true,
+        detailsOmitted: { output: true },
       }),
     );
   });

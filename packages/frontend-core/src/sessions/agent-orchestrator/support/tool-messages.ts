@@ -76,7 +76,7 @@ export const toToolMessageMeta = (part: AgentToolPart): ToolMessageMeta => {
   if (part.endedAtMs !== undefined) {
     meta.endedAtMs = part.endedAtMs;
   }
-  if (part.detailsOmitted) meta.detailsOmitted = true;
+  if (part.detailsOmitted) meta.detailsOmitted = part.detailsOmitted;
   return meta;
 };
 

@@ -215,6 +215,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
           ref={listRef}
           data={items}
           maintainVisibleContentPosition={kind === "latest" ? FOLLOW_LATEST : KEEP_POSITION}
+          drawDistance={DRAW_DISTANCE}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
@@ -260,4 +261,9 @@ const FOLLOW_LATEST = {
 };
 /** The `first` list keeps the first row in view in place, the FlashList default. */
 const KEEP_POSITION = {};
+/**
+ * The distance in points past each edge of the screen that the list renders. Transcript rows vary
+ * in height, so with the 250-point default a fast scroll shows empty space until rows render.
+ */
+const DRAW_DISTANCE = 1000;
 const TOP_SPACE = <View style={styles.topSpace} />;

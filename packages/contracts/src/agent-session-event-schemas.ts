@@ -195,10 +195,14 @@ export const agentToolPartSchema = z
     startedAtMs: finiteNonNegativeNumberSchema.optional(),
     endedAtMs: finiteNonNegativeNumberSchema.optional(),
     /**
-     * The host cut long strings of `input`, `metadata`, `output`, or `resultContent` to their
-     * first characters. `agent_runtime_load_session_tool_part` reads the full part.
+     * The details whose long strings the host cut to their first characters: `input`, or `output`
+     * for `output`, `resultContent`, and `metadata`. `agent_runtime_load_session_tool_part` reads
+     * the full part.
      */
-    detailsOmitted: z.literal(true).optional(),
+    detailsOmitted: z
+      .object({ input: z.literal(true).optional(), output: z.literal(true).optional() })
+      .strict()
+      .optional(),
   })
   .strict();
 export type AgentToolPart = z.infer<typeof agentToolPartSchema>;

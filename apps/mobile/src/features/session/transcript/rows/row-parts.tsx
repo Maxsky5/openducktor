@@ -288,9 +288,7 @@ export function DetailsBox({
         ) : null}
       </Touchable>
       {disclosure.open ? (
-        <Reveal animate={disclosure.pressed} style={[styles.boxBody, divided && styles.boxDivided]}>
-          {children}
-        </Reveal>
+        <View style={[styles.boxBody, divided && styles.boxDivided]}>{children}</View>
       ) : null}
     </View>
   );
@@ -345,15 +343,8 @@ export const StatusPill = memo(function StatusPill({
 });
 
 /** The space before details under a tool line: the desktop `ml-5 mt-1 space-y-2`. */
-export function LineDetails({
-  animate,
-  children,
-}: PropsWithChildren<{ animate: boolean }>): ReactElement {
-  return (
-    <Reveal animate={animate} style={styles.lineDetails}>
-      {children}
-    </Reveal>
-  );
+export function LineDetails({ children }: PropsWithChildren): ReactElement {
+  return <View style={styles.lineDetails}>{children}</View>;
 }
 
 /** The inset of tool details: the desktop `px-1` of the tool container and the `ml-5` of the details. */

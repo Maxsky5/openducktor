@@ -139,8 +139,11 @@ const composeToolPartSessionUpdate = ({
   if (resolvedOutput) resolvedPart.output = resolvedOutput;
   if (resolvedError) resolvedPart.error = resolvedError;
   // An input or output that the event lacks stays from a compact history row, still cut.
-  if (existingToolMeta?.detailsOmitted && (input === undefined || output === undefined))
-    resolvedPart.detailsOmitted = true;
+  const omitted = existingToolMeta?.detailsOmitted;
+  const stillOmitted: NonNullable<ToolPart["detailsOmitted"]> = {};
+  if (omitted?.input && input === undefined) stillOmitted.input = true;
+  if (omitted?.output && output === undefined) stillOmitted.output = true;
+  if (stillOmitted.input || stillOmitted.output) resolvedPart.detailsOmitted = stillOmitted;
   const timingMeta = composeToolTimingMeta(
     existingToolMeta,
     observedEventTimestampMs,

@@ -25,7 +25,7 @@ const WHOLE_OUTPUT_TOOLS = new Set(
 );
 
 /**
- * Cuts the long strings of finished tool parts and marks each cut part with `detailsOmitted`. A
+ * Cuts the long strings of finished tool parts and marks the cut details in `detailsOmitted`. A
  * remote client loads the full part with `agent_runtime_load_session_tool_part` when the user opens
  * its details. Running parts stay whole, because live events still update them.
  */
@@ -50,6 +50,12 @@ const compact = (part: AgentToolPart): AgentToolPart => {
     cut = true;
     return text.slice(0, TOOL_DETAIL_PREVIEW_LENGTH);
   };
+  /** Runs `read` and says whether it cut a string. */
+  const cuts = (read: () => void): boolean => {
+    cut = false;
+    read();
+    return cut;
+  };
   const shortenJson = (value: JSONType): JSONType => {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The tool part schema validated this JSON value.
     if (typeof value === "string") return shorten(value);
@@ -66,14 +72,20 @@ const compact = (part: AgentToolPart): AgentToolPart => {
     return { ...content, file };
   };
   const result: AgentToolPart = { ...part };
-  if (part.input) result.input = shortenData(part.input);
-  if (part.metadata) result.metadata = shortenData(part.metadata);
-  if (!WHOLE_OUTPUT_TOOLS.has(part.tool.trim())) {
+  const inputCut = cuts(() => {
+    if (part.input) result.input = shortenData(part.input);
+  });
+  const outputCut = cuts(() => {
+    if (part.metadata) result.metadata = shortenData(part.metadata);
+    if (WHOLE_OUTPUT_TOOLS.has(part.tool.trim())) return;
     if (part.output !== undefined) result.output = shorten(part.output);
     if (part.resultContent) result.resultContent = part.resultContent.map(shortenContent);
-  }
-  if (!cut) return part;
-  result.detailsOmitted = true;
+  });
+  if (!inputCut && !outputCut) return part;
+  const omitted: NonNullable<AgentToolPart["detailsOmitted"]> = {};
+  if (inputCut) omitted.input = true;
+  if (outputCut) omitted.output = true;
+  result.detailsOmitted = omitted;
   return result;
 };
 

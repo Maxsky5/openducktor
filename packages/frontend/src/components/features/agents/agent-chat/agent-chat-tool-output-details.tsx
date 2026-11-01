@@ -20,7 +20,7 @@ export const ToolOutputDetails = ({
 }): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
   let body: ReactNode = null;
-  if (!meta.detailsOmitted) body = renderOutput(meta);
+  if (!meta.detailsOmitted?.output) body = renderOutput(meta);
   else if (isOpen) body = <FullToolPartDetails meta={meta}>{renderOutput}</FullToolPartDetails>;
   return (
     <details className={className} onToggle={(event) => setIsOpen(event.currentTarget.open)}>

@@ -82,15 +82,15 @@ function FormattedText({ read, color }: { read: () => string; color: string }): 
  * The desktop Input, Output, and Error boxes of a Tool Call. Each box opens on its own, and its
  * text builds only when it opens. The Error box opens at first when `errorOpen` is true.
  */
-export const ToolDetails = memo(function ToolDetails({
-  meta,
-  resetKey,
-  hasInput,
-  hasOutput,
-  hasError,
-  colors,
-  errorOpen = false,
-}: {
+export const ToolDetails = memo(function ToolDetails(props: ToolDetailsProps): ReactElement {
+  return (
+    <WithFullToolPart meta={props.meta}>
+      {(shown) => <ToolDetailsBody {...props} meta={shown} />}
+    </WithFullToolPart>
+  );
+});
+
+type ToolDetailsProps = {
   meta: ToolMeta;
   resetKey: string;
   hasInput: boolean;
@@ -98,7 +98,17 @@ export const ToolDetails = memo(function ToolDetails({
   hasError: boolean;
   colors: ToolDetailsColors;
   errorOpen?: boolean;
-}): ReactElement {
+};
+
+function ToolDetailsBody({
+  meta,
+  resetKey,
+  hasInput,
+  hasOutput,
+  hasError,
+  colors,
+  errorOpen = false,
+}: ToolDetailsProps): ReactElement {
   const output = useMemo(
     () => formatOnce(() => formatRawJsonLikeText(meta.output ?? "")),
     [meta.output],
@@ -107,6 +117,7 @@ export const ToolDetails = memo(function ToolDetails({
     () => formatOnce(() => formatRawJsonLikeText(meta.error ?? "")),
     [meta.error],
   );
+  const outputCut = meta.detailsOmitted?.output === true;
   return (
     <>
       {hasInput && meta.input ? (
@@ -118,18 +129,10 @@ export const ToolDetails = memo(function ToolDetails({
           resetKey={`${resetKey}:output`}
           frameStyle={colors.frame}
           textColor={colors.text}
-          copyText={meta.resultContent ? undefined : output}
+          copyText={outputCut || meta.resultContent ? undefined : output}
         >
-          {meta.detailsOmitted ? (
-            <FullDetails meta={meta} what="output" color={colors.text}>
-              {(full) => (
-                <ToolOutput
-                  content={full.resultContent}
-                  output={() => formatRawJsonLikeText(full.output ?? "")}
-                  color={colors.text}
-                />
-              )}
-            </FullDetails>
+          {outputCut ? (
+            <ToolPartLoader meta={meta} what="output" color={colors.text} />
           ) : (
             <ToolOutput content={meta.resultContent} output={output} color={colors.text} />
           )}
@@ -149,7 +152,7 @@ export const ToolDetails = memo(function ToolDetails({
       ) : null}
     </>
   );
-});
+}
 
 function ToolInput({
   meta,
@@ -166,23 +169,17 @@ function ToolInput({
     () => formatOnce(() => (meta.input ? formatToolInput(meta.input, workingDirectory) : "")),
     [meta.input, workingDirectory],
   );
+  const inputCut = meta.detailsOmitted?.input === true;
   return (
     <DetailsBox
       label="Input"
       resetKey={`${resetKey}:input`}
       frameStyle={colors.frame}
       textColor={colors.text}
-      copyText={text}
+      copyText={inputCut ? undefined : text}
     >
-      {meta.detailsOmitted ? (
-        <FullDetails meta={meta} what="input" color={colors.text}>
-          {(full) => (
-            <FormattedText
-              read={() => (full.input ? formatToolInput(full.input, workingDirectory) : "")}
-              color={colors.text}
-            />
-          )}
-        </FullDetails>
+      {inputCut ? (
+        <ToolPartLoader meta={meta} what="input" color={colors.text} />
       ) : (
         <FormattedText read={text} color={colors.text} />
       )}
@@ -190,38 +187,57 @@ function ToolInput({
   );
 }
 
-type FullDetailsProps = {
-  meta: ToolMeta;
-  what: "input" | "output";
-  color: string;
-  children: (full: ToolMeta) => ReactElement;
-};
-
 /**
- * The body of an open box of a call whose long details compact history cut. It reads the full
- * call from the host, shows a loader until then, and then shows `children` with the full call.
+ * Renders `children` with the call. When compact history cut the call, it renders the cut call
+ * until a box of the call reads the full call, and then the full call.
  */
-export function FullDetails(props: FullDetailsProps): ReactElement {
+export function WithFullToolPart({
+  meta,
+  children,
+}: {
+  meta: ToolMeta;
+  children: (shown: ToolMeta) => ReactElement;
+}): ReactElement {
   const { sessionRef, parentSession } = useTranscriptRows();
   const sessionScope = parentSession.sessionScope ?? null;
   const session = useMemo(() => ({ ...sessionRef, sessionScope }), [sessionRef, sessionScope]);
+  if (!meta.detailsOmitted) return children(meta);
   return (
     <ToolPartSessionContext value={session}>
-      <FullDetailsBody {...props} />
+      <FullToolPart meta={meta}>{children}</FullToolPart>
     </ToolPartSessionContext>
   );
 }
 
-function FullDetailsBody({ meta, what, color, children }: FullDetailsProps): ReactElement {
-  const { meta: full, error, retry } = useToolPartDetails(meta, true);
-  const loaded = !full.detailsOmitted;
+function FullToolPart({
+  meta,
+  children,
+}: {
+  meta: ToolMeta;
+  children: (shown: ToolMeta) => ReactElement;
+}): ReactElement {
+  const { meta: full } = useToolPartDetails(meta, false);
+  const read = !full.detailsOmitted;
   // The full text is taller than the loader. A FlashList recycling state change measures the row
   // again in the same frame, and resets when the list reuses the view for another call.
-  const [shown, setShown] = useRecyclingState(loaded, [meta.partId, meta.callId]);
+  const [shown, setShown] = useRecyclingState(read, [meta.partId, meta.callId]);
   useLayoutEffect(() => {
-    if (loaded && !shown) setShown(true);
-  }, [loaded, setShown, shown]);
-  if (shown) return children(full);
+    if (read && !shown) setShown(true);
+  }, [read, setShown, shown]);
+  return children(shown ? full : meta);
+}
+
+/** The body of an open box whose text compact history cut: it reads the full call. */
+export function ToolPartLoader({
+  meta,
+  what,
+  color,
+}: {
+  meta: ToolMeta;
+  what: "input" | "output";
+  color: string;
+}): ReactElement {
+  const { error, retry } = useToolPartDetails(meta, true);
   if (error !== null)
     return (
       <View style={styles.file}>

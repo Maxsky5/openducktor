@@ -391,7 +391,7 @@ describe("agent-orchestrator session transcript events", () => {
               status: "completed",
               input: { command: "cut" },
               output: "cut",
-              detailsOmitted: true,
+              detailsOmitted: { input: true, output: true },
             },
           },
         ],
@@ -432,7 +432,8 @@ describe("agent-orchestrator session transcript events", () => {
       getSessionMessages(sessionsRef).find((message) => message.meta?.kind === "tool")?.meta;
 
     sendToolPart({ output: "full output" }, 0);
-    expect(toolMeta()).toMatchObject({ input: { command: "cut" }, detailsOmitted: true });
+    expect(toolMeta()).toMatchObject({ input: { command: "cut" } });
+    expect(toolMeta()).toHaveProperty("detailsOmitted", { input: true });
     sendToolPart({ input: { command: "full command" }, output: "full output" }, 1);
     expect(toolMeta()).toMatchObject({ input: { command: "full command" }, output: "full output" });
     expect(toolMeta()).not.toHaveProperty("detailsOmitted");

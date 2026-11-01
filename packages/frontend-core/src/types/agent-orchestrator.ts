@@ -7,6 +7,7 @@ import type {
   AgentSessionWorkflowScope,
   AgentSessionUsageLimit,
   AgentToolData,
+  AgentToolPart,
   FileContent,
   FileDiff,
   RuntimeKind,
@@ -53,8 +54,8 @@ export type AgentChatMessageMeta =
       metadata?: AgentToolData;
       startedAtMs?: number;
       endedAtMs?: number;
-      /** The host cut long details. `useToolPartDetails` reads the full part. */
-      detailsOmitted?: true;
+      /** The details that the host cut. `useToolPartDetails` reads the full part. */
+      detailsOmitted?: AgentToolPart["detailsOmitted"];
       observedStartedAtMs?: number;
       observedEndedAtMs?: number;
       inputReadyAtMs?: number;

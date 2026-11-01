@@ -245,7 +245,7 @@ describe("session history tool details", () => {
       }),
     );
     expect(compact?.parts).toEqual([
-      { ...part, output: output.slice(0, 1024), detailsOmitted: true },
+      { ...part, output: output.slice(0, 1024), detailsOmitted: { output: true } },
     ]);
     expect(reads).toEqual([ref, ref]);
   });

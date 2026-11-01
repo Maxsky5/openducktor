@@ -24,7 +24,7 @@ const cutCall: ToolMeta = {
   status: "completed",
   input: { command: "cat log" },
   output: "first characters",
-  detailsOmitted: true,
+  detailsOmitted: { output: true },
 };
 
 const fullCall: AgentToolPart = {
