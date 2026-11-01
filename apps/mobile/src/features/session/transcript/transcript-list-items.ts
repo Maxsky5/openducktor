@@ -1,5 +1,4 @@
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
-import { isAtTranscriptBottom } from "./transcript-follow";
 import type { MessagePartItem } from "./transcript-message-parts";
 
 /**
@@ -71,9 +70,13 @@ export const transcriptListItems = (
       add(row, rowIndex);
       return;
     }
-    const ordered = kind === "latest" ? parts.toReversed() : parts;
-    for (const part of ordered) add(part, rowIndex);
-    topItemOfRow[rowIndex] = kind === "latest" ? items.length - 1 : items.length - parts.length;
+    if (kind === "latest") {
+      for (let index = parts.length - 1; index >= 0; index -= 1) add(parts[index]!, rowIndex);
+      topItemOfRow[rowIndex] = items.length - 1;
+    } else {
+      for (const part of parts) add(part, rowIndex);
+      topItemOfRow[rowIndex] = items.length - parts.length;
+    }
   };
   if (kind === "latest") {
     add(BOTTOM_EDGE, lastRow);
@@ -100,30 +103,4 @@ export const topRowIndex = (
   // The inverted list shows its highest index at the top of the screen.
   const top = kind === "latest" ? Math.max(...visibleListIndices) : Math.min(...visibleListIndices);
   return list.rowOfItem[top] ?? null;
-};
-
-/** Where an item of a list is, and where the reader is, in points along the list. */
-export type ItemPlace = {
-  /** The start of the item: its bottom edge in the inverted list. */
-  itemStart: number;
-  offset: number;
-  viewportHeight: number;
-};
-
-/**
- * The index of the item that a list keeps in place while the item at `index` changes size, or
- * null for the default of the list. The inverted `latest` list keeps the bottom edge of an item in
- * place, so an item that grows moves its top up. At the latest message, the transcript keeps its
- * bottom in view, as the pinned desktop transcript does. Elsewhere, the list keeps the item above
- * in place: the item keeps its top, and the items under it move down. An item above the screen
- * keeps the default, so the items in view do not move. The `first` list grows down by itself.
- */
-export const itemKeptInPlace = (
-  kind: TranscriptListKind,
-  index: number,
-  itemCount: number,
-  { itemStart, offset, viewportHeight }: ItemPlace,
-): number | null => {
-  if (kind !== "latest" || isAtTranscriptBottom(offset) || index + 1 >= itemCount) return null;
-  return itemStart <= offset + viewportHeight ? index + 1 : null;
 };

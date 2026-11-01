@@ -33,17 +33,14 @@ export type TranscriptRowProps = { item: AgentChatTranscriptRow | MessagePartIte
  * unchanged row, so a streamed change renders only the row that changed. The row reads its
  * streaming state and its Subagent pending input from the row state store, so a change of either
  * renders only the rows that it changes. A part that opens or closes asks the list to measure the
- * row again and to keep it in place, in the same frame.
+ * row again in the same frame.
  */
 export const TranscriptRow = memo(function TranscriptRow({
   item,
 }: TranscriptRowProps): ReactElement {
-  const { rowState, parentSession, beforeRowResize } = useTranscriptRows();
+  const { rowState, parentSession } = useTranscriptRows();
   const list = useFlashListContext();
-  const layoutRow = useCallback(() => {
-    beforeRowResize(item.key);
-    list?.layout();
-  }, [beforeRowResize, item.key, list]);
+  const layoutRow = useCallback(() => list?.layout(), [list]);
   const message = item.kind === "message" ? item.message : null;
   const messageId = item.kind === "message_part" ? item.messageId : message?.id;
   const isStreaming = useMessageStreaming(rowState, messageId ?? "");

@@ -13,8 +13,7 @@ Without this module, the rows show one frame at the wrong place.
 ## API
 
 `index.ts` exports `redrawOnScroll(viewTag)`.
-Call it with the view tag of a native scroll view.
-A second call for the same view changes nothing, so a list can call it on each layout.
+Call it once with the view tag of a native scroll view.
 Fabric reports the layout of a view before it mounts the view, so a view that is not mounted yet gets the redraw after the next mount.
 
 ## Platforms

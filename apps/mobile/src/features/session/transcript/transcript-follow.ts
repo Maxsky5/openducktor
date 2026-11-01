@@ -7,9 +7,8 @@
 const TOP_THRESHOLD_FRACTION = 0.2;
 
 /**
- * The height of the space under the latest message, the first item of the inverted list. While
- * it is in view, the list keeps it in place, so new rows and a growing reply push the rows above
- * up and the latest message stays in view. So this space is the bottom of the transcript.
+ * The height of the space under the latest message. While it is in view, the reader is at the
+ * bottom of the transcript.
  */
 export const BOTTOM_EDGE_HEIGHT = 16;
 

@@ -30,7 +30,6 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { FileEditView } from "./file-edit-view";
-import { useRowLayout } from "./disclosure";
 import { DetailsBox, LINE_DETAILS_INSET, PreText } from "./row-parts";
 
 /**
@@ -219,16 +218,12 @@ function FullToolPart({
 }): ReactElement {
   const { meta: full } = useToolPartDetails(meta, false);
   const read = !full.detailsOmitted;
-  const layoutRow = useRowLayout();
-  // The full text is taller than the loader, so the row keeps its top in place. A FlashList
-  // recycling state change measures the row again in the same frame, and resets when the list
-  // reuses the view for another call.
+  // The full text is taller than the loader. A FlashList recycling state change measures the row
+  // again in the same frame, and resets when the list reuses the view for another call.
   const [shown, setShown] = useRecyclingState(read, [meta.partId, meta.callId]);
   useLayoutEffect(() => {
-    if (!read || shown) return;
-    layoutRow?.();
-    setShown(true);
-  }, [layoutRow, read, setShown, shown]);
+    if (read && !shown) setShown(true);
+  }, [read, setShown, shown]);
   return children(shown ? full : meta);
 }
 

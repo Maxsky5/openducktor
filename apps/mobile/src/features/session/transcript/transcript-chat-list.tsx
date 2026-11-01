@@ -33,7 +33,6 @@ import { redrawOnScroll } from "../../../../modules/openducktor-scroll";
 import { BOTTOM_EDGE_HEIGHT } from "./transcript-follow";
 import { messageParts } from "./transcript-message-parts";
 import {
-  itemKeptInPlace,
   topRowIndex,
   type TranscriptListItem,
   type TranscriptListItems,
@@ -135,30 +134,15 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     visibleRows.setVisible(shown ? rowKeysNearViewport(items, viewableIndices.current) : []);
   }, [items, shown, visibleRows]);
 
-  // A row that changes size keeps its top in place when `itemKeptInPlace` says so.
-  const beforeRowResize = useCallback(
-    (key: string) => {
-      const flashList = listRef.current;
-      const shownItems = itemsRef.current?.items;
-      if (flashList === null || shownItems === undefined) return;
-      const index = shownItems.findIndex((item) => item.key === key);
-      const layout = index < 0 ? undefined : flashList.getLayout(index);
-      if (layout === undefined) return;
-      const kept = itemKeptInPlace(kind, index, shownItems.length, {
-        itemStart: layout.y,
-        offset: flashList.getAbsoluteLastScrollOffset(),
-        viewportHeight: flashList.getWindowSize().height,
-      });
-      if (kept !== null) flashList.keepItemInPlace(kept);
-    },
-    [itemsRef, kind, listRef],
-  );
   // On Android, the scroll view draws each scroll in the frame of the layout change that caused
-  // it, so a row that keeps its place does not move for one frame.
+  // it. One call per list is enough.
+  const redrawsOnScroll = useRef(false);
   const onLayout = useCallback(() => {
-    if (Platform.OS !== "android") return;
+    if (Platform.OS !== "android" || redrawsOnScroll.current) return;
     const viewTag = findNodeHandle(listRef.current?.getNativeScrollRef() ?? null);
-    if (viewTag !== null && viewTag !== undefined) void redrawOnScroll(viewTag);
+    if (viewTag === null || viewTag === undefined) return;
+    redrawsOnScroll.current = true;
+    void redrawOnScroll(viewTag);
   }, [listRef]);
 
   const context = useTranscriptRowsContext({
@@ -167,7 +151,6 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     presentToolCall,
     onOpenSubagent,
     openFullView,
-    beforeRowResize,
   });
   // Each row type has its own views, so a reused view renders a row of the same kind.
   const getItemType = useCallback(
@@ -176,22 +159,15 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     [presentToolCall],
   );
 
-  // The offset of the inverted list is the distance from the latest message.
-  const placeOf = useCallback(
-    (offset: number, contentHeight: number, viewportHeight: number): ListPlace => {
-      const beyond = contentHeight - offset - viewportHeight;
-      return inverted
-        ? { fromBottom: offset, fromTop: beyond, viewportHeight }
-        : { fromTop: offset, fromBottom: beyond, viewportHeight };
-    },
-    [inverted],
-  );
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      onPlace(placeOf(contentOffset.y, contentSize.height, layoutMeasurement.height), true);
+      onPlace(
+        placeOf(inverted, contentOffset.y, contentSize.height, layoutMeasurement.height),
+        true,
+      );
     },
-    [onPlace, placeOf],
+    [inverted, onPlace],
   );
   // A new list has no scroll event, so its content size places the reader.
   const contentHeight = useRef(0);
@@ -201,11 +177,11 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       const list = listRef.current;
       if (!list) return;
       onPlace(
-        placeOf(list.getAbsoluteLastScrollOffset(), height, list.getWindowSize().height),
+        placeOf(inverted, list.getAbsoluteLastScrollOffset(), height, list.getWindowSize().height),
         false,
       );
     },
-    [listRef, onPlace, placeOf],
+    [inverted, listRef, onPlace],
   );
   const shownRef = useRef(shown);
   const onRestShown = useCallback(() => {
@@ -241,9 +217,9 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       if (offset !== 0) list.scrollToOffset({ offset: 0, animated: false });
       return;
     }
-    onPlace(placeOf(offset, contentHeight.current, list.getWindowSize().height), true);
+    onPlace(placeOf(inverted, offset, contentHeight.current, list.getWindowSize().height), true);
     reportTopRow();
-  }, [listRef, onPlace, placeOf, reportTopRow, shown]);
+  }, [inverted, listRef, onPlace, reportTopRow, shown]);
 
   return (
     <View
@@ -288,6 +264,21 @@ const styles = StyleSheet.create({
   bottomSpace: { height: BOTTOM_EDGE_HEIGHT },
   topSpace: { height: 16 },
 });
+/**
+ * The place of the reader from the scroll offset of a list. The offset of the inverted list is
+ * the distance from the latest message.
+ */
+const placeOf = (
+  inverted: boolean,
+  offset: number,
+  contentHeight: number,
+  viewportHeight: number,
+): ListPlace => {
+  const beyond = contentHeight - offset - viewportHeight;
+  return inverted
+    ? { fromBottom: offset, fromTop: beyond, viewportHeight }
+    : { fromTop: offset, fromBottom: beyond, viewportHeight };
+};
 const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
 /**
  * The distance in points past each edge of the screen that the list renders. Transcript rows vary

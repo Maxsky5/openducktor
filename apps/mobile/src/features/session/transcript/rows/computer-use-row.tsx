@@ -17,7 +17,7 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useRowVisible } from "../transcript-visibility";
-import { useDisclosure, useRowLayout } from "./disclosure";
+import { useDisclosure } from "./disclosure";
 import { DisclosureMarker, PreText, ToolTiming } from "./row-parts";
 import { ToolPartLoader, WithFullToolPart } from "./tool-details";
 
@@ -44,11 +44,10 @@ export const ComputerUseRow = memo(function ComputerUseRow({
   const { actionTitle, isFailed, hasDetails, screenshots } = presentation;
   const disclosure = useDisclosure(false, rowKey);
   const [screenshotsOpen, setScreenshotsOpen] = useRecyclingState(false, [rowKey]);
-  const layoutRow = useRowLayout();
-  const toggleScreenshots = useCallback(() => {
-    layoutRow?.();
-    setScreenshotsOpen((open) => !open);
-  }, [layoutRow, setScreenshotsOpen]);
+  const toggleScreenshots = useCallback(
+    () => setScreenshotsOpen((open) => !open),
+    [setScreenshotsOpen],
+  );
   const timing = readToolTiming(meta, messageTimestamp);
   const screenshotLabel = computerUseScreenshotLabel(screenshots.length);
   styles.useVariants({ failed: isFailed });

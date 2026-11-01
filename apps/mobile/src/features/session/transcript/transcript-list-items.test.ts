@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type { MessagePartItem } from "./transcript-message-parts";
 import {
-  itemKeptInPlace,
   type MessagePartsOf,
   topRowIndex,
   type TranscriptListKind,
@@ -98,32 +97,5 @@ describe("transcript list items", () => {
 
   test("finds no row in an empty transcript", () => {
     expect(topRowIndex(first, transcriptListItems(first, [], whole), [0, 1])).toBeNull();
-  });
-});
-
-describe("the item kept in place while an item changes size", () => {
-  // Five items, a screen of 600 points, and a reader 1000 points from the latest message.
-  const away = { offset: 1000, viewportHeight: 600 };
-
-  test("keeps the item above in the latest list, so the item keeps its top", () => {
-    expect(itemKeptInPlace(latest, 2, 5, { ...away, itemStart: 1200 })).toBe(3);
-  });
-
-  test("keeps the item above an item under the screen, as the list does by default", () => {
-    expect(itemKeptInPlace(latest, 2, 5, { ...away, itemStart: 400 })).toBe(3);
-  });
-
-  test("keeps the default for an item above the screen, so the items in view do not move", () => {
-    expect(itemKeptInPlace(latest, 2, 5, { ...away, itemStart: 1601 })).toBeNull();
-  });
-
-  test("keeps the bottom in view at the latest message", () => {
-    const atBottom = { itemStart: 100, offset: 0, viewportHeight: 600 };
-    expect(itemKeptInPlace(latest, 2, 5, atBottom)).toBeNull();
-  });
-
-  test("keeps the default for the last item and in the first list", () => {
-    expect(itemKeptInPlace(latest, 4, 5, { ...away, itemStart: 1200 })).toBeNull();
-    expect(itemKeptInPlace(first, 2, 5, { ...away, itemStart: 1200 })).toBeNull();
   });
 });

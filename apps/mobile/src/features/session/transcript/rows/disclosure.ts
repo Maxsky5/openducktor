@@ -44,28 +44,23 @@ const DisclosureStoreContext = createContext<DisclosureStore | null>(null);
 export const DisclosureStoreProvider = DisclosureStoreContext;
 
 /**
- * Keeps the top of the list row in place and measures the row again. A row of the transcript list
- * gives it, so a part that opens, closes, or changes size gets its new place in the same frame.
- * Call it just before the change.
+ * Measures the list row again. A row of the transcript list gives it, so a part that opens or
+ * closes gets its new place in the same frame.
  */
 const RowLayoutContext = createContext<(() => void) | null>(null);
 
 export const RowLayoutProvider = RowLayoutContext;
 
-/** The row layout function of the transcript list row, or null outside the list. */
-export const useRowLayout = (): (() => void) | null => use(RowLayoutContext);
-
 /**
  * The open state of a part that the reader opens with a press, as a desktop `<details>`. The part
  * follows `defaultOpen` until the reader presses it, so a part that gets content later, such as a
  * file edit whose diff arrives when the call ends, opens as it does after a reload. Each `key`
- * has its own choice. In the transcript list, a press keeps the top of the row in place and
- * measures the row again in the same frame.
+ * has its own choice. In the transcript list, a press measures the row again in the same frame.
  */
 export const useDisclosure = (defaultOpen: boolean, key: string): Disclosure => {
   const store = use(DisclosureStoreContext);
   if (!store) throw new Error("A disclosure needs the transcript disclosure store.");
-  const layoutRow = useRowLayout();
+  const layoutRow = use(RowLayoutContext);
   const subscribe = useCallback(
     (listener: () => void) => store.subscribe(key, listener),
     [key, store],
@@ -74,8 +69,8 @@ export const useDisclosure = (defaultOpen: boolean, key: string): Disclosure => 
   const choice = useSyncExternalStore(subscribe, read, read);
   const open = choice ?? defaultOpen;
   const toggle = useCallback(() => {
-    layoutRow?.();
     store.choose(key, !open);
+    layoutRow?.();
   }, [key, layoutRow, open, store]);
   return useMemo(() => ({ open, pressed: choice !== undefined, toggle }), [choice, open, toggle]);
 };

@@ -16,11 +16,8 @@ class OpenDucktorScrollModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OpenDucktorScroll")
 
-    // Fabric mounts in a frame callback, and `View.scrollTo` asks for the redraw of the scroll view
-    // on the next frame. A scroll that keeps content in place after a layout change of the same
-    // mount, such as a `maintainVisibleContentPosition` correction, then shows one frame after the
-    // layout change. This scroll view redraws in the frame of each scroll. Fabric reports the
-    // layout of a view before it mounts the view, so a view that is not mounted yet gets the
+    // `View.scrollTo` redraws on the next frame, so a scroll that keeps content in place after a
+    // layout change shows one frame late. See the README. A view that is not mounted yet gets the
     // listener after the next mount.
     AsyncFunction("redrawOnScroll") { viewTag: Int ->
       if (redrawOnScroll(viewTag)) return@AsyncFunction
