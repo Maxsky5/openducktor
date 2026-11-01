@@ -93,8 +93,11 @@ jobs:
     env:
       MARKETING_BUILD_TARGET: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
       MARKETING_SITE_ORIGIN: ${{ vars.MARKETING_SITE_ORIGIN }}
+    outputs:
+      commit: ${{ steps.checkout.outputs.commit }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # A release event checks out its tag. The site of a release is the site of main.
           ref: ${{ github.event_name == 'release' && 'main' || '' }}
@@ -130,9 +133,10 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
+      # The tests come from the commit of the built site, also when main moves after the build.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'release' && 'main' || '' }}
+          ref: ${{ needs.build.outputs.commit }}
           persist-credentials: false
       - uses: ./.github/actions/setup
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
