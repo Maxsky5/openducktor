@@ -84,18 +84,18 @@ describe("transcript list items", () => {
   test("finds the row at the top of the screen in each list", () => {
     // The latest list shows its highest index at the top.
     const latestList = transcriptListItems(latest, rows, whole);
-    expect(topRowIndex(latest, latestList, [0, 1, 2])).toBe(1);
-    expect(topRowIndex(latest, latestList, [3, 4])).toBe(0);
+    expect(topRowIndex(latestList, [0, 1, 2])).toBe(1);
+    expect(topRowIndex(latestList, [3, 4])).toBe(0);
     const firstList = transcriptListItems(first, rows, whole);
-    expect(topRowIndex(first, firstList, [2, 3])).toBe(1);
-    expect(topRowIndex(first, firstList, [0, 1])).toBe(0);
-    expect(topRowIndex(first, firstList, [])).toBeNull();
+    expect(topRowIndex(firstList, [2, 3])).toBe(1);
+    expect(topRowIndex(firstList, [0, 1])).toBe(0);
+    expect(topRowIndex(firstList, [])).toBeNull();
     // A part of a long message stands for its message row.
-    expect(topRowIndex(latest, transcriptListItems(latest, rows, splitB), [1, 2, 3])).toBe(1);
-    expect(topRowIndex(first, transcriptListItems(first, rows, splitB), [3, 4])).toBe(1);
+    expect(topRowIndex(transcriptListItems(latest, rows, splitB), [1, 2, 3])).toBe(1);
+    expect(topRowIndex(transcriptListItems(first, rows, splitB), [3, 4])).toBe(1);
   });
 
   test("finds no row in an empty transcript", () => {
-    expect(topRowIndex(first, transcriptListItems(first, [], whole), [0, 1])).toBeNull();
+    expect(topRowIndex(transcriptListItems(first, [], whole), [0, 1])).toBeNull();
   });
 });

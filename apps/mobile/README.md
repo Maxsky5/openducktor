@@ -94,8 +94,8 @@ flowchart TD
 
 - The `latest` transcript list is an inverted FlashList. Rows that mount while the reader scrolls toward earlier messages go to the far end of the list, so they move no row in view.
 - Do not replace it with the non-inverted FlashList chat setup (`maintainVisibleContentPosition` with `startRenderingFromBottom`). In that setup, each row that mounts above the screen moves all rows and the scroll. On Android, flings then drop frames and the transcript jumps.
-- A row that changes size, such as a part that opens or loads its full text, keeps its top in place, and the rows under it move. The FlashList patch makes an inverted list keep the item above the screen in place, instead of the first visible item. At the latest message, the transcript keeps its bottom in view, as the pinned desktop transcript does.
-- `modules/openducktor-scroll` makes each Android transcript scroll view draw a scroll in the frame of the layout change that caused it. Without it, a row that keeps its place moves for one frame.
+- A row that changes size, such as a part that opens or loads its full text, keeps its top in place, and the rows under it move. While the first item of an inverted list is out of view, the FlashList patch keeps the item above the screen in place, instead of the first visible item. The list picks that item again on each scroll. While the first item is in view, the list keeps it in place, so the transcript keeps its bottom in view, as the pinned desktop transcript does.
+- [`modules/openducktor-scroll`](modules/openducktor-scroll/README.md) makes each Android transcript scroll view draw a scroll in the frame of the layout change that caused it.
 
 ### Transport rules
 
@@ -191,7 +191,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 |---|---|
 | Navigation | `expo-router` (native stack, JavaScript tabs with the app tab bar in `src/navigation/tab-bar`), `react-native-screens`. The swipe back of `src/navigation/swipe-back-detector.tsx` reads a source module and the Fabric fields of `react-native-screens`, so `package.json` pins its exact version. Test the swipe back before you change it. |
 | Styles | `react-native-unistyles` v3 with `react-native-nitro-modules`. `AppSystemBars` in `src/ui/app-system-bars.tsx` sets the system bar icons: the React Native `StatusBar` for the status bar, because it also reaches open modals, and `react-native-edge-to-edge` for the Android navigation buttons. |
-| Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. It also makes an inverted list keep the item above the screen in place while its first item is out of view. See [Transcript list](#transcript-list). Remove each part when a release has it. |
+| Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. It also changes the anchor of an inverted list. See [Transcript list](#transcript-list). Remove each part when a release has it. |
 | Motion and gestures | `react-native-reanimated` 4, `react-native-worklets`, `react-native-gesture-handler` |
 | Keyboard | `react-native-keyboard-controller`, `modules/openducktor-keyboard` |
 | Storage | `react-native-mmkv` v4. The app stores no credential. Use Expo SecureStore for a later sensitive value. |

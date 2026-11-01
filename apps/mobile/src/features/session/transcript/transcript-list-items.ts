@@ -64,19 +64,17 @@ export const transcriptListItems = (
   const addRow = (rowIndex: number): void => {
     const row = rows[rowIndex];
     if (row === undefined) return;
+    const start = items.length;
     const parts = partsOf(row);
     if (parts === null) {
-      topItemOfRow[rowIndex] = items.length;
       add(row, rowIndex);
-      return;
-    }
-    if (kind === "latest") {
+    } else if (kind === "latest") {
       for (let index = parts.length - 1; index >= 0; index -= 1) add(parts[index]!, rowIndex);
-      topItemOfRow[rowIndex] = items.length - 1;
     } else {
       for (const part of parts) add(part, rowIndex);
-      topItemOfRow[rowIndex] = items.length - parts.length;
     }
+    // The top of a row is its first part, which the inverted list adds last.
+    topItemOfRow[rowIndex] = kind === "latest" ? items.length - 1 : start;
   };
   if (kind === "latest") {
     add(BOTTOM_EDGE, lastRow);
@@ -92,15 +90,18 @@ export const transcriptListItems = (
 
 /**
  * The transcript index of the row at the top of the screen, from the list indices in view, or
- * null when no row is in view.
+ * null when no row is in view. Both lists show the rows in transcript order from the top of the
+ * screen, so it is the lowest row in view.
  */
 export const topRowIndex = (
-  kind: TranscriptListKind,
   list: TranscriptListItems,
   visibleListIndices: readonly number[],
 ): number | null => {
-  if (visibleListIndices.length === 0 || list.topItemOfRow.length === 0) return null;
-  // The inverted list shows its highest index at the top of the screen.
-  const top = kind === "latest" ? Math.max(...visibleListIndices) : Math.min(...visibleListIndices);
-  return list.rowOfItem[top] ?? null;
+  if (list.topItemOfRow.length === 0) return null;
+  let top: number | null = null;
+  for (const index of visibleListIndices) {
+    const row = list.rowOfItem[index];
+    if (row !== undefined && (top === null || row < top)) top = row;
+  }
+  return top;
 };

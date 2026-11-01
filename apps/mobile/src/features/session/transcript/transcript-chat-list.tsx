@@ -39,7 +39,7 @@ import {
   type TranscriptListKind,
   transcriptListItems,
 } from "./transcript-list-items";
-import type { ListPlace } from "./transcript-list-slots";
+import { type ListPlace, placeOf } from "./transcript-list-slots";
 import { TranscriptNotice } from "./transcript-notice";
 import { TranscriptNoticeContext } from "./transcript-notice-context";
 import { TranscriptRow } from "./transcript-row";
@@ -117,7 +117,6 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   accessibilityActions,
   onAccessibilityAction,
 }: TranscriptChatListProps): ReactElement {
-  const inverted = kind === "latest";
   const list = useMemo(
     () => transcriptListItems(kind, rows, (row) => messageParts(row, presentToolCall)),
     [kind, presentToolCall, rows],
@@ -162,12 +161,9 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      onPlace(
-        placeOf(inverted, contentOffset.y, contentSize.height, layoutMeasurement.height),
-        true,
-      );
+      onPlace(placeOf(kind, contentOffset.y, contentSize.height, layoutMeasurement.height), true);
     },
-    [inverted, onPlace],
+    [kind, onPlace],
   );
   // A new list has no scroll event, so its content size places the reader.
   const contentHeight = useRef(0);
@@ -177,11 +173,11 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       const list = listRef.current;
       if (!list) return;
       onPlace(
-        placeOf(inverted, list.getAbsoluteLastScrollOffset(), height, list.getWindowSize().height),
+        placeOf(kind, list.getAbsoluteLastScrollOffset(), height, list.getWindowSize().height),
         false,
       );
     },
-    [inverted, listRef, onPlace],
+    [kind, listRef, onPlace],
   );
   const shownRef = useRef(shown);
   const onRestShown = useCallback(() => {
@@ -189,9 +185,9 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   }, [onRest]);
   const reportTopRow = useCallback(() => {
     const shownList = itemsRef.current;
-    const top = shownList === null ? null : topRowIndex(kind, shownList, viewableIndices.current);
+    const top = shownList === null ? null : topRowIndex(shownList, viewableIndices.current);
     if (top !== null) onTopRow(top);
-  }, [itemsRef, kind, onTopRow]);
+  }, [itemsRef, onTopRow]);
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<TranscriptListItem>[] }) => {
       viewableIndices.current = viewableItems.flatMap((token) =>
@@ -217,9 +213,9 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       if (offset !== 0) list.scrollToOffset({ offset: 0, animated: false });
       return;
     }
-    onPlace(placeOf(inverted, offset, contentHeight.current, list.getWindowSize().height), true);
+    onPlace(placeOf(kind, offset, contentHeight.current, list.getWindowSize().height), true);
     reportTopRow();
-  }, [inverted, listRef, onPlace, reportTopRow, shown]);
+  }, [kind, listRef, onPlace, reportTopRow, shown]);
 
   return (
     <View
@@ -232,7 +228,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
         <FlashList
           ref={listRef}
           data={items}
-          inverted={inverted}
+          inverted={kind === "latest"}
           drawDistance={DRAW_DISTANCE}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
@@ -264,21 +260,6 @@ const styles = StyleSheet.create({
   bottomSpace: { height: BOTTOM_EDGE_HEIGHT },
   topSpace: { height: 16 },
 });
-/**
- * The place of the reader from the scroll offset of a list. The offset of the inverted list is
- * the distance from the latest message.
- */
-const placeOf = (
-  inverted: boolean,
-  offset: number,
-  contentHeight: number,
-  viewportHeight: number,
-): ListPlace => {
-  const beyond = contentHeight - offset - viewportHeight;
-  return inverted
-    ? { fromBottom: offset, fromTop: beyond, viewportHeight }
-    : { fromTop: offset, fromBottom: beyond, viewportHeight };
-};
 const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
 /**
  * The distance in points past each edge of the screen that the list renders. Transcript rows vary

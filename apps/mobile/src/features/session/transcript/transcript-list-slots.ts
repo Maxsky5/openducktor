@@ -8,6 +8,22 @@ export const LIST_START: ListPlace = { fromTop: 0, fromBottom: 0, viewportHeight
 /** A jump within this many screens scrolls the list on screen. A longer jump shows another list. */
 const NEAR_JUMP_VIEWPORTS = 2;
 
+/**
+ * The place of the reader from the scroll offset of a list. The `latest` list is inverted, so its
+ * offset is the distance from the latest message.
+ */
+export const placeOf = (
+  kind: TranscriptListKind,
+  offset: number,
+  contentHeight: number,
+  viewportHeight: number,
+): ListPlace => {
+  const beyond = contentHeight - offset - viewportHeight;
+  return kind === "latest"
+    ? { fromBottom: offset, fromTop: beyond, viewportHeight }
+    : { fromTop: offset, fromBottom: beyond, viewportHeight };
+};
+
 /** True when the reader is within the near jump distance of the start of the list. */
 export const isNearListStart = (kind: TranscriptListKind, place: ListPlace): boolean =>
   (kind === "latest" ? place.fromBottom : place.fromTop) <=

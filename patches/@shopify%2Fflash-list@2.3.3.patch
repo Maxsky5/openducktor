@@ -1,8 +1,19 @@
 diff --git a/dist/recyclerview/RecyclerView.js b/dist/recyclerview/RecyclerView.js
-index 6799c8a61bff4607633196097da35c7a6975f0b6..1c1c9cc9b8dcfedd4946abbc4c2f10f6cd1438f2 100644
+index 6799c8a61bff4607633196097da35c7a6975f0b6..9bdab1e3be0889641503619bc61b06001b65734a 100644
 --- a/dist/recyclerview/RecyclerView.js
 +++ b/dist/recyclerview/RecyclerView.js
-@@ -241,7 +241,11 @@ const RecyclerViewComponent = (props, ref) => {
+@@ -173,6 +173,10 @@ const RecyclerViewComponent = (props, ref) => {
+             if (recyclerViewManager.updateScrollOffset(scrollOffset, velocity)) {
+                 setRenderId((prev) => prev + 1);
+             }
++            // An inverted list tracks the item above the screen, so each scroll changes it.
++            if (recyclerViewManager.props.inverted) {
++                computeFirstVisibleIndexForOffsetCorrection();
++            }
+         });
+         // Update sticky headers and check bounds
+         (_a = stickyHeaderRef.current) === null || _a === void 0 ? void 0 : _a.reportScrollEvent(event.nativeEvent);
+@@ -241,7 +245,11 @@ const RecyclerViewComponent = (props, ref) => {
       */
      const validateItemSize = useCallback((index, size) => {
          var _a, _b, _c, _d;
@@ -49,10 +60,21 @@ index 08724d1f33824ef563948cff17904d7f497739d4..eede0a38ac7b6da5710ed245ba939cbd
                              setTimeout(() => {
                                  recyclerViewManager.ignoreScrollEvents = false;
 diff --git a/src/recyclerview/RecyclerView.tsx b/src/recyclerview/RecyclerView.tsx
-index 3c25e7e893004932b8a13072e01fe2a940d365d4..52bdd7bd142f5071f7cd8dafff3be822b640d4cd 100644
+index 3c25e7e893004932b8a13072e01fe2a940d365d4..b760bb549841e58130a6abf347221b50c87766ef 100644
 --- a/src/recyclerview/RecyclerView.tsx
 +++ b/src/recyclerview/RecyclerView.tsx
-@@ -374,7 +374,11 @@ const RecyclerViewComponent = <T,>(
+@@ -299,6 +299,10 @@ const RecyclerViewComponent = <T,>(
+           if (recyclerViewManager.updateScrollOffset(scrollOffset, velocity)) {
+             setRenderId((prev) => prev + 1);
+           }
++          // An inverted list tracks the item above the screen, so each scroll changes it.
++          if (recyclerViewManager.props.inverted) {
++            computeFirstVisibleIndexForOffsetCorrection();
++          }
+         }
+       );
+ 
+@@ -374,7 +378,11 @@ const RecyclerViewComponent = <T,>(
     */
    const validateItemSize = useCallback(
      (index: number, size: RVDimension) => {
