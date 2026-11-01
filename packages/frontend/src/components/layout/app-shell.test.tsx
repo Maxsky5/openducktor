@@ -642,6 +642,16 @@ describe("AppShell", () => {
     Reflect.deleteProperty(globalThis, "localStorage");
   });
 
+  test("opens New chat on the first menu click", async () => {
+    renderAppShellForTest();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
+
+    const dialog = screen.getByRole("dialog", { name: "New chat" });
+    expect(within(dialog).getByRole("textbox", { name: /^Name/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
+  });
+
   test("keeps the active repo config loaded outside Agent Studio", () => {
     const queryClients: QueryClient[] = [];
     renderAppShellForTest({

@@ -15,14 +15,10 @@ import { useNavigate } from "react-router";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useDialogPresence } from "@/components/ui/dialog";
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
+import { WorkspaceSessionCreateDialog } from "@/pages/workspace-sessions/workspace-session-create-dialog";
 import type { IssueImportProvider } from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-const WorkspaceSessionCreateDialog = lazy(() =>
-  import("@/pages/workspace-sessions/workspace-session-create-dialog").then((module) => ({
-    default: module.WorkspaceSessionCreateDialog,
-  })),
-);
 const WorkspaceSessionHistoryDialog = lazy(() =>
   import("@/pages/workspace-sessions/workspace-session-history-dialog").then((module) => ({
     default: module.WorkspaceSessionHistoryDialog,
