@@ -96,6 +96,7 @@ function RenameChatForm({
             variant="outline"
             size="lg"
             fill
+            style={styles.action}
             disabled={rename.isPending}
             onPress={() => router.back()}
           />
@@ -104,6 +105,7 @@ function RenameChatForm({
             icon="save"
             size="lg"
             fill
+            style={styles.action}
             command
             loading={rename.isPending}
             disabled={!canSave}
@@ -136,4 +138,5 @@ export function RenameChatSheet({ params }: { params: ChatSheetParams | null }):
 const styles = StyleSheet.create((theme) => ({
   body: { gap: theme.space.lg },
   actions: { flexDirection: "row", gap: theme.space.md },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

@@ -203,6 +203,16 @@ export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
         />
       </Animated.View>
       <Animated.View layout={SETTLE} style={styles.actions}>
+        {connecting ? (
+          <Button
+            label="Cancel"
+            variant="outline"
+            size="lg"
+            onPress={cancel}
+            fill
+            style={styles.action}
+          />
+        ) : null}
         <Button
           label={connecting ? "Connecting…" : "Connect to host"}
           icon="server"
@@ -211,10 +221,8 @@ export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
           disabled={!canConnect && !connecting}
           onPress={() => void connect()}
           fill
+          style={styles.action}
         />
-        {connecting ? (
-          <Button label="Cancel" variant="outline" size="lg" onPress={cancel} fill />
-        ) : null}
       </Animated.View>
     </View>
   );
@@ -251,5 +259,6 @@ const styles = StyleSheet.create((theme) => ({
   divider: { flexDirection: "row", alignItems: "center", gap: theme.space.md },
   dividerLine: { flex: 1, height: theme.hairline, backgroundColor: theme.desktop.border },
   fields: { gap: theme.space.lg },
-  actions: { gap: theme.space.sm, paddingTop: theme.space.xs },
+  actions: { flexDirection: "row", gap: theme.space.sm, paddingTop: theme.space.xs },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

@@ -178,13 +178,10 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.desktop.foreground,
   },
   message: { fontSize: 14, lineHeight: 20, color: theme.desktop.mutedForeground },
-  // Cancel on the left and the action on the right, as the form footers. Two long labels that do
-  // not fit side by side stack, each at full width.
   footer: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: theme.space.sm,
     marginTop: theme.space.lg,
   },
-  action: { flexGrow: 1 },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

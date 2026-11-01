@@ -258,6 +258,7 @@ function ArchiveChatForm({
             variant="outline"
             size="lg"
             fill
+            style={styles.action}
             disabled={archive.isPending}
             onPress={() => router.back()}
           />
@@ -267,6 +268,7 @@ function ArchiveChatForm({
             size="lg"
             icon="archive"
             fill
+            style={styles.action}
             command
             loading={archive.isPending}
             disabled={!form.canArchive}
@@ -355,4 +357,5 @@ const styles = StyleSheet.create((theme) => ({
   warning: { flexDirection: "row", gap: theme.space.sm, alignItems: "flex-start" },
   warningText: { flex: 1, color: theme.desktop.destructiveMuted },
   actions: { flexDirection: "row", gap: theme.space.md },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

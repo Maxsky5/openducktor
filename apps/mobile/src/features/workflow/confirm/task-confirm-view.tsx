@@ -1,6 +1,6 @@
 import type { TaskConfirmCopy } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
 import type { ReactElement, ReactNode } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Button } from "@/ui/button";
@@ -39,7 +39,6 @@ export function TaskConfirmFrame({
   onConfirm: () => void;
   children: ReactNode;
 }): ReactElement {
-  const { fontScale } = useWindowDimensions();
   return (
     <InPlaceSheet
       visible={visible}
@@ -52,29 +51,27 @@ export function TaskConfirmFrame({
       closeControl={false}
       footer={
         <>
-          <View style={styles.action(fontScale)}>
-            <Button
-              label="Cancel"
-              variant="outline"
-              size="lg"
-              disabled={isPending}
-              onPress={onCancel}
-              fill
-            />
-          </View>
-          <View style={styles.action(fontScale)}>
-            <Button
-              label={confirm.label}
-              size="lg"
-              variant={tone}
-              icon={icon}
-              loading={confirm.isBusy}
-              disabled={confirm.disabled}
-              command
-              onPress={onConfirm}
-              fill
-            />
-          </View>
+          <Button
+            label="Cancel"
+            variant="outline"
+            size="lg"
+            disabled={isPending}
+            onPress={onCancel}
+            fill
+            style={styles.action}
+          />
+          <Button
+            label={confirm.label}
+            size="lg"
+            variant={tone}
+            icon={icon}
+            loading={confirm.isBusy}
+            disabled={confirm.disabled}
+            command
+            onPress={onConfirm}
+            fill
+            style={styles.action}
+          />
         </>
       }
     >
@@ -160,7 +157,7 @@ export function TaskConfirmView({ copy, ...frame }: TaskConfirmViewProps): React
 }
 
 const styles = StyleSheet.create((theme) => ({
-  action: (fontScale: number) => ({ flexGrow: 1, flexShrink: 1, flexBasis: 240 * fontScale }),
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
   section: { gap: theme.space.sm, paddingBottom: theme.space.sm },
   row: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.sm },
   rowText: { flex: 1 },

@@ -190,7 +190,6 @@ const styles = StyleSheet.create((theme) => ({
   padded: { paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space.sm },
   footer: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: theme.space.sm,
     paddingHorizontal: theme.layout.screenPadding,
     paddingTop: theme.space.md,
