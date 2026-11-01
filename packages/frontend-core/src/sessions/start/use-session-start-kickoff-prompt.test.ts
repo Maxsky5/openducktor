@@ -119,8 +119,8 @@ describe("useSessionStartKickoffPrompt", () => {
       expect(harness.getLatest().isKickoffPromptLoading).toBe(false);
       expect(readConfig).toHaveBeenCalledTimes(1);
       await harness.run((state) => state.onRetryKickoffPrompt());
-      expect(harness.getLatest().kickoffPromptError).toBe("Prompt settings unavailable");
-      expect(harness.getLatest().isKickoffPromptLoading).toBe(false);
+      await harness.waitFor((state) => state.isKickoffPromptLoading);
+      expect(harness.getLatest().kickoffPromptError).toBeNull();
       await harness.run(() => retry.resolve(configFor()));
       await harness.waitFor((state) => state.kickoffPrompt === "Repo TASK-1");
       expect(harness.getLatest().kickoffPromptError).toBeNull();

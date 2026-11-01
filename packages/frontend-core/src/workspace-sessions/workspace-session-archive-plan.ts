@@ -50,15 +50,11 @@ const worktreeTaskOwners = (preview: WorkspaceSessionArchivePreviewRead) =>
 export const isWorktreeNeeded = (preview: WorkspaceSessionArchivePreviewRead): boolean =>
   worktreeSharedWith(preview).length > 0 || worktreeTaskOwners(preview).length > 0;
 
-/**
- * A worktree that other saved chats or open tasks need stays, whatever the form asks. Nothing is
- * removed while the worktree check runs.
- */
+/** A worktree stays when other saved chats or open tasks need it. */
 export const effectiveWorktreeRemoval = (
   wantsRemoval: boolean,
   preview: WorkspaceSessionArchivePreviewRead,
-  checking: boolean,
-): boolean => !checking && wantsRemoval && !isWorktreeNeeded(preview);
+): boolean => wantsRemoval && !isWorktreeNeeded(preview);
 
 /** Names the saved chats that keep the worktree, or null when no other chat needs it. */
 export const sharedWorktreeNotice = (

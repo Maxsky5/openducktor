@@ -71,7 +71,7 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
     enabled: props.open,
   });
   const isChecking = preview.isFetching;
-  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview, isChecking);
+  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview);
   const sharedNotice = sharedWorktreeNotice(preview);
   const taskNotice = taskWorktreeNotice(preview);
   const canArchive = canArchiveWorkspaceSession({

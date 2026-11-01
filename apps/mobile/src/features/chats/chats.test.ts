@@ -142,7 +142,7 @@ describe("archive consent", () => {
         isArchiving: false,
       });
     // The sheet shows its loader while the worktree check runs, so nothing archives or deletes.
-    expect(form(true, loading)).toMatchObject({ canArchive: false, destructive: false });
+    expect(form(true, loading).canArchive).toBe(false);
     expect(form(true, preview({ hasUncommittedChanges: true }))).toMatchObject({
       canArchive: true,
       notice: { kind: "delete_branch", branchName: "odt/login" },
@@ -203,22 +203,44 @@ describe("archive consent", () => {
     ).toMatchObject({ removeWorktree: false, worktreeConfirmation: undefined });
   });
 
-  test("a refresh of the ready archive preview blocks confirmation until it settles", () => {
+  test("a refresh keeps the archive choice and warnings while blocking confirmation", () => {
     const cached = preview({ hasUncommittedChanges: true });
-    const form = (isFetching: boolean) =>
+    const form = (isFetching: boolean, wantsWorktreeRemoval = true) =>
       archiveChatForm({
         record: worktreeChat,
-        wantsWorktreeRemoval: true,
+        wantsWorktreeRemoval,
         preview: { ...cached, isFetching },
         isArchiving: false,
       });
     expect(form(false).canArchive).toBe(true);
-    expect(form(true).canArchive).toBe(false);
+    expect(form(true)).toMatchObject({
+      canArchive: false,
+      removeWorktree: true,
+      destructive: true,
+      notice: { kind: "delete_branch" },
+      warnings: [{ kind: "local_changes" }],
+    });
+    expect(form(true, false)).toMatchObject({
+      canArchive: false,
+      removeWorktree: false,
+      destructive: false,
+      notice: { kind: "keep" },
+      warnings: [],
+    });
+    expect(form(false, false)).toMatchObject({ canArchive: true, removeWorktree: false });
     expect(form(false)).toMatchObject({
       canArchive: true,
       removeWorktree: true,
       warnings: [{ kind: "local_changes" }],
     });
+    expect(
+      archiveChatInput({
+        workspace,
+        record: worktreeChat,
+        wantsWorktreeRemoval: true,
+        preview: { ...cached, isFetching: true },
+      }),
+    ).toMatchObject({ removeWorktree: false, worktreeConfirmation: undefined });
   });
 
   test("a chat that is archiving cannot archive again", () => {

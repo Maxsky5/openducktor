@@ -30,72 +30,93 @@ const record = (): WorkspaceSession => ({
   archivedAt: null,
 });
 
-test("archive keeps the ready form and focus during a preview refresh while blocking confirmation", async () => {
-  const refresh = createDeferred<WorkspaceSessionArchivePreview>();
-  const preview: WorkspaceSessionArchivePreview = {
-    branchName: "feature/chat",
-    worktreeExists: true,
-    hasUncommittedChanges: false,
-    sharedWith: [],
-    taskOwners: [],
-  };
-  let reads = 0;
-  const requests: boolean[] = [];
-  const connection = createTestClientConnection({
-    client: {
-      workspaceSessionArchivePreview: () =>
-        ++reads === 1 ? Promise.resolve(preview) : refresh.promise,
-    },
-  });
-  const view = render(
-    <QueryProvider connection={connection}>
-      <WorkspaceSessionArchiveDialog
-        open
-        workspaceId="test"
-        record={record()}
-        isArchiving={false}
-        error={null}
-        onArchive={(remove) => requests.push(remove)}
-        onClose={() => {}}
-      />
-    </QueryProvider>,
-  );
-  try {
-    const toggle = await view.findByRole("switch", { name: "Remove worktree and branch" });
-    fireEvent.click(toggle);
-    toggle.focus();
-    await act(async () => {
-      void connection.queryClient.invalidateQueries({
-        queryKey: workspaceSessionArchivePreviewQueryOptions("test", "chat").queryKey,
-      });
+test.each([false, true])(
+  "archive keeps its choice and focus during refresh, shared=%s",
+  async (shared) => {
+    const refresh = createDeferred<WorkspaceSessionArchivePreview>();
+    const preview: WorkspaceSessionArchivePreview = {
+      branchName: "feature/chat",
+      worktreeExists: true,
+      hasUncommittedChanges: true,
+      sharedWith: [],
+      taskOwners: [],
+    };
+    let reads = 0;
+    const requests: boolean[] = [];
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionArchivePreview: () =>
+          ++reads === 1 ? Promise.resolve(preview) : refresh.promise,
+      },
     });
-    await waitFor(() => expect(reads).toBe(2));
-    expect(view.queryByRole("switch") === toggle).toBe(true);
-    expect(document.activeElement === toggle).toBe(true);
-    expect(view.getByRole("status").textContent).toBe("Loading worktree details…");
-    expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true");
-    expect(view.getByText("Worktree chat")).toBeDefined();
-    expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
-    const submit = view.getByRole("button", { name: "Archive chat" });
-    expect(submit.hasAttribute("disabled")).toBe(true);
-    fireEvent.submit(submit.closest("form")!);
-    expect(requests).toEqual([]);
-    await act(async () =>
-      refresh.resolve({
-        ...preview,
-        sharedWith: [{ workspaceId: "test", sessionId: "child", title: "Child chat" }],
-      }),
+    const view = render(
+      <QueryProvider connection={connection}>
+        <WorkspaceSessionArchiveDialog
+          open
+          workspaceId="test"
+          record={record()}
+          isArchiving={false}
+          error={null}
+          onArchive={(remove) => requests.push(remove)}
+          onClose={() => {}}
+        />
+      </QueryProvider>,
     );
-    await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false));
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(view.getByText(/saved chats need it for files or history: Child chat/)).toBeDefined();
-    fireEvent.click(submit);
-    expect(requests).toEqual([false]);
-  } finally {
-    view.unmount();
-    connection.queryClient.clear();
-  }
-});
+    try {
+      const toggle = await view.findByRole("switch", { name: "Remove worktree and branch" });
+      toggle.focus();
+      await act(async () => {
+        void connection.queryClient.invalidateQueries({
+          queryKey: workspaceSessionArchivePreviewQueryOptions("test", "chat").queryKey,
+        });
+      });
+      await waitFor(() => expect(reads).toBe(2));
+      expect(view.queryByRole("switch") === toggle).toBe(true);
+      expect(document.activeElement === toggle).toBe(true);
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      expect(view.getByText(/This worktree has local changes/)).toBeDefined();
+      if (!shared) {
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute("aria-checked")).toBe("false");
+        expect(view.queryByText(/This worktree has local changes/)).toBeNull();
+        expect(view.getByText("The worktree and its branch will stay on disk.")).toBeDefined();
+      }
+      expect(view.getByRole("status").textContent).toBe("Loading worktree details…");
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true");
+      expect(view.getByText("Worktree chat")).toBeDefined();
+      expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
+      const submit = view.getByRole("button", { name: "Archive chat" });
+      expect(submit.hasAttribute("disabled")).toBe(true);
+      fireEvent.submit(submit.closest("form")!);
+      expect(requests).toEqual([]);
+      await act(async () =>
+        refresh.resolve({
+          ...preview,
+          sharedWith: shared
+            ? [{ workspaceId: "test", sessionId: "child", title: "Child chat" }]
+            : [],
+        }),
+      );
+      await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false));
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+      if (shared) {
+        expect(
+          view.getByText(/saved chats need it for files or history: Child chat/),
+        ).toBeDefined();
+        expect(toggle.hasAttribute("disabled")).toBe(true);
+      } else {
+        expect(view.getByText("The worktree and its branch will stay on disk.")).toBeDefined();
+      }
+      fireEvent.click(submit);
+      expect(requests).toEqual([false]);
+    } finally {
+      view.unmount();
+      connection.queryClient.clear();
+      refresh.resolve(preview);
+      await connection.dispose();
+    }
+  },
+);
 
 test.each([false, true])(
   "removal stays enabled by default after the worktree check, dirty=%s",
