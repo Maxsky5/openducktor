@@ -353,6 +353,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentRuntimeQueryClient.agentRuntimeLoadSessionHistory.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionTodos:
       agentRuntimeQueryClient.agentRuntimeLoadSessionTodos.bind(agentRuntimeQueryClient),
+    agentRuntimeLoadSessionToolPart:
+      agentRuntimeQueryClient.agentRuntimeLoadSessionToolPart.bind(agentRuntimeQueryClient),
     agentRuntimeSearchFiles:
       agentRuntimeQueryClient.agentRuntimeSearchFiles.bind(agentRuntimeQueryClient),
     gitCanonicalizePath: gitClient.gitCanonicalizePath.bind(gitClient),

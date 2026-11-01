@@ -184,6 +184,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
         },
         readSessionTodos: async () => [],
         readSessionHistory: async () => [],
+        readSessionToolPart: async () => {
+          throw new Error("Unexpected tool part read");
+        },
         loadAgentSessionHistory: async () => null,
         loadAgentSessionContext: async () => undefined,
         sendAgentMessage: async () => null,
@@ -309,6 +312,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
         throw new Error("Unexpected generated image read");
       },
       readSessionTodos: async () => [],
+      readSessionToolPart: async () => {
+        throw new Error("Unexpected tool part read");
+      },
       readSessionHistory: async () => {
         historyAttempts += 1;
         if (historyAttempts === 1) {
@@ -427,6 +433,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
       },
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
+      readSessionToolPart: async () => {
+        throw new Error("Unexpected tool part read");
+      },
       loadAgentSessionHistory: async () => null,
       loadAgentSessionContext: async () => undefined,
       sendAgentMessage: async () => null,

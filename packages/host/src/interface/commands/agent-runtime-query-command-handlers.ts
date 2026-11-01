@@ -18,6 +18,10 @@ import {
 } from "../../ports/runtime-query-error";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
+import {
+  findSessionToolPart,
+  withToolDetailsOnDemand,
+} from "../../application/runtimes/session-history-tool-details";
 
 export const createAgentRuntimeQueryCommandHandlers = (
   service: AgentRuntimeQueryPort,
@@ -66,7 +70,31 @@ export const createAgentRuntimeQueryCommandHandlers = (
     ),
     agent_runtime_load_session_history: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionHistory,
-      (input) => service.loadSessionHistory(input),
+      ({ toolDetails, ...input }) => {
+        const history = service.loadSessionHistory(input);
+        return toolDetails === "on_demand"
+          ? history.pipe(Effect.map(withToolDetailsOnDemand))
+          : history;
+      },
+    ),
+    agent_runtime_load_session_tool_part: createQueryHandler(
+      AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionToolPart,
+      ({ partId, callId, ...input }) =>
+        service.loadSessionHistory(input).pipe(
+          Effect.flatMap((history) => {
+            const part = findSessionToolPart(history, { partId, callId });
+            return part
+              ? Effect.succeed(part)
+              : Effect.fail(
+                  runtimeQueryError(
+                    AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionToolPart.command,
+                    input,
+                    "invalid_input",
+                    "The session history no longer has this tool call. Reload the session.",
+                  ),
+                );
+          }),
+        ),
     ),
     agent_runtime_load_session_todos: createQueryHandler(
       AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionTodos,

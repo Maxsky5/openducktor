@@ -46,7 +46,7 @@ export const agentSessionHistoryQueryKeys = {
     key[0] === agentSessionHistoryQueryKeys.all[0] && key[2] === runtimeKind,
 };
 
-type RuntimeSessionHistoryRefInput = AgentSessionIdentity & {
+export type RuntimeSessionHistoryRefInput = AgentSessionIdentity & {
   repoPath: string;
   sessionScope: AgentSessionScope | null;
 };

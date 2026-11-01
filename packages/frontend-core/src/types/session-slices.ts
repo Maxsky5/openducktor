@@ -109,6 +109,8 @@ export type AgentOperationsContextValue = {
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,
   ) => Promise<AgentSessionHistoryMessage[]>;
+  /** Reads the full details of a tool part that compact history cut. */
+  readSessionToolPart: import("@openducktor/core").AgentEnginePort["loadSessionToolPart"];
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   loadAgentSessionContext: (session: AgentSessionContextLoadTarget) => Promise<void>;
   sendAgentMessage: (

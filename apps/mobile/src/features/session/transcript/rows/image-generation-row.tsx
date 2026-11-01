@@ -323,8 +323,7 @@ function GhostToggle({
   const muted = theme.desktop.mutedForeground;
   return (
     <Touchable
-      feedback="highlight"
-      radius={theme.radius.md}
+      feedback="none"
       onPress={disclosure.toggle}
       accessibilityRole="button"
       accessibilityLabel={label}

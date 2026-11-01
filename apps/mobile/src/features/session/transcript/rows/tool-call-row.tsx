@@ -81,7 +81,7 @@ export const ToolCallRow = memo(function ToolCallRow({
         accessibilityLabel={`${name}${summary.length > 0 ? `: ${summary}` : ""}${stateLabel}`}
       />
       {expandable && disclosure.open ? (
-        <LineDetails animate={disclosure.pressed}>
+        <LineDetails>
           <ToolDetails
             meta={meta}
             resetKey={rowKey}

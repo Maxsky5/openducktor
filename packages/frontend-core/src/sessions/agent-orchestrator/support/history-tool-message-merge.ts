@@ -116,6 +116,8 @@ export const mergeToolMessages = (
   // History often omits execution timing and rich tool output that live events supplied.
   if (nextMeta.status !== "error") delete nextMeta.error;
   if (nextMeta.status === "error") delete nextMeta.output;
+  // Only the loaded history says whether its details are cut.
+  if (!loadedMessage.meta.detailsOmitted) delete nextMeta.detailsOmitted;
 
   return applyPreferredMessageTimestamp(
     {

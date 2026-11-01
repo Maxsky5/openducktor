@@ -27,7 +27,7 @@ import {
   View,
 } from "react-native";
 import { KEYBOARD_DISMISS_ON_DRAG } from "@/ui/keyboard-dismiss";
-import { BOTTOM_EDGE_HEIGHT } from "./transcript-follow";
+import { BOTTOM_EDGE_HEIGHT, FOLLOW_THRESHOLD_FRACTION } from "./transcript-follow";
 import { messageParts } from "./transcript-message-parts";
 import {
   topRowIndex,
@@ -89,12 +89,13 @@ function TopEdge(): ReactElement {
 }
 
 /**
- * One FlashList of the transcript, of one kind. The `latest` list is inverted: a streamed message
- * grows up from the bottom edge, the keyboard keeps the latest message in view, and earlier rows
- * mount at the far end of the list, where they move no row in view. The `first` list starts at the
- * first message. FlashList mounts the rows near the screen, measures them, reuses the views of the
- * rows that leave for rows of the same type, and keeps the rows in view in place when other rows
- * change. A hidden list stays mounted, so a jump to it shows its rows in the next frame.
+ * One FlashList of the transcript, of one kind. The `latest` list renders from the bottom and
+ * scrolls new content into view while the reader is near the bottom, as the FlashList chat setup.
+ * The `first` list starts at the first message. FlashList mounts the rows near the screen,
+ * measures them, reuses the views of the rows that leave for rows of the same type, and keeps the
+ * first row in view in place when rows above it change. A part that opens grows down, so the rows
+ * above it do not move. A hidden list stays mounted, so a jump to it shows its rows in the next
+ * frame.
  */
 export const TranscriptChatList = memo(function TranscriptChatList({
   kind,
@@ -112,10 +113,9 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   accessibilityActions,
   onAccessibilityAction,
 }: TranscriptChatListProps): ReactElement {
-  const inverted = kind === "latest";
   const list = useMemo(
-    () => transcriptListItems(kind, rows, (row) => messageParts(row, presentToolCall)),
-    [kind, presentToolCall, rows],
+    () => transcriptListItems(rows, (row) => messageParts(row, presentToolCall)),
+    [presentToolCall, rows],
   );
   const { items } = list;
   useLayoutEffect(() => {
@@ -129,43 +129,12 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     visibleRows.setVisible(shown ? rowKeysNearViewport(items, viewableIndices.current) : []);
   }, [items, shown, visibleRows]);
 
-  /** The height of a row before the reader opens or closes one of its parts. */
-  const resizingRow = useRef<{ key: string; height: number } | null>(null);
-  const rowHeight = useCallback(
-    (key: string): number | undefined => {
-      const index = itemsRef.current?.items.findIndex((row) => row.key === key) ?? -1;
-      return index < 0 ? undefined : listRef.current?.getLayout(index)?.height;
-    },
-    [itemsRef, listRef],
-  );
-  const beforeRowResize = useCallback(
-    (key: string) => {
-      const height = rowHeight(key);
-      resizingRow.current = height === undefined ? null : { key, height };
-    },
-    [rowHeight],
-  );
-  // The inverted list keeps the bottom edge of a row in place, so a row that grows moves its top.
-  // After the list measures the row again, the list moves by the growth, so the row stays put.
-  // A row of the list of the first rows grows down and keeps its top in place.
-  const onCommitLayoutEffect = useCallback(() => {
-    const resizing = resizingRow.current;
-    const list = listRef.current;
-    if (resizing === null || list === null) return;
-    resizingRow.current = null;
-    const growth = (rowHeight(resizing.key) ?? resizing.height) - resizing.height;
-    if (!inverted || growth === 0) return;
-    const offset = Math.max(0, list.getAbsoluteLastScrollOffset() + growth);
-    list.scrollToOffset({ offset, animated: false });
-  }, [inverted, listRef, rowHeight]);
-
   const context = useTranscriptRowsContext({
     visibleRows,
     rowState,
     presentToolCall,
     onOpenSubagent,
     openFullView,
-    beforeRowResize,
   });
   // Each row type has its own views, so a reused view renders a row of the same kind.
   const getItemType = useCallback(
@@ -174,22 +143,12 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     [presentToolCall],
   );
 
-  // The offset of the inverted list is the distance from the latest message.
-  const placeOf = useCallback(
-    (offset: number, contentHeight: number, viewportHeight: number): ListPlace => {
-      const beyond = contentHeight - offset - viewportHeight;
-      return inverted
-        ? { fromBottom: offset, fromTop: beyond, viewportHeight }
-        : { fromTop: offset, fromBottom: beyond, viewportHeight };
-    },
-    [inverted],
-  );
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       onPlace(placeOf(contentOffset.y, contentSize.height, layoutMeasurement.height), true);
     },
-    [onPlace, placeOf],
+    [onPlace],
   );
   // A new list has no scroll event, so its content size places the reader.
   const contentHeight = useRef(0);
@@ -203,7 +162,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
         false,
       );
     },
-    [listRef, onPlace, placeOf],
+    [listRef, onPlace],
   );
   const shownRef = useRef(shown);
   const onRestShown = useCallback(() => {
@@ -211,9 +170,9 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   }, [onRest]);
   const reportTopRow = useCallback(() => {
     const shownList = itemsRef.current;
-    const top = shownList === null ? null : topRowIndex(kind, shownList, viewableIndices.current);
+    const top = shownList === null ? null : topRowIndex(shownList, viewableIndices.current);
     if (top !== null) onTopRow(top);
-  }, [itemsRef, kind, onTopRow]);
+  }, [itemsRef, onTopRow]);
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<TranscriptListItem>[] }) => {
       viewableIndices.current = viewableItems.flatMap((token) =>
@@ -236,12 +195,13 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     if (!changed || list === null) return;
     const offset = list.getAbsoluteLastScrollOffset();
     if (!shown) {
-      if (offset !== 0) list.scrollToOffset({ offset: 0, animated: false });
+      if (kind === "latest") void list.scrollToEnd({ animated: false });
+      else if (offset !== 0) list.scrollToOffset({ offset: 0, animated: false });
       return;
     }
     onPlace(placeOf(offset, contentHeight.current, list.getWindowSize().height), true);
     reportTopRow();
-  }, [listRef, onPlace, placeOf, reportTopRow, shown]);
+  }, [kind, listRef, onPlace, reportTopRow, shown]);
 
   return (
     <View
@@ -254,13 +214,13 @@ export const TranscriptChatList = memo(function TranscriptChatList({
         <FlashList
           ref={listRef}
           data={items}
-          inverted={inverted}
+          maintainVisibleContentPosition={kind === "latest" ? FOLLOW_LATEST : KEEP_POSITION}
+          drawDistance={DRAW_DISTANCE}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           onScroll={onScroll}
           onContentSizeChange={onContentSizeChange}
-          onCommitLayoutEffect={onCommitLayoutEffect}
           onViewableItemsChanged={onViewableItemsChanged}
           onScrollEndDrag={onRestShown}
           onMomentumScrollEnd={onRestShown}
@@ -285,5 +245,25 @@ const styles = StyleSheet.create({
   bottomSpace: { height: BOTTOM_EDGE_HEIGHT },
   topSpace: { height: 16 },
 });
+/** The place of the reader from the scroll offset of a list. */
+const placeOf = (offset: number, contentHeight: number, viewportHeight: number): ListPlace => ({
+  fromTop: offset,
+  fromBottom: contentHeight - offset - viewportHeight,
+  viewportHeight,
+});
 const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
+/** The `latest` list starts at the bottom and follows new content while the reader is near it. */
+const FOLLOW_LATEST = {
+  startRenderingFromBottom: true,
+  autoscrollToBottomThreshold: FOLLOW_THRESHOLD_FRACTION,
+  // The follow state reads each scroll, so the scroll lands at once.
+  animateAutoScrollToBottom: false,
+};
+/** The `first` list keeps the first row in view in place, the FlashList default. */
+const KEEP_POSITION = {};
+/**
+ * The distance in points past each edge of the screen that the list renders. Transcript rows vary
+ * in height, so with the 250-point default a fast scroll shows empty space until rows render.
+ */
+const DRAW_DISTANCE = 1000;
 const TOP_SPACE = <View style={styles.topSpace} />;

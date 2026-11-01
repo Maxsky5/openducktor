@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { HostInvokeError } from "@openducktor/host-client";
-import { remoteError } from "@openducktor/host-client/remote";
+import { RemoteReplyTooLargeError, remoteError } from "@openducktor/host-client/remote";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { synchronizeConnectionState } from "./state-recovery";
 
@@ -77,6 +77,23 @@ const observeFailing = (queryClient: QueryClient, error: Error) =>
 test("a host error of one read leaves the recovery to that read's view", async () => {
   const queryClient = new QueryClient();
   const stop = observeFailing(queryClient, new HostInvokeError("The runtime is starting.", null));
+  try {
+    await expect(
+      synchronizeConnectionState(queryClient, [], true, {
+        hostChanged: false,
+        missedEventNames: [],
+      }),
+    ).resolves.toBeUndefined();
+    expect(queryClient.getQueryState(["failing"])?.status).toBe("error");
+  } finally {
+    stop();
+    queryClient.clear();
+  }
+});
+
+test("a reply that is too large leaves the recovery to that read's view", async () => {
+  const queryClient = new QueryClient();
+  const stop = observeFailing(queryClient, new RemoteReplyTooLargeError(32 * 1024 * 1024));
   try {
     await expect(
       synchronizeConnectionState(queryClient, [], true, {

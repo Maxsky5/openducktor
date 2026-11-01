@@ -177,6 +177,9 @@ export const createOpenCodeAgentEngineTestAdapter = (
   },
   stopSession: (input) => adapter.stopSession(input),
   loadSessionHistory: (input) => adapter.loadSessionHistory(bindPolicyInput(input)),
+  loadSessionToolPart: async () => {
+    throw new Error("Unexpected loadSessionToolPart");
+  },
   loadSessionTodos: (input) => adapter.loadSessionTodos(bindPolicyInput(input)),
   loadSessionDiff: (input) => adapter.loadSessionDiff(validateOpenCodeInput(input)),
   loadFileStatus: (input) => adapter.loadFileStatus(validateOpenCodeInput(input)),

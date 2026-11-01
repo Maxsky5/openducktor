@@ -9,6 +9,7 @@ import type {
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
+  LoadAgentSessionToolPartInput,
   SearchAgentFilesInput,
 } from "@openducktor/core";
 import type { InvokeFn } from "./invoke-utils";
@@ -63,6 +64,15 @@ export class HostAgentRuntimeQueryClient {
 
   agentRuntimeLoadSessionTodos(input: LoadAgentSessionTodosInput) {
     const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionTodos;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
+  }
+
+  agentRuntimeLoadSessionToolPart(input: LoadAgentSessionToolPartInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionToolPart;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },

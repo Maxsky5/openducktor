@@ -62,8 +62,7 @@ export const CompactionRow = memo(function CompactionRow({
   return (
     <View>
       <Touchable
-        feedback="highlight"
-        radius={theme.radius.sm}
+        feedback="none"
         onPress={disclosure.toggle}
         accessibilityRole="button"
         accessibilityLabel={label}

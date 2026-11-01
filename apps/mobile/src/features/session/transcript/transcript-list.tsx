@@ -67,8 +67,8 @@ const PREPARE_TIMEOUT_MS = 2000;
 /**
  * The rows that a list shows. A list shows each change at once only while it is on screen and the
  * reader follows the latest message, or reads the list of the first rows, which adds new rows at
- * its far end. Otherwise its rows do not change: in the inverted list, a row that grows or comes
- * under the screen moves the rows in view, and a list that waits does no work.
+ * its far end. Otherwise its rows do not change: the reader who scrolled up in the `latest` list
+ * reads still rows until "New activity", and a list that waits does no work.
  */
 const useShownRows = (
   rows: readonly AgentChatTranscriptRow[],
@@ -84,8 +84,8 @@ const useShownRows = (
  * The transcript of the open session as FlashList chats. A list measures only the rows that it
  * mounts, so only its start has an exact place. A jump to an end shows a list that waits, hidden,
  * at that end, so the jump shows its rows in the next frame. The list that leaves goes back to its
- * start. The transcript opens on an inverted list at the latest message, and mounts the other
- * lists in idle time.
+ * start. The transcript opens on a list at the latest message, and mounts the other lists in idle
+ * time.
  */
 export function TranscriptList({
   rows,
@@ -252,7 +252,7 @@ export function TranscriptList({
       firstB: report("firstB"),
     };
   }, [onPlace]);
-  // The list of the first rows hands over to an inverted list when the reader comes to rest at its
+  // The list of the first rows hands over to a `latest` list when the reader comes to rest at its
   // end, so the transcript follows the latest message again. Both show the same rows there.
   const onRest = useCallback(() => {
     notifyViewport(null);

@@ -3,7 +3,7 @@ import { Globe } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { localImageDataUrl, localImageQueryOptions } from "@/state/queries/local-images";
-import { ActionToolCard } from "./agent-chat-action-tool-card";
+import { ActionToolCard, type ActionToolSection } from "./agent-chat-action-tool-card";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { browserToolScreenshotPaths, browserToolTitle } from "./browser-tool-summary";
 import {
@@ -52,14 +52,16 @@ export const BrowserToolMessage = ({
         load: () => setRequested(true),
         error: failure ? errorMessage(failure) : null,
       }}
-      sections={[
-        {
-          label: "Input",
-          text: hasNonEmptyInput(meta.input) ? JSON.stringify(meta.input, null, 2) : "",
-        },
-        { label: "Error", text: hasNonEmptyText(meta.error) ? meta.error : "", tone: "error" },
-        { label: "Output", text: hasNonEmptyText(meta.output) ? meta.output : "" },
-      ]}
+      sections={browserToolSections}
     />
   );
 };
+
+const browserToolSections = (meta: ToolMeta): ActionToolSection[] => [
+  {
+    label: "Input",
+    text: hasNonEmptyInput(meta.input) ? JSON.stringify(meta.input, null, 2) : "",
+  },
+  { label: "Error", text: hasNonEmptyText(meta.error) ? meta.error : "", tone: "error" },
+  { label: "Output", text: hasNonEmptyText(meta.output) ? meta.output : "" },
+];

@@ -18,7 +18,8 @@ import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useRowVisible } from "../transcript-visibility";
 import { useDisclosure } from "./disclosure";
-import { DisclosureMarker, PreText, Reveal, ToolTiming } from "./row-parts";
+import { DisclosureMarker, PreText, ToolTiming } from "./row-parts";
+import { ToolPartLoader, WithFullToolPart } from "./tool-details";
 
 /**
  * The desktop `ComputerUseToolMessage`: a card with the pointer icon, "Computer Use", the
@@ -40,8 +41,7 @@ export const ComputerUseRow = memo(function ComputerUseRow({
   const theme = useAppTheme();
   const { desktop } = theme;
   const presentation = useMemo(() => buildComputerUsePresentation(meta), [meta]);
-  const { actionTitle, isFailed, code, errorText, outputText, hasDetails, screenshots } =
-    presentation;
+  const { actionTitle, isFailed, hasDetails, screenshots } = presentation;
   const disclosure = useDisclosure(false, rowKey);
   const [screenshotsOpen, setScreenshotsOpen] = useRecyclingState(false, [rowKey]);
   const toggleScreenshots = useCallback(
@@ -80,8 +80,7 @@ export const ComputerUseRow = memo(function ComputerUseRow({
     <View style={styles.card}>
       {hasDetails ? (
         <Touchable
-          feedback="highlight"
-          radius={theme.radius.sm}
+          feedback="none"
           onPress={disclosure.toggle}
           accessibilityRole="button"
           accessibilityLabel={label}
@@ -112,9 +111,11 @@ export const ComputerUseRow = memo(function ComputerUseRow({
         </Touchable>
       ) : null}
       {hasDetails && disclosure.open ? (
-        <Reveal animate={disclosure.pressed} style={styles.details}>
-          <ComputerUseSections code={code} errorText={errorText} outputText={outputText} />
-        </Reveal>
+        <View style={styles.details}>
+          <WithFullToolPart meta={meta}>
+            {(shown) => <ComputerUseSections meta={shown} />}
+          </WithFullToolPart>
+        </View>
       ) : null}
       {screenshotsOpen
         ? screenshots.map((image, index) => (
@@ -132,21 +133,25 @@ export const ComputerUseRow = memo(function ComputerUseRow({
   );
 });
 
-/** The JavaScript, Error, and Output sections of a call that has them. */
-function ComputerUseSections({
-  code,
-  errorText,
-  outputText,
-}: {
-  code: string;
-  errorText: string;
-  outputText: string;
-}): ReactElement {
+/**
+ * The JavaScript, Error, and Output sections of a call that has them. When compact history cut
+ * the output, the Output section reads the full call.
+ */
+function ComputerUseSections({ meta }: { meta: ToolMeta }): ReactElement {
+  const { desktop } = useAppTheme();
+  const { code, errorText, outputText } = useMemo(() => buildComputerUsePresentation(meta), [meta]);
+  const outputCut = meta.detailsOmitted?.output === true;
   return (
     <>
       {code.length > 0 ? <Section label="JavaScript" text={code} /> : null}
       {errorText.length > 0 ? <Section label="Error" text={errorText} error /> : null}
-      {outputText.length > 0 ? <Section label="Output" text={outputText} /> : null}
+      {outputCut ? (
+        <Section label="Output">
+          <ToolPartLoader meta={meta} what="output" color={desktop.foreground} />
+        </Section>
+      ) : outputText.length > 0 ? (
+        <Section label="Output" text={outputText} />
+      ) : null}
     </>
   );
 }
@@ -156,10 +161,13 @@ function Section({
   label,
   text,
   error = false,
+  children,
 }: {
   label: string;
-  text: string;
+  text?: string;
   error?: boolean;
+  /** The body instead of `text`. */
+  children?: ReactElement;
 }): ReactElement {
   const theme = useAppTheme();
   const color = error ? theme.desktop.destructiveSurfaceForeground : theme.desktop.foreground;
@@ -168,7 +176,7 @@ function Section({
     <View style={styles.section}>
       <Text style={[styles.sectionLabel, { color }]}>{label}</Text>
       <View style={styles.sectionBody}>
-        <PreText text={text} color={color} />
+        {children ?? <PreText text={text ?? ""} color={color} />}
       </View>
     </View>
   );

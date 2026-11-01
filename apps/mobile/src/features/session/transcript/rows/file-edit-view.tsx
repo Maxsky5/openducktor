@@ -21,7 +21,7 @@ import { inlineDiffPreview, previewLines, truncateForDisplay } from "../transcri
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useDisclosure } from "./disclosure";
 import { fileEditBody } from "./file-edit-body";
-import { DisclosureMarker, Reveal } from "./row-parts";
+import { DisclosureMarker } from "./row-parts";
 
 const STATUS_LABELS = {
   modified: "Modified",
@@ -126,7 +126,7 @@ export const FileEditView = memo(function FileEditView({
     <View style={styles.block}>
       {hasContent ? (
         <Touchable
-          feedback="highlight"
+          feedback="none"
           onPress={disclosure.toggle}
           accessibilityRole="button"
           accessibilityLabel={label}
@@ -141,11 +141,7 @@ export const FileEditView = memo(function FileEditView({
           {header}
         </View>
       )}
-      {open ? (
-        <Reveal animate={disclosure.pressed}>
-          <FileEditContent data={data} />
-        </Reveal>
-      ) : null}
+      {open ? <FileEditContent data={data} /> : null}
     </View>
   );
 });

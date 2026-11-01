@@ -178,6 +178,9 @@ const operations = (
   releaseGeneratedImageBatch: async () => {},
   readSessionTodos: async () => [],
   readSessionHistory: async () => [],
+  readSessionToolPart: async () => {
+    throw new Error("Unexpected tool part read");
+  },
   loadAgentSessionHistory: async () => null,
   loadAgentSessionContext: async () => {},
   sendAgentMessage: async () => null,
