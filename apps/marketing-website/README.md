@@ -54,7 +54,7 @@ Run these commands from `apps/marketing-website`:
 
 ## Pull requests and production updates
 
-The `Marketing website` workflow starts for pull requests, pushes to `main`, published releases, or by hand. Its `changes` job checks the complete Git diff against the website inputs, without GitHub's event path-filter file limit. Unrelated changes skip the `build` and `deploy` jobs. Stable releases and manual runs always build the site. Prereleases skip all jobs. The `build` job has no secrets: it builds the site for its target, runs the Wrangler dry run and the Chromium tests, and uploads `dist/`. Its `deploy` job receives the Cloudflare token of one environment. It installs the locked dependencies without scripts, downloads `dist/`, and runs Wrangler. It runs no build step.
+The `Marketing website` workflow starts for pull requests, pushes to `main`, published releases, or by hand. Its `changes` job checks the complete Git diff against the website inputs, without GitHub's event path-filter file limit. Unrelated changes skip the `build`, `browser`, and `deploy` jobs. Stable releases and manual runs always build the site. Prereleases skip all jobs. The `build` job has no secrets: it builds the site for its target, runs the Wrangler dry run, and uploads `dist/`. Four `browser` jobs download `dist/` and each runs one shard of the Chromium tests. The `deploy` job receives the Cloudflare token of one environment. It installs the locked dependencies without scripts, downloads `dist/`, and runs Wrangler. It runs no build step.
 
 General CI keeps the shared formatting, lint, typecheck, and unit test commands on Linux, macOS, and Windows, including this workspace. Its build command excludes the website, which the marketing workflow builds on Linux when its inputs change. The marketing workflow covers relevant pull requests to every target branch, including forks. Its input list includes the site, shared product theme and mark, web runner package metadata, dependency files, and both CI workflows. Root commands still build every workspace locally.
 
@@ -90,7 +90,7 @@ The website tests check that each source file has 400 lines or fewer, and that e
 
 For focused work, run the website's `test` and `typecheck` scripts. Browser review must cover light and dark appearances, 320-pixel width, keyboard navigation, disabled JavaScript, reduced motion, the pause control, successful and failed copy operations, each product view and scene, the visible theme switch, and unknown routes. Validate Cloudflare routing locally with `bun run worker:dev` after a preview build. Live deployment also requires the account, domain, token, and GitHub setup above; local checks cannot prove those are configured.
 
-The website build workflow also runs Chromium regressions against the built files. To run them locally, use these commands from `apps/marketing-website`:
+The `browser` jobs of the website workflow run Chromium regressions against the built files. To run them locally, use these commands from `apps/marketing-website`:
 
 ```sh
 bunx playwright install chromium
