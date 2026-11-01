@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { collectWorkspacePackageJsonPaths } from "./release-version";
+import { readPackageScripts, workspacePackageJsonPaths } from "./workspace-packages";
 
 // `bun run --sequential` does not pass arguments to the scripts, so this script starts each test
 // suite with its shard itself. See docs/testing.md.
@@ -20,26 +19,34 @@ export const parseShard = (value: string | undefined): Shard => {
   return { index, total };
 };
 
-// Other test runners do not take the `--shard` option of `bun test`.
+// `bun run` adds the shard argument to the end of the script, so the script must be one command.
+const isSingleCommand = (command: string): boolean => !/&&|\|\||;/.test(command);
+const isBunTest = (command: string): boolean =>
+  /^bun test(\s|$)/.test(command) && isSingleCommand(command);
+// The Node test runner does not take the `--shard` option of `bun test`.
+const isNodeTest = (command: string): boolean =>
+  /^node .*--test\b/.test(command) && isSingleCommand(command);
+
 export const planShardRuns = (suites: TestSuite[], shard: Shard): SuiteRun[] =>
   suites.flatMap(({ directory, script, command }) => {
-    if (command.startsWith("bun test ")) {
+    if (isBunTest(command)) {
       return [{ directory, script, args: [`--shard=${shard.index}/${shard.total}`] }];
     }
-    return shard.index === 1 ? [{ directory, script, args: [] }] : [];
+    if (isNodeTest(command)) {
+      return shard.index === 1 ? [{ directory, script, args: [] }] : [];
+    }
+    throw new Error(
+      `The '${script}' script of '${directory}' must be one 'bun test' or 'node --test' command. Received '${command}'.`,
+    );
   });
-
-const readScripts = (manifestPath: string): Record<string, string> =>
-  JSON.parse(readFileSync(manifestPath, "utf8")).scripts ?? {};
 
 // The workspace suites, then the root script suite.
 const readTestSuites = (): TestSuite[] => {
-  const [rootManifest = "package.json", ...workspaceManifests] = collectWorkspacePackageJsonPaths();
-  const suites = workspaceManifests.flatMap((manifest) => {
-    const command = readScripts(manifest).test;
+  const suites = workspacePackageJsonPaths().flatMap((manifest) => {
+    const command = readPackageScripts(manifest).test;
     return command ? [{ directory: path.dirname(manifest), script: "test", command }] : [];
   });
-  const rootCommand = readScripts(rootManifest)["test:scripts"];
+  const rootCommand = readPackageScripts("package.json")["test:scripts"];
   if (!rootCommand) throw new Error("The root package.json has no `test:scripts` script.");
   return [...suites, { directory: ".", script: "test:scripts", command: rootCommand }];
 };

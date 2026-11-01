@@ -39,7 +39,7 @@ jobs:
           blocking: warning
           version: "0.9.14"
 
-  # The `TypeScript Workspace Quality` job of a platform is the required check of all its jobs.
+  # docs/testing.md describes the jobs of each platform and their required check.
   checks-linux:
     name: Checks (Linux)
     runs-on: ubuntu-latest
@@ -178,7 +178,7 @@ jobs:
   quality-linux:
     name: TypeScript Workspace Quality (Linux)
     needs: [checks-linux, build-linux, tests-linux]
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps: &quality-steps
@@ -197,7 +197,7 @@ jobs:
   quality-macos:
     name: TypeScript Workspace Quality (macOS)
     needs: [checks-macos, build-macos, tests-macos]
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps: *quality-steps
@@ -205,7 +205,7 @@ jobs:
   quality-windows:
     name: TypeScript Workspace Quality (Windows)
     needs: [checks-windows, build-windows, tests-windows]
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps: *quality-steps

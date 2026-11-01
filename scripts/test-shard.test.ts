@@ -13,7 +13,15 @@ const suites: TestSuite[] = [
 ];
 
 describe("test shard plan", () => {
-  test("gives each Bun suite the shard and runs other runners only in the first shard", () => {
+  test("rejects a test script that is not one known test command", () => {
+    for (const command of ["bun test a && bun test b", "cross-env CI=1 bun test", "vitest run"]) {
+      expect(() =>
+        planShardRuns([{ directory: "apps/x", script: "test", command }], { index: 1, total: 2 }),
+      ).toThrow("must be one 'bun test' or 'node --test' command");
+    }
+  });
+
+  test("gives each Bun suite the shard and runs Node suites only in the first shard", () => {
     expect(planShardRuns(suites, { index: 1, total: 3 })).toEqual([
       { directory: "packages/host", script: "test", args: ["--shard=1/3"] },
       { directory: "tools/oxlint/anti-slop", script: "test", args: [] },

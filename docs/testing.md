@@ -54,8 +54,8 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 ## Parallel runs
 
 - [test-shard.ts](../scripts/test-shard.ts) runs every workspace suite and the root script suite in sequence with `bun test --shard`, so it runs a part of the files of each suite. A suite with another test runner, such as the Node runner of the oxlint rules, runs all its files in the first shard. It runs every suite before it reports the failed ones.
-- The root `bun run test` runs the only shard, `1/1`. CI splits the tests of each platform into shards: three on Linux, two on macOS, and four on Windows. GitHub runs at most five macOS jobs of the repository at the same time.
-- The `TypeScript Workspace Quality` job of a platform passes only when the `Checks`, `Build`, and `Tests` jobs of that platform pass.
+- The root `bun run test` runs the only shard, `1/1`. CI splits the tests of each platform into shards. The matrix of each `Tests` job in `ci.yml` sets the shard count. macOS has fewer shards, because GitHub runs at most five macOS jobs of the repository at the same time.
+- The `TypeScript Workspace Quality` job of a platform is its required check. It runs also when a run is cancelled, and it passes only when the `Checks`, `Build`, and `Tests` jobs of that platform pass.
 - On Windows, CI puts `TMP` and `TEMP` on the `D:` drive, because temp trees there are faster than on `C:`.
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
 - `packages/frontend-core` runs with `bun test --parallel`, so each file has its own global. Its tests run without DOM globals. A test file that renders React or reads browser APIs imports `test-support/dom-environment` first. Keep pure tests without it, so they prove that the package runs without a DOM.
