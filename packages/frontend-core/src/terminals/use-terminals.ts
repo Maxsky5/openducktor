@@ -144,8 +144,13 @@ export const useTerminals = (
 
   useEffect(() => {
     if (scopeKey === null || controller === null) return;
-    return watchTerminalList(queryClient, controller, listFilter);
-  }, [controller, listFilter, queryClient, scopeKey]);
+    return watchTerminalList(queryClient, controller, listFilter, (terminalId) => {
+      for (const tab of readState().tabs) {
+        const id = tab.requestState === "lost" ? tab.sourceTerminalId : tab.terminalId;
+        if (id === terminalId) dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
+      }
+    });
+  }, [controller, dispatch, listFilter, queryClient, readState, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;

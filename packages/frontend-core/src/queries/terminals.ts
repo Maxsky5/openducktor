@@ -165,6 +165,7 @@ export const watchTerminalList = (
   queryClient: QueryClient,
   controller: TerminalTransportController,
   filter: TerminalListFilter,
+  onRemoved: (terminalId: string) => void,
 ): (() => void) => {
   let snapshot: TerminalListResponse | null = null;
   return controller.subscribeList(filter, (message, payload) => {
@@ -192,6 +193,7 @@ export const watchTerminalList = (
           ),
         };
       else cacheClosedTerminal(queryClient, filter, message.terminalId, message.revision);
+      onRemoved(message.terminalId);
     }
   });
 };

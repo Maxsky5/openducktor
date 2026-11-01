@@ -186,6 +186,16 @@ describe("useTerminals", () => {
         { timeout: 500 },
       );
       act(() =>
+        view.result.current.onForgotten(
+          "/repo:task-1",
+          terminal.terminalId,
+          "The terminal closed on another client.",
+        ),
+      );
+      expect(view.result.current.tabs.find((tab) => tab.tabId === tabId)?.requestState).toBe(
+        "lost",
+      );
+      act(() =>
         emit({
           version: TERMINAL_PROTOCOL_VERSION,
           type: "list_removed",
