@@ -190,6 +190,8 @@ export const installTerminalTouchSelection = (current: TouchTerminal): void => {
     if (anchor !== null || drag !== null) {
       event.preventDefault();
       event.stopPropagation();
+      const touch = event.changedTouches[0];
+      if (event.type === "touchend" && touch !== undefined) move(touch);
     }
     stopGesture();
   };

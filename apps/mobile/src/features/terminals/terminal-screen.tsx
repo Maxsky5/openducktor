@@ -1,11 +1,13 @@
 import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
+import { StackActions } from "expo-router/react-navigation";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { WorkHeaderTitle } from "@/features/work-owner/work-header-title";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
 import { WorkOwnerScreen } from "@/features/work-owner/work-owner-screen";
+import { toWorkOwnerParams } from "@/features/work-owner/work-owner-params";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { IconButton } from "@/ui/icon-button";
 import { EmptyState } from "@/ui/states";
@@ -38,13 +40,13 @@ export function TerminalScreen(): ReactElement {
 }
 
 function TerminalContent({ owner, tabId }: { owner: WorkOwner; tabId: string }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const theme = useAppTheme();
   const model = useOwnerTerminals(owner);
   const goBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-  }, [router]);
-  const { close, closeUnknown } = useTerminalClose(model, goBack);
+    navigation.dispatch(StackActions.popTo("work/terminals", toWorkOwnerParams(owner.ref)));
+  }, [navigation, owner.ref]);
+  const { close, closeUnknown } = useTerminalClose(model, { onClosing: goBack });
   const tab = findTerminalTab(model.tabs, tabId);
   const closing = tab !== null && model.closingTabIds.has(tab.tabId);
   // The close control of the desktop terminal tab. It turns into a spinner while the host closes.

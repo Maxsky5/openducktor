@@ -19,8 +19,10 @@ declare module "@xterm/xterm/lib/xterm.mjs" {
   };
   export type XtermTouch = { readonly clientX: number; readonly clientY: number };
   export type XtermTouchEvent = {
+    readonly type: string;
     readonly target: object | null;
     readonly touches: ArrayLike<XtermTouch>;
+    readonly changedTouches: ArrayLike<XtermTouch>;
     preventDefault(): void;
     stopPropagation(): void;
   };

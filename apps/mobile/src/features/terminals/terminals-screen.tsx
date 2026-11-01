@@ -2,8 +2,9 @@ import type { RepoAction } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import { Stack, useNavigation } from "expo-router";
-import { StackActions } from "expo-router/react-navigation";
-import { type ReactElement, useCallback, useMemo, useState } from "react";
+import type { NativeStackNavigationProp } from "expo-router/native-stack";
+import { type ParamListBase, StackActions } from "expo-router/react-navigation";
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
@@ -45,10 +46,17 @@ export function TerminalsScreen(): ReactElement {
 }
 
 function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
   // Tablets and wide landscape show the terminal list and the selected terminal side by side.
   const wide = useWideLayout();
-  const model = useOwnerTerminals(owner);
+  const liveModel = useOwnerTerminals(owner);
+  const [departingModel, setDepartingModel] = useState<TerminalSessionsModel | null>(null);
+  // Keep the visible list and header stable until the native stack leaves this screen.
+  const model = departingModel ?? liveModel;
+  useEffect(
+    () => navigation.addListener("transitionEnd", () => setDepartingModel(null)),
+    [navigation],
+  );
   const ownerParams = useMemo(() => toWorkOwnerParams(owner.ref), [owner.ref]);
   const [selectedTabId, setSelectedTabId] = useState<string | null>(null);
 
@@ -56,14 +64,13 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
     (tabId: string) => {
       if (wide) setSelectedTabId(tabId);
       else {
-        // The stack commits this push with the pending tab. URL routing waits for an effect,
-        // which can draw the changed terminal list before it opens the terminal.
+        setDepartingModel(model);
         navigation.dispatch(
           StackActions.push("work/terminal", routes.terminal(ownerParams, tabId).params),
         );
       }
     },
-    [navigation, ownerParams, wide],
+    [model, navigation, ownerParams, wide],
   );
   const onClosed = useCallback(
     (tab: TerminalTab) => {
@@ -71,17 +78,22 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
     },
     [selectedTabId],
   );
-  const { close, closeUnknown } = useTerminalClose(model, onClosed);
-  const { createTerminal } = model;
+  const { close, closeUnknown } = useTerminalClose(model, { onClosed });
+  const selectedTab = model.tabs.find(
+    (tab) => tab.tabId === selectedTabId && !model.closingTabIds.has(tab.tabId),
+  );
+  const { createTerminal } = liveModel;
   const start = useCallback(
     (action?: RepoAction) => {
+      if (!wide) setDepartingModel(model);
       const tabId = createTerminal(action);
-      if (tabId !== null) openTerminal(tabId);
+      if (tabId === null) setDepartingModel(null);
+      else openTerminal(tabId);
     },
-    [createTerminal, openTerminal],
+    [createTerminal, model, openTerminal, wide],
   );
   const gate = useCommandGate();
-  const startBlocked = model.startBlockedReason;
+  const startBlocked = liveModel.startBlockedReason;
   const options = useMemo(
     () => ({
       title: "Terminals",
@@ -122,7 +134,7 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
         <View style={styles.split}>
           <View style={styles.listPane}>{list}</View>
           <View style={styles.detailPane}>
-            {selectedTabId === null ? (
+            {selectedTab === undefined ? (
               <EmptyState
                 icon="square-terminal"
                 title="No Terminal Selected"
@@ -131,7 +143,7 @@ function TerminalsContent({ owner }: { owner: WorkOwner }): ReactElement {
             ) : (
               <TerminalPane
                 model={model}
-                tabId={selectedTabId}
+                tabId={selectedTab.tabId}
                 onRemoveLost={(tab) => void close(tab)}
               />
             )}

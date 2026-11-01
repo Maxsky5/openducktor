@@ -83,10 +83,10 @@ export const tabExitNotice = (tab: TerminalTab) =>
 
 const toTerminalRow = (
   tab: TerminalTab,
-  closing: boolean,
   runsCommand: boolean,
   activityStatus: TerminalSessionsModel["activityStatus"],
 ): TerminalRow => {
+  const closing = tab.requestState === "ready" && tab.summary.lifecycle === "closing";
   const exit = tabExitNotice(tab);
   const live = tab.requestState === "ready" && tab.summary.lifecycle === "running" && !closing;
   const activeCommand = live && runsCommand;
@@ -118,14 +118,15 @@ export const buildTerminalRows = (
     "tabs" | "closingTabIds" | "runningCommandTerminalIds" | "activityStatus"
   >,
 ): TerminalRow[] =>
-  model.tabs.map((tab) =>
-    toTerminalRow(
-      tab,
-      model.closingTabIds.has(tab.tabId),
-      tab.terminalId !== null && model.runningCommandTerminalIds.has(tab.terminalId),
-      model.activityStatus,
-    ),
-  );
+  model.tabs
+    .filter((tab) => !model.closingTabIds.has(tab.tabId))
+    .map((tab) =>
+      toTerminalRow(
+        tab,
+        tab.terminalId !== null && model.runningCommandTerminalIds.has(tab.terminalId),
+        model.activityStatus,
+      ),
+    );
 
 /** The use of the terminal limit, such as "3 of 8 terminals". Closing terminals do not count. */
 export const terminalLimitText = (

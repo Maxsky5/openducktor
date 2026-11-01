@@ -169,7 +169,7 @@ describe("buildTerminalRows", () => {
     ]);
   });
 
-  test("keeps lifecycle states when activity still names a closing or exited terminal", () => {
+  test("hides a closing tab at once and restores it when the close is rejected", () => {
     const rows = buildTerminalRows(
       model(
         [ready(), ready({ terminalId: "t-2", lifecycle: "exited" })],
@@ -178,9 +178,9 @@ describe("buildTerminalRows", () => {
       ),
     );
     expect(rows.map(({ stateLabel, runsCommand }) => ({ stateLabel, runsCommand }))).toEqual([
-      { stateLabel: "Closing", runsCommand: false },
       { stateLabel: "Exited", runsCommand: false },
     ]);
+    expect(buildTerminalRows(model([ready()])).map((row) => row.tabId)).toEqual(["tab:t-1"]);
   });
 });
 

@@ -37,6 +37,9 @@ const touch = (element: Element, type: string, column: number, row = 0) => {
         ? []
         : [{ clientX: (column + 0.5) * 10, clientY: (row + 0.5) * 20 }],
   });
+  Object.defineProperty(event, "changedTouches", {
+    value: [{ clientX: (column + 0.5) * 10, clientY: (row + 0.5) * 20 }],
+  });
   element.dispatchEvent(event);
   return event;
 };
@@ -138,6 +141,23 @@ test("adjusts a range whose end is at the last column", async () => {
   expect(terminal.getSelection()).toBe("abcdefghijklmnopqrs");
 });
 
+test("uses the release position to extend a single-character selection to the wrapped URL above", async () => {
+  const url = "http://localhost:54249/";
+  const { terminal, parent } = await openTerminal(" ".repeat(17) + url);
+  terminal.select(19, 1, 1);
+  expect(terminal.getSelection()).toBe("/");
+  const start = parent.querySelector<HTMLElement>('[data-edge="start"]');
+  const end = parent.querySelector<HTMLElement>('[data-edge="end"]');
+  if (!start || !end) throw new Error("Selection handles are missing.");
+  start.getBoundingClientRect = () => new DOMRect(152, 0, 48, 48);
+  end.getBoundingClientRect = () => new DOMRect(152, 32, 48, 48);
+  touch(start, "touchstart", 17.1, 0.7);
+  touch(start, "touchmove", 17.1, 0.7);
+  expect(terminal.getSelection()).toBe("/");
+  touch(start, "touchend", 15.1, -0.3);
+  expect(terminal.getSelection()).toBe(url);
+});
+
 test("scrolls while dragging past the viewport and stops on touch cancel", async () => {
   const { terminal, parent } = await openTerminal(
     Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\r\n"),
@@ -150,7 +170,11 @@ test("scrolls while dragging past the viewport and stops on touch cancel", async
   touch(handle, "touchstart", 4, 3);
   touch(handle, "touchmove", 4, 5);
   expect(terminal.buffer.active.viewportY).toBeGreaterThan(0);
+  const beforeCancel = terminal.buffer.active.viewportY;
+  const selection = terminal.getSelection();
   touch(handle, "touchcancel", 4, 5);
+  expect(terminal.buffer.active.viewportY).toBe(beforeCancel);
+  expect(terminal.getSelection()).toBe(selection);
   const stoppedAt = terminal.buffer.active.viewportY;
   await new Promise((resolve) => setTimeout(resolve, 80));
   expect(terminal.buffer.active.viewportY).toBe(stoppedAt);

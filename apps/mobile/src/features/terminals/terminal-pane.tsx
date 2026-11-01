@@ -3,7 +3,8 @@ import {
   type TerminalTab,
 } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
-import type { ReactElement } from "react";
+import { type ReactElement, useLayoutEffect } from "react";
+import { useIsFocused } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
@@ -28,9 +29,13 @@ export function TerminalPane({
   tabId,
   onRemoveLost,
   onBack,
-}: TerminalPaneProps): ReactElement {
+}: TerminalPaneProps): ReactElement | null {
   const gate = useCommandGate();
   const status = terminalScreenStatus(model, tabId);
+  const focused = useIsFocused();
+  useLayoutEffect(() => {
+    if (focused && status.kind === "missing") onBack?.();
+  }, [focused, onBack, status.kind]);
   const back = onBack ? (
     <Button label="Back to Terminals" variant="outline" onPress={onBack} />
   ) : null;
@@ -59,12 +64,11 @@ export function TerminalPane({
         />
       );
     case "missing":
-      return (
+      return onBack ? null : (
         <EmptyState
-          icon="unlink"
-          title="Terminal Not Found"
-          message="The host no longer has this terminal. It closed, or the host restarted."
-          action={back}
+          icon="square-terminal"
+          title="No Terminal Selected"
+          message="Select a terminal to attach to it."
         />
       );
     case "lost":
