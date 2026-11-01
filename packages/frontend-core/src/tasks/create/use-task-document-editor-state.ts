@@ -176,12 +176,14 @@ const taskDocumentEditorReducer = (
       return {
         ...currentState,
         documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
-          serverMarkdown: action.payload.markdown,
-          draftMarkdown:
-            section.draftMarkdown === section.serverMarkdown
-              ? action.payload.markdown
-              : section.draftMarkdown,
-          updatedAt: action.payload.updatedAt,
+          // Keep the draft's base version so the save check can detect host changes.
+          ...(section.draftMarkdown !== section.serverMarkdown
+            ? section
+            : {
+                serverMarkdown: action.payload.markdown,
+                draftMarkdown: action.payload.markdown,
+                updatedAt: action.payload.updatedAt,
+              }),
           isLoading: false,
           loaded: true,
           error: action.payload.error ?? null,

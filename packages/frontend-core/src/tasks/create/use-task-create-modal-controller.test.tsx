@@ -399,43 +399,53 @@ describe("useTaskCreateModalController", () => {
     }
   });
 
-  test("blocks a document save when the live task reports a newer document", async () => {
-    const saveDocument = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
-    const task = createTaskCardFixture({
-      id: "task-1",
-      artifactSummary: specSavedAt("2026-07-25T10:00:00.000Z"),
-    });
-    const harness = renderController({
-      task,
-      documentState: createDocumentState({ saveDocument }),
-    });
-    try {
-      act(() => harness.getController().requestSectionChange("spec"));
-      await act(async () => {
-        await Promise.resolve();
+  test.each(["open", "reopened"] as const)(
+    "blocks a document save when the host changes a draft in the %s editor",
+    async (editor) => {
+      const saveDocument = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
+      let document = { markdown: "# Spec", updatedAt: "2026-07-25T10:00:00.000Z" };
+      const documentState = createDocumentState({
+        saveDocument,
+        loadDocument: async () => document,
       });
-      act(() => harness.getController().updateDocumentDraft("spec", "# Local spec"));
-      await act(async () => {
-        harness.replaceTask(
-          createTaskCardFixture(task, {
-            artifactSummary: specSavedAt("2026-07-25T11:00:00.000Z"),
-          }),
-        );
+      let task = createTaskCardFixture({
+        id: "task-1",
+        artifactSummary: specSavedAt(document.updatedAt),
       });
-      await act(async () => {
-        await harness.getController().saveActiveDocument();
-      });
+      let harness = renderController({ task, documentState });
+      try {
+        act(() => harness.getController().requestSectionChange("spec"));
+        await act(async () => {
+          await Promise.resolve();
+        });
+        act(() => harness.getController().updateDocumentDraft("spec", "# Local spec"));
+        document = { markdown: "# New host spec", updatedAt: "2026-07-25T11:00:00.000Z" };
+        task = createTaskCardFixture(task, { artifactSummary: specSavedAt(document.updatedAt) });
+        if (editor === "reopened") {
+          harness.unmount();
+          harness = renderController({ task, documentState, connection: harness.connection });
+          act(() => harness.getController().requestSectionChange("spec"));
+        } else {
+          harness.replaceTask(task);
+        }
+        await act(async () => {
+          await Promise.resolve();
+        });
+        await act(async () => {
+          await harness.getController().saveActiveDocument();
+        });
 
-      expect(saveDocument).not.toHaveBeenCalled();
-      expect(harness.getController().activeDraft).toBe("# Local spec");
-      expect(harness.getController().footerError).toBe(
-        "This document changed on the host while you were editing. Your edits are kept. Copy what you need, then close and reopen the task to load the latest version.",
-      );
-      expect(harness.getController().isSavingDocument).toBeNull();
-    } finally {
-      harness.unmount();
-    }
-  });
+        expect(saveDocument).not.toHaveBeenCalled();
+        expect(harness.getController().activeDraft).toBe("# Local spec");
+        expect(harness.getController().footerError).toBe(
+          "This document changed on the host while you were editing. Your edits are kept. Copy what you need, then close and reopen the task to load the latest version.",
+        );
+        expect(harness.getController().isSavingDocument).toBeNull();
+      } finally {
+        harness.unmount();
+      }
+    },
+  );
 
   test("saves a document again while the task card still shows the version before its save", async () => {
     const saveDocument = mock(async () => ({ updatedAt: "2026-07-25T12:00:00.000Z" }));
