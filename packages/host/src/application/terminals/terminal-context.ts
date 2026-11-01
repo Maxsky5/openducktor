@@ -1,4 +1,4 @@
-import type { TerminalContext } from "@openducktor/contracts";
+import type { TerminalContext, TerminalListFilter } from "@openducktor/contracts";
 
 export type TerminalTaskScope = {
   repoPath: string;
@@ -41,3 +41,24 @@ export const terminalContextMatchesTaskScope = (
   "taskId" in context &&
   context.repoPath === scope.repoPath &&
   scope.taskIds.includes(context.taskId);
+
+export const terminalContextMatchesFilter = (
+  context: TerminalContext,
+  filter: TerminalListFilter,
+): boolean => {
+  if (filter.kind === "all") return true;
+  if (filter.kind === "unassociated") return !("repoPath" in context);
+  if (filter.kind === "workspace_session")
+    return terminalContextMatchesWorkspaceSession(context, filter);
+  return terminalContextMatchesTaskScope(context, {
+    repoPath: filter.repoPath,
+    taskIds: [filter.taskId],
+  });
+};
+
+export const terminalListFilterForContext = (context: TerminalContext): TerminalListFilter => {
+  if (isTaskTerminalContext(context))
+    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
+  if (isWorkspaceSessionTerminalContext(context)) return context;
+  return { kind: "unassociated" };
+};

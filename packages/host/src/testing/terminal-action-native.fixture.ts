@@ -46,6 +46,7 @@ const screens = new Map<string, TerminalScreenState>();
 const inputs = new Map<string, string[]>();
 const writes: string[][] = [];
 const engine = createTerminalSessionEngine({
+  hostInstanceId: "native-test-host",
   now: () => new Date(),
   ptyPort: {
     start: (plan, handlers) =>

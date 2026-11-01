@@ -9,9 +9,11 @@ import {
   REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   REMOTE_STREAM_HEARTBEAT_INTERVAL_MS,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
+  TERMINAL_PROTOCOL_VERSION,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
+  decodeTerminalListSummary,
   remoteNegotiationResultSchema,
   REMOTE_PROTOCOL_VERSION,
   type RemoteClientHello,
@@ -142,6 +144,14 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
     expect(mismatch.result.failure.updateSide).toBe("client");
     const missing = await f.negotiate({ ...hello, requiredCapabilities: ["future.required"] });
     expect(missing.result.failure.missingCapabilities[0].name).toBe("future.required");
+    const legacy = await f.negotiate({
+      ...hello,
+      requiredCapabilities: hello.requiredCapabilities.map((name) =>
+        name === "terminal.v3" ? "terminal.v2" : name,
+      ),
+    });
+    expect(legacy.result.failure.updateSide).toBe("client");
+    expect(legacy.result.failure.nextAction).toContain("client");
     const accepted = await f.negotiate();
     expect(accepted.result.host.shell).toBe("electron");
     expect(accepted.result.missingOptionalCapabilities).toEqual(["future.optional"]);
@@ -290,6 +300,99 @@ test("task leases belong to their negotiated connection and carry the captured r
   }
 });
 
+test("two remote terminal lists receive idle creation and close without output attachments", async () => {
+  const f = await fixture();
+  const sockets: WebSocket[] = [];
+  type Message = ReturnType<typeof decodeTerminalProtocolFrame>["message"];
+  const next = (socket: WebSocket, matches: (message: Message, payload: Uint8Array) => boolean) =>
+    new Promise<ReturnType<typeof decodeTerminalProtocolFrame>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        socket.off("message", receive);
+        reject(new Error("The remote terminal list did not update."));
+      }, 500);
+      const receive = (data: import("ws").RawData) => {
+        const frame = decodeTerminalProtocolFrame(
+          Array.isArray(data)
+            ? Buffer.concat(data)
+            : data instanceof ArrayBuffer
+              ? new Uint8Array(data)
+              : data,
+        );
+        if (!matches(frame.message, frame.payload)) return;
+        clearTimeout(timer);
+        socket.off("message", receive);
+        resolve(frame);
+      };
+      socket.on("message", receive);
+    });
+  try {
+    for (const subscriptionId of ["desktop", "mobile"]) {
+      const admission = await f.negotiate();
+      const socket = new WebSocket(f.base.replace("http:", "ws:") + "/terminal", [
+        TERMINAL_PROTOCOL_SUBPROTOCOL,
+        `${REMOTE_TERMINAL_CONNECTION_PREFIX}${admission.result.connectionId}`,
+      ]);
+      sockets.push(socket);
+      await new Promise<void>((resolve, reject) => {
+        socket.once("open", resolve);
+        socket.once("error", reject);
+      });
+      const ready = next(socket, (message) => message.type === "list_snapshot_end");
+      socket.send(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "observe_list",
+            subscriptionId,
+            filter: { kind: "task", repoPath: "/repo", taskId: "task" },
+          },
+          payload: new Uint8Array(),
+        }),
+      );
+      await ready;
+    }
+    const updates = sockets.map((socket) =>
+      next(
+        socket,
+        (message, payload) =>
+          message.type === "list_updated" &&
+          decodeTerminalListSummary(payload).lifecycle === "running",
+      ),
+    );
+    const created = await Effect.runPromise(
+      f.terminal.service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task" },
+      }),
+    );
+    for (const frame of await Promise.all(updates)) {
+      expect(frame.message).toMatchObject({
+        type: "list_updated",
+      });
+      expect(decodeTerminalListSummary(frame.payload)).toMatchObject({
+        terminalId: created.ref.terminalId,
+        lifecycle: "running",
+      });
+    }
+    expect(f.terminal.pty.operations).toEqual([]);
+    const removals = sockets.map((socket) =>
+      next(socket, (message) => message.type === "list_removed"),
+    );
+    await Effect.runPromise(
+      f.terminal.service.close({ terminalId: created.ref.terminalId, confirmTerminate: true }),
+    );
+    for (const frame of await Promise.all(removals))
+      expect(frame.message).toMatchObject({
+        type: "list_removed",
+        terminalId: created.ref.terminalId,
+      });
+    expect(f.terminal.pty.operations).toEqual(["terminate"]);
+  } finally {
+    for (const socket of sockets) socket.terminate();
+    await f.close();
+  }
+});
+
 test("remote terminal attachment uses the local PTY and closes only its client when admission ends", async () => {
   const f = await fixture();
   let socket: WebSocket | null = null;
@@ -345,7 +448,7 @@ test("remote terminal attachment uses the local PTY and closes only its client w
     socket.send(
       encodeTerminalProtocolFrame({
         message: {
-          version: 2,
+          version: TERMINAL_PROTOCOL_VERSION,
           type: "attach",
           terminalId: "terminal-1",
           lastConsumedSequence: null,

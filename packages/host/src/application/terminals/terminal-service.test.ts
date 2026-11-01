@@ -3,6 +3,7 @@ import type {
   TerminalActivityMessage,
   TerminalServerMessage,
   WorkspaceSession,
+  TerminalSummary,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -84,6 +85,75 @@ describe("TerminalService", () => {
     } finally {
       await Effect.runPromise(Deferred.succeed(release, undefined));
       await Effect.runPromise(Fiber.interrupt(creating));
+      await Effect.runPromise(service.dispose());
+    }
+  });
+
+  test("keeps scoped list observers current through idle creation, title, exit, close, and release", async () => {
+    let nextId = 0;
+    const { service, pty, settleTitles } = await makeService(
+      makePty(true, false),
+      () => `terminal-${++nextId}`,
+    );
+    const summaries = new Map<string, TerminalSummary>();
+    const other: string[] = [];
+    const stop = await Effect.runPromise(
+      service.observeList(
+        { kind: "task", repoPath: "/repo", taskId: "task" },
+        {
+          snapshot: (list) => {
+            expect(list.hostInstanceId).toBe("host-1");
+            for (const summary of list.terminals) summaries.set(summary.terminalId, summary);
+          },
+          updated: (summary) => summaries.set(summary.terminalId, summary),
+          removed: (terminalId) => {
+            summaries.delete(terminalId);
+          },
+        },
+      ),
+    );
+    const stopOther = await Effect.runPromise(
+      service.observeList(
+        { kind: "unassociated" },
+        {
+          snapshot: (list) => {
+            other.push(...list.terminals.map((summary) => summary.terminalId));
+          },
+          updated: (summary) => {
+            other.push(summary.terminalId);
+          },
+          removed: (terminalId) => {
+            other.push(terminalId);
+          },
+        },
+      ),
+    );
+    try {
+      const terminal = await Effect.runPromise(
+        service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      );
+      expect([...summaries.keys()]).toEqual([terminal.ref.terminalId]);
+      expect(summaries.get(terminal.ref.terminalId)?.lifecycle).toBe("running");
+      expect(other).toEqual([]);
+      expect(pty.operations).toEqual([]);
+      pty.emit(new TextEncoder().encode("\u001b]0;new title\u0007"));
+      settleTitles();
+      expect(summaries.get(terminal.ref.terminalId)?.label).toBe("new title");
+      pty.exit();
+      expect(summaries.get(terminal.ref.terminalId)?.lifecycle).toBe("exited");
+      await Effect.runPromise(
+        service.close({ terminalId: terminal.ref.terminalId, confirmTerminate: false }),
+      );
+      expect([...summaries.keys()]).toEqual([]);
+      stop();
+      await Effect.runPromise(
+        service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      );
+      expect([...summaries.keys()]).toEqual([]);
+      expect(other).toEqual([]);
+    } finally {
+      stop();
+      stopOther();
       await Effect.runPromise(service.dispose());
     }
   });

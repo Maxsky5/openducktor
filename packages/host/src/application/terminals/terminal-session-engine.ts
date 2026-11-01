@@ -1,8 +1,4 @@
-import {
-  type TerminalContext,
-  type TerminalListFilter,
-  type TerminalSummary,
-} from "@openducktor/contracts";
+import { type TerminalContext, type TerminalListFilter } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
@@ -12,16 +8,12 @@ import {
   terminalContextKey,
   terminalContextMatchesTaskScope,
   terminalContextMatchesWorkspaceSession,
+  terminalListFilterForContext,
 } from "./terminal-context";
 import { TERMINAL_LIMITS } from "./terminal-limits";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
 import { TerminalServiceError } from "./terminal-service-error";
-import {
-  copyTerminalSummary,
-  isCommandRunning,
-  isLiveTerminal,
-  type TerminalSession,
-} from "./terminal-session";
+import { isCommandRunning, isLiveTerminal, type TerminalSession } from "./terminal-session";
 import {
   createTerminalSessionLifecycle,
   terminalFailure,
@@ -33,7 +25,7 @@ import {
 } from "./terminal-session-output";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalSessionProducer } from "./terminal-session-producer";
-import { createTerminalActivity } from "./terminal-activity";
+import { createTerminalMetadata } from "./terminal-metadata";
 import { restartCommand } from "./terminal-command-restart";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
@@ -44,28 +36,35 @@ export type TerminalWorkspaceActivity = {
 };
 
 export const createTerminalSessionEngine = ({
+  hostInstanceId,
   now,
   ptyPort,
   scheduleTitleSettlement,
 }: {
+  hostInstanceId: string;
   now: () => Date;
   ptyPort: TerminalPtyPort;
   scheduleTitleSettlement?: TerminalTitleSettlementScheduler;
 }) => {
   const sessions = new Map<string, TerminalSession>();
-  const activity = createTerminalActivity(sessions);
-  const lifecycle = createTerminalSessionLifecycle({ now, sessions, activity });
+  const metadata = createTerminalMetadata(sessions);
+  const lifecycle = createTerminalSessionLifecycle({ now, sessions, metadata });
   const { applyStreamEvents, closeSession, closeSessions, getSession, pruneExited } = lifecycle;
   const producer = createTerminalSessionProducer({
+    hostInstanceId,
     sessions,
     ptyPort,
     lifecycle,
-    activity,
+    metadata,
     scheduleTitleSettlement,
   });
 
   return {
-    observeActivity: activity.observe,
+    observeActivity: metadata.observeActivity,
+    observeList(filter: TerminalListFilter, observer: Parameters<typeof metadata.observeList>[1]) {
+      pruneExited();
+      return metadata.observeList(filter, observer);
+    },
     countLive: (): number => {
       pruneExited();
       return [...sessions.values()].filter(
@@ -132,20 +131,13 @@ export const createTerminalSessionEngine = ({
         });
         yield* restartCommand(session, expectedCommand);
       }),
-    list: (filter: TerminalListFilter): TerminalSummary[] => {
+    list: (filter: TerminalListFilter) => {
       pruneExited();
-      return [...sessions.values()].flatMap((session) => {
-        const matches =
-          filter.kind === "all" ||
-          (filter.kind === "unassociated" && !("repoPath" in session.summary.context)) ||
-          (filter.kind === "task" &&
-            "taskId" in session.summary.context &&
-            terminalContextKey(session.summary.context) ===
-              terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId })) ||
-          (filter.kind === "workspace_session" &&
-            terminalContextMatchesWorkspaceSession(session.summary.context, filter));
-        return matches ? [copyTerminalSummary(session)] : [];
-      });
+      return metadata.snapshot(filter).terminals;
+    },
+    listSnapshot: (filter: TerminalListFilter) => {
+      pruneExited();
+      return metadata.snapshot(filter);
     },
     preparePathInput: (
       terminalId: string,
@@ -417,13 +409,14 @@ export const createTerminalSessionEngine = ({
     close: (
       terminalId: string,
       confirmTerminate: boolean,
-    ): Effect.Effect<void, TerminalServiceError> =>
+    ): Effect.Effect<ReturnType<typeof metadata.snapshot>, TerminalServiceError> =>
       Effect.gen(function* () {
         const session = yield* Effect.try({
           try: () => getSession(terminalId, "close"),
           catch: (cause) => terminalOperationFailure(cause, "close"),
         });
         yield* closeSession(session, confirmTerminate);
+        return metadata.snapshot(terminalListFilterForContext(session.summary.context));
       }),
     readOutputTail: (
       terminalId: string,

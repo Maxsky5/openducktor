@@ -171,14 +171,6 @@ export const terminalRunActionRequestSchema = terminalOwnedLaunchSpecSchema.exte
 });
 export type TerminalRunActionRequest = z.infer<typeof terminalRunActionRequestSchema>;
 
-export const terminalCreateResponseSchema = z
-  .object({
-    ref: terminalRefSchema,
-    summary: terminalSummarySchema,
-  })
-  .strict();
-export type TerminalCreateResponse = z.infer<typeof terminalCreateResponseSchema>;
-
 export const terminalListFilterSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all") }).strict(),
   z
@@ -205,10 +197,20 @@ export type TerminalListRequest = z.infer<typeof terminalListRequestSchema>;
 export const terminalListResponseSchema = z
   .object({
     hostInstanceId: z.string().min(1),
+    revision: z.number().int().nonnegative(),
     terminals: z.array(terminalSummarySchema),
   })
   .strict();
 export type TerminalListResponse = z.infer<typeof terminalListResponseSchema>;
+
+export const terminalCreateResponseSchema = z
+  .object({
+    ref: terminalRefSchema,
+    summary: terminalSummarySchema,
+    list: terminalListResponseSchema,
+  })
+  .strict();
+export type TerminalCreateResponse = z.infer<typeof terminalCreateResponseSchema>;
 
 export const terminalPreparePathInputRequestSchema = z
   .object({
@@ -237,7 +239,7 @@ export const terminalCloseRequestSchema = z
 export type TerminalCloseRequest = z.infer<typeof terminalCloseRequestSchema>;
 
 export const terminalCloseResponseSchema = z.discriminatedUnion("closed", [
-  z.object({ closed: z.literal(true) }).strict(),
+  z.object({ closed: z.literal(true), list: terminalListResponseSchema }).strict(),
   z.object({ closed: z.literal(false), confirmationRequired: z.literal(true) }).strict(),
 ]);
 export type TerminalCloseResponse = z.infer<typeof terminalCloseResponseSchema>;

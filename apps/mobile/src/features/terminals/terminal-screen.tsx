@@ -1,11 +1,13 @@
 import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
+import { StackActions } from "expo-router/react-navigation";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { WorkHeaderTitle } from "@/features/work-owner/work-header-title";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
 import { WorkOwnerScreen } from "@/features/work-owner/work-owner-screen";
+import { toWorkOwnerParams } from "@/features/work-owner/work-owner-params";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { IconButton } from "@/ui/icon-button";
 import { EmptyState } from "@/ui/states";
@@ -18,13 +20,13 @@ import { useTerminalClose } from "./use-terminal-close";
 
 /** One terminal of a task or chat, attached and ready for input. */
 export function TerminalScreen(): ReactElement {
-  const { terminalId } = useLocalSearchParams();
-  const id = Array.isArray(terminalId) ? terminalId[0] : terminalId;
+  const { tabId } = useLocalSearchParams();
+  const id = Array.isArray(tabId) ? tabId[0] : tabId;
   return (
     <WorkOwnerScreen title="Terminal" diffs={false}>
       {(owner) =>
         id ? (
-          <TerminalContent owner={owner} terminalId={id} />
+          <TerminalContent owner={owner} tabId={id} />
         ) : (
           <EmptyState
             icon="link-off"
@@ -37,21 +39,15 @@ export function TerminalScreen(): ReactElement {
   );
 }
 
-function TerminalContent({
-  owner,
-  terminalId,
-}: {
-  owner: WorkOwner;
-  terminalId: string;
-}): ReactElement {
-  const router = useRouter();
+function TerminalContent({ owner, tabId }: { owner: WorkOwner; tabId: string }): ReactElement {
+  const navigation = useNavigation();
   const theme = useAppTheme();
   const model = useOwnerTerminals(owner);
   const goBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-  }, [router]);
-  const { close, closeUnknown } = useTerminalClose(model, goBack);
-  const tab = findTerminalTab(model.tabs, terminalId);
+    navigation.dispatch(StackActions.popTo("work/terminals", toWorkOwnerParams(owner.ref)));
+  }, [navigation, owner.ref]);
+  const { close, closeUnknown } = useTerminalClose(model, { onClosing: goBack });
+  const tab = findTerminalTab(model.tabs, tabId);
   const closing = tab !== null && model.closingTabIds.has(tab.tabId);
   // The close control of the desktop terminal tab. It turns into a spinner while the host closes.
   const { controller } = model;
@@ -110,7 +106,7 @@ function TerminalContent({
       ) : null}
       <TerminalPane
         model={model}
-        terminalId={terminalId}
+        tabId={tabId}
         onRemoveLost={(lost) => void close(lost)}
         onBack={goBack}
       />

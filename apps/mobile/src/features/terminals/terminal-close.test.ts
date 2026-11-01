@@ -1,8 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TerminalCloseResponse } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { remoteError } from "@openducktor/host-client/remote";
 import { closeTerminalTab, type TerminalCloseModel } from "./terminal-close";
+
+type CloseResult = Awaited<ReturnType<TerminalCloseModel["onClose"]>>;
 
 const tab: TerminalTab = {
   tabId: "tab:t-1",
@@ -23,7 +24,7 @@ const tab: TerminalTab = {
 };
 
 const closeModel = (
-  results: Array<TerminalCloseResponse | Error>,
+  results: Array<CloseResult | Error>,
   running: string[] = [],
 ): TerminalCloseModel & { calls: boolean[] } => {
   const calls: boolean[] = [];
@@ -41,6 +42,34 @@ const closeModel = (
 };
 
 describe("closeTerminalTab", () => {
+  test.each([false, true])(
+    "leaves the terminal before the host confirms close, running=%s",
+    async (running) => {
+      const result = Promise.withResolvers<CloseResult>();
+      const events: string[] = [];
+      const model: TerminalCloseModel = {
+        runningCommandTerminalIds: new Set(running ? ["t-1"] : []),
+        onClose: () => {
+          events.push("request");
+          return result.promise;
+        },
+      };
+      const closing = closeTerminalTab(
+        model,
+        tab,
+        async () => true,
+        () => events.push("leave"),
+      );
+      await Promise.resolve();
+      try {
+        expect(events).toEqual(["leave", "request"]);
+      } finally {
+        result.resolve({ closed: true });
+        await closing;
+      }
+    },
+  );
+
   test("closes an idle terminal without asking", async () => {
     const model = closeModel([{ closed: true }]);
     const confirm = mock(async () => true);
@@ -65,8 +94,12 @@ describe("closeTerminalTab", () => {
 
   test("asks first for a terminal that runs a command", async () => {
     const declined = closeModel([], ["t-1"]);
-    expect(await closeTerminalTab(declined, tab, async () => false)).toEqual({ kind: "kept" });
+    const onClosing = mock(() => {});
+    expect(await closeTerminalTab(declined, tab, async () => false, onClosing)).toEqual({
+      kind: "kept",
+    });
     expect(declined.calls).toEqual([]);
+    expect(onClosing).not.toHaveBeenCalled();
     const confirmed = closeModel([{ closed: true }], ["t-1"]);
     expect(await closeTerminalTab(confirmed, tab, async () => true)).toEqual({ kind: "closed" });
     expect(confirmed.calls).toEqual([true]);

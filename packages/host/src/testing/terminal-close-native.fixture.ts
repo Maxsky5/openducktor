@@ -10,6 +10,7 @@ import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
   let rejectClose = true;
   const engine = createTerminalSessionEngine({
+    hostInstanceId: "native-test-host",
     now: () => new Date(),
     ptyPort: createNodePtyPort({
       processTreeTerminator: (input) =>

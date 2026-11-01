@@ -200,7 +200,6 @@ export const createTerminalPresentationState = (): TerminalPresentationState => 
 
 const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): ReadyTerminalTab => {
   const previousSummary = previous?.requestState === "ready" ? previous.summary : null;
-  const previousLabel = previous ? terminalTabLabel(previous) : null;
   const preserveLiveLifecycle =
     previous?.requestState === "ready" &&
     previous.awaitingLifecycleSync &&
@@ -208,10 +207,9 @@ const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): ReadyTermi
   const nextSummary = previousSummary
     ? {
         ...summary,
-        label: previousLabel ?? summary.label,
         lifecycle: preserveLiveLifecycle ? previousSummary.lifecycle : summary.lifecycle,
       }
-    : { ...summary, label: previousLabel ?? summary.label };
+    : { ...summary };
   if (
     previous?.requestState === "ready" &&
     previous.awaitingLifecycleSync === preserveLiveLifecycle &&
@@ -366,11 +364,14 @@ export const terminalPresentationReducer = (
       };
     }
     if (event.type === "creationCompleted") {
+      if (!scope.tabs.some((tab) => tab.tabId === event.tabId)) return scope;
       return {
         ...scope,
-        tabs: scope.tabs.map((tab) =>
-          tab.tabId === event.tabId ? toHostTab(event.summary, tab) : tab,
-        ),
+        tabs: scope.tabs.flatMap((tab) => {
+          if (tab.tabId === event.tabId) return [toHostTab(event.summary, tab)];
+          if (tab.terminalId === event.summary.terminalId) return [];
+          return [tab];
+        }),
       };
     }
     if (event.type === "closeStarted") {

@@ -1,13 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
+  decodeTerminalListSummary,
+  decodeTerminalProtocolFrame,
+  encodeTerminalProtocolFrame,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalClientMessage,
   type TerminalServerMessage,
+  type TerminalSummary,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { createTerminalClientSession } from "./terminal-client-session";
-import type { TerminalService } from "./terminal-service";
+import type { TerminalListObserver, TerminalService } from "./terminal-service";
 import { TerminalServiceError } from "./terminal-service-error";
+import { TERMINAL_LIMITS } from "./terminal-limits";
+import { TerminalScreenState } from "./terminal-screen-state";
 
 type TerminalClientService = Parameters<typeof createTerminalClientSession>[0]["terminalService"];
 
@@ -20,10 +26,160 @@ const createTerminalClientService = <Overrides extends Partial<TerminalClientSer
   resize: () => Effect.die("resize is not configured for this test"),
   write: () => Effect.die("write is not configured for this test"),
   observeActivity: () => Effect.die("observeActivity is not configured for this test"),
+  observeList: () => Effect.die("observeList is not configured for this test"),
   ...overrides,
 });
 
 describe("TerminalClientSession", () => {
+  test("delivers a long retained output line and reports an oversized list update before releasing its observer", async () => {
+    const screen = new TerminalScreenState({ columns: 80, rows: 24 });
+    const frames: ReturnType<typeof decodeTerminalProtocolFrame>[] = [];
+    const active = new Set<TerminalListObserver>();
+    let observer: TerminalListObserver | undefined;
+    const summary: TerminalSummary = {
+      terminalId: "long-output",
+      label: "Action",
+      initialWorkingDir: "/repo",
+      createdAt: "2026-10-04T12:00:00.000Z",
+      lifecycle: "exited",
+      exit: {
+        exitCode: 0,
+        signal: null,
+        finalSequence: 70_000,
+        exitedAt: "2026-10-04T12:01:00.000Z",
+      },
+      startedBy: "user",
+      context: {},
+    };
+    const session = createTerminalClientSession({
+      clientId: "list-client",
+      terminalService: createTerminalClientService({
+        observeList: (_filter, next) =>
+          Effect.sync(() => {
+            observer = next;
+            active.add(next);
+            next.snapshot({ hostInstanceId: "host-1", revision: 1, terminals: [summary] });
+            return () => {
+              active.delete(next);
+            };
+          }),
+      }),
+      send: (message, payload) =>
+        frames.push(decodeTerminalProtocolFrame(encodeTerminalProtocolFrame({ message, payload }))),
+    });
+    try {
+      screen.write(new TextEncoder().encode("x".repeat(70_000)), () => {});
+      await screen.drained();
+      const outputTail = screen.outputTail(20);
+      expect(outputTail).toEqual(["x".repeat(70_000)]);
+      summary.initialCommandResult = { type: "exited", exitCode: 0, signal: null, outputTail };
+      await Effect.runPromise(
+        session.handle(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "observe_list",
+            subscriptionId: "long-list",
+            filter: { kind: "unassociated" },
+          },
+          new Uint8Array(),
+        ),
+      );
+      expect(frames.map(({ message }) => message.type)).toEqual([
+        "list_snapshot_start",
+        "list_updated",
+        "list_snapshot_end",
+      ]);
+      expect(decodeTerminalListSummary(frames[1]!.payload)).toEqual(summary);
+      expect(active.size).toBe(1);
+      observer!.updated(
+        {
+          ...summary,
+          initialCommandResult: {
+            type: "exited",
+            exitCode: 0,
+            signal: null,
+            outputTail: ["x".repeat(8 * 1024 * 1024)],
+          },
+        },
+        2,
+      );
+      expect(frames.at(-1)?.message).toMatchObject({
+        type: "protocol_error",
+        failure: {
+          code: "protocol_error",
+          message: expect.stringContaining("Terminal list delivery failed"),
+        },
+      });
+      expect(active.size).toBe(0);
+    } finally {
+      await Effect.runPromise(session.close());
+      screen.dispose();
+    }
+  });
+
+  test("routes scoped list frames, bounds observers, and releases them without attaching output", async () => {
+    const active = new Set<TerminalListObserver>();
+    const sent: TerminalServerMessage[] = [];
+    const session = createTerminalClientSession({
+      clientId: "list-client",
+      terminalService: createTerminalClientService({
+        observeList: (_filter, observer) =>
+          Effect.sync(() => {
+            active.add(observer);
+            observer.snapshot({ hostInstanceId: "host-1", revision: 1, terminals: [] });
+            return () => {
+              active.delete(observer);
+            };
+          }),
+      }),
+      send: (message, payload) => {
+        expect(payload.byteLength).toBe(0);
+        sent.push(message);
+      },
+    });
+    const observe = (subscriptionId: string) =>
+      Effect.runPromise(
+        session.handle(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "observe_list",
+            subscriptionId,
+            filter: { kind: "unassociated" },
+          },
+          new Uint8Array(),
+        ),
+      );
+    try {
+      await observe("list-1");
+      expect(sent).toMatchObject([
+        { type: "list_snapshot_start", subscriptionId: "list-1", hostInstanceId: "host-1" },
+        { type: "list_snapshot_end", subscriptionId: "list-1" },
+      ]);
+      await observe("list-1");
+      expect(active.size).toBe(1);
+      for (let index = 1; index < TERMINAL_LIMITS.listSubscriptionsPerClient; index += 1)
+        await observe(`extra-${index}`);
+      await observe("over-limit");
+      expect(active.size).toBe(TERMINAL_LIMITS.listSubscriptionsPerClient);
+      expect(sent.at(-1)).toMatchObject({
+        type: "protocol_error",
+        failure: { code: "protocol_error", message: expect.stringContaining("subscription limit") },
+      });
+      await Effect.runPromise(
+        session.handle(
+          { version: TERMINAL_PROTOCOL_VERSION, type: "unobserve_list", subscriptionId: "list-1" },
+          new Uint8Array(),
+        ),
+      );
+      await observe("replacement");
+      expect(active.size).toBe(TERMINAL_LIMITS.listSubscriptionsPerClient);
+      await Effect.runPromise(session.close());
+      expect(active.size).toBe(0);
+    } finally {
+      await Effect.runPromise(session.close());
+    }
+  });
+
   test("writes input frames in arrival order when one arrives right after a release", async () => {
     const writes: number[] = [];
     const firstEntered = Deferred.makeUnsafe<void>();

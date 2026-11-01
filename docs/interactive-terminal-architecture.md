@@ -13,7 +13,7 @@ The app does not store terminal sessions, tabs, or transcripts in settings or SQ
 - `packages/contracts` defines commands, summaries, typed failures, and the binary protocol. A frame has a four-byte big-endian JSON header length, the JSON header, and an optional binary body.
 - `packages/host` owns IDs, launch rules, limits, in-memory sessions, output replay, byte order, flow control, titles, and cleanup. PTY adapters implement `TerminalPtyPort`.
 - Electron uses the shared `node-pty` adapter over a dedicated preload IPC bridge.
-- The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v2` subprotocol.
+- The Node web runner uses the same `node-pty` adapter over one authenticated WebSocket. It checks origin and requires the `openducktor-terminal.v3` subprotocol.
 - `packages/frontend-core/src/terminals` owns the terminal bridge contract, the remote terminal bridge, the collection hook, the tab presentation state, the transport controller and pool, the output sequencer, and the keyboard, link, and URL rules. A transport lease shares one controller and one connection per terminal bridge across terminal views. The last lease closes the connection. The task and Workspace Session views supply their owner and requested start directory.
 - `packages/frontend/src/features/terminals` owns the desktop terminal tabs, terminal layer, close dialog, and xterm renderer.
 - `apps/mobile/src/features/terminals` owns the mobile Terminals views. Its isolated page draws xterm.js and reports consumed output, input, and grid changes. React Native owns the socket, attachment, acknowledgements, and recovery through the shared transport controller.
@@ -23,13 +23,13 @@ Create, run action, list, close, restart, and path setup use host commands. Inpu
 
 ## Discover terminals
 
-The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty bottom panel starts a terminal only after discovery succeeds and the bottom panel is still empty. New terminals and action runs use one start rule. They stay disabled while discovery runs or fails, while another terminal starts, and when the owner has 8 terminals. The control shows the reason.
+The frontend uses an owner-scoped TanStack Query read to discover host terminals. Opening an empty bottom panel starts a terminal only after discovery succeeds and the bottom panel is still empty. New terminals and action runs use one start rule. They stay disabled while initial discovery runs or discovery fails, while another terminal starts, and when the owner has 8 terminals. The control shows the reason.
 
 An open request made during discovery waits for that result and creates at most one terminal. Discovery failure, a terminal in the bottom panel, closing the bottom panel, or switching owners cancels the request. Later refreshes do not create terminals without a new open request. The current scope shows loading or empty feedback while other scopes keep their viewports mounted.
 
 Each terminal summary has `startedBy`. The value is `user` for a shell or an action that the user starts, and `host` for a terminal that OpenDucktor starts without a user request, such as a worktree-creation action. Until the user opens or closes the bottom panel for an owner, the bottom panel opens when it holds a terminal that the user started. A `host` terminal stays in the tab list and does not open the bottom panel. When the user opens the bottom panel, the tab shows the retained output.
 
-Discovery failure appears in the bottom panel, and in any panel that shows a terminal tab, with `Retry terminal discovery`. Retry refetches the owner query. A failed refresh keeps existing tabs and their mounted viewports. Discovery does not poll or retry automatically. The live terminal transport remains separate from the list query.
+Discovery failure appears in the bottom panel, and in any panel that shows a terminal tab, with `Retry terminal discovery`. Retry refetches the owner query. A failed refresh keeps existing tabs and their mounted viewports. Discovery does not poll or retry automatically. The live terminal transport feeds owner-scoped list snapshots, summary changes, and removals into the same query cache. Each observer has a transient subscription ID. Reconnect replaces its snapshot, and disconnect releases its host observer. List observation does not attach to output. A background refresh keeps ready rows and creation controls usable.
 
 ## Terminal tabs in session panels
 
@@ -42,6 +42,8 @@ A move from one panel to the other mounts the viewport again in the target panel
 Each panel keeps the viewports of all mounted owners that it holds, so an owner switch does not mount a viewport again. Only the terminals of the selected owner show. The right panel unmounts its viewports while it is hidden. Terminal tabs in both panels count toward the limit of 8 terminals for an owner.
 
 ## Start a terminal
+
+A confirmed create includes the complete scoped list and its host metadata revision. The shared query cache applies it before the pending tab becomes ready, then binds that tab to the newest cached summary. A screen that mounts after the reply keeps the returned tab ID. Newer title, lifecycle, or removal events remain authoritative when the create reply arrives late. Older buffered snapshots cannot remove the new tab. The start handler checks shared pending state so a repeated header callback cannot send another create.
 
 `workingDir` is required. For a task or Workspace Session, the host reads the current target and checks that the requested directory matches it. The host starts in the saved target, checks that it is an accessible directory, and saves the canonical path as `initialWorkingDir`. For a terminal with no owner, the host starts in the requested directory. Later `cd` commands do not change `initialWorkingDir`.
 
@@ -164,7 +166,7 @@ The producer resumes paused output before it stops the process tree. The PTY pro
 
 If process-tree termination fails while the PTY remains live, the adapter restores the host's current output pause request. An ACK or detach during close can clear that request.
 
-The UI hides a tab while close is pending. It restores the tab when confirmation is needed or close fails.
+The UI hides a tab while close is pending. Mobile returns to the owner list at once. It restores the tab when confirmation is needed or close fails. A confirmed close applies the complete scoped list and its revision before it settles the tab. Older reads and buffered snapshots cannot restore the closed terminal. Confirmation keeps the ready list visible.
 
 Task close, delete, reset, and merged-worktree cleanup take a terminal cleanup lease. They stop task terminals before worktrees, branches, or task records. A terminal failure stops later cleanup. The lease blocks a new task terminal during cleanup. It does not block terminals owned by other sessions or the global scope.
 

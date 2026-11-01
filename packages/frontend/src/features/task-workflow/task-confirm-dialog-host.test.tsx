@@ -60,7 +60,7 @@ const closeConfirmationHost = ({
         mergeCandidate: true,
         branchOid,
       }),
-      terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
+      terminalList: async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }),
       taskStopImpactGet: readStopImpact,
       taskMergeStatusGet: async (repoPath) => {
         const status: TaskMergeStatus = {

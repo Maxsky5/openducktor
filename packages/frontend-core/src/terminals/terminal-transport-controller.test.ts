@@ -20,6 +20,85 @@ interface BridgeCallbacksContract {
 const terminalId = "terminal-1";
 
 describe("createTerminalTransportController", () => {
+  test("restores list subscriptions and waits for their replacement snapshots during recovery", async () => {
+    let recover: ((signal: AbortSignal) => Promise<void>) | undefined;
+    const receivers: Array<(frame: Uint8Array) => void> = [];
+    const states: Array<(state: TerminalTransportState) => void> = [];
+    const sent: Uint8Array[] = [];
+    const controller = createTerminalTransportController(
+      {
+        subscribeRecovery: (listener) => {
+          recover = listener;
+          return () => {};
+        },
+        connect: async (onFrame, onState) => {
+          receivers.push(onFrame);
+          states.push(onState);
+          return {
+            send: async (frame) => {
+              sent.push(frame);
+            },
+            close: () => undefined,
+          };
+        },
+      },
+      () => {},
+    );
+    const stop = controller.subscribeList({ kind: "unassociated" }, () => {});
+    const abort = new AbortController();
+    let restoration: Promise<void> | undefined;
+    try {
+      await controller.connect();
+      states[0]?.("disconnected");
+      if (!recover) throw new Error("The terminal controller did not join recovery.");
+      let completed = false;
+      restoration = recover(abort.signal).then(() => {
+        completed = true;
+      });
+      await Bun.sleep(10);
+      expect(receivers).toHaveLength(2);
+      expect(completed).toBe(false);
+      const observations = sent
+        .map((frame) => decodeTerminalProtocolFrame(frame).message)
+        .filter((message) => message.type === "observe_list");
+      expect(observations).toHaveLength(2);
+      const latest = observations.at(-1);
+      if (latest?.type !== "observe_list")
+        throw new Error("The list was not observed after reconnect.");
+      const emit = (type: "list_snapshot_start" | "list_snapshot_end") =>
+        receivers[1]?.(
+          encodeTerminalProtocolFrame({
+            message:
+              type === "list_snapshot_start"
+                ? {
+                    version: TERMINAL_PROTOCOL_VERSION,
+                    type,
+                    subscriptionId: latest.subscriptionId,
+                    hostInstanceId: "replacement-host",
+                    revision: 1,
+                  }
+                : {
+                    version: TERMINAL_PROTOCOL_VERSION,
+                    type,
+                    subscriptionId: latest.subscriptionId,
+                  },
+            payload: new Uint8Array(),
+          }),
+        );
+      emit("list_snapshot_start");
+      await Promise.resolve();
+      expect(completed).toBe(false);
+      emit("list_snapshot_end");
+      await restoration;
+      expect(completed).toBe(true);
+    } finally {
+      abort.abort(new Error("Test finished"));
+      await restoration?.catch(() => undefined);
+      stop();
+      await controller.dispose();
+    }
+  });
+
   test("surfaces a bridge transport failure before reconnecting", async () => {
     const bridgeCallbacks: BridgeCallbacksContract = { reportFailure: undefined };
     const failures: TerminalFailure[] = [];
@@ -870,7 +949,7 @@ describe("createTerminalTransportController", () => {
     expect(operations).toEqual(["attach", "close", "detach"]);
   });
 
-  test("routes binary output and rejects client-directed frames from the host", async () => {
+  test("routes binary output and reports client-directed frames as transport failures", async () => {
     let receive = (_frame: Uint8Array): void => {
       throw new Error("Terminal bridge did not connect.");
     };
@@ -880,7 +959,13 @@ describe("createTerminalTransportController", () => {
         return { send: async () => {}, close: () => {} };
       },
     };
-    const controller = createTerminalTransportController(bridge, () => {});
+    const failures: TerminalFailure[] = [];
+    const states: string[] = [];
+    const controller = createTerminalTransportController(
+      bridge,
+      (state) => states.push(state),
+      (failure) => failures.push(failure),
+    );
     await controller.connect();
     const emitFrame = receive;
     const outputs: number[][] = [];
@@ -899,14 +984,17 @@ describe("createTerminalTransportController", () => {
       }),
     );
     expect(outputs).toEqual([[0, 255]]);
-    expect(() =>
-      emitFrame(
-        encodeTerminalProtocolFrame({
-          message: { version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId },
-          payload: new Uint8Array([1]),
-        }),
-      ),
-    ).toThrow("client-directed");
+    emitFrame(
+      encodeTerminalProtocolFrame({
+        message: { version: TERMINAL_PROTOCOL_VERSION, type: "input", terminalId },
+        payload: new Uint8Array([1]),
+      }),
+    );
+    expect(failures).toMatchObject([
+      { code: "protocol_error", message: expect.stringContaining("client-directed") },
+    ]);
+    expect(states).toContain("disconnected");
+    await controller.dispose();
   });
 
   test("reports connection-global protocol errors instead of dropping them", async () => {

@@ -1,6 +1,17 @@
 import "../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoAction, TerminalListResponse, TerminalSummary } from "@openducktor/contracts";
+import {
+  encodeTerminalProtocolFrame,
+  encodeTerminalListSummary,
+  decodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
+  type RepoAction,
+  type TerminalListResponse,
+  type TerminalSummary,
+  type TerminalCreateResponse,
+  type TerminalCloseResponse,
+  type TerminalListMessage,
+} from "@openducktor/contracts";
 import {
   createHostClient,
   type HostClient,
@@ -17,13 +28,46 @@ import { useTerminals, type TerminalDependencies, type TerminalScope } from "./u
 type StartedTerminal = { tabId: string | null };
 
 describe("useTerminals", () => {
+  test("reports activity readiness even when an empty snapshot keeps the command set empty", async () => {
+    const view = renderModel(async () => ({
+      hostInstanceId: "host-1",
+      revision: 1,
+      terminals: [],
+    }));
+    try {
+      await waitFor(() => expect(view.result.current.controller).not.toBeNull());
+      const [onFrame, onStateChange] = await view.transport;
+      expect(view.result.current.activityStatus).toBe("loading");
+      act(() => {
+        for (const type of ["activity_snapshot_start", "activity_snapshot_end"] as const) {
+          onFrame(
+            encodeTerminalProtocolFrame({
+              message: { version: TERMINAL_PROTOCOL_VERSION, type },
+              payload: new Uint8Array(),
+            }),
+          );
+        }
+      });
+      expect(view.result.current.activityStatus).toBe("ready");
+      expect(view.result.current.runningCommandTerminalIds.size).toBe(0);
+      act(() => onStateChange("disconnected"));
+      expect(view.result.current.activityStatus).toBe("unavailable");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reports synced tabs only after they include the latest host list", async () => {
     const discovery = Promise.withResolvers<TerminalListResponse>();
     const view = renderModel(mock(() => discovery.promise));
     try {
       expect(view.result.current.isSynced).toBe(false);
       await act(async () => {
-        discovery.resolve({ hostInstanceId: "host-1", terminals: [existingTerminal()] });
+        discovery.resolve({
+          hostInstanceId: "host-1",
+          revision: 1,
+          terminals: [existingTerminal()],
+        });
         await discovery.promise;
       });
       await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
@@ -33,19 +77,239 @@ describe("useTerminals", () => {
     }
   });
 
+  test("applies live list changes without refetching and keeps one tab when an event beats the create reply", async () => {
+    const initial: TerminalListResponse = { hostInstanceId: "host-1", revision: 1, terminals: [] };
+    const terminalList = mock(async () => initial);
+    const view = renderModel(terminalList);
+    const creating = Promise.withResolvers<TerminalCreateResponse>();
+    view.terminalCreate.mockImplementation(() => creating.promise);
+    try {
+      await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
+      await waitFor(
+        () =>
+          expect(
+            view.sentFrames.map((frame) => decodeTerminalProtocolFrame(frame).message.type),
+          ).toContain("observe_list"),
+        { timeout: 500 },
+      );
+      const request = view.sentFrames
+        .map((frame) => decodeTerminalProtocolFrame(frame).message)
+        .find((message) => message.type === "observe_list");
+      if (request?.type !== "observe_list") throw new Error("The terminal list did not subscribe.");
+      const [onFrame] = await view.transport;
+      const emit = (message: TerminalListMessage, summary?: TerminalSummary) =>
+        onFrame(
+          encodeTerminalProtocolFrame({
+            message,
+            payload: summary ? encodeTerminalListSummary(summary) : new Uint8Array(),
+          }),
+        );
+      const { subscriptionId } = request;
+      act(() => {
+        emit({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "list_snapshot_start",
+          subscriptionId,
+          hostInstanceId: "host-1",
+          revision: 1,
+        });
+        emit({ version: TERMINAL_PROTOCOL_VERSION, type: "list_snapshot_end", subscriptionId });
+      });
+      const terminal = existingTerminal();
+      let tabId: string | null = null;
+      act(() => {
+        tabId = view.result.current.createTerminal();
+        emit(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "list_updated",
+            subscriptionId,
+            revision: 2,
+          },
+          terminal,
+        );
+        emit(
+          { version: TERMINAL_PROTOCOL_VERSION, type: "list_updated", subscriptionId, revision: 3 },
+          {
+            ...terminal,
+            label: "New title",
+            lifecycle: "exited",
+            exit: {
+              exitCode: 0,
+              signal: null,
+              finalSequence: 10,
+              exitedAt: "2026-11-01T12:00:00.000Z",
+            },
+          },
+        );
+      });
+      await act(async () => {
+        creating.resolve(creation(terminal));
+        await creating.promise;
+      });
+      expect(view.result.current.tabs).toMatchObject([{ tabId, terminalId: terminal.terminalId }]);
+      expect(view.result.current.tabs[0]?.summary).toMatchObject({
+        label: "New title",
+        lifecycle: "exited",
+      });
+
+      const other = { ...terminal, terminalId: "created-elsewhere", label: "Other shell" };
+      act(() =>
+        emit(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "list_updated",
+            subscriptionId,
+            revision: 4,
+          },
+          other,
+        ),
+      );
+      await waitFor(() => expect(view.result.current.tabs).toHaveLength(2), { timeout: 500 });
+      act(() =>
+        emit(
+          {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "list_updated",
+            subscriptionId,
+            revision: 5,
+          },
+          { ...other, label: "Renamed elsewhere" },
+        ),
+      );
+      await waitFor(
+        () =>
+          expect(
+            view.result.current.tabs.find((tab) => tab.terminalId === other.terminalId)?.summary
+              ?.label,
+          ).toBe("Renamed elsewhere"),
+        { timeout: 500 },
+      );
+      act(() =>
+        view.result.current.onForgotten(
+          "/repo:task-1",
+          terminal.terminalId,
+          "The terminal closed on another client.",
+        ),
+      );
+      expect(view.result.current.tabs.find((tab) => tab.tabId === tabId)?.requestState).toBe(
+        "lost",
+      );
+      act(() =>
+        emit({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "list_removed",
+          subscriptionId,
+          revision: 6,
+          terminalId: terminal.terminalId,
+        }),
+      );
+      await waitFor(
+        () =>
+          expect(view.result.current.tabs.map((tab) => tab.terminalId)).toEqual([other.terminalId]),
+        { timeout: 500 },
+      );
+      expect(terminalList).toHaveBeenCalledTimes(1);
+      expect(view.terminalCreate).toHaveBeenCalledTimes(1);
+    } finally {
+      creating.resolve(creation(existingTerminal()));
+      view.unmount();
+    }
+  });
+
+  test.each(["older snapshot", "newer removal"])(
+    "orders a create reply against a %s without losing its tab identity",
+    async (ordering) => {
+      const view = renderModel(
+        mock(async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] })),
+      );
+      const creating = Promise.withResolvers<TerminalCreateResponse>();
+      view.terminalCreate.mockImplementation(() => creating.promise);
+      const terminal = existingTerminal();
+      try {
+        await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
+        const { emit, subscriptionId } = await observeList(view);
+        act(() => {
+          emit({
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "list_snapshot_start",
+            subscriptionId,
+            hostInstanceId: "host-1",
+            revision: 1,
+          });
+          if (ordering === "newer removal")
+            emit({ version: TERMINAL_PROTOCOL_VERSION, type: "list_snapshot_end", subscriptionId });
+        });
+        let tabId: string | null = null;
+        act(() => {
+          tabId = view.result.current.createTerminal();
+          if (ordering === "newer removal") {
+            emit(
+              {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "list_updated",
+                subscriptionId,
+                revision: 2,
+              },
+              terminal,
+            );
+            emit({
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "list_removed",
+              subscriptionId,
+              revision: 3,
+              terminalId: terminal.terminalId,
+            });
+          }
+        });
+        await act(async () => {
+          creating.resolve(creation(terminal));
+          await creating.promise;
+        });
+        if (ordering === "older snapshot") {
+          act(() =>
+            emit({ version: TERMINAL_PROTOCOL_VERSION, type: "list_snapshot_end", subscriptionId }),
+          );
+          expect(view.result.current.tabs).toMatchObject([
+            { tabId, terminalId: terminal.terminalId },
+          ]);
+          act(() =>
+            emit(
+              {
+                version: TERMINAL_PROTOCOL_VERSION,
+                type: "list_updated",
+                subscriptionId,
+                revision: 2,
+              },
+              terminal,
+            ),
+          );
+          expect(view.result.current.tabs).toMatchObject([
+            { tabId, terminalId: terminal.terminalId },
+          ]);
+        } else expect(view.result.current.tabs).toEqual([]);
+        expect(view.terminalCreate).toHaveBeenCalledTimes(1);
+      } finally {
+        creating.resolve(creation(terminal));
+        view.unmount();
+      }
+    },
+  );
+
   test("starts a terminal and returns its tab ID before the host answers", async () => {
     const terminal = existingTerminal();
-    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals: [] })));
-    const create = Promise.withResolvers<{
-      ref: { terminalId: string };
-      summary: TerminalSummary;
-    }>();
+    const view = renderModel(
+      mock(async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] })),
+    );
+    const create = Promise.withResolvers<TerminalCreateResponse>();
     view.terminalCreate.mockImplementation(() => create.promise);
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
       const started: StartedTerminal = { tabId: null };
+      const startFromHeader = view.result.current.createTerminal;
       act(() => {
-        started.tabId = view.result.current.createTerminal();
+        started.tabId = startFromHeader();
+        expect(startFromHeader()).toBeNull();
       });
 
       expect(started.tabId).not.toBeNull();
@@ -59,7 +323,7 @@ describe("useTerminals", () => {
       expect(view.terminalCreate).toHaveBeenCalledTimes(1);
 
       await act(async () => {
-        create.resolve({ ref: { terminalId: terminal.terminalId }, summary: terminal });
+        create.resolve(creation(terminal));
         await create.promise;
       });
       await waitFor(
@@ -74,7 +338,7 @@ describe("useTerminals", () => {
 
   test("blocks creation after failed discovery and retries the host list", async () => {
     const terminal = existingTerminal();
-    const result = { hostInstanceId: "host-1", terminals: [terminal] };
+    const result = { hostInstanceId: "host-1", revision: 1, terminals: [terminal] };
     const retry = Promise.withResolvers<typeof result>();
     const terminalList = mock(async () => result)
       .mockRejectedValueOnce(new Error("Terminal discovery unavailable."))
@@ -113,12 +377,121 @@ describe("useTerminals", () => {
     }
   });
 
+  test("keeps the returned tab ID when the terminal view mounts after creation confirms", async () => {
+    const terminal = existingTerminal();
+    const refresh = Promise.withResolvers<TerminalListResponse>();
+    const terminalList = mock(() => refresh.promise).mockResolvedValueOnce({
+      hostInstanceId: "host-1",
+      revision: 1,
+      terminals: [],
+    });
+    const view = renderModel(terminalList);
+    const created = creation(terminal);
+    view.terminalCreate.mockResolvedValue(created);
+    let terminalView: ReturnType<typeof view.mountConsumer> | undefined;
+    try {
+      await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
+      let tabId: string | null = null;
+      await act(async () => {
+        tabId = view.result.current.createTerminal();
+      });
+      expect(tabId).not.toBeNull();
+      await waitFor(() => expect(view.result.current.tabs[0]?.requestState).toBe("ready"), {
+        timeout: 500,
+      });
+
+      terminalView = view.mountConsumer();
+
+      expect(terminalView.result.current.tabs).toMatchObject([
+        { tabId, terminalId: terminal.terminalId, requestState: "ready" },
+      ]);
+      expect(view.terminalCreate).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => {
+        refresh.resolve({ hostInstanceId: "host-1", revision: 1, terminals: [terminal] });
+        await refresh.promise;
+      });
+      terminalView?.unmount();
+      view.unmount();
+    }
+  });
+
+  test("keeps an optimistic close settled while its confirmation refresh is pending", async () => {
+    const terminal = existingTerminal();
+    const refresh = Promise.withResolvers<TerminalListResponse>();
+    const closed = Promise.withResolvers<TerminalCloseResponse>();
+    const terminalList = mock(() => refresh.promise).mockResolvedValueOnce({
+      hostInstanceId: "host-1",
+      revision: 1,
+      terminals: [terminal],
+    });
+    const view = renderModel(terminalList);
+    view.terminalClose.mockImplementation(() => closed.promise);
+    let closing: Promise<unknown> | undefined;
+    try {
+      await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
+      const tab = view.result.current.tabs[0];
+      if (!tab) throw new Error("Expected the terminal to close.");
+      const { emit, subscriptionId } = await observeList(view);
+      act(() => {
+        emit({
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "list_snapshot_start",
+          subscriptionId,
+          hostInstanceId: "host-1",
+          revision: 2,
+        });
+        emit(
+          { version: TERMINAL_PROTOCOL_VERSION, type: "list_updated", subscriptionId, revision: 2 },
+          terminal,
+        );
+      });
+      act(() => {
+        closing = view.result.current.onClose(tab, false);
+        view.result.current.onRetryDiscovery();
+      });
+      expect(view.result.current.closingTabIds.has(tab.tabId)).toBe(true);
+      await waitFor(() => expect(terminalList).toHaveBeenCalledTimes(2), { timeout: 500 });
+      await act(async () => {
+        closed.resolve({
+          closed: true,
+          list: { hostInstanceId: "host-1", revision: 3, terminals: [] },
+        });
+        await closed.promise;
+      });
+      expect(view.result.current.tabs).toEqual([]);
+      expect(view.result.current.isLoading).toBe(false);
+      expect(view.result.current.isSynced).toBe(true);
+      expect(view.result.current.startBlockedReason).toBeNull();
+      act(() =>
+        emit({ version: TERMINAL_PROTOCOL_VERSION, type: "list_snapshot_end", subscriptionId }),
+      );
+      expect(view.result.current.tabs).toEqual([]);
+      await act(async () => {
+        refresh.resolve({ hostInstanceId: "host-1", revision: 1, terminals: [terminal] });
+        await refresh.promise;
+      });
+      expect(view.result.current.tabs).toEqual([]);
+    } finally {
+      closed.resolve({
+        closed: true,
+        list: { hostInstanceId: "host-1", revision: 3, terminals: [] },
+      });
+      await act(async () => {
+        refresh.resolve({ hostInstanceId: "host-1", revision: 1, terminals: [] });
+        await closing;
+      });
+      view.unmount();
+    }
+  });
+
   test.each([
     { name: "existing tabs", hasTabs: true },
     { name: "an empty list", hasTabs: false },
   ])("keeps $name after a failed refresh", async ({ hasTabs }) => {
     const terminalList = mock(async () => ({
       hostInstanceId: "host-1",
+      revision: 1,
       terminals: hasTabs ? [existingTerminal()] : [],
     }));
     const view = renderModel(terminalList);
@@ -169,6 +542,7 @@ describe("useTerminals", () => {
         filters.push(JSON.stringify(filter));
         return {
           hostInstanceId: "host-1",
+          revision: 1,
           terminals: terminals.filter(
             (entry) =>
               filter.kind === "workspace_session" &&
@@ -195,7 +569,12 @@ describe("useTerminals", () => {
             startedBy: "user",
           };
           terminals.push(summary);
-          return { ref: { terminalId }, summary };
+          return creation(
+            summary,
+            terminals.filter(
+              (known) => JSON.stringify(known.context) === JSON.stringify(summary.context),
+            ),
+          );
         },
       },
       terminalBridge: {
@@ -316,7 +695,9 @@ describe("useTerminals", () => {
       ...existingTerminal(),
       terminalId: `terminal-${index}`,
     }));
-    const view = renderModel(mock(async () => ({ hostInstanceId: "host-1", terminals })));
+    const view = renderModel(
+      mock(async () => ({ hostInstanceId: "host-1", revision: 1, terminals })),
+    );
     try {
       await waitFor(() => expect(view.result.current.tabs).toHaveLength(8), { timeout: 500 });
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
@@ -329,15 +710,16 @@ describe("useTerminals", () => {
     }
   });
 
-  test("runs an action in a new tab and reads the host list again", async () => {
+  test("runs an action in a new tab and caches its confirmed summary", async () => {
     const terminal = { ...existingTerminal(), terminalId: "action-terminal", label: "bun test" };
     let terminals: TerminalSummary[] = [];
     const terminalList = mock(async () => ({
       hostInstanceId: "host-1",
+      revision: terminals.length + 1,
       terminals: [...terminals],
     }));
     const view = renderModel(terminalList);
-    const run = Promise.withResolvers<{ ref: { terminalId: string }; summary: TerminalSummary }>();
+    const run = Promise.withResolvers<TerminalCreateResponse>();
     view.terminalRunAction.mockImplementation(() => run.promise);
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
@@ -365,14 +747,14 @@ describe("useTerminals", () => {
 
       await act(async () => {
         terminals = [terminal];
-        run.resolve({ ref: { terminalId: terminal.terminalId }, summary: terminal });
+        run.resolve(creation(terminal));
         await run.promise;
       });
       await waitFor(() => expect(view.result.current.tabs[0]?.terminalId).toBe("action-terminal"), {
         timeout: 500,
       });
       expect(view.result.current.tabs).toHaveLength(1);
-      expect(terminalList.mock.calls.length).toBeGreaterThan(listCalls);
+      expect(terminalList.mock.calls.length).toBe(listCalls);
     } finally {
       view.unmount();
     }
@@ -380,7 +762,11 @@ describe("useTerminals", () => {
 
   test("shows a failed action tab and retries the same action", async () => {
     const terminal = { ...existingTerminal(), terminalId: "action-terminal" };
-    const view = renderModel(async () => ({ hostInstanceId: "host-1", terminals: [] }));
+    const view = renderModel(async () => ({
+      hostInstanceId: "host-1",
+      revision: 1,
+      terminals: [],
+    }));
     view.terminalRunAction
       .mockImplementationOnce(async () => {
         throw new HostTerminalClientError(
@@ -389,8 +775,7 @@ describe("useTerminals", () => {
         );
       })
       .mockImplementationOnce(async () => ({
-        ref: { terminalId: terminal.terminalId },
-        summary: terminal,
+        ...creation(terminal),
       }));
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
@@ -424,6 +809,7 @@ describe("useTerminals", () => {
     let terminals: TerminalSummary[] = [];
     const terminalList = mock(async () => ({
       hostInstanceId: "host-1",
+      revision: 1,
       terminals: [...terminals],
     }));
     const view = renderModel(terminalList);
@@ -460,7 +846,11 @@ describe("useTerminals", () => {
   test("shows a failed scope read as a discovery error and reads the scope again on retry", async () => {
     const readError = "Could not read the worktree of task task-1: The host is offline.";
     const retryScope = mock(() => {});
-    const terminalList = mock(async () => ({ hostInstanceId: "host-1", terminals: [] }));
+    const terminalList = mock(async () => ({
+      hostInstanceId: "host-1",
+      revision: 1,
+      terminals: [],
+    }));
     const view = renderModel(terminalList, null, { scopeError: readError, retryScope });
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
@@ -476,7 +866,10 @@ describe("useTerminals", () => {
   });
 
   test("blocks an action with the scope reason when the scope has no working directory", async () => {
-    const view = renderModel(async () => ({ hostInstanceId: "host-1", terminals: [] }), null);
+    const view = renderModel(
+      async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }),
+      null,
+    );
     try {
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
       expect(view.result.current.startBlockedReason).toBe("Task task-1 has no available worktree.");
@@ -497,7 +890,7 @@ describe("useTerminals", () => {
     const connection = createTestClientConnection({
       client: {
         systemGetPlatform: async () => "darwin",
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }),
       },
     });
     const dependencies: NonNullable<Parameters<typeof useTerminals>[1]> = {
@@ -591,9 +984,13 @@ function renderModel(
     retryScope: () => {},
   },
 ) {
+  const transport =
+    Promise.withResolvers<Parameters<TerminalDependencies["terminalBridge"]["connect"]>>();
   const unavailable = createUnavailableHost();
   const terminalCreate = mock(unavailable.client.terminalCreate);
   const terminalRunAction = mock(unavailable.client.terminalRunAction);
+  const terminalClose = mock(unavailable.client.terminalClose);
+  const sentFrames: Uint8Array[] = [];
   const connection = createTestClientConnection({
     client: { systemGetPlatform: async () => "darwin", terminalList },
   });
@@ -602,11 +999,18 @@ function renderModel(
       ...unavailable.client,
       terminalCreate,
       terminalRunAction,
+      terminalClose,
     },
     terminalBridge: {
-      connect: async (_onFrame, onStateChange) => {
+      connect: async (onFrame, onStateChange, onFailure) => {
+        transport.resolve([onFrame, onStateChange, onFailure]);
         onStateChange("connected");
-        return { send: async () => undefined, close: () => undefined };
+        return {
+          send: async (frame) => {
+            sentFrames.push(frame);
+          },
+          close: () => undefined,
+        };
       },
     },
   };
@@ -628,7 +1032,37 @@ function renderModel(
       ),
     },
   );
-  return { ...view, terminalCreate, terminalRunAction };
+  const mountConsumer = () =>
+    renderHook(
+      () =>
+        useTerminals(
+          {
+            scope: {
+              key: "/repo:task-1",
+              context: { repoPath: "/repo", taskId: "task-1" },
+              workingDirectory,
+              workingDirectoryError: "Task task-1 has no available worktree.",
+            },
+            isScopeLoading: false,
+            ...scopeLoad,
+          },
+          dependencies,
+        ),
+      {
+        wrapper: ({ children }: PropsWithChildren) => (
+          <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
+        ),
+      },
+    );
+  return {
+    ...view,
+    terminalCreate,
+    terminalRunAction,
+    terminalClose,
+    transport: transport.promise,
+    mountConsumer,
+    sentFrames,
+  };
 }
 
 function testAction(overrides: Partial<RepoAction> = {}): RepoAction {
@@ -649,5 +1083,42 @@ function createUnavailableHost() {
     client: createHostClient(async (command) => {
       throw new Error(`The test host has no handler for '${command}'.`);
     }),
+  };
+}
+
+function creation(
+  summary: TerminalSummary,
+  terminals = [summary],
+  revision = 2,
+): TerminalCreateResponse {
+  return {
+    ref: { terminalId: summary.terminalId },
+    summary,
+    list: { hostInstanceId: "host-1", revision, terminals },
+  };
+}
+
+async function observeList(view: ReturnType<typeof renderModel>) {
+  await waitFor(
+    () =>
+      expect(
+        view.sentFrames.map((frame) => decodeTerminalProtocolFrame(frame).message.type),
+      ).toContain("observe_list"),
+    { timeout: 500 },
+  );
+  const request = view.sentFrames
+    .map((frame) => decodeTerminalProtocolFrame(frame).message)
+    .find((message) => message.type === "observe_list");
+  if (request?.type !== "observe_list") throw new Error("The terminal list did not subscribe.");
+  const [onFrame] = await view.transport;
+  return {
+    subscriptionId: request.subscriptionId,
+    emit: (message: TerminalListMessage, summary?: TerminalSummary) =>
+      onFrame(
+        encodeTerminalProtocolFrame({
+          message,
+          payload: summary ? encodeTerminalListSummary(summary) : new Uint8Array(),
+        }),
+      ),
   };
 }

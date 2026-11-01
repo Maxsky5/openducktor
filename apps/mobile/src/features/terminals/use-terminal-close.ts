@@ -5,7 +5,7 @@ import {
 } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import { useCallback, useMemo, useState } from "react";
-import { type Confirm, useConfirm } from "@/ui/confirm-dialog";
+import { type Confirm, useNavigationConfirm } from "@/ui/confirm-dialog";
 import { closeTerminalTab } from "./terminal-close";
 
 /** Asks before a close stops a running process tree. The texts match the desktop dialog. */
@@ -23,15 +23,24 @@ const confirmTerminalTerminate = (confirm: Confirm, label: string): Promise<bool
  */
 export const useTerminalClose = (
   model: TerminalSessionsModel,
-  onClosed?: (tab: TerminalTab) => void,
+  {
+    onClosing,
+    onClosed,
+  }: {
+    onClosing?: (tab: TerminalTab) => void;
+    onClosed?: (tab: TerminalTab) => void;
+  } = {},
 ) => {
   const { feedback } = useClientConnection();
-  const confirm = useConfirm();
+  const confirm = useNavigationConfirm();
   const [unknownByTabId, setUnknownByTabId] = useState<ReadonlyMap<string, string>>(new Map());
   const close = useCallback(
     async (tab: TerminalTab): Promise<void> => {
-      const outcome = await closeTerminalTab(model, tab, (label) =>
-        confirmTerminalTerminate(confirm, label),
+      const outcome = await closeTerminalTab(
+        model,
+        tab,
+        (label) => confirmTerminalTerminate(confirm, label),
+        () => onClosing?.(tab),
       );
       setUnknownByTabId((current) => {
         if (!current.has(tab.tabId) && outcome.kind !== "unknown") return current;
@@ -41,14 +50,17 @@ export const useTerminalClose = (
         return next;
       });
       if (outcome.kind === "closed") onClosed?.(tab);
-      if (outcome.kind === "unknown") model.onRetryDiscovery();
+      if (outcome.kind === "unknown") {
+        feedback.show("warning", "The close result is unknown.", { description: outcome.guidance });
+        model.onRetryDiscovery();
+      }
       if (outcome.kind === "failed") {
         feedback.show("error", `Could not close ${terminalTabLabel(tab)}`, {
           description: outcome.message,
         });
       }
     },
-    [confirm, feedback, model, onClosed],
+    [confirm, feedback, model, onClosed, onClosing],
   );
   // A lost result no longer matters once its tab leaves the list.
   const tabIds = useMemo(() => new Set(model.tabs.map((tab) => tab.tabId)), [model.tabs]);

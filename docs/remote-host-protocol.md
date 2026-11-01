@@ -152,7 +152,7 @@ An additive optional capability keeps the current protocol version.
 | `host.work.v1` | Host reads and commands for workspaces, tasks, sessions, queues, runtime actions, history, and staging. |
 | `host.events.v1` | Host, task, notification, workspace, and runtime updates. |
 | `agent.live.v1` | Live session snapshots, ordered changes, context, pending input, and replies. |
-| `terminal.v2` | Shared terminal creation, observation, attachment, input, resize, acknowledgements, and output recovery. |
+| `terminal.v3` | Shared terminal creation, observation, attachment, input, resize, acknowledgements, and output recovery. |
 | `work.resources.v1` | Registered task assets and staged attachment previews. |
 
 | Optional capability | Meaning |
@@ -174,7 +174,7 @@ Negotiation sends this client hello:
 {
   "appVersion": "mobile-release",
   "supportedProtocolVersions": [3],
-  "requiredCapabilities": ["host.work.v1", "host.events.v1", "agent.live.v1", "terminal.v2", "work.resources.v1"],
+  "requiredCapabilities": ["host.work.v1", "host.events.v1", "agent.live.v1", "terminal.v3", "work.resources.v1"],
   "optionalCapabilities": ["streams.heartbeat.v1", "history.tool_details.v1"]
 }
 ```
@@ -207,13 +207,13 @@ The ID records compatibility, not device authorization; any reachable compatible
 | `GET R/task-events/subscriptions/{id}/stream` | Stream existing task frames. |
 | `POST R/task-events/subscriptions/{id}/ack` | Acknowledge `{ "cursor": ... }` after applying state. |
 | `DELETE R/task-events/subscriptions/{id}` | Release an owned lease. |
-| `GET R/terminal` | Upgrade to terminal protocol 2. |
+| `GET R/terminal` | Upgrade to terminal protocol 3. |
 | `GET R/task-assets/{workspaceId}/{taskId}/{scope}/{assetId}` | Read a registered task asset. |
 | `GET R/local-attachment-preview?path={stagedPath}` | Resolve and read a staged attachment. |
 
 Startup progress uses `openducktor://session-startup-progress` on the SSE event name `startup`. Each event carries a cumulative operation snapshot. Its replay gap is separate from task, browser, and runtime events. Clients establish the event subscription before they send a tracked startup command.
 
-Remote protocol `3` also carries initial terminal command outcomes in terminal summaries. Terminal frames keep protocol `2`.
+Remote protocol `3` also carries initial terminal command outcomes in terminal summaries. Terminal frames use protocol `3`. A host and client must both support `terminal.v3`; admission refuses a mismatched version with update guidance.
 
 Mutation requests require JSON.
 Command validation, workflow transitions, approvals, selected-runtime resolution, session ownership, and resource limits stay in host services.
@@ -223,13 +223,17 @@ Shell functions `open_external_url` and `system_open_directory_in_tool` are unav
 Remote `system_list_open_in_tools` calls return an empty list so clients do not offer host applications that they cannot launch.
 Launcher shutdown, installation, and updater controls have no remote routes.
 
-Terminal upgrades offer `openducktor-terminal.v2` and `openducktor-connection.<connectionId>`.
-The server verifies the connection tag, then selects `openducktor-terminal.v2`.
+Terminal upgrades offer `openducktor-terminal.v3` and `openducktor-connection.<connectionId>`.
+The server verifies the connection tag, then selects `openducktor-terminal.v3`.
 An explicit connection header must agree with the tag.
 Browser WebSockets cannot set request headers, so each tab sends its connection ID in the tag.
 Native upgrades can omit Origin or use the configured public endpoint origin.
 Use the same terminal ID and last consumed sequence to attach to a surviving PTY.
 Keep terminal protocol backpressure, replay, screen restore, overflow, and lost-handle meanings unchanged.
+
+Terminal list observers use `observe_list` with a transient `subscriptionId` and an existing `TerminalListFilter`. The host sends `list_snapshot_start`, one `list_updated` per summary, and `list_snapshot_end`, then sends summary updates and `list_removed` until `unobserve_list` or connection close. A `list_updated` frame carries validated summary JSON in its binary body, because retained Action output can exceed the header limit. A connection can hold at most 32 list subscriptions. List observation attaches to no output and inspects no process. Reconnect sends a replacement snapshot before list recovery completes.
+
+Each host instance assigns a monotonic revision to terminal metadata changes. List responses, snapshot starts, updates, and removals carry that revision. Successful create, Action start, and close replies include the complete list for the terminal's canonical scope. Clients apply the newest revision to their scoped query cache. They discard older HTTP replies and buffered snapshots. A partial summary never advances the list past an earlier unrelated update unless a complete snapshot already includes that update.
 
 | HTTP status | Meaning |
 |---|---|

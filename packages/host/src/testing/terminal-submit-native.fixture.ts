@@ -28,6 +28,7 @@ export async function checkSubmit({ root, shell, wait }: TerminalNativeFixture) 
     ],
   ] as const) {
     const engine = createTerminalSessionEngine({
+      hostInstanceId: "native-test-host",
       now: () => new Date(),
       ptyPort: createNodePtyPort(),
     });

@@ -307,17 +307,22 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
       client: {
         terminalList: async () => {
           if (failDiscovery) throw new Error("Discovery failed");
-          return { hostInstanceId: "host", terminals: summaries };
+          return { hostInstanceId: "host", revision: 1, terminals: summaries };
         },
         terminalCreate: async () => {
           summaries = [summary];
-          return { ref: { terminalId: summary.terminalId }, summary };
+          return {
+            ref: { terminalId: summary.terminalId },
+            summary,
+            list: { hostInstanceId: "host", revision: 2, terminals: summaries },
+          };
         },
         systemGetPlatform: async () => "darwin",
       },
     });
     connection.queryClient.setQueryData(terminalQueryKeys.task(scope.context), {
       hostInstanceId: "host",
+      revision: 1,
       terminals: summaries,
     });
     const models = new Map<string, ReturnType<typeof useTerminals>>();

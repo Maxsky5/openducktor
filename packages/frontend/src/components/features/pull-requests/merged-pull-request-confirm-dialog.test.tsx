@@ -37,7 +37,7 @@ const createConnection = (readImpact: typeof keptWorktree = keptWorktree) =>
     client: {
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       taskWorktreeCleanupImpactGet: readImpact,
-      terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+      terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 1 }),
       taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
     },

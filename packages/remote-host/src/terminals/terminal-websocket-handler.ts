@@ -29,7 +29,7 @@ const EMPTY_PAYLOAD: Uint8Array = new Uint8Array(0);
 
 export type TerminalWebSocketService = Pick<
   TerminalService,
-  "acknowledge" | "attach" | "detach" | "resize" | "write" | "observeActivity"
+  "acknowledge" | "attach" | "detach" | "resize" | "write" | "observeActivity" | "observeList"
 >;
 
 export type TerminalWebSocketData = {

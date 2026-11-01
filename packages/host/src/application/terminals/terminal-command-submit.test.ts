@@ -69,7 +69,11 @@ test("closing an Action before readiness prevents late submission", async () => 
 
 function makeInitial() {
   const pty = makePty();
-  const engine = createTerminalSessionEngine({ now: () => new Date(), ptyPort: pty.port });
+  const engine = createTerminalSessionEngine({
+    hostInstanceId: "test-host",
+    now: () => new Date(),
+    ptyPort: pty.port,
+  });
   const shell = {
     shell: "/bin/zsh",
     args: ["-il"],

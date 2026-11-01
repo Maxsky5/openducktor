@@ -96,8 +96,8 @@ export const routes = {
   checks: (workspaceId: string, taskId: string) =>
     ({ pathname: "/work/checks", params: { workspaceId, taskId } }) as const,
   terminals: (owner: WorkOwnerParams) => ({ pathname: "/work/terminals", params: owner }) as const,
-  terminal: (owner: WorkOwnerParams, terminalId: string) =>
-    ({ pathname: "/work/terminal", params: { ...owner, terminalId } }) as const,
+  terminal: (owner: WorkOwnerParams, tabId: string) =>
+    ({ pathname: "/work/terminal", params: { ...owner, tabId } }) as const,
   hosts: () => ({ pathname: "/host" }) as const,
   diagnostics: () => ({ pathname: "/host/diagnostics" }) as const,
   // Sheets above the tabs.

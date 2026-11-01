@@ -31,6 +31,7 @@ const createController = () => {
       closeHostTerminal: () => Promise<Result>,
     ) => closeHostTerminal(),
     connect: async () => undefined,
+    subscribeList: () => () => undefined,
     dispose: async () => undefined,
     releaseEmulator: () => undefined,
     resize: async () => undefined,

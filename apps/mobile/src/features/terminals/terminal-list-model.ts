@@ -67,10 +67,11 @@ const PENDING_TONES = {
   lost: "warning",
 } as const satisfies Record<Exclude<TerminalTab["requestState"], "ready">, Tone>;
 
-const rowTone = (tab: TerminalTab): Tone => {
+const rowTone = (tab: TerminalTab, runsCommand: boolean): Tone => {
   if (tab.requestState !== "ready") return PENDING_TONES[tab.requestState];
   const exit = tabExitNotice(tab);
   if (exit) return exit.isFailure ? "warning" : "neutral";
+  if (tab.summary.lifecycle === "running" && !runsCommand) return "neutral";
   return LIFECYCLE_TONES[tab.summary.lifecycle];
 };
 
@@ -80,18 +81,29 @@ export const tabExitNotice = (tab: TerminalTab) =>
     ? terminalExitNotice(tab.summary.exit.exitCode, tab.summary.exit.signal)
     : null;
 
-const toTerminalRow = (tab: TerminalTab, closing: boolean, runsCommand: boolean): TerminalRow => {
+const toTerminalRow = (
+  tab: TerminalTab,
+  runsCommand: boolean,
+  activityStatus: TerminalSessionsModel["activityStatus"],
+): TerminalRow => {
+  const closing = tab.requestState === "ready" && tab.summary.lifecycle === "closing";
   const exit = tabExitNotice(tab);
+  const live = tab.requestState === "ready" && tab.summary.lifecycle === "running" && !closing;
+  const activeCommand = live && runsCommand;
+  let stateLabel = terminalTabLifecycleText(tab);
+  if (live && !activeCommand) {
+    stateLabel = activityStatus === "ready" ? "Idle" : "Activity unknown";
+  }
   return {
     tabId: tab.tabId,
     terminalId: tab.terminalId,
     title: terminalTabLabel(tab),
     startedLabel: tab.requestState === "ready" ? startedLabel(tab.summary) : null,
-    stateLabel: closing ? "Closing" : terminalTabLifecycleText(tab),
-    stateTone: closing ? "pending" : rowTone(tab),
+    stateLabel: closing ? "Closing" : stateLabel,
+    stateTone: closing ? "pending" : rowTone(tab, activeCommand),
     detail: tab.error ?? exit?.text ?? null,
     detailIsFailure: tab.error !== null || (exit?.isFailure ?? false),
-    runsCommand,
+    runsCommand: activeCommand,
     closing,
     canRetry: canRetryTerminalCreation(tab),
     outcomeUnknown:
@@ -101,15 +113,20 @@ const toTerminalRow = (tab: TerminalTab, closing: boolean, runsCommand: boolean)
 
 /** The rows of the Terminals view, in host order with new starts last. */
 export const buildTerminalRows = (
-  model: Pick<TerminalSessionsModel, "tabs" | "closingTabIds" | "runningCommandTerminalIds">,
+  model: Pick<
+    TerminalSessionsModel,
+    "tabs" | "closingTabIds" | "runningCommandTerminalIds" | "activityStatus"
+  >,
 ): TerminalRow[] =>
-  model.tabs.map((tab) =>
-    toTerminalRow(
-      tab,
-      model.closingTabIds.has(tab.tabId),
-      tab.terminalId !== null && model.runningCommandTerminalIds.has(tab.terminalId),
-    ),
-  );
+  model.tabs
+    .filter((tab) => !model.closingTabIds.has(tab.tabId))
+    .map((tab) =>
+      toTerminalRow(
+        tab,
+        tab.terminalId !== null && model.runningCommandTerminalIds.has(tab.terminalId),
+        model.activityStatus,
+      ),
+    );
 
 /** The use of the terminal limit, such as "3 of 8 terminals". Closing terminals do not count. */
 export const terminalLimitText = (
@@ -119,32 +136,26 @@ export const terminalLimitText = (
   return `${open} of ${MAX_SCOPE_TERMINALS} terminals`;
 };
 
-/** The terminal tab of a host terminal ID, also after the terminal was lost. */
-export const findTerminalTab = (
-  tabs: readonly TerminalTab[],
-  terminalId: string,
-): TerminalTab | null =>
-  tabs.find(
-    (tab) =>
-      tab.terminalId === terminalId ||
-      (tab.requestState === "lost" && tab.sourceTerminalId === terminalId),
-  ) ?? null;
+/** The stable tab identity survives creation and a lost host terminal. */
+export const findTerminalTab = (tabs: readonly TerminalTab[], tabId: string): TerminalTab | null =>
+  tabs.find((tab) => tab.tabId === tabId) ?? null;
 
 export type TerminalScreenStatus =
   | { kind: "loading" }
   | { kind: "unavailable"; message: string }
   | { kind: "discovery_failed"; message: string }
   | { kind: "missing" }
+  | { kind: "pending"; tab: Exclude<TerminalTab, { requestState: "ready" | "lost" }> }
   | { kind: "lost"; tab: Extract<TerminalTab, { requestState: "lost" }> }
   | { kind: "ready"; tab: Extract<TerminalTab, { requestState: "ready" }> };
 
-/** What the Terminal screen shows for `terminalId`. */
+/** What the Terminal screen shows for `tabId`, including its pending host request. */
 export const terminalScreenStatus = (
   model: Pick<
     TerminalSessionsModel,
     "isAvailable" | "startBlockedReason" | "tabs" | "isSynced" | "isLoading" | "discoveryError"
   >,
-  terminalId: string,
+  tabId: string,
 ): TerminalScreenStatus => {
   if (!model.isAvailable) {
     return {
@@ -152,9 +163,10 @@ export const terminalScreenStatus = (
       message: model.startBlockedReason ?? "Terminals are unavailable.",
     };
   }
-  const tab = findTerminalTab(model.tabs, terminalId);
+  const tab = findTerminalTab(model.tabs, tabId);
   if (tab?.requestState === "ready") return { kind: "ready", tab };
   if (tab?.requestState === "lost") return { kind: "lost", tab };
+  if (tab) return { kind: "pending", tab };
   if (model.discoveryError !== null)
     return { kind: "discovery_failed", message: model.discoveryError };
   if (!model.isSynced || model.isLoading) return { kind: "loading" };

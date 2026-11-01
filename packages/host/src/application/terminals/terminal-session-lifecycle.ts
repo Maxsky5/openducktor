@@ -15,7 +15,7 @@ import {
   type TerminalSession,
 } from "./terminal-session";
 import type { TerminalOutputEvents } from "./terminal-session-output";
-import type { createTerminalActivity } from "./terminal-activity";
+import type { createTerminalMetadata } from "./terminal-metadata";
 
 export type TerminalOperation = ConstructorParameters<typeof TerminalServiceError>[0]["operation"];
 
@@ -60,11 +60,11 @@ export const terminalOperationFailure = (
 export const createTerminalSessionLifecycle = ({
   now,
   sessions,
-  activity,
+  metadata,
 }: {
   now: () => Date;
   sessions: Map<string, TerminalSession>;
-  activity: ReturnType<typeof createTerminalActivity>;
+  metadata: ReturnType<typeof createTerminalMetadata>;
 }) => {
   const getSession = (terminalId: string, operation: TerminalOperation): TerminalSession => {
     const session = sessions.get(terminalId);
@@ -80,7 +80,7 @@ export const createTerminalSessionLifecycle = ({
   };
 
   const emitLifecycle = (session: TerminalSession): void => {
-    activity.changed(session);
+    metadata.changed(session);
     const exit = session.summary.exit;
     const event: Parameters<TerminalSession["output"]["publish"]>[0] = {
       version: TERMINAL_PROTOCOL_VERSION,
@@ -125,7 +125,7 @@ export const createTerminalSessionLifecycle = ({
         }),
       );
       sessions.delete(session.summary.terminalId);
-      activity.remove(session.summary.terminalId);
+      metadata.remove(session.summary);
     }
   };
 
@@ -252,7 +252,7 @@ export const createTerminalSessionLifecycle = ({
             session.commandRun.phase = "shell";
             session.command = null;
             session.runningCommand = null;
-            activity.changed(session);
+            metadata.changed(session);
           }
           settleCommandRun(session, (outputTail) => ({ type: "failed", message, outputTail }));
           return yield* Effect.fail(
@@ -270,7 +270,7 @@ export const createTerminalSessionLifecycle = ({
       );
       forgetTerminalSession(session);
       sessions.delete(terminalId);
-      activity.remove(terminalId);
+      metadata.remove(session.summary);
     }).pipe(session.operations.run);
 
   const closeSessions = (

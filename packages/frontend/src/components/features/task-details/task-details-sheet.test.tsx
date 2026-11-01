@@ -590,7 +590,7 @@ describe("TaskDetailsSheet", () => {
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
         taskWorktreeCleanupImpactGet: impactGet,
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },
     });
     const task = createTaskCardFixture({

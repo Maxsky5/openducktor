@@ -40,7 +40,7 @@ const createLoadedConnection = () => {
     client: {
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       taskWorktreeCleanupImpactGet: async () => LOADED_IMPACT,
-      terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+      terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
       taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
     },
@@ -50,7 +50,7 @@ const createLoadedConnection = () => {
   queryClient.setQueryData(taskWorktreeCleanupImpactQueryOptions(target).queryKey, LOADED_IMPACT);
   queryClient.setQueryData(
     terminalListByFilterQueryOptions({ filter: { kind: "task", ...target } }).queryKey,
-    { hostInstanceId: "host", terminals: [] },
+    { hostInstanceId: "host", revision: 1, terminals: [] },
   );
   queryClient.setQueryData(
     taskStopImpactQueryOptions({ repoPath: "/repo", taskIds: ["TASK-1"], operation: "close" })
@@ -277,7 +277,7 @@ describe("TaskApprovalModal", () => {
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
         taskWorktreeCleanupImpactGet: readImpact,
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
       },
@@ -366,7 +366,7 @@ describe("TaskApprovalModal", () => {
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
         taskWorktreeCleanupImpactGet: impactGet,
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: stopImpactGet,
         taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
       },
@@ -419,7 +419,7 @@ describe("TaskApprovalModal", () => {
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
         taskWorktreeCleanupImpactGet: async () => readKeptWorktree(),
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [notMerged] }),
         // The check finds the same result, so the card must not change at all.
@@ -483,7 +483,7 @@ describe("TaskApprovalModal", () => {
           mergeCandidate: true,
           branchOid: "tip",
         }),
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
         taskMergeStatusCheck: async () => {
@@ -540,7 +540,7 @@ describe("TaskApprovalModal", () => {
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
         taskWorktreeCleanupImpactGet: impactGet,
-        terminalList: async () => ({ hostInstanceId: "host", terminals: [] }),
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskMergeStatusGet: async (repoPath) => ({
           repoPath,

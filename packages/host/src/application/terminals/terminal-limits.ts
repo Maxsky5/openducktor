@@ -3,6 +3,7 @@ export const TERMINAL_LIMITS = {
   livePerTask: 8,
   livePerWorkspaceSession: 8,
   liveUnassociated: 8,
+  listSubscriptionsPerClient: 32,
   inputBytes: 64 * 1024,
   columns: 500,
   rows: 300,

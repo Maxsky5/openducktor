@@ -16,6 +16,7 @@ import {
   requireTab,
   selectedBottomTerminal,
   summaryForTask,
+  createdTerminal,
   type TaskTerminalPanels,
   type TerminalTestDependencies,
 } from "./agent-studio-terminals-test-harness";
@@ -33,21 +34,27 @@ describe("useAgentStudioTerminals reconciliation", () => {
         terminalList: async () => {
           terminalListCalls += 1;
           if (terminalListCalls > 1) await refresh.promise;
-          return { hostInstanceId: "host-1", terminals: terminalListCalls > 1 ? [created] : [] };
+          return {
+            hostInstanceId: "host-1",
+            revision: 1,
+            terminals: terminalListCalls > 1 ? [created] : [],
+          };
         },
-        terminalCreate: async () => ({ ref: { terminalId: created.terminalId }, summary: created }),
+        terminalCreate: async () => createdTerminal(created),
       },
     };
     const view = renderTaskTerminalPanels(dependencies);
     try {
       await waitFor(() => expect(view.terminals().startBlockedReason).toBeNull());
       act(() => view.panels().bottomToggle.onToggle());
+      await waitFor(() => expect(view.terminals().tabs[0]?.requestState).toBe("ready"));
+      act(() => view.terminals().onRetryDiscovery());
       await waitFor(() => expect(terminalListCalls).toBe(2));
 
       expect(view.terminals().tabs).toHaveLength(1);
       expect(view.terminals().tabs[0]).toMatchObject({
         terminalId: "terminal-created",
-        summary: { label: "/repo/worktrees/task-a" },
+        summary: { label: "Shell 1" },
         requestState: "ready",
       });
       expect(bottomTerminalIds(view.panels())).toEqual(["terminal-created"]);
@@ -65,7 +72,11 @@ describe("useAgentStudioTerminals reconciliation", () => {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId: "host-1", terminals: [...terminals] }),
+        terminalList: async () => ({
+          hostInstanceId: "host-1",
+          revision: 1,
+          terminals: [...terminals],
+        }),
         terminalCreate: async ({ context }) => {
           const terminal: TerminalSummary = {
             ...summaryForTask("taskId" in context ? context.taskId : "unassociated"),
@@ -73,7 +84,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
             label: "Shell 2",
           };
           terminals.push(terminal);
-          return { ref: { terminalId: terminal.terminalId }, summary: terminal };
+          return createdTerminal(terminal, [...terminals]);
         },
       },
     };
@@ -176,7 +187,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId, terminals }),
+        terminalList: async () => ({ hostInstanceId, revision: 1, terminals }),
       },
     };
     const view = renderTaskTerminalPanels(dependencies);
@@ -219,6 +230,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
         ...baseDependencies.hostClient,
         terminalList: async () => ({
           hostInstanceId: "host-1",
+          revision: 1,
           terminals: [firstTerminal, secondTerminal],
         }),
       },
@@ -487,7 +499,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
         ...baseDependencies.hostClient,
         terminalList: async ({ filter }) => {
           const taskId = filter.kind === "task" ? filter.taskId : "unassociated";
-          return { hostInstanceId: "host-1", terminals: summaries(taskId) };
+          return { hostInstanceId: "host-1", revision: 1, terminals: summaries(taskId) };
         },
       },
     };

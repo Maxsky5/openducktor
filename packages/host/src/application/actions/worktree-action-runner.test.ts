@@ -61,19 +61,21 @@ const makeTerminals = () => {
         const result = Deferred.makeUnsafe<TerminalCommandResult>();
         results.set(label, result);
         const terminalId = `terminal-${label}`;
+        const summary = {
+          terminalId,
+          label,
+          context: owner,
+          initialWorkingDir: workingDir,
+          createdAt: "2026-07-12T00:00:00.000Z",
+          lifecycle: "running" as const,
+          exit: null,
+          startedBy,
+        };
         return Effect.succeed({
           response: {
             ref: { terminalId },
-            summary: {
-              terminalId,
-              label,
-              context: owner,
-              initialWorkingDir: workingDir,
-              createdAt: "2026-07-12T00:00:00.000Z",
-              lifecycle: "running",
-              exit: null,
-              startedBy,
-            },
+            summary,
+            list: { hostInstanceId: "host", revision: 1, terminals: [summary] },
           },
           result: Deferred.await(result),
         });
@@ -89,7 +91,9 @@ const makeTerminals = () => {
       Effect.suspend(() => {
         calls.push(`close:${terminalId}:${confirmTerminate}`);
         const failure = closeFailures.get(terminalId);
-        return failure ? Effect.fail(failure) : Effect.void;
+        return failure
+          ? Effect.fail(failure)
+          : Effect.succeed({ hostInstanceId: "host", revision: 2, terminals: [] });
       }),
   };
   return {

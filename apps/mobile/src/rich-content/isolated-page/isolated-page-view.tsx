@@ -76,6 +76,8 @@ export type IsolatedPageViewProps<Inbound, Outbound> = {
   style?: StyleProp<ViewStyle> | undefined;
   /** Lets the page scroll. Block pages size to their content and do not scroll. */
   scrollEnabled?: boolean | undefined;
+  /** Keeps a parent gesture from taking touches, such as while selecting terminal text. */
+  nestedScrollEnabled?: boolean | undefined;
   /**
    * The page takes keyboard input, such as the terminal page. The page can then show the keyboard
    * when the app asks it to focus, and iOS shows no form bar above the keyboard.
@@ -108,6 +110,7 @@ export function IsolatedPageView<Inbound, Outbound>({
   onRestart,
   style,
   scrollEnabled = false,
+  nestedScrollEnabled = scrollEnabled,
   keyboardInput = false,
   revealed = true,
 }: IsolatedPageViewProps<Inbound, Outbound>): ReactElement {
@@ -224,7 +227,7 @@ export function IsolatedPageView<Inbound, Outbound>({
         overScrollMode="never"
         // On Android, a nested-scroll WebView keeps every touch from its parent list. A page that
         // does not scroll must let the list take the drag.
-        nestedScrollEnabled={scrollEnabled}
+        nestedScrollEnabled={nestedScrollEnabled}
         showsVerticalScrollIndicator={scrollEnabled}
         style={styles.webView}
       />

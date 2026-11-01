@@ -1,7 +1,9 @@
-import type {
-  StartupOperationSnapshot,
-  TerminalListFilter,
-  TerminalListResponse,
+import {
+  decodeTerminalListSummary,
+  type StartupOperationSnapshot,
+  type TerminalListFilter,
+  type TerminalListResponse,
+  type TerminalSummary,
 } from "@openducktor/contracts";
 import {
   type QueryClient,
@@ -11,6 +13,7 @@ import {
 } from "@tanstack/react-query";
 import { connectionHost } from "../connection/client-connection";
 import { skippedQueryOptions } from "./skipped-query";
+import type { TerminalTransportController } from "../terminals/terminal-transport-controller";
 
 type TerminalQueryInput = {
   repoPath: string;
@@ -57,6 +60,7 @@ export const terminalListByFilterQueryOptions = ({
           const next = incoming as TerminalListResponse;
           if (!current || current.hostInstanceId !== next.hostInstanceId)
             return replaceEqualDeep(previous, incoming);
+          if (next.revision < current.revision) return current;
           return replaceEqualDeep(current, {
             ...next,
             terminals: next.terminals.map((terminal) => {
@@ -102,3 +106,94 @@ export const invalidateTerminalList = (
   queryClient: QueryClient,
   filter: TerminalListFilter,
 ): Promise<void> => queryClient.invalidateQueries({ queryKey: terminalQueryKeys.filter(filter) });
+
+const updateTerminalList = (
+  queryClient: QueryClient,
+  filter: TerminalListFilter,
+  update: (list: TerminalListResponse | undefined) => TerminalListResponse | undefined,
+): void => {
+  const queryKey = terminalQueryKeys.filter(filter);
+  // Cancellation reverts an older read synchronously, before the live update enters the cache.
+  void queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<TerminalListResponse>(queryKey, update);
+};
+
+const upsertSummary = (
+  list: TerminalListResponse,
+  summary: TerminalSummary,
+): TerminalListResponse => ({
+  ...list,
+  terminals: list.terminals.some((known) => known.terminalId === summary.terminalId)
+    ? list.terminals.map((known) => (known.terminalId === summary.terminalId ? summary : known))
+    : [...list.terminals, summary],
+});
+
+const cacheTerminalSummary = (
+  queryClient: QueryClient,
+  filter: TerminalListFilter,
+  summary: TerminalSummary,
+  revision: number,
+): void =>
+  updateTerminalList(queryClient, filter, (list) =>
+    list && revision > list.revision ? { ...upsertSummary(list, summary), revision } : list,
+  );
+
+export const cacheTerminalList = (
+  queryClient: QueryClient,
+  filter: TerminalListFilter,
+  list: TerminalListResponse,
+): void => updateTerminalList(queryClient, filter, () => list);
+
+const cacheClosedTerminal = (
+  queryClient: QueryClient,
+  filter: TerminalListFilter,
+  terminalId: string,
+  revision: number,
+): void =>
+  updateTerminalList(queryClient, filter, (list) =>
+    list && revision > list.revision
+      ? {
+          ...list,
+          revision,
+          terminals: list.terminals.filter((summary) => summary.terminalId !== terminalId),
+        }
+      : list,
+  );
+
+/** Keep an observed list current without attaching to terminal output or refetching it. */
+export const watchTerminalList = (
+  queryClient: QueryClient,
+  controller: TerminalTransportController,
+  filter: TerminalListFilter,
+  onRemoved: (terminalId: string) => void,
+): (() => void) => {
+  let snapshot: TerminalListResponse | null = null;
+  return controller.subscribeList(filter, (message, payload) => {
+    if (message.type === "list_snapshot_start") {
+      snapshot = {
+        hostInstanceId: message.hostInstanceId,
+        revision: message.revision,
+        terminals: [],
+      };
+    } else if (message.type === "list_snapshot_end") {
+      if (snapshot === null) throw new Error("Terminal list snapshot ended before it started.");
+      const complete = snapshot;
+      snapshot = null;
+      updateTerminalList(queryClient, filter, () => complete);
+    } else if (message.type === "list_updated") {
+      const summary = decodeTerminalListSummary(payload);
+      if (snapshot !== null) snapshot = upsertSummary(snapshot, summary);
+      else cacheTerminalSummary(queryClient, filter, summary, message.revision);
+    } else {
+      if (snapshot !== null)
+        snapshot = {
+          ...snapshot,
+          terminals: snapshot.terminals.filter(
+            (summary) => summary.terminalId !== message.terminalId,
+          ),
+        };
+      else cacheClosedTerminal(queryClient, filter, message.terminalId, message.revision);
+      onRemoved(message.terminalId);
+    }
+  });
+};

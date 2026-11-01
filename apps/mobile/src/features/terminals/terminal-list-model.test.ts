@@ -31,7 +31,7 @@ const ready = (overrides: Partial<TerminalSummary> = {}): TerminalTab => {
   };
 };
 type PendingTab = Extract<TerminalTab, { outcomeUnknown: boolean }>;
-const pending = (overrides: Partial<PendingTab> = {}): TerminalTab => ({
+const pending = (overrides: Partial<PendingTab> = {}): PendingTab => ({
   tabId: "creating:1",
   terminalId: null,
   summary: null,
@@ -55,9 +55,24 @@ const model = (tabs: TerminalTab[], closing: string[] = [], running: string[] = 
   tabs,
   closingTabIds: new Set(closing),
   runningCommandTerminalIds: new Set(running),
+  activityStatus: "ready" as const,
 });
 
 describe("buildTerminalRows", () => {
+  test.each(["loading", "unavailable"] as const)(
+    "does not call an absent command idle while activity is %s",
+    (activityStatus) => {
+      const rows = buildTerminalRows({
+        ...model([ready(), ready({ terminalId: "t-2" })], [], ["t-2"]),
+        activityStatus,
+      });
+      expect(rows.map(({ stateLabel, runsCommand }) => ({ stateLabel, runsCommand }))).toEqual([
+        { stateLabel: "Activity unknown", runsCommand: false },
+        { stateLabel: "Running", runsCommand: true },
+      ]);
+    },
+  );
+
   test("shows the title, who started each terminal, and its state as text", () => {
     const rows = buildTerminalRows(
       model(
@@ -82,7 +97,7 @@ describe("buildTerminalRows", () => {
     expect(
       rows.map(({ title, stateLabel, stateTone }) => ({ title, stateLabel, stateTone })),
     ).toEqual([
-      { title: "zsh", stateLabel: "Running", stateTone: "running" },
+      { title: "zsh", stateLabel: "Idle", stateTone: "neutral" },
       { title: "Setup", stateLabel: "Running", stateTone: "running" },
       { title: "zsh", stateLabel: "Exited", stateTone: "neutral" },
     ]);
@@ -154,9 +169,18 @@ describe("buildTerminalRows", () => {
     ]);
   });
 
-  test("shows closing terminals as Closing", () => {
-    const [row] = buildTerminalRows(model([ready()], ["tab:t-1"]));
-    expect(row).toMatchObject({ stateLabel: "Closing", closing: true });
+  test("hides a closing tab at once and restores it when the close is rejected", () => {
+    const rows = buildTerminalRows(
+      model(
+        [ready(), ready({ terminalId: "t-2", lifecycle: "exited" })],
+        ["tab:t-1"],
+        ["t-1", "t-2"],
+      ),
+    );
+    expect(rows.map(({ stateLabel, runsCommand }) => ({ stateLabel, runsCommand }))).toEqual([
+      { stateLabel: "Exited", runsCommand: false },
+    ]);
+    expect(buildTerminalRows(model([ready()])).map((row) => row.tabId)).toEqual(["tab:t-1"]);
   });
 });
 
@@ -176,10 +200,33 @@ describe("terminalScreenStatus", () => {
     discoveryError: null,
   };
 
+  test.each(["creating", "creation_failed", "unsupported_runtime"] as const)(
+    "opens the pending tab while its request is %s",
+    (requestState) => {
+      const tab = pending({ requestState, error: requestState === "creating" ? null : "Failed." });
+      expect(terminalScreenStatus({ ...base, tabs: [tab] }, tab.tabId)).toEqual({
+        kind: "pending",
+        tab,
+      });
+    },
+  );
+
+  test("keeps an uncertain create failure on its pending screen", () => {
+    const tab = pending({
+      requestState: "creation_failed",
+      error: "The host did not confirm whether the terminal started.",
+      outcomeUnknown: true,
+    });
+    expect(terminalScreenStatus({ ...base, tabs: [tab], isLoading: true }, tab.tabId)).toEqual({
+      kind: "pending",
+      tab,
+    });
+  });
+
   test("finds a terminal and keeps a lost terminal lost", () => {
-    expect(terminalScreenStatus({ ...base, tabs: [ready()] }, "t-1").kind).toBe("ready");
-    expect(terminalScreenStatus({ ...base, tabs: [lost] }, "old").kind).toBe("lost");
-    expect(findTerminalTab([lost], "old")).toBe(lost);
+    expect(terminalScreenStatus({ ...base, tabs: [ready()] }, "tab:t-1").kind).toBe("ready");
+    expect(terminalScreenStatus({ ...base, tabs: [lost] }, "tab:old").kind).toBe("lost");
+    expect(findTerminalTab([lost], "tab:old")).toBe(lost);
   });
 
   test("waits for discovery, then reports a missing terminal or a discovery failure", () => {

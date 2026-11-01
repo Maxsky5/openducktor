@@ -34,9 +34,10 @@ import type {
 import { type createTerminalSessionLifecycle, terminalFailure } from "./terminal-session-lifecycle";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
-import type { createTerminalActivity } from "./terminal-activity";
+import type { createTerminalMetadata } from "./terminal-metadata";
 import { createTerminalCommandTracker } from "./terminal-command-tracker";
 import { COMMAND_BUFFER_ERROR, COMMAND_READY_ERROR, commandInput } from "./terminal-command-input";
+import { terminalListFilterForContext } from "./terminal-context";
 
 /** The command that a command terminal runs before it continues in a shell. */
 type CommandPhase = {
@@ -46,16 +47,18 @@ type CommandPhase = {
 };
 
 export const createTerminalSessionProducer = ({
+  hostInstanceId,
   sessions,
   ptyPort,
   lifecycle,
-  activity,
+  metadata,
   scheduleTitleSettlement,
 }: {
+  hostInstanceId: string;
   sessions: Map<string, TerminalSession>;
   ptyPort: TerminalPtyPort;
   lifecycle: ReturnType<typeof createTerminalSessionLifecycle>;
-  activity: ReturnType<typeof createTerminalActivity>;
+  metadata: ReturnType<typeof createTerminalMetadata>;
   scheduleTitleSettlement: TerminalTitleSettlementScheduler | undefined;
 }) => {
   const { applyStreamEvents, handleExit, handleFailure } = lifecycle;
@@ -63,7 +66,7 @@ export const createTerminalSessionProducer = ({
     // A command terminal keeps its command label.
     if (session.commandRun || title === session.summary.label) return;
     session.summary.label = title;
-    activity.changed(session);
+    metadata.changed(session);
     applyStreamEvents(
       session,
       session.output.publish({
@@ -149,7 +152,7 @@ export const createTerminalSessionProducer = ({
           .pipe(Effect.catch((failure) => Effect.sync(() => publishPtyFailure(session, failure))));
         return;
       }
-      activity.changed(session);
+      metadata.changed(session);
       applyStreamEvents(
         session,
         yield* session.output
@@ -199,7 +202,7 @@ export const createTerminalSessionProducer = ({
     }
     command.run.phase = "shell";
     session.command = null;
-    activity.changed(session);
+    metadata.changed(session);
     Effect.runFork(
       Effect.gen(function* () {
         session.resources.releaseHandle();
@@ -275,7 +278,7 @@ export const createTerminalSessionProducer = ({
                   message,
                   outputTail,
                 }));
-                activity.changed(session);
+                metadata.changed(session);
               }
               Deferred.doneUnsafe(session.ready, Effect.succeed(details.ready));
               return;
@@ -310,10 +313,10 @@ export const createTerminalSessionProducer = ({
               session.runningCommand = null;
               session.command = null;
             }
-            activity.changed(session);
+            metadata.changed(session);
           }),
         );
-        activity.changed(session);
+        metadata.changed(session);
         const shell = { ...shellPlan, commandNonce };
         if (command && interactiveCommand === undefined)
           acceptOutput(session, formatCommandEcho(command.lines));
@@ -331,7 +334,7 @@ export const createTerminalSessionProducer = ({
             Effect.tap((handle) =>
               Effect.sync(() => {
                 activateTerminalSession(session, handle);
-                activity.changed(session);
+                metadata.changed(session);
               }),
             ),
             session.operations.run,
@@ -340,7 +343,7 @@ export const createTerminalSessionProducer = ({
         if (handleResult._tag === "Failure") {
           forgetTerminalSession(session);
           sessions.delete(summary.terminalId);
-          activity.remove(summary.terminalId);
+          metadata.remove(summary);
           return yield* terminalFailure(
             handleResult.failure.code === "unsupported_runtime"
               ? "unsupported_runtime"
@@ -377,7 +380,7 @@ export const createTerminalSessionProducer = ({
                       message,
                       outputTail,
                     }));
-                    activity.changed(session);
+                    metadata.changed(session);
                     return Effect.void;
                   }
                   const input = command.lines[command.run.lineIndex]!;
@@ -407,6 +410,10 @@ export const createTerminalSessionProducer = ({
   const createResponse = (session: TerminalSession): TerminalCreateResponse => ({
     ref: { terminalId: session.summary.terminalId },
     summary: copyTerminalSummary(session),
+    list: {
+      hostInstanceId,
+      ...metadata.snapshot(terminalListFilterForContext(session.summary.context)),
+    },
   });
 
   return {
