@@ -66,7 +66,6 @@ export const createStartupAttemptStore = (
     isCurrent: (id: string, handoff: StartupPreparedHandoff) => boolean;
     release: (id: string) => void;
   },
-  updateTerminalResults: (progress: StartupOperationSnapshot) => void,
 ) => {
   const entries = new Map<string, AttemptEntry>();
   const listeners = new Set<() => void>();
@@ -92,7 +91,6 @@ export const createStartupAttemptStore = (
   };
   const accept = (progress: StartupOperationSnapshot) => {
     if (disposed) return;
-    updateTerminalResults(progress);
     const entry = entries.get(progress.context.startupAttemptId);
     if (!entry || !entry.operationIds.includes(progress.context.operationId)) return;
     if (

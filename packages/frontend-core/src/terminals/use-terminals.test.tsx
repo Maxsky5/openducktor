@@ -336,7 +336,7 @@ describe("useTerminals", () => {
     }
   });
 
-  test("blocks creation after failed discovery and retries the host list", async () => {
+  test("keeps creation blocked after a dismissed discovery failure until Retry reads the list", async () => {
     const terminal = existingTerminal();
     const result = { hostInstanceId: "host-1", revision: 1, terminals: [terminal] };
     const retry = Promise.withResolvers<typeof result>();
@@ -351,8 +351,17 @@ describe("useTerminals", () => {
       });
       expect(view.terminalCreate).not.toHaveBeenCalled();
       expect(view.result.current.discoveryError).toBe("Terminal discovery unavailable.");
+      expect(view.result.current.discoveryNotice).toBe("Terminal discovery unavailable.");
       expect(view.result.current.tabs).toEqual([]);
       expect(terminalList).toHaveBeenCalledTimes(1);
+
+      // Dismissal hides only the notice. The failure keeps new terminals blocked.
+      act(() => view.result.current.onDismissDiscoveryError());
+      expect(view.result.current.discoveryNotice).toBeNull();
+      expect(view.result.current.discoveryError).toBe("Terminal discovery unavailable.");
+      expect(view.result.current.startBlockedReason).toBe(
+        "Terminal discovery failed. Retry terminal discovery.",
+      );
 
       act(() => view.result.current.onRetryDiscovery());
       await waitFor(() => expect(view.result.current.isLoading).toBe(true), { timeout: 500 });
@@ -368,6 +377,7 @@ describe("useTerminals", () => {
         },
       );
       expect(view.result.current.discoveryError).toBeNull();
+      expect(view.result.current.startBlockedReason).toBeNull();
       expect(view.result.current.isLoading).toBe(false);
       expect(view.result.current.tabs).toHaveLength(1);
       expect(terminalList).toHaveBeenCalledTimes(2);

@@ -1,4 +1,5 @@
 import { terminalTabLabel } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { useDismissibleNotice } from "@openducktor/frontend-core/lib/use-dismissible-notice";
 import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { StackActions } from "expo-router/react-navigation";
 import { type ReactElement, useCallback, useMemo } from "react";
@@ -89,19 +90,18 @@ function TerminalContent({ owner, tabId }: { owner: WorkOwner; tabId: string }):
       headerRight,
     };
   }, [headerRight, tab]);
-  const closeGuidance = tab ? (closeUnknown.get(tab.tabId) ?? null) : null;
+  const closeNotice = useDismissibleNotice(tab ? (closeUnknown.get(tab.tabId) ?? null) : null);
   return (
     <>
       <Stack.Screen options={options} />
-      {model.transportError !== null ? (
-        <TerminalTransportNotice message={model.transportError} />
-      ) : null}
-      {closeGuidance !== null ? (
+      <TerminalTransportNotice model={model} />
+      {closeNotice.visible !== null ? (
         <TerminalNoticeStrip
           tone="warning"
           edge="top"
           title="Result unknown."
-          message={`The close result was lost. ${closeGuidance}`}
+          message={`The close result was lost. ${closeNotice.visible}`}
+          onDismiss={closeNotice.dismiss}
         />
       ) : null}
       <TerminalPane

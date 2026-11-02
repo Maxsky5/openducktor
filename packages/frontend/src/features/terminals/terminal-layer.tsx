@@ -10,12 +10,10 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { TerminalNoticeStrip, TerminalViewportNotices } from "./terminal-notice";
 import { tabLinkIds } from "@/components/ui/tab-link-ids";
 import { TabsContent } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { canRetryTerminalCreation } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
-import { terminalCommandResultNotice } from "./terminal-command-result";
-import type { TerminalExitNotice } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import type {
   TerminalSessionsModel,
   TerminalTab,
@@ -118,40 +116,67 @@ export function TerminalLayer({
   );
 }
 
-/** Discovery and transport failures. Panels that show terminals render this above their body. */
+/**
+ * Discovery and transport failures. Panels that show terminals render this above their body. A
+ * dismissed discovery failure still blocks new terminals, so the start controls then offer Retry.
+ */
 export function TerminalStatusMessages({
   terminals,
 }: {
   terminals: Pick<
     TerminalSessionsModel,
-    "discoveryError" | "transportError" | "isLoading" | "onRetryDiscovery"
+    | "discoveryNotice"
+    | "onDismissDiscoveryError"
+    | "transportNotice"
+    | "onDismissTransportError"
+    | "isLoading"
+    | "onRetryDiscovery"
   >;
 }): ReactElement | null {
-  if (terminals.discoveryError === null && terminals.transportError === null) return null;
+  if (terminals.discoveryNotice === null && terminals.transportNotice === null) return null;
   return (
     <div className="shrink-0">
-      {terminals.discoveryError !== null ? (
-        <div className="flex items-center gap-3 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          <p role="alert" className="min-w-0 flex-1 break-words">
-            Terminal discovery failed: {terminals.discoveryError}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={terminals.onRetryDiscovery}
-            disabled={terminals.isLoading}
-          >
-            Retry terminal discovery
-          </Button>
-        </div>
+      {terminals.discoveryNotice !== null ? (
+        <TerminalNoticeStrip
+          tone="error"
+          role="alert"
+          action={<TerminalDiscoveryRetryButton terminals={terminals} />}
+          dismissLabel="Dismiss terminal discovery error"
+          onDismiss={terminals.onDismissDiscoveryError}
+        >
+          Terminal discovery failed: {terminals.discoveryNotice}
+        </TerminalNoticeStrip>
       ) : null}
-      {terminals.transportError !== null ? (
-        <p role="alert" className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          Terminal transport failed: {terminals.transportError}
-        </p>
+      {terminals.transportNotice !== null ? (
+        <TerminalNoticeStrip
+          tone="error"
+          role="alert"
+          dismissLabel="Dismiss terminal transport error"
+          onDismiss={terminals.onDismissTransportError}
+        >
+          Terminal transport failed: {terminals.transportNotice}
+        </TerminalNoticeStrip>
       ) : null}
     </div>
+  );
+}
+
+/** Reads the terminal list again after a discovery failure. */
+function TerminalDiscoveryRetryButton({
+  terminals,
+}: {
+  terminals: Pick<TerminalSessionsModel, "isLoading" | "onRetryDiscovery">;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={terminals.onRetryDiscovery}
+      disabled={terminals.isLoading}
+    >
+      Retry terminal discovery
+    </Button>
   );
 }
 
@@ -184,14 +209,11 @@ const TerminalViewport = memo(function TerminalViewport({
   onTitleChange: TerminalSessionsModel["onTitleChange"];
 }): ReactElement {
   const [attention, setAttention] = useState<string | null>(null);
-  const [exitNotice, setExitNotice] = useState<TerminalExitNotice | null>(null);
-  const notice = attention === null ? exitNotice : { text: attention, isFailure: true };
-  const commandResult = tab.summary?.initialCommandResult;
-  const commandNotice = commandResult ? terminalCommandResultNotice(commandResult) : null;
+  const [exitText, setExitText] = useState<string | null>(null);
   const handleLifecycle = useCallback(
-    (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => {
+    (lifecycle: TerminalLifecycle, exit: string | null) => {
       if (tab.terminalId) onLifecycle(scopeKey, tab.terminalId, lifecycle);
-      if (exit !== null) setExitNotice(exit);
+      if (exit !== null) setExitText(exit);
     },
     [onLifecycle, scopeKey, tab.terminalId],
   );
@@ -263,34 +285,11 @@ const TerminalViewport = memo(function TerminalViewport({
           />
         </Suspense>
       </div>
-      {notice ? (
-        <p
-          role="status"
-          aria-label="Terminal status"
-          className={cn(
-            "shrink-0 border-t border-border px-3 py-1.5 text-xs",
-            notice.isFailure
-              ? "bg-warning-surface text-warning-surface-foreground"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {notice.text}
-        </p>
-      ) : null}
-      {commandNotice ? (
-        <p
-          role="status"
-          aria-label="Setup command result"
-          className={cn(
-            "shrink-0 border-t border-border px-3 py-1.5 text-xs",
-            commandNotice.isFailure
-              ? "bg-warning-surface text-warning-surface-foreground"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {commandNotice.text}
-        </p>
-      ) : null}
+      <TerminalViewportNotices
+        attention={attention}
+        onDismissAttention={() => setAttention(null)}
+        exitText={exitText}
+      />
     </div>
   );
 });

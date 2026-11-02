@@ -4,10 +4,11 @@ import type {
   TerminalSummary,
 } from "@openducktor/contracts";
 import { useCallback, useState, useSyncExternalStore } from "react";
-import { Loader2, RotateCw, X } from "lucide-react";
+import { Loader2, RotateCw } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { DismissButton } from "./terminal-notice";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { terminalActivityOwnerKey } from "@openducktor/frontend-core/terminals/terminal-activity-store";
 import {
@@ -100,16 +101,11 @@ export function TerminalRestartButton({
         <p role="alert" className="min-w-0 flex-1 text-xs text-destructive">
           {error}
         </p>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="-mt-1 -mr-1 size-6"
-          aria-label="Dismiss restart error"
+        <DismissButton
+          label="Dismiss restart error"
+          className="-mt-1 -mr-1"
           onClick={() => setError(null)}
-        >
-          <X className="size-3" aria-hidden="true" />
-        </Button>
+        />
       </PopoverContent>
     </Popover>
   );

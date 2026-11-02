@@ -196,12 +196,21 @@ describe("createTerminalSession", () => {
     expect(view.session.read()).toMatchObject({
       inputEnabled: false,
       lifecycle: "exited",
-      exit: { text: "Exited with code 2.", isFailure: true },
+      exit: "Exited with code 2.",
     });
     view.session.receive({ type: "terminal_input", data: "ls\r" });
     await flush();
     expect(view.calls.some((call) => call.startsWith("write"))).toBe(false);
     expect(view.lifecycles).toEqual(["exited"]);
+  });
+
+  test("clears a terminal problem when the user dismisses it", () => {
+    const view = setup();
+    view.attach();
+    view.emit({ version, type: "output_overflow", terminalId: TERMINAL_ID });
+    expect(view.session.read().attention).toBe("Output overflow stopped this terminal.");
+    view.session.dismissAttention();
+    expect(view.session.read().attention).toBeNull();
   });
 
   test("takes no input for a terminal that the host forgot", async () => {

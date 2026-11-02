@@ -29,7 +29,7 @@ test("a terminal read with no owner cannot fetch a broad list", () => {
 });
 
 test.each(["host", "replacement-host"])(
-  "a held %s refresh applies metadata and removals without losing a confirmed result from the same host",
+  "a held %s refresh applies metadata and removals",
   async (hostInstanceId) => {
     const response = Promise.withResolvers<TerminalListResponse>();
     const connection = createTestClientConnection({
@@ -59,21 +59,7 @@ test.each(["host", "replacement-host"])(
       terminals: [terminal, { ...terminal, terminalId: "removed" }],
     });
     const read = connection.queryClient.fetchQuery(options);
-    const result = {
-      type: "exited" as const,
-      exitCode: 1,
-      signal: null,
-      outputTail: ["Install failed."],
-    };
     try {
-      connection.queryClient.setQueryData(options.queryKey, {
-        hostInstanceId: "host",
-        revision: 1,
-        terminals: [
-          { ...terminal, initialCommandResult: result },
-          { ...terminal, terminalId: "removed", initialCommandResult: result },
-        ],
-      });
       response.resolve({
         hostInstanceId,
         revision: 2,
@@ -100,9 +86,6 @@ test.each(["host", "replacement-host"])(
         lifecycle: "exited",
         exit: { exitCode: 0, finalSequence: 12 },
       });
-      expect(cached?.terminals[0]?.initialCommandResult).toEqual(
-        hostInstanceId === "host" ? result : undefined,
-      );
     } finally {
       response.resolve({ hostInstanceId, revision: 1, terminals: [] });
       await read;

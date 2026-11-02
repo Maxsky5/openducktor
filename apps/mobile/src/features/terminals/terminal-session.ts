@@ -6,7 +6,6 @@ import {
   createLatestResizeScheduler,
   createTerminalInputSequencer,
   handleTerminalMetadataFrame,
-  type TerminalExitNotice,
   type TerminalFrameScheduler,
 } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import { isOutcomeUnknown } from "@openducktor/frontend-core/lib/command-outcome";
@@ -32,7 +31,8 @@ export type TerminalSessionState = {
   hydrated: boolean;
   /** The lifecycle from the terminal stream, or null before its snapshot. */
   lifecycle: TerminalLifecycle | null;
-  exit: TerminalExitNotice | null;
+  /** The exit status text after the process exits. */
+  exit: string | null;
   /** An output, sync, or protocol failure of this terminal. */
   attention: string | null;
   /** The host no longer has the terminal. */
@@ -248,6 +248,9 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
     },
     dismissInputNotice(): void {
       update({ inputNotice: null });
+    },
+    dismissAttention(): void {
+      update({ attention: null });
     },
     dispose(): void {
       if (disposed) return;

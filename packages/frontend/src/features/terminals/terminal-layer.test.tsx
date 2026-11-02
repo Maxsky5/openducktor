@@ -1,55 +1,21 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
-import { createTerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
-import { createTerminalSessionsFixture } from "@/test-utils/session-panel-fixtures";
-import { QueryProvider } from "@/test-utils/query-provider";
-import { Tabs } from "@/components/ui/tabs";
-import { TerminalLayer } from "./terminal-layer";
+import { TerminalStatusMessages } from "./terminal-layer";
 
-test("keeps the setup command result visible in its running terminal after startup feedback ends", () => {
-  const tab: TerminalTab = {
-    tabId: "setup",
-    terminalId: "setup-terminal",
-    summary: {
-      terminalId: "setup-terminal",
-      label: "Install dependencies",
-      context: { workspaceId: "workspace", repoPath: "/repo", taskId: "task" },
-      initialWorkingDir: "/worktrees/task",
-      createdAt: "2026-10-26T00:00:00.000Z",
-      lifecycle: "running",
-      exit: null,
-      startedBy: "host",
-      initialCommandResult: {
-        type: "exited",
-        exitCode: 42,
-        signal: null,
-        outputTail: ["Install failed"],
-      },
-    },
-    awaitingLifecycleSync: false,
-    error: null,
-    requestState: "ready",
-  };
-  const controller = createTerminalTransportController(
-    { connect: async () => ({ send: async () => {}, close: () => {} }) },
-    () => {},
-  );
+test("offers Retry and Dismiss for a discovery failure and Dismiss for a transport failure", () => {
   const markup = renderToStaticMarkup(
-    <QueryProvider>
-      <Tabs value="setup">
-        <TerminalLayer
-          terminals={createTerminalSessionsFixture({ controller })}
-          mounts={[{ key: "setup", scopeKey: "task", tab, value: "setup" }]}
-          activeKey="setup"
-          isVisible
-          isInteractive
-          focusRequest={0}
-          tabIdBase="terminals"
-        />
-      </Tabs>
-    </QueryProvider>,
+    <TerminalStatusMessages
+      terminals={{
+        discoveryNotice: "The host did not answer.",
+        onDismissDiscoveryError: () => {},
+        transportNotice: "Socket closed.",
+        onDismissTransportError: () => {},
+        isLoading: false,
+        onRetryDiscovery: () => {},
+      }}
+    />,
   );
-  expect(markup).toContain('aria-label="Setup command result"');
-  expect(markup).toContain("Command exited with code 42.");
+  expect(markup).toContain("Retry terminal discovery");
+  expect(markup).toContain('aria-label="Dismiss terminal discovery error"');
+  expect(markup).toContain('aria-label="Dismiss terminal transport error"');
 });

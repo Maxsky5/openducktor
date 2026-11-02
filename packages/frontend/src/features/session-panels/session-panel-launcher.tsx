@@ -1,9 +1,10 @@
 import { ArrowRight } from "lucide-react";
 import { type ReactElement, useId } from "react";
+import { Button } from "@/components/ui/button";
 import { PANEL_TAB_KIND_RULES, type PanelTabKind } from "./panel-tab-kinds";
 import type { PanelLauncherEntry } from "./use-session-panels";
 
-/** Shows one card for each tab kind that a panel can open now. */
+/** Shows one card for each tab kind that a panel can open now, with the recovery of a blocked card. */
 export function SessionPanelLauncher({
   entries,
   onPick,
@@ -20,6 +21,18 @@ export function SessionPanelLauncher({
           {entries.map((entry) => (
             <li key={entry.kind}>
               <SessionPanelLauncherCard entry={entry} onPick={onPick} />
+              {entry.recovery ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  disabled={entry.recovery.disabled}
+                  onClick={entry.recovery.onRun}
+                >
+                  {entry.recovery.label}
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>

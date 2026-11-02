@@ -121,26 +121,20 @@ export const createLiveTerminalFitScheduler = ({
   };
 };
 
-/** The exit status of a terminal process. A clean exit is not a failure. */
-export type TerminalExitNotice = { text: string; isFailure: boolean };
-
-/** The exit status text of a process that exited with `exitCode` or `signal`. */
-export const terminalExitNotice = (
+/**
+ * The exit status text of a process that exited with `exitCode` or `signal`. A nonzero exit is
+ * normal shell behavior, so the status informs and does not report a failure.
+ */
+export const terminalExitText = (
   exitCode: number | null | undefined,
   signal: string | null | undefined,
-): TerminalExitNotice => {
-  const signalText = signal ? ` (${signal})` : "";
-  return {
-    text: `Exited with code ${exitCode ?? "unknown"}${signalText}.`,
-    isFailure: exitCode !== 0 || Boolean(signal),
-  };
-};
+): string => `Exited with code ${exitCode ?? "unknown"}${signal ? ` (${signal})` : ""}.`;
 
 export const handleTerminalMetadataFrame = (
   message: TerminalServerMessage,
   handlers: {
     onAttention: (message: string | null) => void;
-    onLifecycle: (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => void;
+    onLifecycle: (lifecycle: TerminalLifecycle, exit: string | null) => void;
     onTitle: (title: string) => void;
     onForgotten: (message: string, failure: TerminalFailure | null) => void;
     onFailure: (message: string) => void;
@@ -161,7 +155,7 @@ export const handleTerminalMetadataFrame = (
   }
   if (message.type === "lifecycle") {
     const exit =
-      message.lifecycle === "exited" ? terminalExitNotice(message.exitCode, message.signal) : null;
+      message.lifecycle === "exited" ? terminalExitText(message.exitCode, message.signal) : null;
     handlers.onLifecycle(message.lifecycle, exit);
     return true;
   }

@@ -76,7 +76,14 @@ export type {
 } from "./use-session-panel-browser-tabs";
 export type { PanelPresence } from "./use-session-panel-visibility";
 
-export type PanelLauncherEntry = { kind: PanelTabKind; disabledReason: string | null };
+/** An action that removes the cause of a disabled launcher card, such as Retry for a failed read. */
+export type PanelLauncherRecovery = { label: string; disabled: boolean; onRun: () => void };
+
+export type PanelLauncherEntry = {
+  kind: PanelTabKind;
+  disabledReason: string | null;
+  recovery?: PanelLauncherRecovery;
+};
 
 export type SessionPanelModel = {
   panel: PanelId;
@@ -153,20 +160,20 @@ const EMPTY_TAB_IDS: ReadonlySet<string> = new Set();
 const NO_UNAVAILABLE_KINDS: ReadonlySet<ToolTabKind> = new Set();
 const EMPTY_LAYOUT_SNAPSHOT = (): SessionPanelLayout => EMPTY_LAYOUT;
 
-/** Why the launcher cannot open a tab of each host-tab kind now, or null when it can. */
-type LauncherBlockedReasons = Record<HostTabKind, string | null>;
+/** Why the launcher cannot open a tab of each host-tab kind now, and how to remove that cause. */
+type LauncherBlocks = Record<HostTabKind, Pick<PanelLauncherEntry, "disabledReason" | "recovery">>;
 
 /** The kinds that a panel can open now. An open unique kind has no entry, because its tab shows. */
 const launcherFor = (
   panel: PanelId,
   layout: SessionPanelLayout,
   context: SessionPanelContext,
-  blockedReasons: LauncherBlockedReasons,
+  blocks: LauncherBlocks,
 ): PanelLauncherEntry[] =>
   PANEL_TAB_KINDS.flatMap((kind): PanelLauncherEntry[] => {
     if (context.unavailableKinds.has(kind)) return [];
     if (!canPlacePanelTab(layout, context, kind, panel)) return [];
-    return [{ kind, disabledReason: isHostTabKind(kind) ? blockedReasons[kind] : null }];
+    return [isHostTabKind(kind) ? { kind, ...blocks[kind] } : { kind, disabledReason: null }];
   });
 
 /** Closes a host tab with the actions of its kind. */
@@ -227,7 +234,7 @@ const usePanelModel = (
     ownerKey: string | null;
     focusRequest: number;
     browserAddressFocus: BrowserAddressFocus | null;
-    blockedReasons: LauncherBlockedReasons;
+    blockedReasons: LauncherBlocks;
     browserTabView: BrowserTabView | null;
     terminals: TerminalSessionsModel;
     terminalMounts: MountedTerminal[];
@@ -593,10 +600,31 @@ export function useSessionPanels({
   );
   const actions: PanelActions = { selectTab, closeTab, addTab, pickKind, hideBottom };
   const terminalBlockedReason = terminals.startBlockedReason;
+  const { onRetryDiscovery } = terminals;
   const browserBlockedReason = browser?.startBlockedReason ?? null;
-  const blockedReasons = useMemo<LauncherBlockedReasons>(
-    () => ({ terminal: terminalBlockedReason, browser: browserBlockedReason }),
-    [browserBlockedReason, terminalBlockedReason],
+  const blockedReasons = useMemo<LauncherBlocks>(
+    () => ({
+      // A failed discovery blocks new terminals, so the card offers Retry in every panel.
+      terminal:
+        discoveryError === null
+          ? { disabledReason: terminalBlockedReason }
+          : {
+              disabledReason: terminalBlockedReason,
+              recovery: {
+                label: "Retry terminal discovery",
+                disabled: isLoadingTerminals,
+                onRun: onRetryDiscovery,
+              },
+            },
+      browser: { disabledReason: browserBlockedReason },
+    }),
+    [
+      browserBlockedReason,
+      discoveryError,
+      onRetryDiscovery,
+      isLoadingTerminals,
+      terminalBlockedReason,
+    ],
   );
   const shared = {
     context,

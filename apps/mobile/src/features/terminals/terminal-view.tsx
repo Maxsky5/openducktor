@@ -2,6 +2,7 @@ import { useClientConnection } from "@openducktor/frontend-core/connection/clien
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { TerminalTouchKey } from "@openducktor/frontend-core/terminals/terminal-keyboard-policy";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
+import { useDismissibleNotice } from "@openducktor/frontend-core/lib/use-dismissible-notice";
 import { checkHttpUrl } from "@openducktor/frontend-core/terminals/terminal-url-policy";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import * as Clipboard from "expo-clipboard";
@@ -26,11 +27,10 @@ import {
   IsolatedPageView,
 } from "@/rich-content/isolated-page/isolated-page-view";
 import { useAppTheme } from "@/theme/app-theme-context";
-import { Button } from "@/ui/button";
 import { useConfirm } from "@/ui/confirm-dialog";
 import { ErrorState } from "@/ui/states";
 import { Text } from "@/ui/text";
-import { tabExitNotice } from "./terminal-list-model";
+import { tabExitText } from "./terminal-list-model";
 import { terminalFontSize, terminalPageColors } from "./terminal-colors";
 import { TerminalKeyBar } from "./terminal-key-bar";
 import { TerminalNoticeStrip } from "./terminal-notice-strip";
@@ -251,7 +251,7 @@ export const TerminalView = memo(function TerminalView({
   }, [keyboardVisible, pageReady, post]);
 
   const attachLabel = controller ? "Attaching to the terminal" : "Connecting terminals";
-  const exit = state.exit ?? tabExitNotice(tab);
+  const exit = state.exit ?? tabExitText(tab);
   const lifecycle = state.lifecycle ?? tab.summary.lifecycle;
   // The terminal screens cover the tab bar, so the keys keep the bottom safe area while the
   // keyboard is closed. The page refits on each size change, so the view takes the final keyboard
@@ -315,6 +315,7 @@ export const TerminalView = memo(function TerminalView({
           state={state}
           exited={lifecycle === "exited"}
           exit={exit}
+          onDismissAttention={() => session?.dismissAttention()}
           onDismissInputNotice={() => session?.dismissInputNotice()}
         />
       </View>
@@ -345,14 +346,16 @@ function TerminalTopNotices({
   platformError: string | null;
   inputPaused: boolean;
 }): ReactElement {
+  const platformNotice = useDismissibleNotice(platformError);
   return (
     <>
-      {platformError !== null ? (
+      {platformNotice.visible !== null ? (
         <TerminalNoticeStrip
           tone="warning"
           edge="top"
           title="Terminal shortcuts unavailable."
-          message={`${platformError} Host keyboard shortcuts do not work. Open the terminal again to retry.`}
+          message={`${platformNotice.visible} Host keyboard shortcuts do not work. Open the terminal again to retry.`}
+          onDismiss={platformNotice.dismiss}
         />
       ) : null}
       {inputPaused ? (
@@ -367,19 +370,27 @@ function TerminalTopNotices({
   );
 }
 
-/** The notices under the terminal: a terminal problem, its exit, and input that did not arrive. */
+/**
+ * The notices under the terminal: a terminal problem, its exit, and input that did not arrive. The
+ * user can dismiss each one.
+ */
 function TerminalBottomNotices({
   state,
   exited,
   exit,
+  onDismissAttention,
   onDismissInputNotice,
 }: {
   state: TerminalSessionState;
   exited: boolean;
   exit: TerminalSessionState["exit"];
+  onDismissAttention: () => void;
   onDismissInputNotice: () => void;
 }): ReactElement {
   const { inputNotice } = state;
+  const exitNotice = useDismissibleNotice(
+    exited ? `${exit ?? "The process ended."} It keeps its output and takes no input.` : null,
+  );
   return (
     <>
       {state.attention ? (
@@ -388,14 +399,16 @@ function TerminalBottomNotices({
           edge="bottom"
           title="Terminal problem."
           message={state.attention}
+          onDismiss={onDismissAttention}
         />
       ) : null}
-      {exited ? (
+      {exitNotice.visible !== null ? (
         <TerminalNoticeStrip
-          tone={exit?.isFailure ? "warning" : "muted"}
+          tone="muted"
           edge="bottom"
           title="The terminal exited."
-          message={`${exit?.text ?? "The process ended."} It keeps its output and takes no input.`}
+          message={exitNotice.visible}
+          onDismiss={exitNotice.dismiss}
         />
       ) : null}
       {inputNotice?.kind === "unknown" ? (
@@ -404,9 +417,7 @@ function TerminalBottomNotices({
           edge="bottom"
           title={`${INPUT_DELIVERY_UNKNOWN}.`}
           message={`${inputNotice.guidance} The app does not send this input again.`}
-          action={
-            <Button label="Dismiss" size="sm" variant="outline" onPress={onDismissInputNotice} />
-          }
+          onDismiss={onDismissInputNotice}
         />
       ) : null}
       {inputNotice?.kind === "not_sent" ? (
@@ -415,6 +426,7 @@ function TerminalBottomNotices({
           edge="bottom"
           title="Input not sent."
           message={`${inputNotice.message} Type it again when the terminal is connected.`}
+          onDismiss={onDismissInputNotice}
         />
       ) : null}
     </>

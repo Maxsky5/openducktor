@@ -6,7 +6,6 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
-import type { TerminalExitNotice } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type TerminalViewportProps = {
@@ -16,7 +15,7 @@ type TerminalViewportProps = {
   active: boolean;
   focusRequest: number;
   onAttention: (message: string | null) => void;
-  onLifecycle: (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => void;
+  onLifecycle: (lifecycle: TerminalLifecycle, exit: string | null) => void;
   onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
 };

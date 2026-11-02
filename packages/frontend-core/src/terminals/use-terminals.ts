@@ -32,6 +32,7 @@ import type { TerminalTransportController } from "./terminal-transport-controlle
 import type { TerminalBridge } from "./terminal-bridge";
 import { useTerminalTransport } from "./use-terminal-transport";
 import { useTerminalPresentation } from "./use-terminal-presentation";
+import { useDismissibleNotice } from "../lib/use-dismissible-notice";
 
 export type { TerminalTab } from "./terminal-presentation-state";
 
@@ -74,8 +75,17 @@ export type TerminalSessionsModel = {
   isSynced: boolean;
   mountedTabs: MountedTab[];
   isLoading: boolean;
+  /** The failed list read. It blocks new terminals until a discovery read succeeds. */
   discoveryError: string | null;
-  transportError: string | null;
+  /** The discovery failure notice, or null after the user dismissed it. */
+  discoveryNotice: string | null;
+  onDismissDiscoveryError: () => void;
+  /**
+   * The terminal socket failure, or null after the user dismissed it. The connection recovers
+   * alone, so the notice offers no Retry.
+   */
+  transportNotice: string | null;
+  onDismissTransportError: () => void;
   platform: AppPlatform | undefined;
   platformError: string | null;
   controller: TerminalTransportController | null;
@@ -336,6 +346,8 @@ export const useTerminals = (
   const isLoading = terminalQuery.isLoading || isScopeLoading;
   const openTabs = visibleState.tabs.filter((tab) => !closingTabIds.has(tab.tabId));
   const discoveryError = terminalQuery.isError ? terminalQuery.error.message : scopeError;
+  const discoveryNotice = useDismissibleNotice(discoveryError);
+  const transportNotice = useDismissibleNotice(transportError);
   const startBlockedReason = terminalStartBlockedReason({
     scope,
     isLoading,
@@ -375,7 +387,10 @@ export const useTerminals = (
       mountedTabs,
       isLoading,
       discoveryError,
-      transportError,
+      discoveryNotice: discoveryNotice.visible,
+      onDismissDiscoveryError: discoveryNotice.dismiss,
+      transportNotice: transportNotice.visible,
+      onDismissTransportError: transportNotice.dismiss,
       platform: platformQuery.data,
       platformError: platformQuery.isError ? platformQuery.error.message : null,
       controller,
@@ -396,6 +411,8 @@ export const useTerminals = (
       controller,
       createTerminal,
       discoveryError,
+      discoveryNotice.dismiss,
+      discoveryNotice.visible,
       forgetTerminal,
       isLoading,
       isSynced,
@@ -409,7 +426,8 @@ export const useTerminals = (
       scope,
       scopeKey,
       startBlockedReason,
-      transportError,
+      transportNotice.dismiss,
+      transportNotice.visible,
       visibleState.tabs,
     ],
   );

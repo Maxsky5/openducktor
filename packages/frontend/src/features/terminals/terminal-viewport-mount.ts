@@ -11,7 +11,6 @@ import {
   createTerminalInputSequencer,
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
-  type TerminalExitNotice,
 } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import {
   containsTransferredImage,
@@ -44,7 +43,7 @@ type MountTerminalViewportInput = {
   preparePathInput: (paths: readonly string[]) => Promise<string>;
   writeClipboard: (text: string) => Promise<void>;
   onAttention: (message: string | null) => void;
-  onLifecycle: (lifecycle: TerminalLifecycle, exit: TerminalExitNotice | null) => void;
+  onLifecycle: (lifecycle: TerminalLifecycle, exit: string | null) => void;
   onForgotten: (message: string, failure: TerminalFailure | null) => void;
   onTitleChange: (title: string) => void;
   onHydrated: () => void;
