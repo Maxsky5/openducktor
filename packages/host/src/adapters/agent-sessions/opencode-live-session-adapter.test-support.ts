@@ -51,7 +51,12 @@ export const controlMetadata = {
 
 export const controlSummary = {
   ...controlMetadata,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "repo",
+    taskId: "task-1",
+    role: "build",
+  } as const,
 };
 
 export const acceptedMessageText = "Hello";

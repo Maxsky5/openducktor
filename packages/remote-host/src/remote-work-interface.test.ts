@@ -344,7 +344,7 @@ test("two remote terminal lists receive idle creation and close without output a
             version: TERMINAL_PROTOCOL_VERSION,
             type: "observe_list",
             subscriptionId,
-            filter: { kind: "task", repoPath: "/repo", taskId: "task" },
+            filter: { kind: "task", workspaceId: "repo", repoPath: "/repo", taskId: "task" },
           },
           payload: new Uint8Array(),
         }),
@@ -362,7 +362,7 @@ test("two remote terminal lists receive idle creation and close without output a
     const created = await Effect.runPromise(
       f.terminal.service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
       }),
     );
     for (const frame of await Promise.all(updates)) {
@@ -400,7 +400,7 @@ test("remote terminal attachment uses the local PTY and closes only its client w
     await Effect.runPromise(
       f.terminal.service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
       }),
     );
     const id = (await f.negotiate()).result.connectionId;

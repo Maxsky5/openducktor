@@ -440,7 +440,12 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("startSessionRequest starts a fresh session even when another session is active", async () => {
     const updateCalls: AgentStudioQueryUpdate[] = [];
     const loadedSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       externalSessionId: "session-active",
     });
 
@@ -486,7 +491,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startDeferred.promise);
     const loadedSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       externalSessionId: "session-active",
     });
 
@@ -639,7 +649,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       loadedSession: createSession({
         externalSessionId: "session-spec",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
       }),
       selectedTask: createPromptTask({
         agentWorkflows: {
@@ -809,7 +824,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       loadedSession: createSession({
         externalSessionId: "session-spec",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
       }),
       selectedTask: createPromptTask({
         agentWorkflows: {
@@ -877,7 +897,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       loadedSession: createSession({
         externalSessionId: "session-plan",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "planner",
+        },
         runtimeKind: "claude",
         selectedModel: null,
       }),
@@ -976,7 +1001,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       loadedSession: createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
         externalSessionId: "session-spec",
       }),
       workflow: createWorkflowFixture({
@@ -1088,7 +1118,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "qa",
       loadedSession: createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
         externalSessionId: "session-qa",
       }),
       selectedTask: createTask({
@@ -1186,7 +1221,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     const updateCalls: AgentStudioQueryUpdate[] = [];
     const existingSession = createSession({
       externalSessionId: "session-existing",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
 
       startedAt: "2026-02-22T12:00:00.000Z",
       workingDirectory: "/repo/worktrees/session-existing",
@@ -1196,7 +1236,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "qa",
       loadedSession: createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
         externalSessionId: "session-qa",
       }),
       selectedTask: createTask({
@@ -1278,7 +1323,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "qa",
       loadedSession: createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
         externalSessionId: "session-qa",
       }),
       selectedTask: createTask({
@@ -1292,7 +1342,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-existing",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
 
           startedAt: "2026-02-22T12:00:00.000Z",
           workingDirectory: "/repo/worktrees/session-existing",
@@ -1358,7 +1413,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1400,7 +1460,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1443,7 +1508,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1480,7 +1550,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1511,12 +1586,22 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
         createSession({
           externalSessionId: "session-build-older",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
       ]),
@@ -1576,7 +1661,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),

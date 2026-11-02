@@ -59,15 +59,12 @@ const healthyRepoStoreHealth: RepoStoreHealth = {
   category: "healthy",
   status: "ready",
   isReady: true,
-  detail: "SQLite task store is ready.",
+  detail: "The host database is ready.",
   databasePath: "/config/task-stores/workspace-1/database.sqlite",
 };
 const createTaskStore = (
   health: RepoStoreHealth = healthyRepoStoreHealth,
-  calls: Array<{
-    repoPath: string;
-    prepare?: boolean;
-  }> = [],
+  calls: Parameters<TaskStorePort["diagnoseRepoStore"]>[0][] = [],
 ): TaskStorePort =>
   createTaskStoreTestDouble({
     diagnoseRepoStore: (input) =>
@@ -259,17 +256,19 @@ describe("createSystemDiagnosticsService", () => {
       isReady: false,
       detail: "SQLite task store database is unavailable",
     };
-    const calls: Array<{ repoPath: string; prepare?: boolean }> = [];
+    const calls: Parameters<TaskStorePort["diagnoseRepoStore"]>[0][] = [];
     const service = createSystemDiagnosticsServiceForTest({
       systemCommands: createSystemCommandPort(),
       repoStoreDiagnostics: createTaskStore(health, calls),
     });
-    expect(await Effect.runPromise(service.taskStoreCheck("/repo"))).toEqual({
+    expect(
+      await Effect.runPromise(service.taskStoreCheck({ workspaceId: "repo", repoPath: "/repo" })),
+    ).toEqual({
       repoStoreHealth: health,
       taskStoreOk: false,
       taskStorePath: health.databasePath,
       taskStoreError: health.detail,
     });
-    expect(calls).toEqual([{ repoPath: "/repo", prepare: true }]);
+    expect(calls).toEqual([{ workspaceId: "repo", repoPath: "/repo", prepare: true }]);
   });
 });

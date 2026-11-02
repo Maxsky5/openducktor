@@ -29,7 +29,12 @@ export function useTaskStopImpact({
   const repoPath = activeWorkspace?.repoPath ?? null;
   const shouldRead = enabled && repoPath !== null && taskIds.length > 0;
   const query = useQuery({
-    ...taskStopImpactQueryOptions({ repoPath: repoPath ?? "", taskIds, operation }),
+    ...taskStopImpactQueryOptions({
+      workspaceId: activeWorkspace?.workspaceId ?? "disabled",
+      repoPath: repoPath ?? "",
+      taskIds,
+      operation,
+    }),
     enabled: shouldRead,
   });
   const retry = () => {

@@ -1,11 +1,13 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
-import { toRepositorySelectorOptions } from "./repository-selector-model";
+import {
+  type RepositorySelectorWorkspace,
+  toRepositorySelectorOptions,
+} from "./repository-selector-model";
 
 type RepositorySelectorProps = {
-  workspaces: WorkspaceRecord[];
+  workspaces: RepositorySelectorWorkspace[];
   value: string;
   onValueChange: (workspaceId: string) => void;
   disabled?: boolean;

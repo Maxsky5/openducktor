@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
@@ -57,7 +58,7 @@ const renderSplitAction = ({
   onCreateTask?: () => void;
   listArchived?: (workspaceId: string) => Promise<never[]>;
   client?: Partial<HostClient>;
-  refreshTaskData?: (repoPath: string) => Promise<void>;
+  refreshTaskData?: ({ repoPath }: WorkspaceRef) => Promise<void>;
   taskStoreCheck?: ChecksStateContextValue["taskStoreCheck"];
 }) => {
   const connection = createTestClientConnection({
@@ -255,7 +256,7 @@ describe("SessionCreateSplitAction", () => {
     });
     const success = spyOn(toast, "success").mockImplementation(() => "toast-id");
     const error = spyOn(toast, "error").mockImplementation(() => "toast-id");
-    const refreshTaskData = mock(async (_repoPath: string) => {
+    const refreshTaskData = mock(async (_scope: WorkspaceRef) => {
       throw new Error("The task store is locked.");
     });
     try {

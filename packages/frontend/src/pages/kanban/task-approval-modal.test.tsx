@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -52,22 +53,27 @@ const createLoadedConnection = () => {
       taskWorktreeCleanupImpactGet: async () => LOADED_IMPACT,
       terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-      taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
     },
   });
   const { queryClient } = connection;
-  const target = { repoPath: "/repo", taskId: "TASK-1" };
+  const target = { workspaceId: "workspace-1", repoPath: "/repo", taskId: "TASK-1" };
   queryClient.setQueryData(taskWorktreeCleanupImpactQueryOptions(target).queryKey, LOADED_IMPACT);
   queryClient.setQueryData(
     terminalListByFilterQueryOptions({ filter: { kind: "task", ...target } }).queryKey,
     { hostInstanceId: "host", revision: 1, terminals: [] },
   );
   queryClient.setQueryData(
-    taskStopImpactQueryOptions({ repoPath: "/repo", taskIds: ["TASK-1"], operation: "close" })
-      .queryKey,
+    taskStopImpactQueryOptions({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskIds: ["TASK-1"],
+      operation: "close",
+    }).queryKey,
     { stoppableSessionCount: 0 },
   );
-  queryClient.setQueryData(taskMergeStatusQueryOptions("/repo").queryKey, {
+  queryClient.setQueryData(taskMergeStatusQueryOptions(workspaceRefFixture("/repo")).queryKey, {
+    workspaceId: "workspace-1",
     repoPath: "/repo",
     tasks: [],
   });
@@ -302,7 +308,7 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: readImpact,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
       },
     });
     return render(
@@ -395,7 +401,7 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: stopImpactGet,
-        taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
       },
     });
     const panel = (mode: TaskApprovalApprovalModalModel["mode"]) =>
@@ -449,11 +455,11 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: async () => readKeptWorktree(),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [notMerged] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [notMerged] }),
         // The check finds the same result, so the card must not change at all.
-        taskMergeStatusCheck: (repoPath) =>
+        taskMergeStatusCheck: (scope) =>
           new Promise((resolve) => {
-            finishCheck = () => resolve({ repoPath, tasks: [notMerged] });
+            finishCheck = () => resolve({ ...scope, tasks: [notMerged] });
           }),
       },
     });
@@ -513,7 +519,7 @@ describe("TaskApprovalModal", () => {
         }),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
         taskMergeStatusCheck: async () => {
           throw new Error("git fetch origin failed.");
         },
@@ -570,14 +576,14 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (repoPath) => ({
-          repoPath,
+        taskMergeStatusGet: async (scope) => ({
+          ...scope,
           tasks: [
             status({ kind: "not_merged", checkedAt, branchOid: "old-tip", unmergedCommitCount: 1 }),
           ],
         }),
-        taskMergeStatusCheck: async (repoPath) => ({
-          repoPath,
+        taskMergeStatusCheck: async (scope) => ({
+          ...scope,
           tasks: [status({ kind: "merged", checkedAt, branchOid: "new-tip" })],
         }),
       },

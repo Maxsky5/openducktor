@@ -19,7 +19,9 @@ const createSession = (
 ): CodexSessionState => ({
   summary: {
     externalSessionId: threadId,
-    sessionAssociation: role ? { kind: "workflow", taskId: "task-1", role } : { kind: "unbound" },
+    sessionAssociation: role
+      ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role }
+      : { kind: "unbound" },
     startedAt: "2026-05-07T00:00:00.000Z",
     status: "running",
   },

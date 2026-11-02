@@ -1,8 +1,10 @@
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import {
   azureDevOpsRepositorySchema,
   type AzureDevOpsConnectionState,
   type AzureDevOpsDeviceCode,
   type AzureDevOpsRepository,
+  type WorkspaceRef,
 } from "@openducktor/contracts";
 import { azureDevOpsRepositoryKey } from "@openducktor/core";
 import { Effect } from "effect";
@@ -15,8 +17,7 @@ import type {
 
 export type AzureDevOpsConnectionServiceError = HostError | WorkspaceSettingsError;
 
-export type AzureDevOpsConnectionInput = {
-  repoPath: string;
+export type AzureDevOpsConnectionInput = WorkspaceRef & {
   repository: AzureDevOpsRepository;
 };
 
@@ -41,7 +42,7 @@ export const createAzureDevOpsConnectionService = ({
   workspaceSettingsService,
 }: {
   connection?: AzureDevOpsConnectionPort | undefined;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
 }): AzureDevOpsConnectionService => {
   const requireConnection = () =>
     connection
@@ -55,7 +56,7 @@ export const createAzureDevOpsConnectionService = ({
 
   const readConfig = (input: AzureDevOpsConnectionInput, requireEnabled: boolean) =>
     Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
       const provider = repoConfig.git.provider;
       const savedRepository = azureDevOpsRepositorySchema.safeParse(provider?.repository);
       const requestedRepository = azureDevOpsRepositorySchema.safeParse(input.repository);

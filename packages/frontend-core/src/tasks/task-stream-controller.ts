@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceScopeKey } from "../queries/workspace-scope";
 import type { TaskEventCursor } from "@openducktor/contracts";
 import type { TaskStreamFrame, TaskStreamSubscription } from "../connection/host-connection";
 import type {
@@ -29,7 +31,7 @@ export type TaskStreamController = {
   start(): Promise<void>;
   stop(): Promise<void>;
   /** Drop the task data of a workspace that closed. */
-  releaseWorkspace(repoPath: string): Promise<void>;
+  releaseWorkspace(repoPath: WorkspaceRef): Promise<void>;
 };
 
 export const createTaskStreamController = ({
@@ -46,12 +48,12 @@ export const createTaskStreamController = ({
   taskViewSync: TaskViewSync;
   agentSessionViewSync: AgentSessionViewSync;
   /** The workspaces that a snapshot reconciles. */
-  getOpenRepoPaths: () => readonly string[];
+  getOpenRepoPaths: () => readonly WorkspaceRef[];
   onDegraded: (cause: unknown) => void;
-  onSnapshotFinished?: (repoPath: string, succeeded: boolean) => void;
-  onSnapshotStarted?: (repoPath: string) => void;
+  onSnapshotFinished?: (repoPath: WorkspaceRef, succeeded: boolean) => void;
+  onSnapshotStarted?: (repoPath: WorkspaceRef) => void;
   /** Open workspaces that a snapshot could not reconcile. The stream and other workspaces are current. */
-  onWorkspaceFailures: (failures: ReadonlyMap<string, unknown>) => void;
+  onWorkspaceFailures: (failures: ReadonlyMap<WorkspaceRef, unknown>) => void;
 }): TaskStreamController => {
   let current: OwnedSubscription | null = null;
   let acquiring: OwnedSubscription | null = null;
@@ -217,18 +219,18 @@ export const createTaskStreamController = ({
         tasks.taskIdsByRepo,
         () => isActive(owner, frameGeneration),
       );
-      readRepoPaths = new Set(tasks.taskIdsByRepo.keys());
+      readRepoPaths = new Set([...tasks.taskIdsByRepo.keys()].map(workspaceScopeKey));
       if (isActive(owner, frameGeneration)) {
         // One workspace that fails does not stop the snapshot of the other workspaces.
         reportWorkspaceFailures(new Map([...tasks.failures, ...sessionFailures]));
       }
     } finally {
       if (isActive(owner, frameGeneration)) {
-        const openRepoPaths = new Set(getOpenRepoPaths());
+        const openRepoPaths = new Set(getOpenRepoPaths().map(workspaceScopeKey));
         // Only a failed snapshot recovers the stream.
         for (const repoPath of repoPaths) {
-          if (openRepoPaths.has(repoPath)) {
-            onSnapshotFinished?.(repoPath, readRepoPaths.has(repoPath));
+          if (openRepoPaths.has(workspaceScopeKey(repoPath))) {
+            onSnapshotFinished?.(repoPath, readRepoPaths.has(workspaceScopeKey(repoPath)));
           }
         }
       }
@@ -239,9 +241,11 @@ export const createTaskStreamController = ({
   };
 
   /** Report the failures of the workspaces that are still open. */
-  const reportWorkspaceFailures = (failures: ReadonlyMap<string, unknown>): void => {
-    const openRepoPaths = new Set(getOpenRepoPaths());
-    const failed = new Map([...failures].filter(([repoPath]) => openRepoPaths.has(repoPath)));
+  const reportWorkspaceFailures = (failures: ReadonlyMap<WorkspaceRef, unknown>): void => {
+    const openRepoPaths = new Set(getOpenRepoPaths().map(workspaceScopeKey));
+    const failed = new Map(
+      [...failures].filter(([repoPath]) => openRepoPaths.has(workspaceScopeKey(repoPath))),
+    );
     if (failed.size === 0) return;
     try {
       onWorkspaceFailures(failed);

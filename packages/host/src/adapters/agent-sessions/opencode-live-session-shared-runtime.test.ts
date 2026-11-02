@@ -13,7 +13,12 @@ import {
 
 const repoA = "/repo-a";
 const repoB = "/repo-b";
-const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+const workflowScope = {
+  kind: "workflow",
+  workspaceId: "repo",
+  taskId: "task-1",
+  role: "build",
+} as const;
 
 const sessionRef = (repoPath: string, externalSessionId: string) => ({
   repoPath,

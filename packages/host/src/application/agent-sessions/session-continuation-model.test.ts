@@ -5,7 +5,6 @@ import {
   agentModelCatalogSchema,
   agentSessionResumeIntentSchema,
   repoConfigSchema,
-  settingsSnapshotSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
@@ -15,13 +14,19 @@ import { task } from "../tasks/test-support/task-workflow-harness";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentSessionCommandService } from "./agent-session-command-service";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 
 const root = {
   repoPath: "/repo",
   runtimeKind: "codex" as const,
   workingDirectory: "/repo/tree",
   externalSessionId: "root",
-  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "repo",
+    taskId: "task-1",
+    role: "build" as const,
+  },
 };
 const selection = (modelId: string): AgentSessionModelSelection => ({
   runtimeKind: "codex",
@@ -62,17 +67,24 @@ const setup = (
     turnPreparation: createSessionTurnPreparation({
       taskWorkflows: builtinTaskWorkflows,
       taskReader,
+      settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
       settings: {
-        getRepoConfigByRepoPath: () =>
+        getRepoConfig: () =>
           Effect.succeed(
             repoConfigSchema.parse({
-              workspaceId: "workspace",
+              workspaceId: "repo",
               workspaceName: "Workspace",
               repoPath: "/repo",
             }),
           ),
-        getSettingsSnapshot: () =>
-          Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
+        getRepoConfigByRepoPath: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "repo",
+              workspaceName: "Workspace",
+              repoPath: "/repo",
+            }),
+          ),
       },
       queries: {
         loadRuntimeCatalog: () =>

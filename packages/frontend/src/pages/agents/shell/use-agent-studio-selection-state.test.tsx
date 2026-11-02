@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskArtifactCollection } from "@openducktor/contracts";
 import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
@@ -87,7 +88,7 @@ describe("useAgentStudioSelectionState", () => {
       await waitFor(() =>
         expect(
           connection.queryClient.getQueryData(
-            documentQueryKeys.document("/repo", "task-1", "spec"),
+            documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
           ),
         ).toEqual({ markdown: "hello", updatedAt: null }),
       );
@@ -109,10 +110,16 @@ describe("useAgentStudioSelectionState", () => {
     async (role, section) => {
       const pendingList = Promise.withResolvers<TaskArtifactCollection>();
       const list = mock(() => pendingList.promise);
-      const read = mock(async (_repoPath: string, _taskId: string, _code: string) => ({
-        markdown: "hello",
-        updatedAt: null,
-      }));
+      const read = mock(
+        async (
+          _scope: { workspaceId: string; repoPath: string },
+          _taskId: string,
+          _code: string,
+        ) => ({
+          markdown: "hello",
+          updatedAt: null,
+        }),
+      );
       const connection = createTestClientConnection({
         client: { taskArtifactsList: list, workflowArtifactGet: read },
       });
@@ -127,8 +134,9 @@ describe("useAgentStudioSelectionState", () => {
           scheduleQueryUpdate: () => {
             readStartedBeforeRoute =
               read.mock.calls.length === 1 &&
-              connection.queryClient.getQueryState(artifactQueryKeys.collection("/repo", "task-2"))
-                ?.fetchStatus === "fetching";
+              connection.queryClient.getQueryState(
+                artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-2"),
+              )?.fetchStatus === "fetching";
           },
         }),
         { connection },
@@ -147,12 +155,12 @@ describe("useAgentStudioSelectionState", () => {
         await waitFor(() =>
           expect(
             connection.queryClient.getQueryData(
-              documentQueryKeys.document("/repo", "task-2", section),
+              documentQueryKeys.document(workspaceRefFixture("/repo"), "task-2", section),
             ),
           ).toEqual({ markdown: "hello", updatedAt: null }),
         );
         expect(read).toHaveBeenCalledTimes(1);
-        expect(read).toHaveBeenCalledWith("/repo", "task-2", section);
+        expect(read).toHaveBeenCalledWith(workspaceRefFixture("/repo"), "task-2", section);
         expect(h.getLatest().selection.taskId).toBe("task-1");
       } finally {
         pendingList.resolve({ artifacts: [], canManageFree: true });

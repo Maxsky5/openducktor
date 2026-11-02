@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workspaceIdSchema } from "./workspace-id-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
   runtimeApprovalRequestTypeSchema,
@@ -113,6 +114,7 @@ export const taskAgentSessionsSchema = z.object({
 export type TaskAgentSessions = z.infer<typeof taskAgentSessionsSchema>;
 
 export const agentSessionStopTargetSchema = z.object({
+  workspaceId: workspaceIdSchema,
   repoPath: nonEmptyStringSchema,
   taskId: nonEmptyStringSchema,
   externalSessionId: nonEmptyStringSchema,

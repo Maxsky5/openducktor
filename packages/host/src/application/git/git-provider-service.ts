@@ -1,8 +1,10 @@
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type {
   GitProviderId,
   GitProviderRepository,
   RepoConfig,
   RepositoryGitProviderContext,
+  WorkspaceRef,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
@@ -23,12 +25,13 @@ export type GitProviderServiceError =
   | WorkspaceSettingsError;
 
 export type GitProviderService = {
-  detectRepository(input: {
-    repoPath: string;
-    providerId: GitProviderId;
-  }): Effect.Effect<GitProviderRepository, GitProviderServiceError>;
+  detectRepository(
+    input: WorkspaceRef & {
+      providerId: GitProviderId;
+    },
+  ): Effect.Effect<GitProviderRepository, GitProviderServiceError>;
   getContext(
-    repoPath: string,
+    workspace: WorkspaceRef,
   ): Effect.Effect<RepositoryGitProviderContext, GitProviderServiceError>;
 };
 
@@ -37,18 +40,18 @@ export const createGitProviderService = ({
   workspaceSettingsService,
 }: {
   resolver: GitProviderResolver;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
 }): GitProviderService => ({
-  detectRepository({ repoPath, providerId }) {
+  detectRepository(input) {
     return Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const provider = yield* resolver.resolve(detectionConfig(repoConfig, providerId));
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
+      const provider = yield* resolver.resolve(detectionConfig(repoConfig, input.providerId));
       return yield* provider.repository().detectRepository(repoConfig.repoPath);
     });
   },
-  getContext(repoPath) {
+  getContext(input) {
     return Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
       const config = repoConfig.git.provider;
       if (!config) {
         return null;

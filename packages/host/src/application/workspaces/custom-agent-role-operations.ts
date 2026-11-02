@@ -2,7 +2,7 @@ import { customAgentRoleInputSchema, type CustomAgentRoleInput } from "@openduck
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import { loadGlobalConfig, type WorkspaceSettingsService } from "./workspace-settings-model";
+import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 type CustomAgentRoleOperations = Pick<
   WorkspaceSettingsService,
@@ -25,34 +25,33 @@ export const createCustomAgentRoleOperations = (
             cause,
           }),
       });
-      const config = yield* loadGlobalConfig(settingsConfig);
-      if (id !== null && !config.customAgentRoles.some((role) => role.id === id)) {
-        return yield* Effect.fail(
-          new HostValidationError({ message: `Custom Agent Role not found: ${id}`, field: "id" }),
-        );
-      }
-      if (
-        config.customAgentRoles.some(
-          (role) => role.id !== id && role.name.toLowerCase() === parsed.name.toLowerCase(),
+      const saved = { ...parsed, id: id ?? crypto.randomUUID() };
+      yield* settingsConfig.updateConfig((config) => {
+        if (id !== null && !config.customAgentRoles.some((role) => role.id === id))
+          throw new HostValidationError({
+            message: `Custom Agent Role not found: ${id}`,
+            field: "id",
+          });
+        if (
+          config.customAgentRoles.some(
+            (role) => role.id !== id && role.name.toLowerCase() === parsed.name.toLowerCase(),
+          )
         )
-      ) {
-        return yield* Effect.fail(
-          new HostValidationError({
+          throw new HostValidationError({
             message: `A Custom Agent Role named "${parsed.name}" already exists.`,
             field: "name",
-          }),
-        );
-      }
-      const saved = { ...parsed, id: id ?? crypto.randomUUID() };
-      const customAgentRoles = config.customAgentRoles.filter((role) => role.id !== id);
-      customAgentRoles.push(saved);
-      yield* settingsConfig.writeConfig({ ...config, customAgentRoles });
+          });
+        return {
+          ...config,
+          customAgentRoles: [...config.customAgentRoles.filter((role) => role.id !== id), saved],
+        };
+      }, []);
       return saved;
     });
   return {
     listCustomAgentRoles: () =>
       Effect.gen(function* () {
-        const config = yield* loadGlobalConfig(settingsConfig);
+        const config = yield* settingsConfig.readGlobalConfig();
         return [...config.customAgentRoles].sort((left, right) =>
           left.name.localeCompare(right.name),
         );
@@ -61,16 +60,17 @@ export const createCustomAgentRoleOperations = (
     updateCustomAgentRole: (id, input) => saveRole(id, input),
     deleteCustomAgentRole: (id) =>
       Effect.gen(function* () {
-        const config = yield* loadGlobalConfig(settingsConfig);
-        if (!config.customAgentRoles.some((role) => role.id === id)) {
-          return yield* Effect.fail(
-            new HostValidationError({ message: `Custom Agent Role not found: ${id}`, field: "id" }),
-          );
-        }
-        yield* settingsConfig.writeConfig({
-          ...config,
-          customAgentRoles: config.customAgentRoles.filter((role) => role.id !== id),
-        });
+        yield* settingsConfig.updateConfig((config) => {
+          if (!config.customAgentRoles.some((role) => role.id === id))
+            throw new HostValidationError({
+              message: `Custom Agent Role not found: ${id}`,
+              field: "id",
+            });
+          return {
+            ...config,
+            customAgentRoles: config.customAgentRoles.filter((role) => role.id !== id),
+          };
+        }, []);
       }),
   };
 };

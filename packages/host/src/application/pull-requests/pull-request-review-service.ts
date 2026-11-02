@@ -1,5 +1,7 @@
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import {
   type GitProviderId,
+  type WorkspaceRef,
   type PullRequest,
   type PullRequestReviewContext,
   pullRequestReviewContextSchema,
@@ -13,8 +15,7 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 
-export type PullRequestReviewContextInput = {
-  repoPath: string;
+export type PullRequestReviewContextInput = WorkspaceRef & {
   taskId?: string;
 };
 
@@ -33,15 +34,19 @@ export const createPullRequestReviewService = ({
 }: {
   resolver: GitProviderResolver;
   taskReader: Pick<TaskReader, "getTask">;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
 }): PullRequestReviewService => ({
   getContext(input) {
     return Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
       let pullRequest: PullRequest | null = null;
       if (input.taskId) {
         const taskResult = yield* Effect.result(
-          taskReader.getTask({ repoPath: repoConfig.repoPath, taskId: input.taskId }),
+          taskReader.getTask({
+            workspaceId: input.workspaceId,
+            repoPath: repoConfig.repoPath,
+            taskId: input.taskId,
+          }),
         );
         if (taskResult._tag === "Failure") {
           return providerError("unknown", errorMessage(taskResult.failure));

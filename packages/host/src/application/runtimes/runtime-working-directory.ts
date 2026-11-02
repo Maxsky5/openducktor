@@ -1,5 +1,7 @@
 import { pathStartsWith } from "@openducktor/path-support";
+import type { AgentSessionScope } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import {
   hasNestedNodeErrorCode,
   type HostOperationErrorAggregate,
@@ -21,15 +23,37 @@ export type RuntimeWorkingDirectoryDependencies = {
     | "defaultWorktreeBasePath"
     | "resolveConfiguredPath"
   >;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  workspaceSettingsService: Pick<
+    WorkspaceSettingsService,
+    "getRepoConfig" | "getRepoConfigByRepoPath"
+  >;
+};
+export type RuntimeWorkingDirectoryInput = {
+  repoPath: string;
+  workingDirectory: string;
+  sessionScope?: AgentSessionScope | undefined;
+};
+
+export const resolveRuntimeRepoConfig = (
+  settings: RuntimeWorkingDirectoryDependencies["workspaceSettingsService"],
+  input: Pick<RuntimeWorkingDirectoryInput, "repoPath" | "sessionScope">,
+) => {
+  const workspaceId = input.sessionScope?.workspaceId;
+  return workspaceId === undefined
+    ? settings.getRepoConfigByRepoPath(input.repoPath)
+    : getScopedRepoConfig(settings, { workspaceId, repoPath: input.repoPath });
 };
 
 export const requireRuntimeWorkingDirectory = (
   dependencies: RuntimeWorkingDirectoryDependencies,
-  input: { repoPath: string; workingDirectory: string },
+  input: RuntimeWorkingDirectoryInput,
 ) =>
   Effect.gen(function* () {
     const canonicalRepoPath = yield* dependencies.settingsConfig.canonicalizePath(input.repoPath);
+    const repoConfig = yield* resolveRuntimeRepoConfig(dependencies.workspaceSettingsService, {
+      ...input,
+      repoPath: canonicalRepoPath,
+    });
     const canonicalWorkingDirectory = yield* dependencies.settingsConfig.canonicalizePath(
       input.workingDirectory,
     );
@@ -37,8 +61,6 @@ export const requireRuntimeWorkingDirectory = (
       return;
     }
 
-    const repoConfig =
-      yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(canonicalRepoPath);
     const worktreeBasePath =
       repoConfig.worktreeBasePath !== undefined
         ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)

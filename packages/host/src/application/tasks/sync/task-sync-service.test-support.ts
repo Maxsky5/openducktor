@@ -1,4 +1,9 @@
-import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
+import type {
+  ExternalTaskSyncEvent,
+  TaskCard,
+  WorkspaceRecord,
+  WorkspaceRef,
+} from "@openducktor/contracts";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
 import { Effect } from "effect";
 import { createTaskEventStream } from "../../../events/task-event-stream";
@@ -11,12 +16,13 @@ type TaskSyncServiceTestInput = Omit<
   | "publicationReporter"
   | "taskEventStream"
   | "taskService"
+  | "settingsConfig"
   | "workspaceSettingsService"
 > &
   Partial<
     Pick<
       Parameters<typeof createTaskSyncService>[0],
-      "mergeDetection" | "onBackgroundFailure" | "publicationReporter"
+      "mergeDetection" | "onBackgroundFailure" | "publicationReporter" | "settingsConfig"
     >
   > & {
     workspaceSettingsService: Pick<
@@ -26,7 +32,7 @@ type TaskSyncServiceTestInput = Omit<
       Partial<
         Pick<
           Parameters<typeof createTaskSyncService>[0]["workspaceSettingsService"],
-          "getSettingsSnapshot" | "getWorkspaceCatalog"
+          "getWorkspaceCatalog"
         >
       >;
     eventBus: { publish(event: ExternalTaskSyncEvent): void };
@@ -36,19 +42,35 @@ type TaskSyncServiceTestInput = Omit<
 
 /** A merge detection pass that finds no candidates. */
 export const noMergeDetection = {
-  runPass: (repoPath: string) => Effect.succeed({ repoPath, tasks: [] }),
+  runPass: (workspace: WorkspaceRef) => Effect.succeed({ ...workspace, tasks: [] }),
 };
+
+export const syncWorkspace = (repoPath = "/repo", workspaceId = "repo"): WorkspaceRecord => ({
+  workspaceId,
+  workspaceName: workspaceId,
+  repoPath,
+  abbreviation: null,
+  tileColor: null,
+  isActive: false,
+  hasConfig: true,
+  configuredWorktreeBasePath: null,
+  defaultWorktreeBasePath: null,
+  effectiveWorktreeBasePath: null,
+});
 
 export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) => {
   const stream = createTaskEventStream({ reporter: { report: () => {} } });
   return createTaskSyncService({
     ...input,
+    settingsConfig: input.settingsConfig ?? {
+      readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+    },
     workspaceSettingsService: {
-      getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
       // Each listed workspace is open, so the sync loop syncs it.
       getWorkspaceCatalog: () =>
         input.workspaceSettingsService.listWorkspaces().pipe(
           Effect.map((openWorkspaces) => ({
+            catalogRevision: 0,
             openWorkspaces,
             closedWorkspaces: [],
             incompleteRemovals: [],
@@ -64,6 +86,8 @@ export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
     publicationReporter: input.publicationReporter ?? { report: () => Effect.void },
     taskEventStream: {
+      cursor: stream.cursor,
+      reset: stream.reset,
       publish: (event) => {
         input.eventBus.publish(event);
         return stream.publish(event);

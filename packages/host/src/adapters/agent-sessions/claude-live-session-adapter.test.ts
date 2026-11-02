@@ -54,6 +54,15 @@ const workingDirectoryDependencies = {
     resolveConfiguredPath: (path: string) => path,
   },
   workspaceSettingsService: {
+    getRepoConfig: () =>
+      Effect.succeed(
+        repoConfigSchema.parse({
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          worktreeBasePath: "/worktrees/repo",
+        }),
+      ),
     getRepoConfigByRepoPath: () =>
       Effect.succeed(
         repoConfigSchema.parse({
@@ -71,7 +80,7 @@ const summary = {
   runtimeKind: "claude",
   workingDirectory: "/repo/worktree",
   title: "Claude build",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   startedAt: "2026-07-17T10:01:00.000Z",
   status: "idle",
 } as const satisfies AgentSessionSummary;
@@ -87,7 +96,7 @@ const session: ClaudeSessionContext = {
     runtimeKind: "claude",
     workingDirectory: "/repo/worktree",
     runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
     systemPrompt: "Build",
   },
   model: undefined,
@@ -164,7 +173,12 @@ const startInput = {
   repoPath: "/repo",
   runtimeKind: "claude" as const,
   workingDirectory: "/repo/worktree",
-  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "repo",
+    taskId: "task-1",
+    role: "build" as const,
+  },
   systemPrompt: "Build",
 };
 

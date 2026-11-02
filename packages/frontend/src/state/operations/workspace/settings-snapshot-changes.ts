@@ -1,40 +1,15 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import {
+  workspaceScopeKey,
+  workspaceScopeValue,
+} from "@openducktor/frontend-core/queries/workspace-scope";
+import { jsonValuesEqual, type SettingsSnapshot, type WorkspaceRef } from "@openducktor/contracts";
 
 export type SettingsSnapshotChanges = {
   workspacesChanged: boolean;
   agentRuntimesChanged: boolean;
   customAgentRolesChanged: boolean;
   kanbanDoneVisibleDaysChanged: boolean;
-  changedGitProviderRepoPaths: string[];
-};
-
-const isSameJsonValue = <Value>(left: Value, right: Value): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
-
-const changedGitProviderRepoPaths = (
-  previous: SettingsSnapshot["workspaces"] | undefined,
-  next: SettingsSnapshot["workspaces"],
-): string[] => {
-  if (previous === undefined) {
-    return Object.values(next).map((workspace) => workspace.repoPath);
-  }
-
-  const repoPaths = new Set<string>();
-  for (const [workspaceId, nextWorkspace] of Object.entries(next)) {
-    const previousWorkspace = previous[workspaceId];
-    if (previousWorkspace === undefined) {
-      repoPaths.add(nextWorkspace.repoPath);
-      continue;
-    }
-    if (!isSameJsonValue(previousWorkspace.git, nextWorkspace.git)) {
-      repoPaths.add(nextWorkspace.repoPath);
-    }
-    if (previousWorkspace.repoPath !== nextWorkspace.repoPath) {
-      repoPaths.add(nextWorkspace.repoPath);
-      repoPaths.add(previousWorkspace.repoPath);
-    }
-  }
-  return [...repoPaths];
+  changedGitProviderWorkspaces: WorkspaceRef[];
 };
 
 export const diffSettingsSnapshots = (
@@ -42,12 +17,40 @@ export const diffSettingsSnapshots = (
   next: SettingsSnapshot,
 ): SettingsSnapshotChanges => ({
   workspacesChanged:
-    previous === undefined || !isSameJsonValue(previous.workspaces, next.workspaces),
+    previous === undefined || !jsonValuesEqual(previous.workspaces, next.workspaces),
   agentRuntimesChanged:
-    previous === undefined || !isSameJsonValue(previous.agentRuntimes, next.agentRuntimes),
+    previous === undefined || !jsonValuesEqual(previous.agentRuntimes, next.agentRuntimes),
   customAgentRolesChanged:
-    previous === undefined || !isSameJsonValue(previous.customAgentRoles, next.customAgentRoles),
+    previous === undefined || !jsonValuesEqual(previous.customAgentRoles, next.customAgentRoles),
   kanbanDoneVisibleDaysChanged:
     previous !== undefined && previous.kanban.doneVisibleDays !== next.kanban.doneVisibleDays,
-  changedGitProviderRepoPaths: changedGitProviderRepoPaths(previous?.workspaces, next.workspaces),
+  changedGitProviderWorkspaces: changedGitProviderWorkspaces(previous?.workspaces, next.workspaces),
 });
+
+const changedGitProviderWorkspaces = (
+  previous: SettingsSnapshot["workspaces"] | undefined,
+  next: SettingsSnapshot["workspaces"],
+): WorkspaceRef[] => {
+  if (previous === undefined) {
+    return Object.values(next).map(workspaceScopeValue);
+  }
+
+  const scopes = new Map<string, WorkspaceRef>();
+  const add = (workspace: WorkspaceRef) =>
+    scopes.set(workspaceScopeKey(workspace), workspaceScopeValue(workspace));
+  for (const [workspaceId, nextWorkspace] of Object.entries(next)) {
+    const previousWorkspace = previous[workspaceId];
+    if (previousWorkspace === undefined) {
+      add(nextWorkspace);
+      continue;
+    }
+    if (!jsonValuesEqual(previousWorkspace.git, nextWorkspace.git)) {
+      add(nextWorkspace);
+    }
+    if (previousWorkspace.repoPath !== nextWorkspace.repoPath) {
+      add(nextWorkspace);
+      add(previousWorkspace);
+    }
+  }
+  return [...scopes.values()];
+};

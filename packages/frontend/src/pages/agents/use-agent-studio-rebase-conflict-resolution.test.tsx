@@ -45,7 +45,12 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
 const buildSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
   createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
 
     status: "running",
     ...overrides,
@@ -104,7 +109,12 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   const plannerSession = createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     externalSessionId: "planner-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "planner",
+    },
 
     status: "running",
   });
@@ -516,7 +526,12 @@ describe("useAgentStudioRebaseConflictResolution", () => {
   test("uses the live selected Builder session without a shell-side summary wrapper", async () => {
     const liveBuilderSession = createAgentSessionFixture({
       externalSessionId: "build-live-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
 
       status: "running",
       workingDirectory: "/repo/worktrees/task-1",
@@ -625,7 +640,12 @@ function createRetryHarness(
         externalSessionId: `build-new-${workflows.length + 1}`,
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/task-1",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         status: "idle",
       });
       const identity = toAgentSessionIdentity(builder);

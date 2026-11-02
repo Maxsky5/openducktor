@@ -175,7 +175,12 @@ await writeFile(
   `${records.map((record) => JSON.stringify({ ...record, sessionId: foreignId, cwd: foreign })).join("\n")}\n`,
 );
 
-const scope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+const scope = {
+  kind: "workflow" as const,
+  workspaceId: "repo",
+  taskId: "task-1",
+  role: "build" as const,
+};
 const model = {
   runtimeKind: "claude" as const,
   providerId: "claude",

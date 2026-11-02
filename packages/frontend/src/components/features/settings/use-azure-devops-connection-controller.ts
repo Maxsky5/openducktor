@@ -1,4 +1,8 @@
-import type { AzureDevOpsConnectionState, AzureDevOpsRepository } from "@openducktor/contracts";
+import type {
+  AzureDevOpsConnectionState,
+  AzureDevOpsRepository,
+  WorkspaceRef,
+} from "@openducktor/contracts";
 import {
   azureDevOpsConnectionConfigurationFingerprint,
   isAzureDevOpsRepository,
@@ -19,8 +23,7 @@ import {
 } from "@openducktor/frontend-core/connection/client-connection";
 import type { HostClient } from "@openducktor/host-client";
 
-export type AzureDevOpsConnectionInput = {
-  repoPath: string;
+export type AzureDevOpsConnectionInput = WorkspaceRef & {
   repository: AzureDevOpsRepository;
 };
 
@@ -237,10 +240,13 @@ export const useAzureDevOpsConnectionController = ({
   const invalidateProviderContext = useCallback(
     () =>
       queryClient.invalidateQueries({
-        queryKey: repositoryGitProviderContextQueryKeys.repo(selectedRepoPath),
+        queryKey: repositoryGitProviderContextQueryKeys.repo({
+          workspaceId,
+          repoPath: selectedRepoPath,
+        }),
         exact: true,
       }),
-    [queryClient, selectedRepoPath],
+    [queryClient, selectedRepoPath, workspaceId],
   );
 
   const pendingAttemptId =

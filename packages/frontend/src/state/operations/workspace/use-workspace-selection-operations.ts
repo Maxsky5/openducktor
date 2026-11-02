@@ -24,7 +24,6 @@ import {
   dropWorkspaceConfigQueries,
   invalidateWorkspaceCaches,
   invalidateWorkspaceSettingsSnapshot,
-  loadWorkspaceListFromQuery,
   pruneWorkspaceConfigQueries,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
@@ -169,7 +168,11 @@ export function useWorkspaceSelectionOperations({
   const workspaceReorderVersionRef = useRef(0);
   const workspaceLifecycleInFlightRef = useRef(false);
   const activeWorkspaceRef = useRef(activeWorkspace);
-  const workspaceListQuery = useQuery(workspaceListQueryOptions());
+  const workspaceListQuery = useQuery({
+    ...workspaceListQueryOptions(),
+    queryFn: async () =>
+      (await queryClient.fetchQuery(workspaceCatalogQueryOptions())).openWorkspaces,
+  });
   const workspaceCatalogQuery = useQuery(workspaceCatalogQueryOptions());
   const workspaces = workspaceListQuery.data ?? [];
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
@@ -338,11 +341,8 @@ export function useWorkspaceSelectionOperations({
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
-    const [data] = await Promise.all([
-      loadWorkspaceListFromQuery(queryClient),
-      queryClient.fetchQuery(workspaceCatalogQueryOptions()),
-    ]);
-    applyWorkspaceRecords(data);
+    const catalog = await queryClient.fetchQuery(workspaceCatalogQueryOptions());
+    applyWorkspaceRecords(catalog.openWorkspaces);
   }, [applyWorkspaceRecords, queryClient]);
 
   const addWorkspace = useCallback(
@@ -393,7 +393,7 @@ export function useWorkspaceSelectionOperations({
               queryKey: workspaceQueryKeys.repoConfig(outcome.workspace.workspaceId),
             }),
             queryClient.invalidateQueries({
-              queryKey: repositoryGitProviderContextQueryKeys.repo(outcome.workspace.repoPath),
+              queryKey: repositoryGitProviderContextQueryKeys.repo(outcome.workspace),
             }),
           ]);
         } catch (cause) {

@@ -16,7 +16,7 @@ export const createTaskAssetAwareUpdate =
     filePort,
     staging,
     persistence,
-    resolveWorkspaceIdForRepoPath,
+    resolveWorkspaceId,
   }: TaskAssetAwareMutationDependencies): TaskStorePort["updateTask"] =>
   (input) => {
     if (!Object.hasOwn(input.patch, "description")) {
@@ -73,13 +73,15 @@ export const createTaskAssetAwareUpdate =
         }
         return yield* inner.updateTask(input);
       }
-      workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      workspaceId = yield* resolveWorkspaceId(input);
       const existing = yield* registry.listAssets({
+        workspaceId,
         repoPath: input.repoPath,
         taskId: input.taskId,
         scope: "description",
       });
       const currentTask = yield* inner.getTask({
+        workspaceId,
         repoPath: input.repoPath,
         taskId: input.taskId,
       });
@@ -117,7 +119,11 @@ export const createTaskAssetAwareUpdate =
       for (const asset of stagedAssets) {
         if (
           existingIds.has(asset.assetId) ||
-          (yield* registry.assetIdExists({ repoPath: input.repoPath, assetId: asset.assetId }))
+          (yield* registry.assetIdExists({
+            workspaceId,
+            repoPath: input.repoPath,
+            assetId: asset.assetId,
+          }))
         ) {
           return yield* new TaskAssetError({
             operation: "update",
@@ -170,6 +176,7 @@ export const createTaskAssetAwareUpdate =
         promotedAssetIds.push(asset.assetId);
       }
       const updated = yield* persistence.updateTaskWithDescriptionAssets({
+        workspaceId,
         repoPath: input.repoPath,
         taskId: input.taskId,
         expectedTask: currentTask,

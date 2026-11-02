@@ -1,7 +1,6 @@
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   createObservedCheckFixture,
-  createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
 } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
@@ -129,7 +128,6 @@ export const createWorkspaceStateFixture = (
     commitWorkspaceProviderSetup: async () => {
       throw new Error("commitWorkspaceProviderSetup is not configured for this test.");
     },
-    saveWorkspaceModelDefaults: async () => {},
     selectWorkspace: async () => {},
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},
@@ -137,10 +135,7 @@ export const createWorkspaceStateFixture = (
     loadRepoSettings: async () => {
       throw new Error("loadRepoSettings is not configured for this test.");
     },
-    saveRepoSettings: async () => {},
-    loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
     detectGithubRepository: async () => null,
-    saveGlobalGitConfig: async () => {},
     previewSettingsSnapshotRuntime: async () => {
       throw new Error("previewSettingsSnapshotRuntime is not configured for this test.");
     },

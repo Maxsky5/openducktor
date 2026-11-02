@@ -37,7 +37,12 @@ const taskFixture: TaskCard = {
 const createSessionFixture = (): AgentSessionState => ({
   runtimeKind: "opencode",
   externalSessionId: "external-1",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build",
+  },
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-03-01T09:00:00.000Z",

@@ -10,12 +10,12 @@ import {
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
-import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { RuntimeQueryError } from "../../ports/runtime-query-error";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
+  createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -35,8 +35,15 @@ const historyHarness = async (
   temporaryRoots.push(root);
   const repoPath = path.join(root, "repo");
   await mkdir(repoPath);
-  const settingsConfig = createSettingsConfigAdapter({
-    configPath: path.join(root, "settings.json"),
+  const settingsConfig = createSettingsConfigTestDouble({
+    canonicalizePath: (inputPath) =>
+      Effect.tryPromise({
+        try: () => realpath(inputPath),
+        catch: (cause) => toHostOperationError(cause, "test.canonicalizePath"),
+      }),
+    defaultWorktreeBasePath: (workspaceId) => path.join(root, "worktrees", workspaceId),
+    defaultRepoWorktreeBasePath: () => path.join(root, "legacy-worktrees"),
+    resolveConfiguredPath: (inputPath) => inputPath,
   });
   const managedRoot =
     rootKind === "legacy"
@@ -61,7 +68,7 @@ const historyHarness = async (
     },
     workingDirectory,
     externalSessionId: "saved-session",
-    sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+    sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
   } as const;
   const runtime: RuntimeInstanceSummary = {
     runtimeId: "runtime-1",
@@ -103,6 +110,15 @@ const historyHarness = async (
     },
     settingsConfig,
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfigSchema.parse({
+            workspaceId: "workspace",
+            workspaceName: "Workspace",
+            repoPath,
+            worktreeBasePath: rootKind === "configured" ? managedRoot : undefined,
+          }),
+        ),
       getRepoConfigByRepoPath: () =>
         Effect.succeed(
           repoConfigSchema.parse({

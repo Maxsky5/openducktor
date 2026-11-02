@@ -39,6 +39,19 @@ test("openSqliteDatabase supports the Node runtime adapter", async () => {
       try {
         await Effect.runPromise(database.exec("create table sample (label text not null, value integer not null);"));
 
+        await Effect.runPromise(database.exec("BEGIN IMMEDIATE"));
+        if (!await Effect.runPromise(database.inTransaction())) throw new Error("expected active transaction");
+        const contender = await Effect.runPromise(openSqliteDatabase(databasePath, "node"));
+        try {
+          const waiting = Effect.runPromise(contender.exec("BEGIN IMMEDIATE"));
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          await Effect.runPromise(database.exec("ROLLBACK"));
+          await waiting;
+          await Effect.runPromise(contender.exec("ROLLBACK"));
+        } finally {
+          await Effect.runPromise(contender.close());
+        }
+        if (await Effect.runPromise(database.inTransaction())) throw new Error("expected finished transaction");
         const insert = await Effect.runPromise(database.prepare("insert into sample (label, value) values (?, ?)"));
         const insertResult = await Effect.runPromise(insert.run("alpha", 7));
         if (Number(insertResult.changes) !== 1) {
@@ -57,6 +70,13 @@ test("openSqliteDatabase supports the Node runtime adapter", async () => {
         }
       } finally {
         await Effect.runPromise(database.close());
+      }
+      const readonly = await Effect.runPromise(openSqliteDatabase(databasePath, "node", { readonly: true }));
+      try {
+        const write = await Effect.runPromise(Effect.result(readonly.exec("DELETE FROM sample")));
+        if (write._tag !== "Failure") throw new Error("readonly source accepted a write");
+      } finally {
+        await Effect.runPromise(readonly.close());
       }
     `,
   );

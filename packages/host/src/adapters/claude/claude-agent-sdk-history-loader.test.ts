@@ -293,7 +293,7 @@ describe("claudeLiveHistoryContext", () => {
           workingDirectory: "/repo",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         },
       }),
     );

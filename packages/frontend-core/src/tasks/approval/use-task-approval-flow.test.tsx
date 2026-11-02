@@ -49,7 +49,7 @@ const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   );
 
 const defaultTaskApprovalContextGet = async (
-  _repoPath: string,
+  _repoPath: import("@openducktor/contracts").WorkspaceRef,
   _taskId: string,
 ): Promise<TaskApprovalContextLoadResult> => {
   throw new Error("not configured");
@@ -202,7 +202,7 @@ const registerDependencySpies = (): void => {
       agentDefaults: {},
     }),
     workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-    taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
+    taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
   };
 };
 
@@ -454,7 +454,10 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(taskApprovalContextGetMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(taskApprovalContextGetMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      "TASK-1",
+    );
     expect(expectApprovalModal().isLoading).toBe(true);
     expect(expectApprovalModal().mode).toBe("pull_request");
 
@@ -685,7 +688,10 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
     });
 
-    expect(taskApprovalContextGetMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(taskApprovalContextGetMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      "TASK-1",
+    );
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(expectApprovalModal().isLoading).toBe(true);
     expect(expectApprovalModal().mergeMethod).toBe("merge_commit");
@@ -1117,8 +1123,8 @@ describe("useTaskApprovalFlow", () => {
 
   test("opens with Close Task selected for a merged task branch and closes with the cleanup choice", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
-    hostClientFakes.taskMergeStatusGet = async (repoPath) => ({
-      repoPath,
+    hostClientFakes.taskMergeStatusGet = async (scope) => ({
+      ...scope,
       tasks: [
         {
           taskId: "TASK-1",
@@ -1578,19 +1584,23 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
-      expected: {
-        taskStatus: "human_review",
-        sourceBranch: "odt/TASK-1",
-        targetBranch: { remote: "upstream", branch: "main" },
+    expect(taskDirectMergeMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      "TASK-1",
+      {
+        expected: {
+          taskStatus: "human_review",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { remote: "upstream", branch: "main" },
+        },
+        mergeMethod: "squash",
+        squashCommitMessage: "feat: merged task",
+        removeWorktree: true,
       },
-      mergeMethod: "squash",
-      squashCommitMessage: "feat: merged task",
-      removeWorktree: true,
-    });
+    );
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith(
-      "/repo",
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
       "TASK-1",
       true,
       expect.objectContaining({
@@ -1650,16 +1660,20 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
-      expected: {
-        taskStatus: "human_review",
-        sourceBranch: "odt/TASK-1",
-        targetBranch: { branch: "release/2026.03" },
+    expect(taskDirectMergeMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      "TASK-1",
+      {
+        expected: {
+          taskStatus: "human_review",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { branch: "release/2026.03" },
+        },
+        mergeMethod: "merge_commit",
+        squashCommitMessage: undefined,
+        removeWorktree: true,
       },
-      mergeMethod: "merge_commit",
-      squashCommitMessage: undefined,
-      removeWorktree: true,
-    });
+    );
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
@@ -1709,17 +1723,24 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
-    expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
-      expected: {
-        taskStatus: "human_review",
-        sourceBranch: "odt/TASK-1",
-        targetBranch: { remote: "origin", branch: "main" },
+    expect(agentSessionsListForTasksMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      ["TASK-1"],
+    );
+    expect(taskDirectMergeMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      "TASK-1",
+      {
+        expected: {
+          taskStatus: "human_review",
+          sourceBranch: "odt/TASK-1",
+          targetBranch: { remote: "origin", branch: "main" },
+        },
+        mergeMethod: "merge_commit",
+        squashCommitMessage: undefined,
+        removeWorktree: true,
       },
-      mergeMethod: "merge_commit",
-      squashCommitMessage: undefined,
-      removeWorktree: true,
-    });
+    );
     await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
       description: "session lookup failed",
@@ -1776,10 +1797,13 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
+    expect(agentSessionsListForTasksMock).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      ["TASK-1"],
+    );
     expect(gitPushBranchMock).not.toHaveBeenCalled();
     expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith(
-      "/repo",
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
       "TASK-1",
       true,
       expect.any(Object),
@@ -2195,7 +2219,7 @@ describe("useTaskApprovalFlow", () => {
 
     await waitForTaskApprovalModalClosed();
     expect(taskPullRequestUpsertMock).toHaveBeenCalledWith(
-      "/repo",
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
       "TASK-1",
       "Ship approval flow",
       "Task description",
@@ -2336,15 +2360,17 @@ describe("useTaskApprovalFlow", () => {
     );
     const secondApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
 
-    taskApprovalContextGetMock.mockImplementation(async (_repoPath: string, taskId: string) => {
-      if (taskId === "TASK-1") {
-        return createReadyTaskApprovalContextResult({
-          taskId,
-        });
-      }
+    taskApprovalContextGetMock.mockImplementation(
+      async (_repoPath: import("@openducktor/contracts").WorkspaceRef, taskId: string) => {
+        if (taskId === "TASK-1") {
+          return createReadyTaskApprovalContextResult({
+            taskId,
+          });
+        }
 
-      return secondApprovalContext.promise;
-    });
+        return secondApprovalContext.promise;
+      },
+    );
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(

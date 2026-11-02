@@ -174,7 +174,18 @@ describe("createMcpHostBridgeServer", () => {
     const bridge = createMcpHostBridgeServer({
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
-      workspaceSettingsService: createWorkspaceSettingsService(),
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfig: (workspaceId) =>
+          workspaceId === "repo"
+            ? Effect.succeed(repoConfig)
+            : Effect.fail(
+                new HostOperationError({
+                  operation: "test.workspace",
+                  message: "Workspace ID is no longer registered.",
+                }),
+              ),
+        getRepoConfigByRepoPath: () => Effect.die("Several workspaces use this repository path."),
+      }),
       onStatusChanged: () => {},
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
@@ -212,7 +223,12 @@ describe("createMcpHostBridgeServer", () => {
       } satisfies OdtMcpBridgeService,
     });
     try {
-      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const connection = await Effect.runPromise(
+        bridge.ensureConnection({ workspaceId: "repo", repoPath: "/repo" }),
+      );
+      await expect(
+        Effect.runPromise(bridge.ensureConnection({ workspaceId: "missing", repoPath: "/repo" })),
+      ).rejects.toThrow("Workspace ID is no longer registered.");
       expect(connection).toMatchObject({
         workspaceId: "repo",
         hostToken: "token-1",

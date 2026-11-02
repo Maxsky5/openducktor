@@ -183,7 +183,6 @@ export const HOST_COMMAND_NAMES = [
   "workspace_replace_azure_devops_pat",
   "workspace_resolve_local_attachment_path",
   "workspace_resolve_path",
-  "workspace_save_repo_settings",
   "workspace_save_settings_snapshot",
   "workspace_select",
   "workspace_session_archive",
@@ -207,10 +206,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_stage_local_attachment",
   "workspace_start_azure_devops_sign_in",
   "workspace_update_agent_model_favorites",
-  "workspace_update_global_git_config",
   "workspace_update_kanban_task_card_view",
-  "workspace_update_repo_config",
-  "workspace_update_repo_hooks",
   "workspace_update_sidebar_session_grouping",
 ] as const;
 

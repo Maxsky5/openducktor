@@ -62,8 +62,8 @@ const harness = () => {
 describe("terminal activity transport", () => {
   test("shares one metadata observer, commits snapshots together, and keeps owner reads stable", async () => {
     const { controller, connections, receive } = harness();
-    const task = { repoPath: "/repo", taskId: "task" };
-    const otherRepo = { repoPath: "/other", taskId: "task" };
+    const task = { workspaceId: "repo", repoPath: "/repo", taskId: "task" };
+    const otherRepo = { workspaceId: "other-workspace", repoPath: "/repo", taskId: "task" };
     const chat = {
       kind: "workspace_session" as const,
       repoPath: "/repo",
@@ -130,7 +130,7 @@ describe("terminal activity transport", () => {
 
   test("refreshes after reconnect or resubscription and ignores frames from the old connection", async () => {
     const { controller, connections, receive, snapshot } = harness();
-    const owner = { repoPath: "/repo", taskId: "task" };
+    const owner = { workspaceId: "repo", repoPath: "/repo", taskId: "task" };
     const key = terminalActivityOwnerKey(owner);
     let stop = controller.subscribeActivity(() => {});
     try {

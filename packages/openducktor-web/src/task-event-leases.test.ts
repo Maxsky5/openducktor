@@ -20,6 +20,7 @@ const change = (sequence: number): Extract<TaskEventStreamFrame, { type: "change
     eventId: `event-${sequence}`,
     kind: "external_task_created",
     boardChanges: null,
+    workspaceId: "repo",
     repoPath: "/repo",
     taskId: `task-${sequence}`,
     taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
@@ -38,6 +39,8 @@ const createFakeStream = () => {
       return unsubscribeCalls;
     },
     stream: {
+      cursor: () => cursor(0),
+      reset: () => cursor(0),
       publish: () => cursor(0),
       subscribe: (_input: TaskEventStreamSubscribe, nextSink: Sink) => {
         sink = nextSink;

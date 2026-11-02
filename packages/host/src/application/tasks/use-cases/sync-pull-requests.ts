@@ -1,4 +1,5 @@
-import type { PullRequest } from "@openducktor/contracts";
+import { pullRequestRecordsMatch } from "../support/pull-request-records-match";
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {
@@ -37,15 +38,13 @@ export const createTaskPullRequestSyncUseCases = ({
     const changedTaskIds = new Set<string>();
     const sync: Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> = Effect.gen(
       function* () {
-        const { repoPath } = input;
         const dependencies = yield* requireDependencies(() =>
           requirePullRequestSyncDependencies({
             gitProviderResolver,
             workspaceSettingsService,
           }),
         );
-        const repoConfig =
-          yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+        const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
         const effectiveRepoPath = repoConfig.repoPath;
         const providerResult = yield* Effect.result(
           dependencies.gitProviderResolver.resolve(repoConfig),
@@ -69,6 +68,7 @@ export const createTaskPullRequestSyncUseCases = ({
         const providerId = provider.getDescriptor().id;
 
         const tasks = yield* taskStore.listPullRequestSyncCandidates({
+          workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
         });
         for (const task of tasks) {
@@ -106,12 +106,14 @@ export const createTaskPullRequestSyncUseCases = ({
               ),
             );
             yield* taskStore.setPullRequest({
+              workspaceId: input.workspaceId,
               repoPath: effectiveRepoPath,
               taskId: task.id,
               pullRequest: updated.record,
             });
             changedTaskIds.add(task.id);
             const current = yield* taskStore.getTask({
+              workspaceId: input.workspaceId,
               repoPath: effectiveRepoPath,
               taskId: task.id,
             });
@@ -121,6 +123,7 @@ export const createTaskPullRequestSyncUseCases = ({
               continue;
             }
             yield* completeTaskClosure({
+              workspaceId: input.workspaceId,
               cleanup: cleanupMergedTaskState(
                 {
                   ...cleanupDependencies,
@@ -134,17 +137,20 @@ export const createTaskPullRequestSyncUseCases = ({
                 updated.sourceBranch,
                 updated.targetBranch,
                 current.removeWorktreeOnClose,
+                input.workspaceId,
               ),
               gitPort: cleanupDependencies.gitPort,
               operation: "sync merged pull request",
               repoPath: effectiveRepoPath,
-              decision,
+              taskWorkflows,
+              effect: "pull_request.merged",
               taskId: task.id,
               taskSessionLifecycleCoordinator,
               taskStore,
             });
           } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {
             yield* taskStore.setPullRequest({
+              workspaceId: input.workspaceId,
               repoPath: effectiveRepoPath,
               taskId: task.id,
               pullRequest: updated.record,
@@ -190,10 +196,4 @@ export const createTaskPullRequestSyncUseCases = ({
     },
     repoPullRequestSyncDetailed,
   };
-};
-
-const pullRequestRecordsMatch = (left: PullRequest, right: PullRequest): boolean => {
-  const { lastSyncedAt: _leftSync, ...leftRecord } = left;
-  const { lastSyncedAt: _rightSync, ...rightRecord } = right;
-  return JSON.stringify(leftRecord) === JSON.stringify(rightRecord);
 };

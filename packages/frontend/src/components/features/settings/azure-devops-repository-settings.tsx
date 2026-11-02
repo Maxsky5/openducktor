@@ -18,7 +18,6 @@ type AzureRepositoryController = Pick<
   | "isDetecting"
   | "repositoryActionError"
   | "updateDraft"
-  | "connectionInput"
   | "consentGranted"
   | "httpCollectionUrl"
   | "mappingErrors"
@@ -26,7 +25,12 @@ type AzureRepositoryController = Pick<
   | "repositoryErrors"
   | "setHttpConsent"
   | "updateRemoteMappings"
->;
+> & {
+  connectionInput: Pick<
+    NonNullable<AzureDevOpsGitProviderFormController["connectionInput"]>,
+    "repoPath" | "repository"
+  > | null;
+};
 
 type AzureDevOpsRepositorySettingsProps = {
   controller: AzureRepositoryController;

@@ -22,7 +22,7 @@ type WorktreeOwnerDependencies = Pick<
 > & {
   store: Pick<WorkspaceSessionStorePort, "listForWorktreeOwnership">;
   claudeSessionMetadata: ClaudeSessionMetadataPort;
-  taskOwnership: TaskOwnershipReader;
+  taskOwnership: Pick<TaskOwnershipReader, "listOpenTasksForWorktreeOwnership">;
 };
 
 /** The chats and tasks that need a worktree. */
@@ -66,7 +66,7 @@ export const readWorktreeOwners = (
     const sourcePath = yield* resolvePath(source.executionTarget.workingDirectory);
     const config = yield* dependencies.settingsConfig.readConfig();
     const byId = new Map<string, OwnerWorkspace>([[scope.workspaceId, { scope, config: null }]]);
-    for (const [workspaceId, workspace] of Object.entries(config?.workspaces ?? {})) {
+    for (const [workspaceId, workspace] of Object.entries(config.workspaces)) {
       byId.set(workspaceId, {
         scope: byId.get(workspaceId)?.scope ?? { workspaceId, repoPath: workspace.repoPath },
         config: workspace,
@@ -97,48 +97,43 @@ const readChatOwners = (
   { scope, source, sourcePath, workspaces, resolvePath }: OwnerReadContext,
 ): Effect.Effect<WorkspaceSessionArchivePreview["sharedWith"], HostError | TaskStoreError> =>
   Effect.gen(function* () {
-    const owners: WorkspaceSessionArchivePreview["sharedWith"] = [];
-    for (const { scope: candidate } of workspaces) {
-      const sessions = yield* dependencies.store.listForWorktreeOwnership(candidate);
-      const needed = yield* Effect.forEach(
-        sessions,
-        (session) =>
-          Effect.gen(function* () {
-            if (candidate.workspaceId === scope.workspaceId && session.id === source.id)
-              return false;
-            const executionPath = yield* resolvePath(session.executionTarget.workingDirectory);
-            // Archived chats can restore their own execution folder through the normal restore path.
-            if (executionPath === sourcePath) return session.archivedAt === null;
-            if (session.runtimeKind !== "claude" || session.externalSessionId === null)
-              return false;
-            const historyDirectory = yield* dependencies.claudeSessionMetadata
-              .readWorkingDirectory(session.externalSessionId)
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new HostOperationError({
-                      operation: "workspaceSession.archive.historyDependency",
-                      message: `Cannot check history for saved chat '${runtimeTitle(session) ?? "Untitled session"}' (${session.id}). ${cause.message}`,
-                      cause,
-                      details: { workspaceId: candidate.workspaceId, sessionId: session.id },
-                    }),
-                ),
-              );
-            if (historyDirectory === null) return false;
-            return (yield* resolvePath(historyDirectory)) === sourcePath;
-          }),
-        { concurrency: PATH_READ_CONCURRENCY },
-      );
-      sessions.forEach((session, index) => {
-        if (!needed[index]) return;
-        owners.push({
-          workspaceId: candidate.workspaceId,
-          sessionId: session.id,
-          title: runtimeTitle(session) ?? "Untitled session",
-        });
-      });
-    }
-    return owners;
+    const sessions = yield* dependencies.store.listForWorktreeOwnership({
+      workspaces: workspaces.map((workspace) => workspace.scope),
+    });
+    const needed = yield* Effect.forEach(
+      sessions,
+      (session) =>
+        Effect.gen(function* () {
+          if (session.workspaceId === scope.workspaceId && session.id === source.id) return false;
+          const executionPath = yield* resolvePath(session.workingDirectory);
+          // Archived chats can restore their own execution folder through the normal restore path.
+          if (executionPath === sourcePath) return session.archivedAt === null;
+          if (session.runtimeKind !== "claude" || session.externalSessionId === null) return false;
+          const historyDirectory = yield* dependencies.claudeSessionMetadata
+            .readWorkingDirectory(session.externalSessionId)
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation: "workspaceSession.archive.historyDependency",
+                    message: `Cannot check history for saved chat '${runtimeTitle(session) ?? "Untitled session"}' (${session.id}). ${cause.message}`,
+                    cause,
+                    details: { workspaceId: session.workspaceId, sessionId: session.id },
+                  }),
+              ),
+            );
+          if (historyDirectory === null) return false;
+          return (yield* resolvePath(historyDirectory)) === sourcePath;
+        }),
+      { concurrency: PATH_READ_CONCURRENCY },
+    );
+    return sessions
+      .filter((_, index) => needed[index])
+      .map((session) => ({
+        workspaceId: session.workspaceId,
+        sessionId: session.id,
+        title: runtimeTitle(session) ?? "Untitled session",
+      }));
   });
 
 /**
@@ -152,34 +147,38 @@ const readTaskOwners = (
 ): Effect.Effect<WorkspaceSessionArchivePreview["taskOwners"], HostError | TaskStoreError> =>
   Effect.gen(function* () {
     const { settingsConfig, taskOwnership } = dependencies;
-    const taskOwners: WorkspaceSessionArchivePreview["taskOwners"] = [];
-    for (const { scope, config } of workspaces) {
-      // A task worktree path needs the workspace settings. Without them, no task can own it.
-      if (!config) continue;
-      const tasks = yield* taskOwnership.listOpenTasksForWorktreeOwnership(scope);
-      if (tasks.length === 0) continue;
-      const worktreeBase = managedWorktreeBaseForRepoConfig(settingsConfig, config);
-      const needed = yield* Effect.forEach(
-        tasks,
-        (task) =>
-          Effect.gen(function* () {
-            const paths = [
-              settingsConfig.join(worktreeBase, task.taskId),
-              ...task.sessionDirectories,
-            ];
-            for (const path of paths) {
-              if ((yield* resolvePath(path)) === sourcePath) return true;
-            }
-            return false;
-          }),
-        { concurrency: PATH_READ_CONCURRENCY },
-      );
-      tasks.forEach((task, index) => {
-        if (!needed[index]) return;
-        taskOwners.push({ workspaceId: scope.workspaceId, taskId: task.taskId, title: task.title });
-      });
-    }
-    return taskOwners;
+    // A task worktree path needs the workspace settings. Without them, no task can own it.
+    const configured = workspaces.flatMap(({ scope, config }) =>
+      config ? [{ scope, config }] : [],
+    );
+    if (configured.length === 0) return [];
+    const tasks = yield* taskOwnership.listOpenTasksForWorktreeOwnership({
+      workspaces: configured.map(({ scope }) => scope),
+    });
+    const configs = new Map(configured.map(({ scope, config }) => [scope.workspaceId, config]));
+    const needed = yield* Effect.forEach(
+      tasks,
+      (task) =>
+        Effect.gen(function* () {
+          // The read returns tasks of the requested workspaces only, so each one has settings.
+          const config = configs.get(task.workspaceId)!;
+          const paths = [
+            settingsConfig.join(
+              managedWorktreeBaseForRepoConfig(settingsConfig, config),
+              task.taskId,
+            ),
+            ...task.sessionDirectories,
+          ];
+          for (const path of paths) {
+            if ((yield* resolvePath(path)) === sourcePath) return true;
+          }
+          return false;
+        }),
+      { concurrency: PATH_READ_CONCURRENCY },
+    );
+    return tasks
+      .filter((_, index) => needed[index])
+      .map((task) => ({ workspaceId: task.workspaceId, taskId: task.taskId, title: task.title }));
   });
 
 const PATH_READ_CONCURRENCY = 8;

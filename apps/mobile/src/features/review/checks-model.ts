@@ -73,11 +73,13 @@ const withDetail = (
 
 /** The review query of a task, as desktop builds it: only for a linked pull request it can read. */
 export const ciReviewQueryInput = ({
+  workspaceId,
   repoPath,
   taskId,
   pullRequest,
   unavailableReason,
 }: {
+  workspaceId: string;
   repoPath: string;
   taskId: string;
   pullRequest: PullRequest | undefined;
@@ -85,6 +87,7 @@ export const ciReviewQueryInput = ({
 }): PullRequestReviewContextQueryInput | null =>
   pullRequest && unavailableReason === null
     ? {
+        workspaceId,
         repoPath,
         taskId,
         pullRequest: { providerId: pullRequest.providerId, number: pullRequest.number },

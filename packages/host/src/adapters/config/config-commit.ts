@@ -1,15 +1,45 @@
 import type { GlobalConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { HostOperationError } from "../../effect/host-errors";
+import type { SettingsConfigPort, SettingsConfigView } from "../../ports/settings-config-port";
 
-/** Reports each config after its durable write succeeds. A failed write reports nothing. */
+/** Reports the fields that each durable settings write committed. */
 export const withConfigCommit = (
   port: SettingsConfigPort,
-  committed: (config: GlobalConfig) => Effect.Effect<void>,
-): SettingsConfigPort => ({
-  ...port,
-  writeConfig: (config) =>
-    Effect.uninterruptible(
-      port.writeConfig(config).pipe(Effect.andThen(Effect.suspend(() => committed(config)))),
-    ),
-});
+  committed: (config: SettingsConfigView) => Effect.Effect<void>,
+): SettingsConfigPort => {
+  const observe = (config: GlobalConfig, workspaceIds?: readonly string[]) =>
+    Effect.gen(function* () {
+      if (workspaceIds === undefined) return yield* committed(config);
+      const catalog = yield* port.readWorkspaceCatalogSnapshot(config).pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({
+              operation: "settingsConfig.observeCommit",
+              message:
+                "Settings saved, but workspace observation did not refresh. Reload the host to use the saved settings.",
+              cause,
+            }),
+        ),
+      );
+      yield* committed({
+        ...config,
+        workspaces: Object.fromEntries(
+          catalog.workspaces.map((workspace) => [workspace.workspaceId, workspace]),
+        ),
+      });
+    });
+  return {
+    ...port,
+    applyConfigChange: (change, workspaceIds) =>
+      port.applyConfigChange(change, workspaceIds).pipe(
+        Effect.tap((result) => observe(result.config, workspaceIds)),
+        Effect.uninterruptible,
+      ),
+    updateConfig: (change, workspaceIds) =>
+      port.updateConfig(change, workspaceIds).pipe(
+        Effect.tap((config) => observe(config, workspaceIds)),
+        Effect.uninterruptible,
+      ),
+  };
+};

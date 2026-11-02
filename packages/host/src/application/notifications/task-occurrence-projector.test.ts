@@ -10,6 +10,7 @@ const event = (
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId,
   kind: "tasks_updated",
+  workspaceId: "repo",
   boardChanges: null,
   repoPath: "/repo",
   taskIds: ["task-1"],

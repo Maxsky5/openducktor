@@ -8,7 +8,7 @@ import {
 const summary = (terminalId: string): TerminalSummary => ({
   terminalId,
   label: terminalId,
-  context: { repoPath: "/repo", taskId: "task-1" },
+  context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
   initialWorkingDir: "/repo/task-1",
   createdAt: "2026-07-17T00:00:00.000Z",
   lifecycle: "running",

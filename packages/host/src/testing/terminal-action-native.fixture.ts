@@ -171,7 +171,7 @@ async function start(
       {
         terminalId: id,
         label: id,
-        context: { repoPath: root, taskId: "fixture" },
+        context: { workspaceId: "repo", repoPath: root, taskId: "fixture" },
         initialWorkingDir: workingDir,
         createdAt: new Date().toISOString(),
         lifecycle: "starting",

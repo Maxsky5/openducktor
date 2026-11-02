@@ -16,23 +16,25 @@ import { useMemo } from "react";
  * works, each action waits for it, as on desktop. A merged task branch puts Close Task first.
  */
 export function useTaskQuickActions({
+  workspaceId,
   repoPath,
   task,
   summaries,
   sessionWorking,
 }: {
+  workspaceId: string;
   repoPath: string;
   task: TaskCard | null;
   summaries: readonly AgentSessionSummary[];
   sessionWorking: boolean;
 }) {
   const provider = useQuery({
-    ...repositoryGitProviderContextQueryOptions(repoPath),
+    ...repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }),
     enabled: task?.status === "human_review",
   });
   const providerError = gitProviderReadError(provider.error);
   const providerContext = provider.data;
-  const mergedTarget = useMergedTaskTarget(repoPath, task);
+  const mergedTarget = useMergedTaskTarget({ workspaceId, repoPath }, task);
   return useMemo(
     () =>
       buildAgentStudioQuickActions({

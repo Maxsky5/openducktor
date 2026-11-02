@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import {
+  createAgentSessionSummaryFixture,
+  createTaskCardFixture,
+  createWorkflowAssociationFixture,
+} from "./agent-studio-test-utils";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
@@ -159,12 +163,12 @@ describe("agents-page-selection", () => {
     const plannerSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: createWorkflowAssociationFixture("planner"),
     });
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const resolved = resolveAgentStudioSelectedSessionSummary({
@@ -182,12 +186,12 @@ describe("agents-page-selection", () => {
     const plannerSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: createWorkflowAssociationFixture("planner"),
     });
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const resolved = resolveAgentStudioSelectedSessionSummary({
@@ -205,7 +209,7 @@ describe("agents-page-selection", () => {
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const resolved = resolveAgentStudioSessionSelection({
@@ -225,7 +229,7 @@ describe("agents-page-selection", () => {
     const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       status: "idle",
       startedAt: "2026-02-22T10:00:00.000Z",
@@ -233,7 +237,7 @@ describe("agents-page-selection", () => {
     const runningSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-running",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       status: "running",
       startedAt: "2026-02-22T09:00:00.000Z",
@@ -262,7 +266,7 @@ describe("agents-page-selection", () => {
     const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       status: "idle",
       startedAt: "2026-02-22T10:00:00.000Z",
@@ -270,7 +274,7 @@ describe("agents-page-selection", () => {
     const waitingSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-waiting",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       status: "idle",
       statusUnavailableReason: "Reconnect Claude.",
@@ -304,7 +308,7 @@ describe("agents-page-selection", () => {
     const olderRunningSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-running-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: createWorkflowAssociationFixture("planner"),
 
       status: "running",
       startedAt: "2026-02-22T09:00:00.000Z",
@@ -312,7 +316,7 @@ describe("agents-page-selection", () => {
     const newerStartingSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "qa-starting-newer",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: createWorkflowAssociationFixture("qa"),
 
       status: "starting",
       startedAt: "2026-02-22T12:00:00.000Z",
@@ -333,14 +337,14 @@ describe("agents-page-selection", () => {
     const specSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       startedAt: "2026-02-22T11:00:00.000Z",
     });
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       startedAt: "2026-02-22T10:00:00.000Z",
     });
@@ -369,7 +373,7 @@ describe("agents-page-selection", () => {
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const resolved = resolveAgentStudioSelectedSessionSummary({
@@ -396,14 +400,14 @@ describe("agents-page-selection", () => {
     const olderSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       startedAt: "2026-02-22T09:00:00.000Z",
     });
     const latestSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       startedAt: "2026-02-22T11:00:00.000Z",
     });
@@ -423,14 +427,14 @@ describe("agents-page-selection", () => {
     const latestSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       startedAt: "2026-02-22T11:00:00.000Z",
     });
     const latestPlannerSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-latest",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: createWorkflowAssociationFixture("planner"),
 
       startedAt: "2026-02-22T12:00:00.000Z",
     });
@@ -459,14 +463,14 @@ describe("agents-page-selection", () => {
     const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       startedAt: "2026-02-22T08:00:00.000Z",
     });
     const latestBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-latest",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       startedAt: "2026-02-22T12:00:00.000Z",
     });
@@ -494,14 +498,14 @@ describe("agents-page-selection", () => {
     const latestSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       startedAt: "2026-02-22T13:00:00.000Z",
     });
     const latestBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-latest",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       startedAt: "2026-02-22T12:00:00.000Z",
     });
@@ -534,7 +538,7 @@ describe("agents-page-selection", () => {
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const resolved = resolveAgentStudioSelectedSessionSummary({
@@ -566,7 +570,7 @@ describe("agents-page-selection", () => {
     const qaSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "qa-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: createWorkflowAssociationFixture("qa"),
 
       startedAt: "2026-02-22T12:00:00.000Z",
     });
@@ -588,7 +592,7 @@ describe("agents-page-selection", () => {
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
 
       startedAt: "2026-02-22T12:00:00.000Z",
     });
@@ -610,14 +614,14 @@ describe("agents-page-selection", () => {
     const olderSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       startedAt: "2026-02-22T09:00:00.000Z",
     });
     const newerQaSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "qa-newer",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: createWorkflowAssociationFixture("qa"),
 
       startedAt: "2026-02-22T13:00:00.000Z",
     });
@@ -639,12 +643,12 @@ describe("agents-page-selection", () => {
     const activeBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-active",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
     const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const resolved = resolveAgentStudioBuilderSessionsForTask({
@@ -659,12 +663,12 @@ describe("agents-page-selection", () => {
     const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
     const otherTaskBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-2",
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build", "task-2"),
     });
 
     const resolved = resolveAgentStudioBuilderSessionsForTask({
@@ -679,12 +683,12 @@ describe("agents-page-selection", () => {
     const activeBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-active",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
     const secondaryBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-secondary",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: createWorkflowAssociationFixture("build"),
     });
 
     const sessions = resolveAgentStudioBuilderSessionsForTask({

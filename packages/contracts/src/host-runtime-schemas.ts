@@ -198,10 +198,19 @@ export const settingsSnapshotSaveResultSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("saved"),
+      shared: z.enum(["unchanged", "saved"]),
+      preferences: z.enum(["unchanged", "saved"]),
       workspaces: z.array(workspaceRecordSchema),
       runtimeApplications: z.array(runtimeSettingsApplicationSchema),
     })
     .strict(),
+  z.strictObject({
+    type: z.literal("partial"),
+    shared: z.literal("saved"),
+    preferences: z.strictObject({ message: z.string().min(1) }),
+    workspaces: z.array(workspaceRecordSchema),
+    runtimeApplications: z.array(runtimeSettingsApplicationSchema),
+  }),
   z
     .object({ type: z.literal("runtime_impact_changed"), impact: runtimeLifecycleImpactSchema })
     .strict(),

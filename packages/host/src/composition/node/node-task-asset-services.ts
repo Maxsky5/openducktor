@@ -1,14 +1,19 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { getScopedRepoConfig } from "../../application/tasks/support/scoped-repo-config";
 import { Effect } from "effect";
-import { rm } from "node:fs/promises";
-import path from "node:path";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
 import { createSqliteIssueImportStore } from "../../adapters/sqlite/sqlite-issue-import-store";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
-import { createSqliteTaskRepositoryContextManager } from "../../adapters/sqlite/sqlite-task-repository-context";
+import type {
+  SqliteHostDatabaseManager,
+  SqliteTaskRepositoryContextProvider,
+  SqliteWorkspacesReadProvider,
+  WorkspaceDatabaseScope,
+} from "../../adapters/sqlite/sqlite-task-repository-context";
+import { createSqliteTaskOwnershipReader } from "../../adapters/sqlite/sqlite-workspace-ownership-reads";
+import type { WorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createTaskAssetAwareTaskStore } from "../../application/task-assets/task-asset-aware-task-store";
 import {
   createTaskAssetReadService,
@@ -26,7 +31,6 @@ import {
   HostOperationError,
   HostValidationError,
   type HostOperationErrorAggregate,
-  type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type {
   TaskOwnershipReader,
@@ -64,44 +68,41 @@ export type NodeTaskAssetServices = {
   taskStore: TaskStorePort;
   issueImportStore: IssueImportStorePort;
   removeWorkspaceTaskAssets: (workspaceId: string) => Effect.Effect<void, TaskAssetError>;
-  removeWorkspaceTaskStore: (
-    workspaceId: string,
-  ) => Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 export const createNodeTaskAssetServices = ({
   configDir,
-  assertWorkspaceAdmitted,
-  assertOwnershipReadAdmitted,
+  contextManager,
+  resolveTaskStoreAccess,
   configuredTaskStore,
   isWorkspaceBlocked,
   onBackgroundFailure,
-  processEnv,
-  taskWorkflows,
   workspaceSettingsService,
 }: {
   configDir: OpenDucktorConfigDir;
-  taskWorkflows: TaskWorkflowResolver;
-  assertWorkspaceAdmitted?: (input: {
-    operation: string;
-    repoPath: string;
-    workspaceId: string;
-  }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
-  assertOwnershipReadAdmitted: (input: {
-    operation: string;
-    repoPath: string;
-    workspaceId: string;
-  }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
+  contextManager: SqliteHostDatabaseManager;
+  /** Decides the lifecycle access of each operation. The store checks it in the transaction. */
+  resolveTaskStoreAccess: WorkspaceAdmissionService["resolveTaskStoreAccess"];
   configuredTaskStore?: TaskStorePort | undefined;
   isWorkspaceBlocked?: (workspaceId: string) => boolean;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
-  processEnv: NodeJS.ProcessEnv;
   workspaceSettingsService: WorkspaceSettingsService;
 }): NodeTaskAssetServices => {
-  const resolveWorkspaceIdForRepoPath = (repoPath: string) =>
-    workspaceSettingsService
-      .getRepoConfigByRepoPath(repoPath)
-      .pipe(Effect.map((repoConfig) => repoConfig.workspaceId));
+  const admit = (scope: WorkspaceDatabaseScope, operation: string) =>
+    resolveTaskStoreAccess({
+      access: scope.access ?? "open",
+      operation,
+      repoPath: scope.repoPath,
+      workspaceId: scope.workspaceId,
+    }).pipe(Effect.map((access) => ({ ...scope, access })));
+  const contextProvider: SqliteTaskRepositoryContextProvider = (scope, operation, use) =>
+    admit(scope, operation).pipe(
+      Effect.flatMap((admitted) => contextManager.withDatabase(admitted, operation, use)),
+    );
+  const workspacesProvider: SqliteWorkspacesReadProvider = (scopes, operation, use) =>
+    Effect.forEach(scopes, (scope) => admit(scope, operation)).pipe(
+      Effect.flatMap((admitted) => contextManager.readWorkspaces(admitted, operation, use)),
+    );
   const filePort = createNodeTaskAssetFilePort({
     configDir: configDir.root,
     configDirScope: configDir.scope,
@@ -121,45 +122,13 @@ export const createNodeTaskAssetServices = ({
       ),
   });
   const taskAssetStagingService = createTaskAssetStagingService(filePort);
-  const contextManagerInput: Parameters<typeof createSqliteTaskRepositoryContextManager>[0] = {
-    configDir: configDir.root,
-    onBackgroundFailure,
-    processEnv,
-    resolveWorkspaceIdForRepoPath,
-    taskWorkflows,
-    assertWorkspaceOwnershipReadAdmitted: (scope) =>
-      Effect.gen(function* () {
-        const config = yield* workspaceSettingsService.getRepoConfig(scope.workspaceId);
-        if (config.repoPath !== scope.repoPath) {
-          return yield* new HostValidationError({
-            field: "workspaceId",
-            message:
-              "The Workspace no longer matches this Repository. Reload the Workspace before retrying.",
-          });
-        }
-        if (config.removal) {
-          return yield* new HostValidationError({
-            field: "workspaceId",
-            message: `Workspace removal is incomplete for ${scope.workspaceId}. Retry removal before accessing this workspace.`,
-          });
-        }
-        yield* assertOwnershipReadAdmitted({
-          ...scope,
-          operation: "workspaceSessionStore.worktreeOwners",
-        });
-      }),
-  };
-  if (assertWorkspaceAdmitted) {
-    contextManagerInput.assertWorkspaceAdmitted = assertWorkspaceAdmitted;
-  }
-  const contextManager = createSqliteTaskRepositoryContextManager(contextManagerInput);
   const registry = createSqliteTaskAssetRegistry({
-    contextProvider: contextManager.withDatabase,
+    contextProvider,
   });
   const inner =
     configuredTaskStore ??
     createSqliteTaskRepository({
-      contextProvider: contextManager.withDatabase,
+      contextProvider,
     });
   const taskAssetReadService = createTaskAssetReadService({
     filePort,
@@ -182,16 +151,13 @@ export const createNodeTaskAssetServices = ({
     recoveryServiceInput.isWorkspaceBlocked = isWorkspaceBlocked;
   }
   const taskAssetRecoveryService = createTaskAssetRecoveryService(recoveryServiceInput);
-  const taskStoreRoot = path.join(configDir.root, "task-stores");
 
   return {
     workspaceSessionStore: createSqliteWorkspaceSessionStore({
-      contextProvider: contextManager.withDatabase,
-      listForWorktreeOwnership: contextManager.listWorkspaceSessionsForWorktreeOwnership,
+      contextProvider,
+      workspacesProvider,
     }),
-    taskOwnership: {
-      listOpenTasksForWorktreeOwnership: contextManager.listOpenTasksForWorktreeOwnership,
-    },
+    taskOwnership: createSqliteTaskOwnershipReader(workspacesProvider),
     startupSweep: () =>
       taskAssetRecoveryService
         .startupSweep()
@@ -213,7 +179,7 @@ export const createNodeTaskAssetServices = ({
         ),
     },
     taskStoreConnectionShutdownStep: {
-      label: "SQLite task store connections",
+      label: "host database connection",
       run: contextManager.dispose,
     },
     taskStore: createTaskAssetAwareTaskStore({
@@ -222,24 +188,18 @@ export const createNodeTaskAssetServices = ({
       filePort,
       staging: taskAssetStagingService,
       persistence: configuredTaskStore ? null : registry,
-      resolveWorkspaceIdForRepoPath,
+      resolveWorkspaceId: (scope) =>
+        Effect.gen(function* () {
+          const config = yield* getScopedRepoConfig(workspaceSettingsService, {
+            workspaceId: scope.workspaceId,
+            repoPath: scope.repoPath,
+          });
+          return config.workspaceId;
+        }),
     }),
     issueImportStore: configuredTaskStore
       ? unsupportedIssueImportStore
-      : createSqliteIssueImportStore({ contextProvider: contextManager.withDatabase }),
+      : createSqliteIssueImportStore({ contextProvider }),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
-    removeWorkspaceTaskStore: (workspaceId) =>
-      contextManager.closeWorkspace(
-        workspaceId,
-        Effect.tryPromise({
-          try: () => rm(path.join(taskStoreRoot, workspaceId), { force: true, recursive: true }),
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "workspace.removeTaskStoreDirectory",
-              message: `Failed to remove the task store directory for workspace ${workspaceId}.`,
-              cause,
-            }),
-        }),
-      ),
   };
 };

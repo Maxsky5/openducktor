@@ -132,7 +132,7 @@ function createForkHarness({
         runtimeKind: "codex",
         workingDirectory: "/repo/worktrees/task",
       },
-      scope: { kind: "workflow", taskId: "task", role: "build" },
+      scope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
       disabledReason: null,
     });
     return (

@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,8 +22,8 @@ describe("task mutation runner", () => {
     try {
       await harness.mount();
       const { queryClient } = harness.getLatest();
-      const taskKey = taskQueryKeys.repoData("/repo");
-      const docKey = documentQueryKeys.document("/repo", "task-1", "spec");
+      const taskKey = taskQueryKeys.repoData(workspaceRefFixture("/repo"));
+      const docKey = documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec");
       queryClient.setQueryData(taskKey, { tasks: [] });
       queryClient.setQueryData(docKey, { markdown: "# Old", updatedAt: null });
       await harness.run(({ runner }) =>

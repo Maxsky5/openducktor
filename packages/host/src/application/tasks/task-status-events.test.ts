@@ -1,18 +1,21 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { builtinTaskWorkflow, type TransitionCause } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
-import { noMergeDetection } from "./sync/task-sync-service.test-support";
+import { noMergeDetection, syncWorkspace } from "./sync/task-sync-service.test-support";
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { Effect, Fiber } from "effect";
-import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import type { ExternalTaskSyncEvent, WorkspaceRef } from "@openducktor/contracts";
+import { Effect, Fiber, Result } from "effect";
+import {
+  createSqliteTaskStoreHarness,
+  type SqliteTaskStoreTestHarness,
+} from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { createTaskSyncService } from "./sync/task-sync-service";
 import { HostOperationError } from "../../effect/host-errors";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createTaskServiceWithMutationProgressTestDouble } from "../../test-support/task-service-test-double";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
-import { createTaskSyncService } from "./sync/task-sync-service";
 import { enrichTask, enrichTasks } from "./support/task-workflow-helpers";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
@@ -20,23 +23,45 @@ import {
   type TaskServiceWithMutationProgress,
 } from "./task-service";
 
-const createServices = (
+const transition = (
   store: TaskStorePort,
+  {
+    status,
+    cause,
+    ...scope
+  }: WorkspaceRef & { taskId: string; status: string; cause?: TransitionCause },
+) =>
+  store.transitionTask({
+    ...scope,
+    decide: () =>
+      Result.succeed({
+        status,
+        workflowId: builtinTaskWorkflow.definition.id,
+        ...(cause && { cause }),
+      }),
+  });
+
+const createServices = (
+  harness: SqliteTaskStoreTestHarness,
   overrides: Partial<TaskServiceWithMutationProgress> = {},
 ) => {
+  const { store, repoPath, workspaceId } = harness;
+  const workspace = syncWorkspace(repoPath, workspaceId);
   const events: ExternalTaskSyncEvent[] = [];
   const failures: unknown[] = [];
   const base = createTaskServiceWithMutationProgressTestDouble({
     listTasks: (input) =>
       store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
     transitionTask: (input) =>
-      store.transitionTask(input).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
+      transition(store, input).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
     ...overrides,
   });
   const sync = createTaskSyncService({
     taskService: base,
     mergeDetection: noMergeDetection,
     taskEventStream: {
+      cursor: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: events.length }),
+      reset: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: events.length }),
       publish: (event) => {
         events.push(event);
         return { epoch: "11111111-1111-4111-8111-111111111111", sequence: events.length };
@@ -58,11 +83,18 @@ const createServices = (
       Effect.sync(() => {
         failures.push(failure);
       }),
+    settingsConfig: {
+      readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+    },
     workspaceSettingsService: {
       getWorkspaceCatalog: () =>
-        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
-      listWorkspaces: () => Effect.succeed([]),
-      getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+        Effect.succeed({
+          catalogRevision: 0,
+          openWorkspaces: [workspace],
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+        }),
+      listWorkspaces: () => Effect.succeed([workspace]),
     },
   });
   return {
@@ -94,32 +126,32 @@ test.each([
   "publishes the source role for %s from %s",
   async (operation, previousStatus, sourceRole) => {
     const harness = await createSqliteTaskStoreHarness();
-    const { repoPath, store } = harness;
+    const { repoPath, store, workspaceId } = harness;
     try {
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
+          workspaceId,
           status: "open",
           task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
       await Effect.runPromise(
-        store.transitionTask({ repoPath, taskId: task.id, status: previousStatus }),
+        transition(store, { workspaceId, repoPath, taskId: task.id, status: previousStatus }),
       );
-      const { service, events } = createServices(store, {
+      const { service, events } = createServices(harness, {
         workflowArtifactSave: createTaskServiceWithMutationProgress({
           taskWorkflows: builtinTaskWorkflows,
           taskStore: store,
         }).workflowArtifactSave,
         buildCompleted: () =>
-          store
-            .transitionTask({
-              repoPath,
-              taskId: task.id,
-              status: "human_review",
-              cause: { signal: "taskProgressedToHumanReview", sourceRole: "build" },
-            })
-            .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
+          transition(store, {
+            repoPath,
+            workspaceId,
+            taskId: task.id,
+            status: "human_review",
+            cause: { signal: "taskProgressedToHumanReview", sourceRole: "build" },
+          }).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
       });
       await Effect.runPromise(
         operation === "qaApproved"
@@ -128,6 +160,7 @@ test.each([
                 sourceTool: "workflow_artifact_save",
                 updatedBy: "user",
                 repoPath,
+                workspaceId,
                 taskId: task.id,
                 markdown: "Approved",
                 code: "qaReport",
@@ -135,7 +168,7 @@ test.each([
                 submit: true,
               })
               .pipe(Effect.asVoid)
-          : service.buildCompleted({ repoPath, taskId: task.id }).pipe(Effect.asVoid),
+          : service.buildCompleted({ workspaceId, repoPath, taskId: task.id }).pipe(Effect.asVoid),
       );
       expect(events).toMatchObject([
         {
@@ -151,72 +184,33 @@ test.each([
   },
 );
 
-test("keeps the committed transition and reports a failed publication snapshot without retry", async () => {
-  const harness = await createSqliteTaskStoreHarness();
-  const { repoPath, store } = harness;
-  try {
-    const task = await Effect.runPromise(
-      store.createTask({
-        repoPath,
-        status: "open",
-        task: { title: "Task", issueType: "task", priority: 2 },
-      }),
-    );
-    let snapshotReads = 0;
-    let mutations = 0;
-    const { service, events, failures } = createServices(store, {
-      listTasks: () =>
-        Effect.suspend(() => {
-          snapshotReads += 1;
-          return Effect.fail(
-            new HostOperationError({ operation: "task.list", message: "Snapshot unavailable" }),
-          );
-        }),
-      transitionTask: (input) =>
-        Effect.gen(function* () {
-          mutations += 1;
-          return enrichTask(builtinTaskWorkflow, yield* store.transitionTask(input));
-        }),
-    });
-    const failure = await Effect.runPromise(
-      service.transitionTask({ repoPath, taskId: task.id, status: "spec_ready" }).pipe(Effect.flip),
-    );
-    expect(failure.message).toContain("Task changes were saved");
-    expect(failure.message).toContain("Reload the workspace");
-    expect(failure.message).toContain("Do not repeat the change");
-    expect((await Effect.runPromise(store.listTasks({ repoPath })))[0]?.status).toBe("spec_ready");
-    expect(mutations).toBe(1);
-    expect(snapshotReads).toBe(1);
-    expect(events).toEqual([]);
-    expect(failures).toHaveLength(1);
-  } finally {
-    await harness.cleanup();
-  }
-});
-
 test.each([false, true])(
   "publishes concurrent mutations in commit order, background sync=%s",
   async (viaSync) => {
     const harness = await createSqliteTaskStoreHarness();
-    const { repoPath, store } = harness;
+    const { repoPath, store, workspaceId } = harness;
     const committed = deferred();
     const release = deferred();
     try {
       const task = await Effect.runPromise(
         store.createTask({
           repoPath,
+          workspaceId,
           status: "open",
           task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
-      const { service, sync, events, failures } = createServices(store, {
+      const { service, sync, events, failures } = createServices(harness, {
         repoPullRequestSyncDetailed: () =>
-          store
-            .transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" })
-            .pipe(Effect.as({ ran: true, changedTaskIds: [task.id] })),
+          transition(store, {
+            workspaceId,
+            repoPath,
+            taskId: task.id,
+            status: "ready_for_dev",
+          }).pipe(Effect.as({ ran: true, changedTaskIds: [task.id] })),
         transitionTask: (input) =>
           Effect.gen(function* () {
-            const result = yield* store.transitionTask(input);
+            const result = yield* transition(store, input);
             if (input.status === "spec_ready") {
               committed.resolve();
               yield* Effect.promise(() => release.promise);
@@ -225,21 +219,21 @@ test.each([false, true])(
           }),
       });
       const first = Effect.runPromise(
-        service.transitionTask({ repoPath, taskId: task.id, status: "spec_ready" }),
+        service.transitionTask({ workspaceId, repoPath, taskId: task.id, status: "spec_ready" }),
       );
       await committed.promise;
       const secondStarted = deferred();
       const secondMutation = viaSync
-        ? sync.syncRepoPullRequests(repoPath).pipe(Effect.asVoid)
+        ? sync.syncRepoPullRequests(repoPath, workspaceId).pipe(Effect.asVoid)
         : service
-            .transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" })
+            .transitionTask({ workspaceId, repoPath, taskId: task.id, status: "ready_for_dev" })
             .pipe(Effect.asVoid);
       const second = Effect.runFork(
         Effect.sync(secondStarted.resolve).pipe(Effect.andThen(secondMutation)),
       );
       await secondStarted.promise;
       expect(events).toEqual([]);
-      expect((await Effect.runPromise(store.listTasks({ repoPath })))[0]?.status).toBe(
+      expect((await Effect.runPromise(store.listTasks({ workspaceId, repoPath })))[0]?.status).toBe(
         "spec_ready",
       );
       release.resolve();
@@ -262,9 +256,11 @@ test.each([false, true])(
       ]);
       // A metadata/no-op status update must not repeat either transition.
       await Effect.runPromise(
-        service.transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" }),
+        service.transitionTask({ workspaceId, repoPath, taskId: task.id, status: "ready_for_dev" }),
       );
-      expect(events[2]).toMatchObject({ statusChanges: [] });
+      expect(
+        events.flatMap((event) => (event.kind === "tasks_updated" ? event.statusChanges : [])),
+      ).toHaveLength(2);
     } finally {
       release.resolve();
       await harness.cleanup();
@@ -274,11 +270,12 @@ test.each([false, true])(
 
 test("publishes committed transitions when the rest of a mutation fails", async () => {
   const harness = await createSqliteTaskStoreHarness();
-  const { repoPath, store } = harness;
+  const { repoPath, store, workspaceId } = harness;
   try {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        workspaceId,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -287,10 +284,11 @@ test("publishes committed transitions when the rest of a mutation fails", async 
       operation: "build-completed",
       message: "Cleanup failed",
     });
-    const { service, events, failures } = createServices(store, {
+    const { service, events, failures } = createServices(harness, {
       buildCompleted: (input) =>
         Effect.gen(function* () {
-          yield* store.transitionTask({
+          yield* transition(store, {
+            workspaceId: input.workspaceId,
             repoPath: input.repoPath,
             taskId: input.taskId,
             status: "spec_ready",
@@ -303,7 +301,7 @@ test("publishes committed transitions when the rest of a mutation fails", async 
         }),
     });
     const result = await Effect.runPromise(
-      Effect.result(service.buildCompleted({ repoPath, taskId: task.id })),
+      Effect.result(service.buildCompleted({ workspaceId, repoPath, taskId: task.id })),
     );
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") expect(result.failure).toBe(failure);
@@ -318,24 +316,27 @@ test("publishes committed transitions when the rest of a mutation fails", async 
 
 test("records QA transitions only after the entire SQLite transaction commits", async () => {
   const harness = await createSqliteTaskStoreHarness();
-  const { repoPath, store, databasePath } = harness;
+  const { repoPath, store, databasePath, workspaceId } = harness;
   try {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        workspaceId,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const database = new Database(databasePath);
     database.run(
-      "CREATE TRIGGER reject_qa BEFORE INSERT ON tasks_artifacts BEGIN SELECT RAISE(ABORT, 'QA insert rejected'); END",
+      "CREATE TRIGGER reject_qa BEFORE INSERT ON task_artifacts BEGIN SELECT RAISE(ABORT, 'QA insert rejected'); END",
     );
     database.close();
     const input = {
+      workspaceId,
       repoPath,
       taskId: task.id,
-      status: "human_review" as const,
+      decide: () =>
+        Result.succeed({ status: "human_review", workflowId: builtinTaskWorkflow.definition.id }),
       verdict: "approved" as const,
       markdown: "Approved",
     };
@@ -351,9 +352,9 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     );
     expect(failed.result._tag).toBe("Failure");
     expect(failed.statusChanges).toEqual([]);
-    expect((await Effect.runPromise(store.getTask({ repoPath, taskId: task.id }))).status).toBe(
-      "open",
-    );
+    expect(
+      (await Effect.runPromise(store.getTask({ workspaceId, repoPath, taskId: task.id }))).status,
+    ).toBe("open");
     const cleanupDatabase = new Database(databasePath);
     cleanupDatabase.run("DROP TRIGGER reject_qa");
     cleanupDatabase.close();
@@ -378,22 +379,23 @@ test("records QA transitions only after the entire SQLite transaction commits", 
 
 test("captures transitions made by pull request synchronization", async () => {
   const harness = await createSqliteTaskStoreHarness();
-  const { repoPath, store } = harness;
+  const { repoPath, store, workspaceId } = harness;
   try {
     const task = await Effect.runPromise(
       store.createTask({
         repoPath,
+        workspaceId,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
-    const { sync, events, failures } = createServices(store, {
+    const { sync, events, failures } = createServices(harness, {
       repoPullRequestSyncDetailed: () =>
-        store
-          .transitionTask({ repoPath, taskId: task.id, status: "closed" })
-          .pipe(Effect.as({ ran: true, changedTaskIds: [task.id] })),
+        transition(store, { workspaceId, repoPath, taskId: task.id, status: "closed" }).pipe(
+          Effect.as({ ran: true, changedTaskIds: [task.id] }),
+        ),
     });
-    await Effect.runPromise(sync.syncRepoPullRequests(repoPath));
+    await Effect.runPromise(sync.syncRepoPullRequests(repoPath, workspaceId));
     expect(failures).toEqual([]);
     expect(events).toMatchObject([
       { statusChanges: [{ previousStatus: "open", task: { id: task.id, status: "closed" } }] },

@@ -154,30 +154,43 @@ function FeedbackToast({
     >
       <GestureDetector gesture={pan}>
         <Animated.View style={swipeStyle}>
-          <Touchable
-            feedback="opacity"
-            onPress={close}
-            accessibilityRole="button"
-            accessibilityLabel={
-              entry.description ? `${entry.message}. ${entry.description}` : entry.message
-            }
-            accessibilityHint="Dismisses the message."
-            style={styles.toast}
-          >
-            <View style={[styles.badge, { backgroundColor: withAlpha(accent, 0.12) }]}>
-              <Icon name={KIND_ICONS[entry.kind]} size={16} colorValue={accent} />
-            </View>
-            <View style={styles.body}>
-              <Text style={styles.title} numberOfLines={2}>
-                {entry.message}
-              </Text>
-              {entry.description ? (
-                <Text style={styles.detail} numberOfLines={3}>
-                  {entry.description}
+          <View style={styles.toast}>
+            <Touchable
+              feedback="opacity"
+              onPress={close}
+              accessibilityRole="button"
+              accessibilityLabel={
+                entry.description ? `${entry.message}. ${entry.description}` : entry.message
+              }
+              accessibilityHint="Dismisses the message."
+              style={styles.toastRow}
+            >
+              <View style={[styles.badge, { backgroundColor: withAlpha(accent, 0.12) }]}>
+                <Icon name={KIND_ICONS[entry.kind]} size={16} colorValue={accent} />
+              </View>
+              <View style={styles.body}>
+                <Text style={styles.title} numberOfLines={2}>
+                  {entry.message}
                 </Text>
-              ) : null}
-            </View>
-          </Touchable>
+                {entry.description ? (
+                  <Text style={styles.detail} numberOfLines={3}>
+                    {entry.description}
+                  </Text>
+                ) : null}
+              </View>
+            </Touchable>
+            {entry.action ? (
+              <Touchable
+                feedback="opacity"
+                onPress={entry.action.onClick}
+                accessibilityRole="button"
+                accessibilityLabel={entry.action.label}
+                style={styles.action}
+              >
+                <Text style={styles.actionLabel}>{entry.action.label}</Text>
+              </Touchable>
+            ) : null}
+          </View>
         </Animated.View>
       </GestureDetector>
     </Animated.View>
@@ -316,6 +329,9 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   body: { flex: 1, gap: 2 },
+  toastRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: theme.space.md },
+  action: { minWidth: 48, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  actionLabel: { ...sansWeight("semibold"), fontSize: 13, color: theme.desktop.primary },
   title: {
     ...sansWeight("semibold"),
     fontSize: 15,

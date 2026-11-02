@@ -33,6 +33,7 @@ export function useKanbanBoardData({
   const taskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
   const { filter, matchingTasks } = useKanbanBoardFilterModel(workspaceId, kanbanTasks);
   const sessionLists = useAgentSessionLists({
+    workspaceId,
     repoPath,
     taskIds,
     enabled: repoPath !== null && taskIds.length > 0,

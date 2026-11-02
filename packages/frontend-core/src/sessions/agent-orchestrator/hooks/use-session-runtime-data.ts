@@ -54,6 +54,11 @@ export const useSessionRuntimeData = ({
     selectedSession?.sessionAssociation.kind === "workflow"
       ? selectedSession.sessionAssociation.taskId
       : null;
+  const selectedWorkspaceId =
+    selectedSession?.sessionAssociation.kind === "workflow" ||
+    selectedSession?.sessionAssociation.kind === "repository"
+      ? (selectedSession.sessionAssociation.workspaceId ?? null)
+      : null;
   const selectedRole =
     selectedSession?.sessionAssociation.kind === "workflow"
       ? selectedSession.sessionAssociation.role
@@ -65,12 +70,19 @@ export const useSessionRuntimeData = ({
     }
     let sessionAssociation: AgentSessionAssociation;
     if (selectedAssociationKind === "workflow") {
-      if (!selectedTaskId || !selectedRole) {
+      if (!selectedTaskId || !selectedRole || !selectedWorkspaceId) {
         throw new Error("Workflow session runtime data requires a task id and role.");
       }
-      sessionAssociation = { kind: "workflow", taskId: selectedTaskId, role: selectedRole };
+      sessionAssociation = {
+        kind: "workflow",
+        workspaceId: selectedWorkspaceId,
+        taskId: selectedTaskId,
+        role: selectedRole,
+      };
     } else if (selectedAssociationKind === "repository") {
-      sessionAssociation = { kind: "repository" };
+      sessionAssociation = selectedWorkspaceId
+        ? { kind: "repository", workspaceId: selectedWorkspaceId }
+        : { kind: "repository" };
     } else {
       sessionAssociation = { kind: "unbound" };
     }
@@ -84,6 +96,7 @@ export const useSessionRuntimeData = ({
     stableSelectedSessionIdentity,
     selectedModel,
     selectedRole,
+    selectedWorkspaceId,
     selectedTaskId,
   ]);
   const runtimePolicyTarget = useMemo(() => {

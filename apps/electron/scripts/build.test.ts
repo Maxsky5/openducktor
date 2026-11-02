@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { copySqliteTaskStoreMigrations, resolveSqliteTaskStoreMigrationCopyPlan } from "./build";
+import { copySqliteMigrations, resolveSqliteMigrationCopyPlans } from "./build";
 
 describe("Electron build", () => {
   it("places SQLite task-store migrations next to the bundled main process", () => {
@@ -10,22 +10,24 @@ describe("Electron build", () => {
     const electronPackageRoot = join(workspaceRoot, "apps", "electron");
 
     expect(
-      resolveSqliteTaskStoreMigrationCopyPlan({
+      resolveSqliteMigrationCopyPlans({
         electronPackageRoot,
         workspaceRoot,
       }),
-    ).toEqual({
-      sourceDirectory: join(
-        workspaceRoot,
-        "packages",
-        "host",
-        "src",
-        "adapters",
-        "sqlite",
-        "drizzle",
-      ),
-      targetDirectory: join(electronPackageRoot, "dist", "drizzle"),
-    });
+    ).toEqual(
+      ["drizzle", "drizzle-host"].map((folder) => ({
+        sourceDirectory: join(
+          workspaceRoot,
+          "packages",
+          "host",
+          "src",
+          "adapters",
+          "sqlite",
+          folder,
+        ),
+        targetDirectory: join(electronPackageRoot, "dist", folder),
+      })),
+    );
   });
 
   it("copies the generated SQLite task-store migration folder", async () => {
@@ -38,7 +40,7 @@ describe("Electron build", () => {
       await writeFile(join(sourceDirectory, "0000_create_task_store_tables.sql"), "create table");
       await writeFile(join(sourceDirectory, "meta", "_journal.json"), "{}");
 
-      await copySqliteTaskStoreMigrations({ sourceDirectory, targetDirectory });
+      await copySqliteMigrations({ sourceDirectory, targetDirectory });
 
       await expect(
         readFile(join(targetDirectory, "0000_create_task_store_tables.sql"), "utf8"),

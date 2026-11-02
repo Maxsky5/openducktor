@@ -1,19 +1,28 @@
+import { assertRuntimeOwnershipScope } from "./sqlite-runtime-ownership-scope";
 import { listRuntimeSessionOwners } from "./sqlite-runtime-session-owners";
 import { type AgentSessionRecord, type TaskAgentSessions } from "@openducktor/contracts";
-import { eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
+import { sqliteValues } from "./sqlite-parameters";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostResourceError } from "../../effect/host-errors";
-import type { OpenTaskDirectories, TaskStorePort } from "../../ports/task-repository-ports";
-import { agentSessionsFromRow, encodeAgentSessionBatch } from "./sqlite-json-codecs";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
+import {
+  readTaskSessions,
+  readTaskSessionsForTasks,
+  readTaskSessionsWithPositions,
+  replaceTaskSessions,
+  selectedModelColumns,
+  taskRelationScope,
+} from "./sqlite-task-relations";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreReadError,
   type SqliteTaskStoreWriteError,
 } from "./sqlite-task-store-errors";
-import { type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+import { type HostDatabaseSession, taskSessions, tasks } from "./sqlite-host-database-schema";
 
 const compactAgentSessionForStorage = (
   session: AgentSessionRecord,
@@ -32,7 +41,8 @@ const compactAgentSessionForStorage = (
 };
 
 export const listAgentSessionsForTasks = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["listAgentSessionsForTasks"]>[0],
 ): Effect.Effect<TaskAgentSessions[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
@@ -41,14 +51,16 @@ export const listAgentSessionsForTasks = (
         database
           .select({
             id: tasks.id,
-            agentSessionsJson: tasks.agentSessionsJson,
           })
           .from(tasks)
-          .where(inArray(tasks.id, input.taskIds)),
+          .where(
+            and(eq(tasks.workspaceId, workspaceId), inArray(tasks.id, sqliteValues(input.taskIds))),
+          ),
       "sqliteTaskRepository.listAgentSessionsForTasks.selectTasks",
       { taskIds: input.taskIds },
     );
     const rowsByTaskId = new Map(rows.map((row) => [row.id, row]));
+    const sessionsByTask = yield* readTaskSessionsForTasks(session, workspaceId, input.taskIds);
     const results: TaskAgentSessions[] = [];
     for (const taskId of input.taskIds) {
       const row = rowsByTaskId.get(taskId);
@@ -62,44 +74,18 @@ export const listAgentSessionsForTasks = (
       }
       results.push({
         taskId,
-        agentSessions: yield* agentSessionsFromRow(row),
+        agentSessions: sessionsByTask.get(row.id) ?? [],
       });
     }
     return results;
   });
 
-/** Reads every open task with the working directories of its sessions in one query. */
-export const readOpenTasksForWorktreeOwnership = (
-  session: TaskStoreSession,
-  terminalStates: readonly string[],
-): Effect.Effect<OpenTaskDirectories[], SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    const rows = yield* session.execute(
-      (database) =>
-        database
-          .select({ id: tasks.id, title: tasks.title, agentSessionsJson: tasks.agentSessionsJson })
-          .from(tasks)
-          .where(notInArray(tasks.status, [...terminalStates])),
-      "sqliteTaskRepository.openTasksForWorktreeOwnership",
-    );
-    return yield* Effect.forEach(rows, (row) =>
-      agentSessionsFromRow(row).pipe(
-        Effect.map((agentSessions) => ({
-          taskId: row.id,
-          title: row.title,
-          sessionDirectories: agentSessions
-            .map((agentSession) => agentSession.workingDirectory.trim())
-            .filter(Boolean),
-        })),
-      ),
-    );
-  });
-
 /** Save a root's event time without changing the task's edit time. */
 export const recordAgentSessionActivity = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["recordAgentSessionActivity"]>[0],
-): Effect.Effect<TaskAgentSessions | null, SqliteTaskStoreWriteError> =>
+): Effect.Effect<(TaskAgentSessions & { workspaceId: string }) | null, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     if (!Number.isSafeInteger(input.occurredAt) || input.occurredAt < 0) {
       return yield* new SqliteTaskStoreDataError({
@@ -108,24 +94,32 @@ export const recordAgentSessionActivity = (
       });
     }
     // Live events can spell the same path differently; the shared identity check owns path matching.
-    const rows = yield* session.execute(
+    const candidates = yield* session.execute(
       (database) =>
-        database.select({ id: tasks.id, agentSessionsJson: tasks.agentSessionsJson }).from(tasks)
-          .where(sql`exists (
-          select 1 from json_each(${tasks.agentSessionsJson}) as saved
-          where json_extract(saved.value, '$.runtimeKind') = ${input.identity.runtimeKind}
-            and json_extract(saved.value, '$.externalSessionId') = ${input.identity.externalSessionId}
-        )`),
+        database
+          .selectDistinct({ id: taskSessions.taskId })
+          .from(taskSessions)
+          .where(
+            and(
+              eq(taskSessions.workspaceId, workspaceId),
+              eq(taskSessions.runtimeKind, input.identity.runtimeKind),
+              eq(taskSessions.externalSessionId, input.identity.externalSessionId),
+            ),
+          ),
       "sqliteTaskRepository.recordAgentSessionActivity.findOwner",
     );
+    const rows = candidates;
     let owner: {
       taskId: string;
       sessions: AgentSessionRecord[];
       stored: AgentSessionRecord;
+      position: number;
     } | null = null;
     for (const row of rows) {
-      const sessions = yield* agentSessionsFromRow(row);
-      const stored = sessions.find((record) => hasSameAgentSessionIdentity(record, input.identity));
+      const sessions = yield* readTaskSessionsWithPositions(session, workspaceId, row.id);
+      const stored = sessions.find(({ record }) =>
+        hasSameAgentSessionIdentity(record, input.identity),
+      );
       if (!stored) continue;
       if (owner) {
         return yield* new SqliteTaskStoreDataError({
@@ -133,10 +127,15 @@ export const recordAgentSessionActivity = (
           message: `More than one task owns session '${input.identity.externalSessionId}'.`,
         });
       }
-      owner = { taskId: row.id, sessions, stored };
+      owner = {
+        taskId: row.id,
+        sessions: sessions.map(({ record }) => record),
+        stored: stored.record,
+        position: stored.position,
+      };
     }
     if (!owner) return null;
-    const { taskId, sessions, stored } = owner;
+    const { taskId, sessions, stored, position } = owner;
     if (input.occurredAt <= (stored.lastActivityAt ?? Date.parse(stored.startedAt))) return null;
     const next = sessions.map((record) =>
       record === stored ? { ...record, lastActivityAt: input.occurredAt } : record,
@@ -144,64 +143,104 @@ export const recordAgentSessionActivity = (
     yield* session.execute(
       (database) =>
         database
-          .update(tasks)
-          .set({ agentSessionsJson: encodeAgentSessionBatch(next) })
-          .where(eq(tasks.id, taskId)),
+          .update(taskSessions)
+          .set({ lastActivityAt: input.occurredAt })
+          .where(
+            and(
+              eq(taskSessions.workspaceId, workspaceId),
+              eq(taskSessions.taskId, taskId),
+              eq(taskSessions.position, position),
+            ),
+          ),
       "sqliteTaskRepository.recordAgentSessionActivity.updateSession",
     );
-    return { taskId, agentSessions: next };
+    return { workspaceId, taskId, agentSessions: next };
   });
 
 export const clearAgentSessionsByRoles = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["clearAgentSessionsByRoles"]>[0],
   updatedAt: Date,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
+    const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
     const roleSet = new Set(input.roles.map((role) => role.trim()).filter(Boolean));
     if (roleSet.size === 0) {
       return true;
     }
-    const sessions = yield* agentSessionsFromRow(row);
-    const remaining = sessions.filter((session) => !roleSet.has(session.role.trim()));
+    const sessions = yield* readTaskSessionsWithPositions(session, workspaceId, row.id);
+    const matches = sessions.filter(({ record }) => roleSet.has(record.role.trim()));
+    if (matches.length > 0)
+      yield* session.execute(
+        (db) =>
+          db
+            .delete(taskSessions)
+            .where(
+              and(
+                taskRelationScope(taskSessions, workspaceId, input.taskId),
+                inArray(
+                  taskSessions.position,
+                  sqliteValues(matches.map(({ position }) => position)),
+                ),
+              ),
+            ),
+        "sqliteTaskRepository.clearAgentSessionsByRoles.deleteSessions",
+      );
     yield* session.execute(
-      (database) =>
-        database
+      (db) =>
+        db
           .update(tasks)
-          .set({
-            agentSessionsJson: encodeAgentSessionBatch(remaining),
-            updatedAt,
-          })
-          .where(eq(tasks.id, input.taskId)),
+          .set({ updatedAt })
+          .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
       "sqliteTaskRepository.clearAgentSessionsByRoles.updateTask",
     );
     return true;
   });
 
 export const upsertAgentSession = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["upsertAgentSession"]>[0],
   updatedAt: Date,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const compactSession = yield* compactAgentSessionForStorage(input.session);
-    const owner = (yield* listRuntimeSessionOwners(session)).find(
-      (owner) =>
-        owner.kind === "workspace" &&
-        owner.runtimeKind === compactSession.runtimeKind &&
-        owner.externalSessionId === compactSession.externalSessionId,
-    );
-    if (owner)
-      return yield* new SqliteTaskStoreDataError({
-        field: "agentSessionsJson",
-        message: "This runtime conversation already belongs to a workspace chat.",
-      });
-    const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
-    const sessions = yield* agentSessionsFromRow(row);
+    const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+    const sessions = yield* readTaskSessions(session, workspaceId, row.id);
     const existingIndex = sessions.findIndex((entry) =>
       hasSameAgentSessionIdentity(entry, compactSession),
     );
+    if (existingIndex < 0) {
+      if (!input.ownershipScope)
+        return yield* new SqliteTaskStoreDataError({
+          field: "ownershipScope",
+          message:
+            "Resolve the current repository ownership scope before linking a new task session.",
+        });
+      const workspaceIds = yield* assertRuntimeOwnershipScope(session, input.ownershipScope, {
+        workspaceId,
+        repoPath: input.repoPath,
+      });
+      const owner = (yield* listRuntimeSessionOwners(session, workspaceIds, {
+        runtimeKind: compactSession.runtimeKind,
+        externalSessionIds: [compactSession.externalSessionId],
+      })).find(
+        (owner) =>
+          owner.runtimeKind === compactSession.runtimeKind &&
+          owner.externalSessionId === compactSession.externalSessionId &&
+          !(
+            owner.kind === "task" &&
+            owner.workspaceId === workspaceId &&
+            owner.taskId === input.taskId
+          ),
+      );
+      if (owner)
+        return yield* new SqliteTaskStoreDataError({
+          field: "externalSessionId",
+          message: `This runtime conversation already belongs to ${owner.kind === "task" ? `task ${owner.taskId}` : "a workspace chat"} in workspace ${owner.workspaceId}. Open it from its owner.`,
+        });
+    }
     if (existingIndex >= 0) {
       const stored = sessions[existingIndex];
       sessions[existingIndex] =
@@ -215,31 +254,33 @@ export const upsertAgentSession = (
       sessions.push(compactSession);
     }
     const nextSessions = sessions
-      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+      .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
       .slice(0, 100);
+    yield* replaceTaskSessions(session, workspaceId, input.taskId, nextSessions);
     yield* session.execute(
-      (database) =>
-        database
+      (db) =>
+        db
           .update(tasks)
-          .set({
-            agentSessionsJson: encodeAgentSessionBatch(nextSessions),
-            updatedAt,
-          })
-          .where(eq(tasks.id, input.taskId)),
+          .set({ updatedAt })
+          .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
       "sqliteTaskRepository.upsertAgentSession.updateTask",
     );
     return true;
   });
 
 export const updateAgentSessionModel = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["updateAgentSessionModel"]>[0],
   updatedAt: Date,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
-    const sessions = yield* agentSessionsFromRow(row);
-    const existing = sessions.find((entry) => hasSameAgentSessionIdentity(entry, input.identity));
+    const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+    const sessions = yield* readTaskSessionsWithPositions(session, workspaceId, row.id);
+    const matches = sessions.filter(({ record }) =>
+      hasSameAgentSessionIdentity(record, input.identity),
+    );
+    const existing = matches[0]?.record;
     if (!existing) {
       return yield* Effect.fail(
         new HostResourceError({
@@ -258,46 +299,64 @@ export const updateAgentSessionModel = (
       ...existing,
       selectedModel: input.selectedModel,
     });
-    const nextSessions = sessions.map((entry) =>
-      hasSameAgentSessionIdentity(entry, input.identity) ? updated : entry,
+    yield* session.execute(
+      (db) =>
+        db
+          .update(taskSessions)
+          .set(selectedModelColumns(updated.selectedModel))
+          .where(
+            and(
+              eq(taskSessions.workspaceId, workspaceId),
+              eq(taskSessions.taskId, input.taskId),
+              inArray(taskSessions.position, sqliteValues(matches.map(({ position }) => position))),
+            ),
+          ),
+      "sqliteTaskRepository.updateAgentSessionModel.updateSessions",
     );
     yield* session.execute(
-      (database) =>
-        database
+      (db) =>
+        db
           .update(tasks)
-          .set({
-            agentSessionsJson: encodeAgentSessionBatch(nextSessions),
-            updatedAt,
-          })
-          .where(eq(tasks.id, input.taskId)),
+          .set({ updatedAt })
+          .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
       "sqliteTaskRepository.updateAgentSessionModel.updateTask",
     );
     return true;
   });
 
 export const deleteAgentSession = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["deleteAgentSession"]>[0],
   updatedAt: Date,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
-    const sessions = yield* agentSessionsFromRow(row);
-    const remaining = sessions.filter(
-      (entry) => !hasSameAgentSessionIdentity(entry, input.identity),
+    const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+    const sessions = yield* readTaskSessionsWithPositions(session, workspaceId, row.id);
+    const matches = sessions.filter(({ record }) =>
+      hasSameAgentSessionIdentity(record, input.identity),
     );
-    if (remaining.length === sessions.length) {
+    if (matches.length === 0) {
       return true;
     }
     yield* session.execute(
-      (database) =>
-        database
+      (db) =>
+        db
+          .delete(taskSessions)
+          .where(
+            and(
+              taskRelationScope(taskSessions, workspaceId, input.taskId),
+              inArray(taskSessions.position, sqliteValues(matches.map(({ position }) => position))),
+            ),
+          ),
+      "sqliteTaskRepository.deleteAgentSession.deleteSessions",
+    );
+    yield* session.execute(
+      (db) =>
+        db
           .update(tasks)
-          .set({
-            agentSessionsJson: encodeAgentSessionBatch(remaining),
-            updatedAt,
-          })
-          .where(eq(tasks.id, input.taskId)),
+          .set({ updatedAt })
+          .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
       "sqliteTaskRepository.deleteAgentSession.updateTask",
     );
     return true;

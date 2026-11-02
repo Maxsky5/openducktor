@@ -2,20 +2,23 @@ import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdir, realpath, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
+import {
+  createSqliteHostDatabaseManager,
+  type WorkspaceDatabaseScope,
+} from "./sqlite-task-repository-context";
 import {
   createSqliteTaskStoreHarness,
   insertRawTask,
   type SqliteTaskStoreTestHarness,
-  openSqliteTaskStoreTestConnection,
+  openHostDatabaseTestConnection,
 } from "./sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "./sqlite-workspace-session-store";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
-import { toHostOperationError } from "../../effect/host-errors";
+import { workspaces } from "./sqlite-host-settings-schema";
 
 const makeSession = (id = "one", updatedAt = 1): WorkspaceSession => ({
   id,
@@ -45,41 +48,67 @@ describe("SQLite Workspace Session store", () => {
   afterEach(async () => {
     await harness.cleanup();
   });
-  const scope = () => ({ repoPath: harness.repoPath, workspaceId: "fairnest" });
+  const scope = () => {
+    const ref = harness.scope;
+    return { ...ref, ownershipScope: { catalogRevision: 0, workspaces: [ref] } };
+  };
   const ref = (sessionId = "one") => ({ ...scope(), sessionId });
   const store = () => createSqliteWorkspaceSessionStore(harness);
 
   test("ownership reads include archived history beyond the UI limit after a closed root disappears", async () => {
     const repoPath = path.join(harness.configDir, "owner-repo");
     await mkdir(repoPath);
-    const workspaceScope = { workspaceId: "closed-owner", repoPath };
+    const ownerRef = { workspaceId: "closed-owner", repoPath };
+    const workspaceScope = {
+      ...ownerRef,
+      ownershipScope: { catalogRevision: 0, workspaces: [ownerRef] },
+    };
+    await Effect.runPromise(
+      harness.contextProvider(harness.scope, "test.seedOwner", ({ session }) =>
+        session.execute(
+          (db) =>
+            db.insert(workspaces).values({
+              ...ownerRef,
+              workspaceName: "Closed owner",
+              branchPrefix: "odt",
+              defaultTargetBranch: "main",
+              closed: false,
+            }),
+          "test.seedOwner",
+        ),
+      ),
+    );
     const admission = createWorkspaceAdmissionService({
       workspaceSettingsService: {
         getWorkspaceCatalog: () =>
-          Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+          Effect.succeed({
+            catalogRevision: 0,
+            openWorkspaces: [],
+            closedWorkspaces: [],
+            incompleteRemovals: [],
+          }),
       },
     });
-    const manager = createSqliteTaskRepositoryContextManager({
+    const manager = createSqliteHostDatabaseManager({
       taskWorkflows: builtinTaskWorkflows,
       configDir: harness.configDir,
-      processEnv: {},
-      openConnection: openSqliteTaskStoreTestConnection,
-      assertWorkspaceAdmitted: admission.assertTaskStoreAccess,
-      assertWorkspaceOwnershipReadAdmitted: (input) =>
-        admission.assertTaskStoreOwnershipReadAccess({
-          ...input,
-          operation: "workspaceSessionStore.worktreeOwners",
-        }),
-      resolveWorkspaceIdForRepoPath: (directory) =>
-        Effect.tryPromise({
-          try: () => realpath(directory),
-          catch: (cause) => toHostOperationError(cause, "test.resolveWorkspace"),
-        }).pipe(Effect.as(workspaceScope.workspaceId)),
+      openConnection: openHostDatabaseTestConnection,
     });
+    const admit = (scope: WorkspaceDatabaseScope, operation: string) =>
+      admission
+        .resolveTaskStoreAccess({ ...scope, access: scope.access ?? "open", operation })
+        .pipe(Effect.map((access) => ({ ...scope, access })));
     const repository = createSqliteWorkspaceSessionStore({
-      contextProvider: manager.withDatabase,
-      listForWorktreeOwnership: manager.listWorkspaceSessionsForWorktreeOwnership,
+      contextProvider: (scope, operation, use) =>
+        admit(scope, operation).pipe(
+          Effect.flatMap((admitted) => manager.withDatabase(admitted, operation, use)),
+        ),
+      workspacesProvider: (scopes, operation, use) =>
+        Effect.forEach(scopes, (scope) => admit(scope, operation)).pipe(
+          Effect.flatMap((admitted) => manager.readWorkspaces(admitted, operation, use)),
+        ),
     });
+    const ownershipRead = { workspaces: [workspaceScope] };
     try {
       const active = await Effect.runPromise(
         repository.create({
@@ -99,7 +128,11 @@ describe("SQLite Workspace Session store", () => {
       expect(archiveList).toHaveLength(100);
       expect(archiveList.some(({ id }) => id === "archived-0")).toBe(false);
       expect(await Effect.runPromise(repository.listActive(workspaceScope))).toEqual([active]);
-      admission.blockWorkspace({ ...workspaceScope, reason: "closed" });
+      const database = new Database(harness.databasePath);
+      database.run("UPDATE workspaces SET closed = 1 WHERE workspace_id = ?", [
+        workspaceScope.workspaceId,
+      ]);
+      database.close();
       await expect(Effect.runPromise(repository.listActive(workspaceScope))).rejects.toThrow(
         "Workspace is closed",
       );
@@ -114,22 +147,34 @@ describe("SQLite Workspace Session store", () => {
       ).rejects.toThrow("Workspace is closed");
       await rm(repoPath, { recursive: true });
       await expect(Effect.runPromise(repository.listActive(workspaceScope))).rejects.toThrow(
-        "ENOENT",
+        "closed",
       );
-      expect(await Effect.runPromise(repository.listForWorktreeOwnership(workspaceScope))).toEqual([
-        ...archived.toReversed(),
-        active,
-      ]);
+      expect(await Effect.runPromise(repository.listForWorktreeOwnership(ownershipRead))).toEqual(
+        [...archived.toReversed(), active].map((session) => ({
+          workspaceId: workspaceScope.workspaceId,
+          id: session.id,
+          runtimeKind: session.runtimeKind,
+          externalSessionId: session.externalSessionId,
+          workingDirectory: session.executionTarget.workingDirectory,
+          generatedTitle: session.generatedTitle,
+          manualTitle: session.manualTitle,
+          archivedAt: session.archivedAt,
+        })),
+      );
       await Effect.runPromise(
         admission.reserveWorkspace({ ...workspaceScope, operation: "remove" }),
       );
       await expect(
-        Effect.runPromise(repository.listForWorktreeOwnership(workspaceScope)),
+        Effect.runPromise(repository.listForWorktreeOwnership(ownershipRead)),
       ).rejects.toThrow("remove operation is already in progress");
       admission.releaseReservation(workspaceScope.workspaceId);
-      admission.blockWorkspace({ ...workspaceScope, reason: "removal" });
+      const removingDatabase = new Database(harness.databasePath);
+      removingDatabase.run("INSERT INTO workspace_removals VALUES (?, 0, 'attachments', NULL)", [
+        workspaceScope.workspaceId,
+      ]);
+      removingDatabase.close();
       await expect(
-        Effect.runPromise(repository.listForWorktreeOwnership(workspaceScope)),
+        Effect.runPromise(repository.listForWorktreeOwnership(ownershipRead)),
       ).rejects.toThrow("Workspace removal is incomplete");
     } finally {
       await Effect.runPromise(manager.dispose());
@@ -163,6 +208,46 @@ describe("SQLite Workspace Session store", () => {
         }),
       );
     expect(await Effect.runPromise(repository.listArchived(scope()))).toHaveLength(100);
+    expect(
+      await Effect.runPromise(
+        repository.listRuntimeOwners({
+          ...scope(),
+          filter: {
+            runtimeKind: "codex",
+            externalSessionIds: ["task-owned", "runtime-archived-0"],
+          },
+        }),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "task",
+          taskId: "closed-task",
+          externalSessionId: "task-owned",
+        }),
+        expect.objectContaining({ kind: "workspace", sessionId: "archived-0", archived: true }),
+      ]),
+    );
+    expect(
+      await Effect.runPromise(
+        repository.listRuntimeOwners({
+          ...scope(),
+          filter: {
+            runtimeKind: "opencode",
+            externalSessionIds: ["task-owned", "runtime-archived-0"],
+          },
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      await Effect.runPromise(
+        repository.listRuntimeOwners({
+          ...scope(),
+          filter: { runtimeKind: "codex", externalSessionIds: [] },
+        }),
+      ),
+    ).toEqual([]);
+
     await expect(
       Effect.runPromise(
         repository.importSession({
@@ -177,7 +262,7 @@ describe("SQLite Workspace Session store", () => {
     const repository = store();
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Owner", issueType: "task", priority: 2 },
       }),
@@ -186,7 +271,8 @@ describe("SQLite Workspace Session store", () => {
       Effect.runPromise(repository.importSession({ ...scope(), session: makeSession() })),
       Effect.runPromise(
         harness.store.upsertAgentSession({
-          repoPath: harness.repoPath,
+          ...harness.scope,
+          ownershipScope: scope().ownershipScope,
           taskId: task.id,
           session: createAgentSessionRecord({
             runtimeKind: "codex",
@@ -197,6 +283,76 @@ describe("SQLite Workspace Session store", () => {
     ]);
     expect(attempts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(await Effect.runPromise(repository.listRuntimeOwners(scope()))).toHaveLength(1);
+  });
+
+  test("keeps identical chat identities in unrelated workspaces isolated", async () => {
+    const repository = store();
+    const first = scope();
+    const secondRef = { workspaceId: "fairnest-other", repoPath: "/repos/Other" };
+    await Effect.runPromise(
+      harness.contextProvider(first, "test.registerPeer", ({ session }) =>
+        session.execute(
+          (db) =>
+            db.insert(workspaces).values({
+              ...secondRef,
+              workspaceName: "Other",
+              branchPrefix: "odt",
+              defaultTargetBranch: "main",
+              closed: false,
+            }),
+          "test.registerPeer",
+        ),
+      ),
+    );
+    const second = {
+      ...secondRef,
+      ownershipScope: { catalogRevision: 0, workspaces: [secondRef] },
+    };
+    await Effect.runPromise(repository.create({ ...first, session: makeSession() }));
+    await Effect.runPromise(repository.create({ ...second, session: makeSession() }));
+    await Effect.runPromise(
+      repository.rename({ ...second, sessionId: "one", manualTitle: "Second workspace" }),
+    );
+    expect(
+      (await Effect.runPromise(repository.get({ ...first, sessionId: "one" }))).manualTitle,
+    ).toBeNull();
+    expect(
+      (await Effect.runPromise(repository.listActive(second))).map(
+        ({ manualTitle }) => manualTitle,
+      ),
+    ).toEqual(["Second workspace"]);
+    const database = new Database(harness.databasePath);
+    try {
+      database.exec("PRAGMA foreign_keys = ON");
+      database.run("DELETE FROM workspaces WHERE workspace_id = ?", [second.workspaceId]);
+    } finally {
+      database.close();
+    }
+    expect(await Effect.runPromise(repository.listIds(first))).toEqual(["one"]);
+    await expect(
+      Effect.runPromise(repository.get({ ...second, sessionId: "one" })),
+    ).rejects.toThrow();
+  });
+
+  test("rejects a changed ownership catalog before it saves a chat", async () => {
+    const repository = store();
+    await Effect.runPromise(repository.listActive(scope()));
+    const database = new Database(harness.databasePath);
+    try {
+      database.run("UPDATE host_metadata SET catalog_revision = 1 WHERE singleton_id = 1");
+    } finally {
+      database.close();
+    }
+    await expect(
+      Effect.runPromise(repository.importSession({ ...scope(), session: makeSession() })),
+    ).rejects.toThrow("Workspace registration changed");
+    expect(await Effect.runPromise(repository.listIds(scope()))).toEqual([]);
+    const input = {
+      ...scope(),
+      ownershipScope: { ...scope().ownershipScope, catalogRevision: 1 },
+      session: makeSession(),
+    };
+    expect((await Effect.runPromise(repository.importSession(input))).created).toBe(true);
   });
 
   test("deduplicates competing imports and protects draft binding", async () => {
@@ -256,19 +412,17 @@ describe("SQLite Workspace Session store", () => {
       const session = makeSession();
       if (draft) session.externalSessionId = null;
       await Effect.runPromise(store().create({ ...scope(), session }));
-      const reopened = createSqliteTaskRepositoryContextManager({
+      const reopened = createSqliteHostDatabaseManager({
         taskWorkflows: builtinTaskWorkflows,
-        assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
-        processEnv: {},
-        resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
-        resolveDatabasePath: () => Effect.succeed(harness.databasePath),
+        configDir: harness.configDir,
+        openConnection: openHostDatabaseTestConnection,
       });
       try {
         expect(
           await Effect.runPromise(
             createSqliteWorkspaceSessionStore({
               contextProvider: reopened.withDatabase,
-              listForWorktreeOwnership: reopened.listWorkspaceSessionsForWorktreeOwnership,
+              workspacesProvider: reopened.readWorkspaces,
             }).get(ref()),
           ),
         ).toEqual(session);
@@ -373,23 +527,23 @@ describe("SQLite Workspace Session store", () => {
     expect(
       await Effect.runPromise(
         repository.findByRuntimeSession({
-          ...scope(),
+          workspaces: [harness.scope],
           runtimeKind: "codex",
           externalSessionId: "absent",
         }),
       ),
-    ).toBeNull();
+    ).toEqual([]);
     expect(
       (
         await Effect.runPromise(
           repository.findByRuntimeSession({
-            ...scope(),
+            workspaces: [harness.scope],
             runtimeKind: "codex",
             externalSessionId: "runtime-one",
           }),
         )
-      )?.id,
-    ).toBe("one");
+      ).map(({ workspaceId, session }) => [workspaceId, session.id]),
+    ).toEqual([[harness.workspaceId, "one"]]);
   });
 
   test("archives and restores idempotently without changing activity or execution", async () => {
@@ -574,9 +728,9 @@ describe("SQLite Workspace Session store", () => {
     const release = Promise.withResolvers<void>();
     let calls = 0;
     const paused = createSqliteWorkspaceSessionStore({
-      listForWorktreeOwnership: harness.listForWorktreeOwnership,
-      contextProvider: (repoPath, operation, use) => {
-        const run = harness.contextProvider(repoPath, operation, use);
+      workspacesProvider: harness.workspacesProvider,
+      contextProvider: (scope, operation, use) => {
+        const run = harness.contextProvider(scope, operation, use);
         if (operation !== "workspaceSessionStore.recordAcceptedMessage" || ++calls !== 1)
           return run;
         return Effect.promise(async () => {
@@ -673,17 +827,17 @@ describe("SQLite Workspace Session store", () => {
     expect(await Effect.runPromise(repository.get(ref()))).toEqual(saved);
   });
 
-  test("surfaces corrupt stored JSON instead of hiding the record", async () => {
+  test("surfaces invalid stored typed fields instead of hiding the record", async () => {
     const repository = store();
     await Effect.runPromise(repository.create({ ...scope(), session: makeSession() }));
     const database = new Database(harness.databasePath);
     try {
-      database.run("UPDATE workspace_sessions SET role_snapshot_json = 'broken' WHERE id = 'one'");
+      database.run("UPDATE workspace_sessions SET role_snapshot_name = '' WHERE id = 'one'");
     } finally {
       database.close();
     }
     await expect(Effect.runPromise(repository.listActive(scope()))).rejects.toThrow(
-      "Stored Workspace Session one is invalid",
+      "Stored workspace session one in workspace fairnest is invalid",
     );
   });
 });

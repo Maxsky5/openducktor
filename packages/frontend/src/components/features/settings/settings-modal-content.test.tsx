@@ -6,15 +6,23 @@ import {
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
-import { createElement } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRepoSettingsConfigFixture,
+  createSettingsSnapshotFixture,
+  createWorkspaceRecordFixture,
+} from "@/test-utils/shared-test-fixtures";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { SettingsModalContent } from "./settings-modal-content";
+
+enableReactActEnvironment();
 
 const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot =>
   createSettingsSnapshotFixture(overrides);
@@ -22,6 +30,8 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
 const createMockController = (snapshot: SettingsSnapshot) => ({
   customAgentRoleValidationState: { errorsById: {}, totalErrorCount: 0 },
   updateCustomAgentRoles: () => {},
+  discardDraft: () => {},
+  retainDraft: () => {},
   isLoadingSettings: false,
   isLoadingRuntimeDefinitions: false,
   isLoadingRuntimeExecutables: false,
@@ -148,6 +158,83 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
 });
 
 describe("settings modal content", () => {
+  test("keeps a removed workspace draft selectable and its text available to copy", async () => {
+    const liveWorkspace = createWorkspaceRecordFixture({
+      workspaceId: "live",
+      workspaceName: "Live repository",
+    });
+    const snapshot = createMockSnapshot({
+      workspaces: {
+        live: {
+          ...createRepoSettingsConfigFixture("live", "/live"),
+          workspaceName: "Live repository",
+        },
+        removed: {
+          ...createRepoSettingsConfigFixture("removed", "/removed"),
+          workspaceName: "Removed repository",
+          hooks: { postComplete: ["UNSAVED cleanup command"] },
+        },
+      },
+    });
+    const Wrapper = () => {
+      const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("removed");
+      return createElement(SettingsModalContent, {
+        section: "repositories",
+        repositorySection: "scripts",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        selectedCustomAgentRoleId: null,
+        onSelectedCustomAgentRoleIdChange: () => {},
+        isInteractionDisabled: false,
+        controller: {
+          ...createMockController(snapshot),
+          workspaces: [liveWorkspace],
+          workspaceIds: ["live", "removed"],
+          selectedWorkspaceId,
+          selectedWorkspace: selectedWorkspaceId === "live" ? liveWorkspace : null,
+          selectedRepoConfig: snapshot.workspaces[selectedWorkspaceId] ?? null,
+          setSelectedWorkspaceId,
+        },
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      });
+    };
+    const rendered = render(createElement(QueryProvider, null, createElement(Wrapper)));
+
+    try {
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Removed repository (unavailable draft)" }),
+        );
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("option", { name: "Live repository" }));
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Live repository" }));
+      });
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("option", { name: "Removed repository (unavailable draft)" }),
+        );
+      });
+
+      const cleanupField = screen.getByLabelText<HTMLTextAreaElement>(
+        "Worktree cleanup script (one command per line)",
+      );
+      expect(cleanupField.value).toBe("UNSAVED cleanup command");
+      expect(cleanupField.disabled).toBe(false);
+      expect(screen.getByRole("alert").textContent).toContain("Copy any text you need");
+      expect(screen.getByRole("alert").textContent).toContain("Cancel to discard");
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("renders repository scripts separately from repository configuration", () => {
     const snapshot = createMockSnapshot({
       workspaces: {
@@ -271,7 +358,7 @@ describe("settings modal content", () => {
     const { queryClient } = connection;
     queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, savedSnapshot);
     queryClient.setQueryData(
-      repositoryGitProviderContextQueryKeys.repo("/repo"),
+      repositoryGitProviderContextQueryKeys.repo({ workspaceId: "repo", repoPath: "/repo" }),
       (): RepositoryGitProviderContext => ({
         descriptor: GITHUB_PROVIDER_DESCRIPTOR,
         config: savedSnapshot.workspaces.repo!.git.provider!,

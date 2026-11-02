@@ -21,7 +21,12 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
 });
 const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   ...sessionIdentity(),
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build",
+  },
   title: "BUILD task-1",
   status: "idle",
   runtimeStatusMessage: null,
@@ -94,7 +99,12 @@ describe("resolveSessionRuntimeDataRefs", () => {
         workingDirectory: "/repo",
         externalSessionId: "external-1",
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       },
     });
   });

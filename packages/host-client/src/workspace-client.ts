@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import {
   type LocalImageReadInput,
   type LocalImageReadResult,
@@ -17,6 +18,9 @@ import {
   settingsSnapshotRuntimePreviewSchema,
   settingsSnapshotSaveResultSchema,
   type AgentModelFavorite,
+  agentModelFavoritesSchema,
+  kanbanTaskCardViewSchema,
+  sidebarSessionGroupingSchema,
   type AzureDevOpsConnectionState,
   azureDevOpsConnectionStateSchema,
   type AzureDevOpsDeviceCode,
@@ -26,7 +30,6 @@ import {
   type CustomAgentRoleInput,
   customAgentRoleSchema,
   type GitProviderRepository,
-  type GlobalGitConfig,
   type KanbanTaskCardView,
   gitProviderRepositorySchema,
   type RepositoryGitProviderContext,
@@ -40,9 +43,6 @@ import {
   type WorkspaceRecord,
   type WorkspaceAgentStudioState,
   type WorkspaceAgentStudioStateAction,
-  type WorkspaceRepoConfigInput,
-  type WorkspaceRepoHooksInput,
-  type WorkspaceRepoSettingsInput,
   type WorkspaceCatalog,
   type WorkspacePathResolution,
   type WorkspaceRemovalCommandResult,
@@ -54,12 +54,6 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 import { z } from "zod";
-
-export type {
-  WorkspaceRepoConfigInput,
-  WorkspaceRepoHooksInput,
-  WorkspaceRepoSettingsInput,
-} from "@openducktor/contracts";
 
 const stagedLocalAttachmentSchema = z.object({
   path: z.string().refine((path) => path.trim().length > 0),
@@ -146,30 +140,6 @@ const workspaceReorder = async (
   );
 };
 
-const workspaceUpdateRepoConfig = async (
-  invokeFn: InvokeFn,
-  workspaceId: string,
-  config: WorkspaceRepoConfigInput,
-): Promise<WorkspaceRecord> => {
-  return invokeFn("workspace_update_repo_config", { workspaceId, config }, workspaceRecordSchema);
-};
-
-const workspaceSaveRepoSettings = async (
-  invokeFn: InvokeFn,
-  workspaceId: string,
-  settings: WorkspaceRepoSettingsInput,
-): Promise<WorkspaceRecord> => {
-  return invokeFn("workspace_save_repo_settings", { workspaceId, settings }, workspaceRecordSchema);
-};
-
-const workspaceUpdateRepoHooks = async (
-  invokeFn: InvokeFn,
-  workspaceId: string,
-  hooks: WorkspaceRepoHooksInput,
-): Promise<WorkspaceRecord> => {
-  return invokeFn("workspace_update_repo_hooks", { workspaceId, hooks }, workspaceRecordSchema);
-};
-
 const workspaceGetRepoConfig = async (
   invokeFn: InvokeFn,
   workspaceId: string,
@@ -227,63 +197,63 @@ const workspaceSaveSettingsSnapshot = async (
 const workspaceUpdateAgentModelFavorites = async (
   invokeFn: InvokeFn,
   favorites: AgentModelFavorite[],
-): Promise<SettingsSnapshot> => {
-  return invokeFn("workspace_update_agent_model_favorites", { favorites }, settingsSnapshotSchema);
+): Promise<AgentModelFavorite[]> => {
+  return invokeFn(
+    "workspace_update_agent_model_favorites",
+    { favorites },
+    agentModelFavoritesSchema,
+  );
 };
 
 const workspaceUpdateKanbanTaskCardView = async (
   invokeFn: InvokeFn,
   taskCardView: KanbanTaskCardView,
-): Promise<SettingsSnapshot> => {
+): Promise<KanbanTaskCardView> => {
   return invokeFn(
     "workspace_update_kanban_task_card_view",
     { taskCardView },
-    settingsSnapshotSchema,
+    kanbanTaskCardViewSchema,
   );
-};
-
-const workspaceUpdateGlobalGitConfig = async (
-  invokeFn: InvokeFn,
-  git: GlobalGitConfig,
-): Promise<void> => {
-  await invokeFn("workspace_update_global_git_config", { git }, voidResultSchema);
 };
 
 const workspaceUpdateSidebarSessionGrouping = async (
   invokeFn: InvokeFn,
   grouping: SidebarSessionGrouping,
-): Promise<SettingsSnapshot> =>
-  invokeFn("workspace_update_sidebar_session_grouping", { grouping }, settingsSnapshotSchema);
+): Promise<SidebarSessionGrouping> =>
+  invokeFn("workspace_update_sidebar_session_grouping", { grouping }, sidebarSessionGroupingSchema);
 
 const workspaceDetectGithubRepository = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
 ): Promise<GitProviderRepository | null> => {
   return invokeFn(
     "workspace_detect_github_repository",
-    { repoPath },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
     gitProviderRepositorySchema.nullable(),
   );
 };
 
 const workspaceDetectAzureDevOpsRepository = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
 ): Promise<GitProviderRepository> =>
-  invokeFn("workspace_detect_azure_devops_repository", { repoPath }, gitProviderRepositorySchema);
+  invokeFn(
+    "workspace_detect_azure_devops_repository",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+    gitProviderRepositorySchema,
+  );
 
-export type AzureDevOpsConnectionInput = {
-  repoPath: string;
+export type AzureDevOpsConnectionInput = WorkspaceRef & {
   repository: AzureDevOpsRepository;
 };
 
 const workspaceGetGitProviderContext = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
 ): Promise<RepositoryGitProviderContext> => {
   return invokeFn(
     "workspace_get_git_provider_context",
-    { repoPath },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
     repositoryGitProviderContextSchema,
   );
 };
@@ -473,27 +443,6 @@ export class HostWorkspaceClient {
     return workspaceReorder(this.invokeFn, workspaceOrder);
   }
 
-  async workspaceUpdateRepoConfig(
-    workspaceId: string,
-    config: WorkspaceRepoConfigInput,
-  ): Promise<WorkspaceRecord> {
-    return workspaceUpdateRepoConfig(this.invokeFn, workspaceId, config);
-  }
-
-  async workspaceSaveRepoSettings(
-    workspaceId: string,
-    settings: WorkspaceRepoSettingsInput,
-  ): Promise<WorkspaceRecord> {
-    return workspaceSaveRepoSettings(this.invokeFn, workspaceId, settings);
-  }
-
-  async workspaceUpdateRepoHooks(
-    workspaceId: string,
-    hooks: WorkspaceRepoHooksInput,
-  ): Promise<WorkspaceRecord> {
-    return workspaceUpdateRepoHooks(this.invokeFn, workspaceId, hooks);
-  }
-
   async workspaceGetRepoConfig(workspaceId: string): Promise<RepoConfig> {
     return workspaceGetRepoConfig(this.invokeFn, workspaceId);
   }
@@ -531,32 +480,30 @@ export class HostWorkspaceClient {
 
   async workspaceUpdateAgentModelFavorites(
     favorites: AgentModelFavorite[],
-  ): Promise<SettingsSnapshot> {
+  ): Promise<AgentModelFavorite[]> {
     return workspaceUpdateAgentModelFavorites(this.invokeFn, favorites);
   }
 
   async workspaceUpdateKanbanTaskCardView(
     taskCardView: KanbanTaskCardView,
-  ): Promise<SettingsSnapshot> {
+  ): Promise<KanbanTaskCardView> {
     return workspaceUpdateKanbanTaskCardView(this.invokeFn, taskCardView);
   }
 
   async workspaceUpdateSidebarSessionGrouping(
     grouping: SidebarSessionGrouping,
-  ): Promise<SettingsSnapshot> {
+  ): Promise<SidebarSessionGrouping> {
     return workspaceUpdateSidebarSessionGrouping(this.invokeFn, grouping);
   }
 
-  async workspaceUpdateGlobalGitConfig(git: GlobalGitConfig): Promise<void> {
-    return workspaceUpdateGlobalGitConfig(this.invokeFn, git);
+  async workspaceDetectGithubRepository(
+    scope: WorkspaceRef,
+  ): Promise<GitProviderRepository | null> {
+    return workspaceDetectGithubRepository(this.invokeFn, scope);
   }
 
-  async workspaceDetectGithubRepository(repoPath: string): Promise<GitProviderRepository | null> {
-    return workspaceDetectGithubRepository(this.invokeFn, repoPath);
-  }
-
-  async workspaceDetectAzureDevOpsRepository(repoPath: string): Promise<GitProviderRepository> {
-    return workspaceDetectAzureDevOpsRepository(this.invokeFn, repoPath);
+  async workspaceDetectAzureDevOpsRepository(scope: WorkspaceRef): Promise<GitProviderRepository> {
+    return workspaceDetectAzureDevOpsRepository(this.invokeFn, scope);
   }
 
   async workspaceGetAzureDevOpsConnection(
@@ -597,8 +544,8 @@ export class HostWorkspaceClient {
     await this.invokeFn("workspace_disconnect_azure_devops", input, voidResultSchema);
   }
 
-  async workspaceGetGitProviderContext(repoPath: string): Promise<RepositoryGitProviderContext> {
-    return workspaceGetGitProviderContext(this.invokeFn, repoPath);
+  async workspaceGetGitProviderContext(scope: WorkspaceRef): Promise<RepositoryGitProviderContext> {
+    return workspaceGetGitProviderContext(this.invokeFn, scope);
   }
 
   async workspaceStageLocalAttachment(input: {

@@ -103,6 +103,7 @@ describe("session entry presentation", () => {
       sessionId: "chat",
     });
     expect(sessionEntryTerminalContext(taskSessionEntry)).toEqual({
+      workspaceId: "alpha",
       repoPath: "/repos/alpha",
       taskId: "task-1",
     });

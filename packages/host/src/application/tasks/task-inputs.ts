@@ -1,4 +1,5 @@
 import type {
+  WorkspaceRef,
   AgentSessionIdentity,
   AgentSessionRecord,
   PullRequest,
@@ -8,9 +9,7 @@ import type {
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 
-export type RepoPathInput = {
-  repoPath: string;
-};
+export type RepoPathInput = WorkspaceRef;
 
 export type TaskIdInput = RepoPathInput & {
   taskId: string;

@@ -41,7 +41,10 @@ describe("diffSettingsSnapshots", () => {
       agentRuntimesChanged: true,
       customAgentRolesChanged: true,
       kanbanDoneVisibleDaysChanged: false,
-      changedGitProviderRepoPaths: ["/repo-a", "/repo-b"],
+      changedGitProviderWorkspaces: [
+        { workspaceId: "repo-a", repoPath: "/repo-a" },
+        { workspaceId: "repo-b", repoPath: "/repo-b" },
+      ],
     });
   });
 
@@ -60,32 +63,34 @@ describe("diffSettingsSnapshots", () => {
       agentRuntimesChanged: false,
       customAgentRolesChanged: false,
       kanbanDoneVisibleDaysChanged: false,
-      changedGitProviderRepoPaths: [],
+      changedGitProviderWorkspaces: [],
     });
   });
 
-  test("reports only the repository whose git provider config changed", () => {
+  test("reports only the changed provider when two workspace IDs share a path", () => {
     const changes = diffSettingsSnapshots(
       createSnapshot({
-        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/same"),
         "repo-b": createRepoSettingsConfigFixture(
           "repo-b",
-          "/repo-b",
+          "/same",
           createGitProviderConfigFixture({ name: "repo-b" }),
         ),
       }),
       createSnapshot({
-        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/same"),
         "repo-b": createRepoSettingsConfigFixture(
           "repo-b",
-          "/repo-b",
+          "/same",
           createGitProviderConfigFixture({ name: "renamed" }),
         ),
       }),
     );
 
     expect(changes.workspacesChanged).toBe(true);
-    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-b"]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([
+      { workspaceId: "repo-b", repoPath: "/same" },
+    ]);
   });
 
   test("reports a workspace change that does not touch the git provider", () => {
@@ -112,7 +117,7 @@ describe("diffSettingsSnapshots", () => {
     );
 
     expect(changes.workspacesChanged).toBe(true);
-    expect(changes.changedGitProviderRepoPaths).toEqual([]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([]);
   });
 
   test("reports a repository whose provider was removed", () => {
@@ -127,7 +132,9 @@ describe("diffSettingsSnapshots", () => {
       createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
     );
 
-    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([
+      { workspaceId: "repo-a", repoPath: "/repo-a" },
+    ]);
   });
 
   test("reports a repository whose provider was disabled", () => {
@@ -148,7 +155,9 @@ describe("diffSettingsSnapshots", () => {
       }),
     );
 
-    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([
+      { workspaceId: "repo-a", repoPath: "/repo-a" },
+    ]);
   });
 
   test("reports both paths when a repository path changes", () => {
@@ -157,7 +166,10 @@ describe("diffSettingsSnapshots", () => {
       createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-moved") }),
     );
 
-    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-moved", "/repo-a"]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([
+      { workspaceId: "repo-a", repoPath: "/repo-moved" },
+      { workspaceId: "repo-a", repoPath: "/repo-a" },
+    ]);
   });
 
   test("reports a repository added after the previous snapshot", () => {
@@ -166,7 +178,9 @@ describe("diffSettingsSnapshots", () => {
       createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
     );
 
-    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([
+      { workspaceId: "repo-a", repoPath: "/repo-a" },
+    ]);
   });
 
   test("reports changed agent runtimes and kanban retention", () => {
@@ -179,7 +193,7 @@ describe("diffSettingsSnapshots", () => {
 
     expect(changes.agentRuntimesChanged).toBe(true);
     expect(changes.kanbanDoneVisibleDaysChanged).toBe(true);
-    expect(changes.changedGitProviderRepoPaths).toEqual([]);
+    expect(changes.changedGitProviderWorkspaces).toEqual([]);
   });
 
   test("reports a defaults-only agent runtime change", () => {

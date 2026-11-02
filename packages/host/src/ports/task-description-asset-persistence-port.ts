@@ -5,6 +5,7 @@ import type { TaskStoreError, TaskRecord } from "./task-repository-ports";
 
 export type TaskDescriptionAssetPersistencePort = {
   createTaskWithDescriptionAssets(input: {
+    workspaceId: string;
     repoPath: string;
     task: TaskCreateInput;
     /** The initial state of the task workflow. */
@@ -13,6 +14,7 @@ export type TaskDescriptionAssetPersistencePort = {
     prepareFiles(taskId: string): Effect.Effect<void, TaskStoreError>;
   }): Effect.Effect<TaskRecord, TaskStoreError>;
   updateTaskWithDescriptionAssets(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     expectedTask: TaskRecord;

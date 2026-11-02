@@ -93,7 +93,7 @@ const withSavedTranscript = async (
         externalSessionId: sessionId,
         runtimeKind: "claude",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task", role: "build" },
       },
       options: { processEnv: { CLAUDE_CONFIG_DIR: config }, storage },
       transcript,

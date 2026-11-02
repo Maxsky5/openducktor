@@ -1,3 +1,5 @@
+import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
@@ -807,7 +809,7 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
-      taskOwnership: database,
+      taskOwnership: database.taskOwnership,
       claudeSessionMetadata: {
         readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
       },
@@ -825,6 +827,7 @@ describe("Workspace Session persistence through the shared command module", () =
       store: h.store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),
+        getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(config)),
         listCustomAgentRoles: () => Effect.succeed([]),
       },
       runtime: { requireReady: () => Effect.die(new Error("unexpected runtime readiness check")) },
@@ -869,7 +872,7 @@ describe("Workspace Session persistence through the shared command module", () =
           }),
       }),
       settingsConfig: createSettingsConfigTestDouble({
-        readConfig: () => Effect.succeed(null),
+        readConfig: () => Effect.succeed(createDefaultGlobalConfig()),
         pathExists: () => Effect.succeed(true),
       }),
       worktreeFiles: createWorktreeFilePortTestDouble({

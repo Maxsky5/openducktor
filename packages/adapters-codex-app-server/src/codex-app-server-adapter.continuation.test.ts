@@ -279,7 +279,7 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
 
     await expect(
       adapter.continueInterruptedTurn(
-        continuationInput({ sessionScope: workflowAgentSessionScope("task-2", "build") }),
+        continuationInput({ sessionScope: workflowAgentSessionScope("repo", "task-2", "build") }),
       ),
     ).rejects.toMatchObject({
       reason: "identity_mismatch",

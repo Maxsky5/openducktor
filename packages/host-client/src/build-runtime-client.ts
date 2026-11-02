@@ -1,4 +1,5 @@
 import {
+  type WorkspaceRef,
   repoPullRequestSyncRequestSchema,
   repoPullRequestSyncResponseSchema,
   type RepoPullRequestSyncResponse,
@@ -45,8 +46,12 @@ import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 import { type BuiltinTaskCard as TaskCard, builtinTaskCardSchema } from "@openducktor/workflows";
 
-const taskStoreCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskStoreCheck> => {
-  return invokeFn("task_store_check", { repoPath }, taskStoreCheckSchema);
+const taskStoreCheck = async (invokeFn: InvokeFn, scope: WorkspaceRef): Promise<TaskStoreCheck> => {
+  return invokeFn(
+    "task_store_check",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+    taskStoreCheckSchema,
+  );
 };
 
 const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
@@ -67,10 +72,14 @@ const runtimeExecutablesCheck = async (
 
 const taskWorktreeGet = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
 ): Promise<TaskWorktreeSummary | null> => {
-  return invokeFn("task_worktree_get", { repoPath, taskId }, taskWorktreeSummarySchema.nullable());
+  return invokeFn(
+    "task_worktree_get",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+    taskWorktreeSummarySchema.nullable(),
+  );
 };
 
 const runtimeStatus = async (invokeFn: InvokeFn): Promise<HostRuntimeSnapshot> => {
@@ -94,81 +103,97 @@ const runtimeRestart = async (
 
 const buildStart = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   runtimeKind: RuntimeKind,
 ): Promise<BuildSessionBootstrap> => {
-  return invokeFn("build_start", { repoPath, taskId, runtimeKind }, buildSessionBootstrapSchema);
+  return invokeFn(
+    "build_start",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, runtimeKind },
+    buildSessionBootstrapSchema,
+  );
 };
 
 const buildBlocked = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   reason: string,
 ): Promise<TaskCard> => {
-  return invokeFn("build_blocked", { repoPath, taskId, reason }, builtinTaskCardSchema);
+  return invokeFn(
+    "build_blocked",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, reason },
+    builtinTaskCardSchema,
+  );
 };
 
 const buildResumed = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
 ): Promise<TaskCard> => {
-  return invokeFn("build_resumed", { repoPath, taskId }, builtinTaskCardSchema);
+  return invokeFn(
+    "build_resumed",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+    builtinTaskCardSchema,
+  );
 };
 
 const buildCompleted = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   summary?: string,
 ): Promise<TaskCard> => {
   return invokeFn(
     "build_completed",
-    { repoPath, taskId, input: { summary } },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, input: { summary } },
     builtinTaskCardSchema,
   );
 };
 
 const humanRequestChanges = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   note?: string,
 ): Promise<TaskCard> => {
-  return invokeFn("human_request_changes", { repoPath, taskId, note }, builtinTaskCardSchema);
+  return invokeFn(
+    "human_request_changes",
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, note },
+    builtinTaskCardSchema,
+  );
 };
 
 const taskApprovalContextGet = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
 ): Promise<TaskApprovalContextLoadResult> => {
   return invokeFn(
     "task_approval_context_get",
-    { repoPath, taskId },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
     taskApprovalContextLoadResultSchema,
   );
 };
 
 const taskDirectMerge = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   input: TaskDirectMergeInput,
 ): Promise<TaskDirectMergeResult> => {
   const parsedInput = taskDirectMergeInputSchema.parse(input);
   return invokeFn(
     "task_direct_merge",
-    { repoPath, taskId, input: parsedInput },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, input: parsedInput },
     taskDirectMergeResultSchema,
   );
 };
 
 const taskDirectMergeComplete = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   removeWorktree: boolean,
   publicationConsent?: TaskDirectMergeCompleteIntent["publicationConsent"],
@@ -176,7 +201,8 @@ const taskDirectMergeComplete = async (
   return invokeFn(
     "task_direct_merge_complete",
     taskDirectMergeCompleteIntentSchema.parse({
-      repoPath,
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
       taskId,
       removeWorktree,
       publicationConsent,
@@ -187,61 +213,69 @@ const taskDirectMergeComplete = async (
 
 const taskPullRequestUpsert = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   title: string,
   body: string,
 ) => {
   return invokeFn(
     "task_pull_request_upsert",
-    { repoPath, taskId, input: { title, body } },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, input: { title, body } },
     pullRequestSchema,
   );
 };
 
 const taskPullRequestUnlink = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
 ): Promise<{ ok: boolean }> => {
   const payload = await invokeFn(
     "task_pull_request_unlink",
-    { repoPath, taskId },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
     booleanResultSchema,
   );
   return { ok: payload };
 };
 
-const taskPullRequestDetect = async (invokeFn: InvokeFn, repoPath: string, taskId: string) => {
+const taskPullRequestDetect = async (invokeFn: InvokeFn, scope: WorkspaceRef, taskId: string) => {
   return invokeFn(
     "task_pull_request_detect",
-    { repoPath, taskId },
+    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
     taskPullRequestDetectResultSchema,
   );
 };
 
 const taskPullRequestLinkMerged = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
   pullRequest: PullRequest,
   removeWorktree: boolean,
 ) => {
   return invokeFn(
     "task_pull_request_link_merged",
-    { repoPath, taskId, pullRequest, removeWorktree },
+    {
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
+      taskId,
+      pullRequest,
+      removeWorktree,
+    },
     builtinTaskCardSchema,
   );
 };
 
 const repoPullRequestSync = async (
   invokeFn: InvokeFn,
-  repoPath: string,
-  expectedWorkspaceId?: string,
+  scope: WorkspaceRef,
 ): Promise<RepoPullRequestSyncResponse> => {
   return invokeFn(
     "repo_pull_request_sync",
-    repoPullRequestSyncRequestSchema.parse({ repoPath, expectedWorkspaceId }),
+    repoPullRequestSyncRequestSchema.parse({
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
+    }),
     repoPullRequestSyncResponseSchema,
   );
 };
@@ -270,8 +304,8 @@ export class HostAgentClient {
     return invoke("git_check", {}, gitCheckSchema);
   }
 
-  async taskStoreCheck(repoPath: string): Promise<TaskStoreCheck> {
-    return taskStoreCheck(this.invokeFn, repoPath);
+  async taskStoreCheck(scope: WorkspaceRef): Promise<TaskStoreCheck> {
+    return taskStoreCheck(this.invokeFn, scope);
   }
 
   async runtimeDefinitionsList(): Promise<RuntimeDescriptor[]> {
@@ -284,8 +318,8 @@ export class HostAgentClient {
     return runtimeExecutablesCheck(this.invokeFn, input);
   }
 
-  async taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null> {
-    return taskWorktreeGet(this.invokeFn, repoPath, taskId);
+  async taskWorktreeGet(scope: WorkspaceRef, taskId: string): Promise<TaskWorktreeSummary | null> {
+    return taskWorktreeGet(this.invokeFn, scope, taskId);
   }
 
   async runtimeStatus(): Promise<HostRuntimeSnapshot> {
@@ -304,85 +338,82 @@ export class HostAgentClient {
   }
 
   async buildStart(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     runtimeKind: RuntimeKind,
   ): Promise<BuildSessionBootstrap> {
-    return buildStart(this.invokeFn, repoPath, taskId, runtimeKind);
+    return buildStart(this.invokeFn, scope, taskId, runtimeKind);
   }
 
-  async buildBlocked(repoPath: string, taskId: string, reason: string): Promise<TaskCard> {
-    return buildBlocked(this.invokeFn, repoPath, taskId, reason);
+  async buildBlocked(scope: WorkspaceRef, taskId: string, reason: string): Promise<TaskCard> {
+    return buildBlocked(this.invokeFn, scope, taskId, reason);
   }
 
-  async buildResumed(repoPath: string, taskId: string): Promise<TaskCard> {
-    return buildResumed(this.invokeFn, repoPath, taskId);
+  async buildResumed(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
+    return buildResumed(this.invokeFn, scope, taskId);
   }
 
-  async buildCompleted(repoPath: string, taskId: string, summary?: string): Promise<TaskCard> {
-    return buildCompleted(this.invokeFn, repoPath, taskId, summary);
+  async buildCompleted(scope: WorkspaceRef, taskId: string, summary?: string): Promise<TaskCard> {
+    return buildCompleted(this.invokeFn, scope, taskId, summary);
   }
 
-  async humanRequestChanges(repoPath: string, taskId: string, note?: string): Promise<TaskCard> {
-    return humanRequestChanges(this.invokeFn, repoPath, taskId, note);
+  async humanRequestChanges(scope: WorkspaceRef, taskId: string, note?: string): Promise<TaskCard> {
+    return humanRequestChanges(this.invokeFn, scope, taskId, note);
   }
 
   async taskApprovalContextGet(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
   ): Promise<TaskApprovalContextLoadResult> {
-    return taskApprovalContextGet(this.invokeFn, repoPath, taskId);
+    return taskApprovalContextGet(this.invokeFn, scope, taskId);
   }
 
   async taskDirectMerge(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     input: TaskDirectMergeInput,
   ): Promise<TaskDirectMergeResult> {
-    return taskDirectMerge(this.invokeFn, repoPath, taskId, input);
+    return taskDirectMerge(this.invokeFn, scope, taskId, input);
   }
 
   async taskDirectMergeComplete(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     removeWorktree: boolean,
     publicationConsent?: TaskDirectMergeCompleteIntent["publicationConsent"],
   ): Promise<TaskCard> {
     return taskDirectMergeComplete(
       this.invokeFn,
-      repoPath,
+      scope,
       taskId,
       removeWorktree,
       publicationConsent,
     );
   }
 
-  async taskPullRequestUpsert(repoPath: string, taskId: string, title: string, body: string) {
-    return taskPullRequestUpsert(this.invokeFn, repoPath, taskId, title, body);
+  async taskPullRequestUpsert(scope: WorkspaceRef, taskId: string, title: string, body: string) {
+    return taskPullRequestUpsert(this.invokeFn, scope, taskId, title, body);
   }
 
-  async taskPullRequestUnlink(repoPath: string, taskId: string): Promise<{ ok: boolean }> {
-    return taskPullRequestUnlink(this.invokeFn, repoPath, taskId);
+  async taskPullRequestUnlink(scope: WorkspaceRef, taskId: string): Promise<{ ok: boolean }> {
+    return taskPullRequestUnlink(this.invokeFn, scope, taskId);
   }
 
-  async taskPullRequestDetect(repoPath: string, taskId: string) {
-    return taskPullRequestDetect(this.invokeFn, repoPath, taskId);
+  async taskPullRequestDetect(scope: WorkspaceRef, taskId: string) {
+    return taskPullRequestDetect(this.invokeFn, scope, taskId);
   }
 
   async taskPullRequestLinkMerged(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     pullRequest: PullRequest,
     removeWorktree: boolean,
   ) {
-    return taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest, removeWorktree);
+    return taskPullRequestLinkMerged(this.invokeFn, scope, taskId, pullRequest, removeWorktree);
   }
 
-  async repoPullRequestSync(
-    repoPath: string,
-    expectedWorkspaceId?: string,
-  ): Promise<RepoPullRequestSyncResponse> {
-    return repoPullRequestSync(this.invokeFn, repoPath, expectedWorkspaceId);
+  async repoPullRequestSync(scope: WorkspaceRef): Promise<RepoPullRequestSyncResponse> {
+    return repoPullRequestSync(this.invokeFn, scope);
   }
 
   async agentSessionStop(target: AgentSessionStopTarget): Promise<{ ok: boolean }> {

@@ -40,14 +40,15 @@ export const executeOdtMcpMutationTool = (
 
 const executeCreateTask: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskService } = context;
+    const { workspaceScopeForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
       "odt_create_task",
       ODT_TOOL_SCHEMAS.odt_create_task,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
+    const { workspaceId, repoPath } = yield* workspaceScopeForWorkspace(parsed.workspaceId ?? "");
     const created = yield* taskService.createTask({
+      workspaceId,
       repoPath,
       task: {
         title: parsed.title,
@@ -66,14 +67,16 @@ const executeCreateTask: OdtMcpMutationHandler = (context, input) =>
 
 const executeUpdateTask: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
+    const { taskScopeForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
       "odt_update_task",
       ODT_TOOL_SCHEMAS.odt_update_task,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
+    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
     const patch = buildTaskUpdatePatch(task, parsed);
     if (Object.keys(patch).length === 0) {
       return yield* parseResponse(
@@ -83,6 +86,7 @@ const executeUpdateTask: OdtMcpMutationHandler = (context, input) =>
       );
     }
     const updated = yield* taskService.updateTask({
+      workspaceId,
       repoPath,
       taskId: task.id,
       patch,
@@ -96,15 +100,18 @@ const executeUpdateTask: OdtMcpMutationHandler = (context, input) =>
 
 const executeBuildBlocked: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
+    const { taskScopeForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
       "odt_build_blocked",
       ODT_TOOL_SCHEMAS.odt_build_blocked,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
+    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
     const updated = yield* taskService.buildBlocked({
+      workspaceId,
       repoPath,
       taskId: task.id,
       reason: parsed.reason,
@@ -117,15 +124,17 @@ const executeBuildBlocked: OdtMcpMutationHandler = (context, input) =>
 
 const executeBuildResumed: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
+    const { taskScopeForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
       "odt_build_resumed",
       ODT_TOOL_SCHEMAS.odt_build_resumed,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    const updated = yield* taskService.buildResumed({ repoPath, taskId: task.id });
+    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
+    const updated = yield* taskService.buildResumed({ workspaceId, repoPath, taskId: task.id });
     return yield* parseResponse("odt_build_resumed", RESPONSE_SCHEMAS.odt_build_resumed, {
       task: mapPublicTask(updated),
     });
@@ -133,15 +142,18 @@ const executeBuildResumed: OdtMcpMutationHandler = (context, input) =>
 
 const executeBuildCompleted: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
+    const { taskScopeForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
       "odt_build_completed",
       ODT_TOOL_SCHEMAS.odt_build_completed,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
+    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
     const completionInput: Parameters<TaskService["buildCompleted"]>[0] = {
+      workspaceId,
       repoPath,
       taskId: task.id,
     };
@@ -164,20 +176,23 @@ const executeBuildCompleted: OdtMcpMutationHandler = (context, input) =>
 
 const executeSetPullRequest: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
+    const { taskScopeForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
       "odt_set_pull_request",
       ODT_TOOL_SCHEMAS.odt_set_pull_request,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
+    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
     const pullRequest = yield* taskService.linkPullRequest({
+      workspaceId,
       repoPath,
       taskId: task.id,
       number: parsed.number,
     });
-    const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);
+    const updated = yield* context.taskForWorkspace(workspaceId, task.id);
     return yield* parseResponse("odt_set_pull_request", RESPONSE_SCHEMAS.odt_set_pull_request, {
       task: mapPublicTask(updated),
       pullRequest,

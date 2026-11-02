@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { ClientFeedback } from "../../../platform/client-feedback";
@@ -30,8 +31,12 @@ type SessionActionsDependencies = {
   closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
+  invalidateSessionStopQueries: (input: {
+    workspaceId: string;
+    repoPath: string;
+    taskId: string;
+  }) => Promise<void>;
 };
 
 export const createAgentSessionActions = ({

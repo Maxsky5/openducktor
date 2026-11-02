@@ -19,8 +19,8 @@ export type BoardAvailability = {
 };
 
 export function useBoardAvailability(workspace: WorkspaceRecord): BoardAvailability {
-  const taskStore = useQuery(taskStoreCheckQueryOptionsOrSkip(workspace.repoPath));
-  const provider = useQuery(repositoryGitProviderContextQueryOptions(workspace.repoPath));
+  const taskStore = useQuery(taskStoreCheckQueryOptionsOrSkip(workspace));
+  const provider = useQuery(repositoryGitProviderContextQueryOptions(workspace));
   return {
     creationBlockedReason: taskCreationBlockedReason({
       data: taskStore.data ?? null,

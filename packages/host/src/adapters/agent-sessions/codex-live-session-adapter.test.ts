@@ -237,7 +237,12 @@ const createControllerHarness = ({
     runtimeKind: "codex" as const,
     workingDirectory: "/repo/worktree",
     title: "Live Codex session",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build",
+    } as const,
     startedAt: "2026-07-16T10:01:00.000Z",
     status: "running" as const,
   };
@@ -780,7 +785,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       await Effect.runPromise(
         adapter.updateSessionModel({
           ...ref,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           model: nextModel,
         }),
       );
@@ -1219,7 +1224,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         createController: harness.createController,
       })(runtime),
     );
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
 
     await Effect.runPromise(
       prepared.adapter.startSession({
@@ -1300,7 +1310,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         createController: harness.createController,
       })(runtime),
     );
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     const send = {
       ...ref,
       sessionScope,
@@ -1383,7 +1398,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         createController: harness.createController,
       })(runtime),
     );
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
 
     const failure = await Effect.runPromise(
       Effect.flip(
@@ -2006,7 +2026,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const persistedRef = {
       ...ref,
       externalSessionId: "persisted-thread",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" } as const,
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "qa",
+      } as const,
     };
 
     await expect(Effect.runPromise(prepared.adapter.loadContext(persistedRef))).resolves.toEqual({

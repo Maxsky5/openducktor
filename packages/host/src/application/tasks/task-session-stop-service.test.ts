@@ -25,22 +25,24 @@ const createTaskStore = (
   sessionOverrides: Partial<AgentSessionRecord> = {},
   extraAgentSessions: AgentSessionRecord[] = [],
 ): StopServiceDependencies["taskReader"] => ({
-  getTaskMetadata: () =>
-    Effect.succeed({
-      artifacts: {},
-      agentSessions: [
-        {
-          externalSessionId: "external-session-1",
-          role: "build" as const,
-          startedAt: "2026-05-10T10:00:00.000Z",
-          runtimeKind: "opencode" as const,
-          workingDirectory: "/canonical/repo/worktree",
-          selectedModel: null,
-          ...sessionOverrides,
-        },
-        ...extraAgentSessions,
-      ],
-    }),
+  listAgentSessionsForTasks: () =>
+    Effect.succeed([
+      {
+        taskId: "task-1",
+        agentSessions: [
+          {
+            externalSessionId: "external-session-1",
+            role: "build" as const,
+            startedAt: "2026-05-10T10:00:00.000Z",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/canonical/repo/worktree",
+            selectedModel: null,
+            ...sessionOverrides,
+          },
+          ...extraAgentSessions,
+        ],
+      },
+    ]),
 });
 
 const createSessionStopper = (
@@ -66,6 +68,7 @@ describe("createTaskSessionStopService agentSessionStop", () => {
     await expect(
       Effect.runPromise(
         service.agentSessionStop({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           externalSessionId: "external-session-1",
@@ -111,6 +114,7 @@ describe("createTaskSessionStopService agentSessionStop", () => {
     await expect(
       Effect.runPromise(
         service.agentSessionStop({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           externalSessionId: "shared-session",
@@ -140,6 +144,7 @@ describe("createTaskSessionStopService agentSessionStop", () => {
     await expect(
       Effect.runPromise(
         service.agentSessionStop({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           externalSessionId: "external-session-1",
@@ -168,6 +173,7 @@ describe("createTaskSessionStopService agentSessionStop", () => {
     await expect(
       Effect.runPromise(
         service.agentSessionStop({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           externalSessionId: "external-session-1",

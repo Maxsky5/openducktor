@@ -11,7 +11,7 @@ import {
 const summary = (overrides: Partial<TerminalSummary> = {}): TerminalSummary => ({
   terminalId: "t-1",
   label: "zsh",
-  context: { repoPath: "/repo", taskId: "task-1" },
+  context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
   initialWorkingDir: "/worktrees/task-1",
   createdAt: "2026-10-19T00:00:00.000Z",
   lifecycle: "running",

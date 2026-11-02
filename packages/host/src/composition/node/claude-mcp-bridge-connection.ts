@@ -5,9 +5,10 @@ import { HostOperationError } from "../../effect/host-errors";
 export const resolveClaudeMcpBridgeConnection = (
   bridge: McpHostBridgeServer | undefined,
   repoPath: string,
+  workspaceId?: string,
 ) =>
   bridge
-    ? bridge.ensureConnection({ repoPath }).pipe(
+    ? bridge.ensureConnection({ repoPath, ...(workspaceId !== undefined && { workspaceId }) }).pipe(
         Effect.mapError(
           (cause) =>
             new HostOperationError({

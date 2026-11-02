@@ -15,6 +15,7 @@ const secondSubscriptionId = "5630586c-4a12-4580-a158-229d3bb96cb6";
 const event = (id: string): Extract<ExternalTaskSyncEvent, { kind: "external_task_created" }> => ({
   eventId: `event-${id}`,
   kind: "external_task_created",
+  workspaceId: "repo",
   boardChanges: null,
   repoPath: "/repo",
   taskId: `task-${id}`,
@@ -45,6 +46,31 @@ const acknowledge = (
 ) => stream.acknowledge({ subscriptionId, cursor });
 
 describe("createTaskEventStream", () => {
+  test("a database reset replaces a pending snapshot with a new stream boundary", async () => {
+    const { stream } = createStream();
+    const frames: TaskEventStreamFrame[] = [];
+    const subscription = stream.subscribe({ cursor: null }, (frame) => {
+      frames.push(frame);
+    });
+    await flush();
+    expect(frames[0]).toMatchObject({ type: "snapshot_required", cursor: { epoch, sequence: 0 } });
+    stream.reset();
+    const boundary = stream.reset();
+    await flush();
+    expect(boundary).toEqual({ epoch, sequence: 2 });
+    expect(frames.at(-1)).toMatchObject({ type: "snapshot_required", cursor: boundary });
+    const next = stream.publish(event("after-reset"));
+    await flush();
+    expect(frames.at(-1)?.type).toBe("snapshot_required");
+    acknowledge(stream, subscription.subscriptionId, boundary);
+    await flush();
+    expect(frames.at(-1)).toMatchObject({
+      type: "change",
+      cursor: next,
+      event: { taskId: "task-after-reset" },
+    });
+    subscription.unsubscribe();
+  });
   test("recovers a future subscription cursor through its delivered snapshot boundary", async () => {
     const { stream } = createStream();
     const frames: TaskEventStreamFrame[] = [];
@@ -362,6 +388,7 @@ describe("createTaskEventStream", () => {
     const published: ExternalTaskSyncEvent = {
       eventId: "event-1",
       kind: "tasks_updated",
+      workspaceId: "repo",
       boardChanges: null,
       repoPath: "/repo",
       taskIds: ["task-1"],
@@ -434,6 +461,7 @@ describe("createTaskEventStream", () => {
     const published: ExternalTaskSyncEvent = {
       eventId: "event-1",
       kind: "external_task_created" as const,
+      workspaceId: "repo",
       boardChanges: null,
       get repoPath() {
         repoPathReads += 1;

@@ -61,7 +61,7 @@ export const createNodeTaskSessionServices = ({
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<
     Parameters<typeof createNodeTaskEventServices>[0],
-    "baseTaskService" | "taskWorkflows" | "mergeDetection"
+    "baseTaskService" | "taskWorkflows" | "mergeDetection" | "settingsConfig"
   >;
   publishMergeStatus: CreateTaskMergeDetectionServiceInput["publish"];
   remoteFetch: CreateTaskMergeDetectionServiceInput["remoteFetch"];
@@ -118,6 +118,7 @@ export const createNodeTaskSessionServices = ({
   });
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
+    settingsConfig: taskServiceInput.settingsConfig,
     taskWorkflows: taskServiceInput.taskWorkflows,
     baseTaskService,
     mergeDetection,
@@ -152,6 +153,7 @@ export const createNodeTaskSessionServices = ({
   });
   const turnPreparation = createSessionTurnPreparation({
     settings: taskServiceInput.workspaceSettingsService,
+    settingsConfig: taskServiceInput.settingsConfig,
     queries: agentRuntimeQueries,
     taskReader: taskServiceInput.taskStore,
     taskWorkflows: taskServiceInput.taskWorkflows,
@@ -228,6 +230,7 @@ export const createNodeTaskSessionServices = ({
     resolveParts: workflowLaunch.resolveParts,
     queries: agentRuntimeQueries,
     settings: taskServiceInput.workspaceSettingsService,
+    settingsConfig: taskServiceInput.settingsConfig,
     tasks: eventServices.taskService,
     taskReader: taskServiceInput.taskStore,
     taskWorkflows: taskServiceInput.taskWorkflows,

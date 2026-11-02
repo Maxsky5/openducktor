@@ -103,13 +103,15 @@ test("joins session sources across workspaces and changes grouping without more 
     ["build", [record("beta-build", "/beta", "2026-09-30T06:00:00.000Z")]],
   ]);
   const readHistory = mock(async () => []);
-  const readSessions = mock(async (_repoPath: string, taskIds: string[]) => {
-    if (taskIds.includes("closed")) throw new Error("The closed task's worktree was removed.");
-    return taskIds.map((taskId) => ({ taskId, agentSessions: sessionsByTask.get(taskId) ?? [] }));
-  });
+  const readSessions = mock(
+    async (_repoPath: import("@openducktor/contracts").WorkspaceRef, taskIds: string[]) => {
+      if (taskIds.includes("closed")) throw new Error("The closed task's worktree was removed.");
+      return taskIds.map((taskId) => ({ taskId, agentSessions: sessionsByTask.get(taskId) ?? [] }));
+    },
+  );
   const connection = createTestClientConnection({
     client: {
-      tasksList: async (repoPath) => tasksByRepo.get(repoPath) ?? [],
+      tasksList: async (repoPath) => tasksByRepo.get(repoPath.repoPath) ?? [],
       agentSessionsListForTasks: readSessions,
       workspaceSessionListActive: async (workspaceId) =>
         workspaceId === "alpha"
@@ -235,11 +237,16 @@ test("reads the tasks, chats, and task sessions of the refreshed workspaces agai
   const connection = createTestClientConnection({
     client: {
       tasksList: async (repoPath) => {
-        reads.push(`tasks ${repoPath}`);
-        return [createTaskCardFixture({ id: `task${repoPath.replace("/", "-")}`, title: "Task" })];
+        reads.push(`tasks ${repoPath.repoPath}`);
+        return [
+          createTaskCardFixture({
+            id: `task${repoPath.repoPath.replace("/", "-")}`,
+            title: "Task",
+          }),
+        ];
       },
       agentSessionsListForTasks: async (repoPath, taskIds) => {
-        reads.push(`task sessions ${repoPath}`);
+        reads.push(`task sessions ${repoPath.repoPath}`);
         return taskIds.map((taskId) => ({ taskId, agentSessions: [] }));
       },
       workspaceSessionListActive: async (workspaceId) => {
@@ -298,9 +305,10 @@ test("keeps cached task sessions listed while the batch read of a new task fails
     },
   });
   const { queryClient } = connection;
-  queryClient.setQueryData(agentSessionQueryKeys.list("/alpha", "cached"), [
-    record("native", "/alpha", "2026-09-30T06:00:00.000Z"),
-  ]);
+  queryClient.setQueryData(
+    agentSessionQueryKeys.list({ workspaceId: "alpha", repoPath: "/alpha" }, "cached"),
+    [record("native", "/alpha", "2026-09-30T06:00:00.000Z")],
+  );
   const wrapper = ({ children }: { children: ReactNode }) => (
     <ClientConnectionProvider connection={connection}>
       <WorkspaceActivityContext.Provider value={createWorkspaceActivityObserverStub()}>
@@ -332,7 +340,10 @@ test("keeps every unchanged entry and the model of an equal rebuild", async () =
   const connection = createTestClientConnection({
     client: {
       tasksList: async () => [createTaskCardFixture({ id: "build", title: "Build it" })],
-      agentSessionsListForTasks: async (_repoPath: string, taskIds: string[]) =>
+      agentSessionsListForTasks: async (
+        _repoPath: import("@openducktor/contracts").WorkspaceRef,
+        taskIds: string[],
+      ) =>
         taskIds.map((taskId) => ({
           taskId,
           agentSessions: [record("task-native", "/alpha", "2026-09-30T06:00:00.000Z")],

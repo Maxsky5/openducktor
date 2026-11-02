@@ -141,7 +141,7 @@ Native HTTP requests can omit Origin; browser headers do not identify a device.
 
 ## Compatibility
 
-The current remote protocol is `3`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets.
+The current remote protocol is `4`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets. Version 4 requires full workspace references and typed settings edits, and adds workflow-qualified Autopilot outcomes. Hosts and clients must use this version together.
 The protocol version is independent of app release versions.
 Hosts and clients can use different app versions when they share a protocol version and the client receives all required capabilities.
 A breaking change to required behavior needs a new remote protocol version.

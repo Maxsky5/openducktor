@@ -4,7 +4,6 @@ import {
   type CustomAgentRoleInput,
   DEFAULT_BRANCH_PREFIX,
   type GlobalConfig,
-  type GlobalGitConfig,
   type KanbanTaskCardView,
   globalConfigSchema,
   type RepoConfig,
@@ -23,20 +22,21 @@ import {
   type WorkspaceAgentStudioStateAction,
   type WorkspaceRemovalPhase,
   type WorkspaceRemovalRecord,
-  type WorkspaceRepoConfigInput,
-  type WorkspaceRepoHooksInput,
-  type WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
-import { parseConfig } from "../../config/parse-config";
+import type { LoadedGlobalConfig } from "../../config/global-config";
 import { workspaceRecordForId } from "./workspace-catalog-model";
 import {
   type HostInvariantErrorAggregate,
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
+import type {
+  SettingsConfigError,
+  SettingsConfigPort,
+  SettingsConfigChange,
+  SettingsConfigPersistence,
+} from "../../ports/settings-config-port";
 
 export type RepoConfigDraft = Pick<
   RepoConfig,
@@ -50,7 +50,7 @@ export type WorkspaceSettingsError =
   | SettingsConfigError;
 
 export type WorkspaceSettingsService = {
-  /** The stable ID of this host. The first read creates it and saves it in the settings file. */
+  /** Creates and saves a stable host ID on the first read. */
   readHostId(): Effect.Effect<string, WorkspaceSettingsError>;
   readRemoteAccessSettings(): Effect.Effect<RemoteAccessSettings, WorkspaceSettingsError>;
   saveRemoteAccessSettings(
@@ -107,17 +107,10 @@ export type WorkspaceSettingsService = {
     workspaceId: string,
     action: WorkspaceAgentStudioStateAction,
   ): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
-  updateRepoConfig(
+  /** Replaces the git provider settings of a workspace, for workspace provider setup. */
+  updateRepoGitConfig(
     workspaceId: string,
-    update: WorkspaceRepoConfigInput,
-  ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
-  saveRepoSettings(
-    workspaceId: string,
-    settings: WorkspaceRepoSettingsInput,
-  ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
-  updateRepoHooks(
-    workspaceId: string,
-    hooks: RepoHooks,
+    git: RepoConfig["git"],
   ): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   getSettingsSnapshot(): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   /** Validates a settings save without writing it. */
@@ -125,29 +118,30 @@ export type WorkspaceSettingsService = {
     snapshot: SettingsSnapshotSaveInput,
   ): Effect.Effect<PreparedSettingsSnapshot, WorkspaceSettingsError>;
   /**
-   * Validates a settings save, then lets `commit` decide whether to run `write`.
-   * The whole call holds the config write lock.
+   * Lets `commit` decide whether to run `write` for a prepared save. `write` applies the
+   * prepared edits to the current settings in the write transaction. The whole call holds the
+   * config write lock.
    */
   saveSettingsSnapshotWith<A, E>(
-    snapshot: SettingsSnapshotSaveInput,
+    prepared: PreparedSettingsSnapshot,
     commit: (
-      prepared: PreparedSettingsSnapshot,
-      write: Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>,
+      write: Effect.Effect<SettingsWriteResult, WorkspaceSettingsError>,
     ) => Effect.Effect<A, E>,
   ): Effect.Effect<A, E | WorkspaceSettingsError>;
   updateAgentModelFavorites(
     favorites: AgentModelFavorite[],
-  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
+  ): Effect.Effect<AgentModelFavorite[], WorkspaceSettingsError>;
   updateKanbanTaskCardView(
     taskCardView: KanbanTaskCardView,
-  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
+  ): Effect.Effect<KanbanTaskCardView, WorkspaceSettingsError>;
   updateSidebarSessionGrouping(
     grouping: SidebarSessionGrouping,
-  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
+  ): Effect.Effect<SidebarSessionGrouping, WorkspaceSettingsError>;
   setTheme(theme: ThemePreference): Effect.Effect<void, WorkspaceSettingsError>;
-  updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;
 };
+export type SettingsWriteResult = SettingsConfigPersistence & { workspaces: WorkspaceRecord[] };
 export type PreparedSettingsSnapshot = {
+  readonly edits: SettingsSnapshotSaveInput;
   readonly current: GlobalConfig;
   readonly next: GlobalConfig;
 };
@@ -162,10 +156,6 @@ export type WorkspaceAddInput = {
   agentDefaults?: RepoConfig["agentDefaults"];
   onRegistered?: (workspace: WorkspaceRecord) => void;
 };
-export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
-  Effect.gen(function* () {
-    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-  });
 const normalizeOptionalNonEmptyString = (value: string | undefined): string | undefined => {
   if (value === undefined) {
     return undefined;
@@ -173,7 +163,7 @@ const normalizeOptionalNonEmptyString = (value: string | undefined): string | un
   const text = value.trim();
   return text.length > 0 ? text : undefined;
 };
-const normalizeHooks = (value: WorkspaceRepoHooksInput | RepoHooks): RepoHooks => {
+const normalizeHooks = (value: RepoHooks): RepoHooks => {
   const hooks = repoHooksSchema.parse(value);
   return {
     postComplete: hooks.postComplete.map((command) => command.trim()).filter(Boolean),
@@ -195,7 +185,10 @@ const normalizeRepoConfigInput = (input: RepoConfigDraft): RepoConfig => {
         : normalizeWorktreeCopyPaths(input.worktreeCopyPaths),
   });
 };
-export const touchRecentWorkspace = (config: LoadedGlobalConfig, workspaceId: string): void => {
+export const touchRecentWorkspace = (
+  config: Pick<LoadedGlobalConfig, "recentWorkspaces">,
+  workspaceId: string,
+): void => {
   config.recentWorkspaces = [
     workspaceId,
     ...config.recentWorkspaces.filter((entry) => entry !== workspaceId),
@@ -280,7 +273,7 @@ export const validateAndNormalizeRepoConfig = (
     });
   });
 export const ensureRepoPathAvailable = (
-  config: LoadedGlobalConfig,
+  config: { workspaces: Record<string, { repoPath: string }> },
   repoPath: string,
   currentWorkspaceId?: string,
 ): void => {
@@ -297,21 +290,16 @@ export const ensureRepoPathAvailable = (
 };
 export const saveAndReturnWorkspaceRecord = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
+  change: SettingsConfigChange,
   workspaceId: string,
   onRegistered?: (workspace: WorkspaceRecord) => void,
 ) =>
   Effect.gen(function* () {
-    const parsed = yield* parseConfig(globalConfigSchema, config);
-    const record = yield* Effect.try({
-      try: () => workspaceRecordForId(settingsConfig, config, workspaceId),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
-    yield* settingsConfig.writeConfig(parsed);
+    const config = yield* settingsConfig.updateConfig(
+      (current, catalog) => globalConfigSchema.parse(change(current, catalog)),
+      [workspaceId],
+    );
+    const record = workspaceRecordForId(settingsConfig, config, workspaceId);
     onRegistered?.(record);
     return record;
   });
@@ -328,99 +316,3 @@ export const requireConfiguredWorkspace = (
   }
   return existing;
 };
-export const findRepoConfigByRepoPath = (
-  settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
-  repoPath: string,
-) =>
-  Effect.gen(function* () {
-    const canonicalRepoPath = yield* settingsConfig.canonicalizePath(repoPath);
-    const repoConfig = Object.values(config.workspaces).find(
-      (workspace) => workspace.repoPath === canonicalRepoPath,
-    );
-    if (!repoConfig) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `Workspace is not configured for repository: ${canonicalRepoPath}`,
-          field: "repoPath",
-        }),
-      );
-    }
-    return yield* Effect.try({
-      try: () => repoConfigSchema.parse(repoConfig),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
-  });
-export const buildMergedRepoConfig = (
-  workspaceId: string,
-  existing: RepoConfig,
-  update: WorkspaceRepoSettingsInput,
-  includeHooks: boolean,
-): RepoConfigDraft => ({
-  ...existing,
-  workspaceId,
-  defaultModel: update.defaultModel ?? existing.defaultModel,
-  worktreeBasePath: update.worktreeBasePath ?? existing.worktreeBasePath,
-  branchPrefix: update.branchPrefix ?? existing.branchPrefix,
-  defaultTargetBranch: update.defaultTargetBranch ?? existing.defaultTargetBranch,
-  git: update.git ?? existing.git,
-  hooks: includeHooks && update.hooks ? normalizeHooks(update.hooks) : existing.hooks,
-  actions: update.actions ?? existing.actions,
-  worktreeCopyPaths: update.worktreeCopyPaths ?? existing.worktreeCopyPaths,
-  promptOverrides: update.promptOverrides ?? existing.promptOverrides,
-  agentDefaults: update.agentDefaults ?? existing.agentDefaults,
-});
-export const normalizeSnapshotWorkspaces = (
-  settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
-  snapshotWorkspaces: SettingsSnapshotSaveInput["workspaces"],
-) =>
-  Effect.gen(function* () {
-    const nextWorkspaces = { ...config.workspaces } satisfies Record<string, RepoConfig>;
-    for (const workspaceId of Object.keys(snapshotWorkspaces)) {
-      if (!config.workspaces[workspaceId]) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace not found in config: ${workspaceId}. Add/select the workspace before updating configuration.`,
-            field: "workspaceId",
-          }),
-        );
-      }
-      delete nextWorkspaces[workspaceId];
-    }
-    for (const [workspaceId, repoConfig] of Object.entries(snapshotWorkspaces)) {
-      const existingRepoConfig = config.workspaces[workspaceId];
-      if (!existingRepoConfig) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace not found in config: ${workspaceId}. Add/select the workspace before updating configuration.`,
-            field: "workspaceId",
-          }),
-        );
-      }
-      const normalizedRepoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, {
-        ...repoConfig,
-        workspaceId,
-        agentStudioState: existingRepoConfig.agentStudioState,
-        closed: existingRepoConfig.closed,
-        removal: existingRepoConfig.removal,
-      });
-      const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(
-        ([, workspace]) => workspace.repoPath === normalizedRepoConfig.repoPath,
-      )?.[0];
-      if (conflictingWorkspaceId) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Repository path is already registered to workspace ${conflictingWorkspaceId}: ${normalizedRepoConfig.repoPath}`,
-            field: "repoPath",
-          }),
-        );
-      }
-      nextWorkspaces[workspaceId] = normalizedRepoConfig;
-    }
-    return nextWorkspaces;
-  });

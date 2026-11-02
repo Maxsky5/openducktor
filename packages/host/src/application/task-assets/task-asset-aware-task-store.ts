@@ -47,7 +47,7 @@ export const createTaskAssetAwareTaskStore = (
     filePort: dependencies.filePort,
     inner: dependencies.inner,
     registry: dependencies.registry,
-    resolveWorkspaceIdForRepoPath: dependencies.resolveWorkspaceIdForRepoPath,
+    resolveWorkspaceId: dependencies.resolveWorkspaceId,
   });
   return {
     ...dependencies.inner,

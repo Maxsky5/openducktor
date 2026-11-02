@@ -14,6 +14,6 @@ export const createAzureAreaPathsCommandHandlers = (
           field: "azure_area_paths_list",
           message: "Area path input is invalid. Check the repository and retry.",
         });
-      return service.list(parsed.data.repoPath);
+      return service.list(parsed.data);
     },
   }) satisfies HostCommandHandlerDefinitions;

@@ -5,7 +5,13 @@ import { collectTaskStatusChanges, recordCommittedTaskStatusChange } from "./tas
 
 const record = (id: string, status: string, previousStatus: string) =>
   // SAFETY: The recorder reads only id, title, and status.
-  recordCommittedTaskStatusChange({ task: { id, title: id, status } as TaskCard, previousStatus });
+  recordCommittedTaskStatusChange({
+    task: { id, title: id, status } as TaskCard,
+    previousStatus,
+    workflowId: "openducktor",
+    autopilotSettings: { alwaysStartQaReviewsFresh: false, rules: [] },
+    workspace: { repoPath: "/repo", workspaceName: "Repo" },
+  });
 
 test("each concurrent mutation collects only its own committed transitions", async () => {
   const firstRecorded = Deferred.makeUnsafe<void>();

@@ -67,7 +67,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
     sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
     isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     store: WorkspaceSessionStorePort;
-    taskOwnership: TaskOwnershipReader;
+    taskOwnership: Pick<TaskOwnershipReader, "listOpenTasksForWorktreeOwnership">;
     claudeSessionMetadata: ClaudeSessionMetadataPort;
     terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
     browserTabs: BrowserOwnerCleanupPort;
@@ -109,7 +109,7 @@ export const createWorkspaceSessionService = (
                 runtimeKind: session.runtimeKind,
                 workingDirectory: session.executionTarget.workingDirectory,
                 externalSessionId: session.externalSessionId!,
-                sessionScope: { kind: "repository" },
+                sessionScope: { kind: "repository", workspaceId: input.workspaceId },
                 resumeMode: "reattach",
                 model: session.selectedModel ?? undefined,
                 systemPrompt: session.roleSnapshot?.systemPrompt ?? "",

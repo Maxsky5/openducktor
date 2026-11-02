@@ -11,8 +11,10 @@ const trimmedNonEmpty = (value: string): string | null => {
 };
 
 export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepoConfig => {
+  // Keep every field that needs no normalization, such as `git` and `actions`.
+  // The action dialog trims and checks each action, so the draft holds only valid actions.
   return {
-    workspaceId: repo.workspaceId,
+    ...repo,
     workspaceName: repo.workspaceName.trim(),
     abbreviation: trimmedNonEmpty(repo.abbreviation ?? "") ?? undefined,
     tileColor: trimmedNonEmpty(repo.tileColor ?? "") ?? undefined,
@@ -21,10 +23,7 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
-    git: repo.git,
     hooks: { postComplete: dropBlankLines(repo.hooks.postComplete) },
-    // The action dialog trims and checks each action, so the draft holds only valid actions.
-    actions: repo.actions,
     worktreeCopyPaths: dropBlankLines(repo.worktreeCopyPaths),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
   };

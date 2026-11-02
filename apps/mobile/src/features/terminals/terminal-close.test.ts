@@ -11,7 +11,7 @@ const tab: TerminalTab = {
   summary: {
     terminalId: "t-1",
     label: "dev server",
-    context: { repoPath: "/repo", taskId: "task-1" },
+    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
     initialWorkingDir: "/repo",
     createdAt: "2026-10-19T00:00:00.000Z",
     lifecycle: "running",

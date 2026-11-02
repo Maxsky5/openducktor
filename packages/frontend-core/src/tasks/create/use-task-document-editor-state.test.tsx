@@ -1,3 +1,4 @@
+import type { RetainedTaskDocument } from "./task-editor-drafts";
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -20,6 +21,8 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const originalConsoleError = console.error;
 
 type HookArgs = Parameters<typeof useTaskDocumentEditorState>[0];
+
+const workspace = { workspaceId: "workspace-1", repoPath: "/repo" };
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -48,6 +51,7 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   open: true,
   taskId: "task-1",
   repoPath: "/repo",
+  workspaceId: "workspace-1",
   activeSection: "spec",
   loadDocument: async (_taskId, code) => ({
     markdown: code === "spec" ? "# Spec" : "## Plan",
@@ -60,7 +64,7 @@ describe("useTaskDocumentEditorState", () => {
   test("opens a cached task document before any load render", async () => {
     const read = mock(async () => ({ markdown: "# From host", updatedAt: null }));
     const connection = createTestClientConnection({ client: { workflowArtifactGet: read } });
-    connection.queryClient.setQueryData(documentQueryKeys.document("/repo", "task-1", "spec"), {
+    connection.queryClient.setQueryData(documentQueryKeys.document(workspace, "task-1", "spec"), {
       markdown: "# Cached spec",
       updatedAt: "2026-10-31T12:00:00Z",
     });
@@ -68,7 +72,7 @@ describe("useTaskDocumentEditorState", () => {
       ...createBaseProps(),
       repoPath: "/repo",
       loadDocument: (taskId: string, code: "spec" | "plan" | "qaReport") =>
-        loadTaskDocumentFromQuery(connection.queryClient, "/repo", taskId, code),
+        loadTaskDocumentFromQuery(connection.queryClient, workspace, taskId, code),
     };
     const wrapper = ({ children }: PropsWithChildren) =>
       createElement(ClientConnectionProvider, { connection }, children);
@@ -97,14 +101,14 @@ describe("useTaskDocumentEditorState", () => {
       updatedAt: "2026-10-31T13:00:00Z",
     }));
     const connection = createTestClientConnection({ client: { workflowArtifactGet: read } });
-    const key = documentQueryKeys.document("/repo", "task-1", "plan");
+    const key = documentQueryKeys.document(workspace, "task-1", "plan");
     const cached = { markdown: "# Old plan", updatedAt: "2026-10-31T12:00:00Z" };
     connection.queryClient.setQueryData(key, cached);
     const props: HookArgs = {
       ...createBaseProps(),
       activeSection: null,
       loadDocument: (taskId, code) =>
-        loadTaskDocumentFromQuery(connection.queryClient, "/repo", taskId, code),
+        loadTaskDocumentFromQuery(connection.queryClient, workspace, taskId, code),
     };
     const wrapper = ({ children }: PropsWithChildren) =>
       createElement(ClientConnectionProvider, { connection }, children);
@@ -150,6 +154,83 @@ describe("useTaskDocumentEditorState", () => {
     expect(state.documents.spec.error).toBeNull();
 
     await harness.unmount();
+  });
+
+  test.each(["scope change", "unmount"] as const)(
+    "a late document save keeps the replacement draft after %s and return to the same owner",
+    async (departure) => {
+      const retainedDrafts = new Map<string, RetainedTaskDocument>();
+      const props = createBaseProps({ workspaceId: "workspace-a", retainedDrafts });
+      const original = createHookHarness(props);
+      let replacement = original;
+      await original.mount();
+      await original.waitFor((state) => state.documents.spec.loaded);
+      await original.run((state) => state.updateDraft("spec", "Submitted draft"));
+      const acknowledgeOldSave = original.getLatest().applySaved;
+      if (departure === "scope change") {
+        await original.update({ ...props, workspaceId: "workspace-b" });
+        await original.waitFor((state) => state.documents.spec.loaded);
+        await original.update(props);
+      } else {
+        await original.unmount();
+        replacement = createHookHarness(props);
+        await replacement.mount();
+      }
+      try {
+        await replacement.waitFor((state) => state.documents.spec.loaded);
+        await replacement.run((state) => state.updateDraft("spec", "Replacement draft"));
+        await replacement.run(() =>
+          acknowledgeOldSave("spec", "Submitted draft", "2026-02-20T11:00:00Z"),
+        );
+        expect(replacement.getLatest().documents.spec.draftMarkdown).toBe("Replacement draft");
+      } finally {
+        await replacement.unmount();
+      }
+      const reopened = createHookHarness(props);
+      try {
+        await reopened.mount();
+        await reopened.waitFor((state) => state.documents.spec.loaded);
+        expect(reopened.getLatest().documents.spec.draftMarkdown).toBe("Replacement draft");
+      } finally {
+        await reopened.unmount();
+      }
+    },
+  );
+
+  test("keeps a removed target document draft in connection memory by full workspace identity", async () => {
+    const retainedDrafts = new Map<string, RetainedTaskDocument>();
+    const original = createHookHarness(
+      createBaseProps({ workspaceId: "workspace-a", retainedDrafts }),
+    );
+    await original.mount();
+    await original.waitFor((state) => state.documents.spec.loaded);
+    await original.run((state) => state.updateDraft("spec", "Unsaved document"));
+    await original.unmount();
+
+    const other = createHookHarness(
+      createBaseProps({ workspaceId: "workspace-b", retainedDrafts }),
+    );
+    await other.mount();
+    await other.waitFor((state) => state.documents.spec.loaded);
+    expect(other.getLatest().documents.spec.draftMarkdown).toBe("# Spec");
+    await other.unmount();
+
+    const restored = createHookHarness(
+      createBaseProps({
+        workspaceId: "workspace-a",
+        retainedDrafts,
+        loadDocument: async () => {
+          throw new Error("The task was removed. Copy or discard this draft.");
+        },
+      }),
+    );
+    await restored.mount();
+    await restored.waitFor((state) => state.documents.spec.error !== null);
+    expect(restored.getLatest().documents.spec.draftMarkdown).toBe("Unsaved document");
+    expect(restored.getLatest().documents.spec.error).toContain("removed");
+    await restored.run((state) => state.discardDraft("spec"));
+    expect(retainedDrafts.size).toBe(0);
+    await restored.unmount();
   });
 
   test("captures loader failure and clears loading", async () => {

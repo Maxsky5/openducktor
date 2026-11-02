@@ -38,6 +38,7 @@ function setup(action: ArtifactAction, client: Partial<HostClient>) {
       { connection },
       createElement(ArtifactActionDialog, {
         action,
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-1",
         canManage: true,

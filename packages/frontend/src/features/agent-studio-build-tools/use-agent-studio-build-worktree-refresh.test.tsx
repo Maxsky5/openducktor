@@ -55,7 +55,12 @@ const createCompletedToolSession = (tool: string, id = tool, input?: AgentToolDa
   }
   return createAgentSessionFixture({
     externalSessionId: "build-session-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
     messages: [
       {
         id,
@@ -116,7 +121,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       createBaseArgs({
         loadedSession: createAgentSessionFixture({
           externalSessionId: "build-session-1",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           messages: [],
         }),
       }),
@@ -138,7 +148,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         createBaseArgs({
           loadedSession: createAgentSessionFixture({
             externalSessionId: "build-session-1",
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "build",
+            },
             messages: [
               ...sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
               ...sessionMessagesToArray(createCompletedToolSession("write", "tool-2")),
@@ -158,7 +173,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       createBaseArgs({
         loadedSession: createAgentSessionFixture({
           externalSessionId: "build-session-1",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           historyLoadState: "loading",
           messages: [],
         }),
@@ -196,7 +216,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
   test("deduplicates completed tool messages within the same session", async () => {
     const initialSession = createAgentSessionFixture({
       externalSessionId: "build-session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       messages: [],
     });
     const loadedSession = createCompletedToolSession("apply_patch", "tool-1");
@@ -227,7 +252,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         loadedSession: createAgentSessionFixture({
           externalSessionId: "shared-build-session",
           workingDirectory: "/repo/worktree-a",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           messages: [],
         }),
       }),
@@ -242,7 +272,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
           loadedSession: createAgentSessionFixture({
             externalSessionId: "shared-build-session",
             workingDirectory: "/repo/worktree-b",
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "build",
+            },
             messages: sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
           }),
         }),
@@ -312,7 +347,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         createBaseArgs({
           loadedSession: createAgentSessionFixture({
             externalSessionId: "spec-session-1",
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "spec",
+            },
             messages: createCompletedToolSession("apply_patch", "tool-3").messages,
           }),
         }),
@@ -328,7 +368,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       createBaseArgs({
         loadedSession: createAgentSessionFixture({
           externalSessionId: "build-session-1",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           messages: [],
         }),
       }),
@@ -342,7 +387,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         createBaseArgs({
           loadedSession: createAgentSessionFixture({
             externalSessionId: "build-session-1",
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "build",
+            },
             messages: [
               ...sessionMessagesToArray(
                 createCompletedToolSession("bash", "tool-1", {
@@ -384,7 +434,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     const baseArgs = createBaseArgs({
       loadedSession: createAgentSessionFixture({
         externalSessionId: "build-session-1",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         messages: [pendingToolMessage],
       }),
     });
@@ -400,7 +455,12 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
           ...baseArgs.selectedView,
           loadedSession: createAgentSessionFixture({
             externalSessionId: "build-session-1",
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "build",
+            },
             messages: [baseCompletedMessage],
           }),
         }),

@@ -394,6 +394,7 @@ describe("useAgentStudioTerminals", () => {
     const shown: string[] = [];
     let isRecording = false;
     const view = renderTaskTerminalPanels(dependencies, {
+      workspaceId: "workspace-1",
       children: ({ panels }) => {
         if (isRecording) {
           const { bottom } = panels;

@@ -43,8 +43,13 @@ import type { AgentSessionLiveStateService } from "../agent-sessions/agent-sessi
 import type { createAgentSessionCommandService } from "../agent-sessions/agent-session-command-service";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import {
+  resolveRuntimeOwnershipScope,
+  type RuntimeOwnershipScopeDependencies,
+} from "./workspace-session-import-owners";
 
 export type WorkspaceSessionForkDependencies = WorkspaceSessionRecordReaderDependencies &
+  RuntimeOwnershipScopeDependencies &
   WorkspaceSessionTargetCreationDependencies &
   WorkspaceSessionTargetValidationDependencies & {
     git: Pick<GitPort, "getCurrentBranch">;
@@ -218,8 +223,8 @@ const forkAndSave = (
           forkPoint: input.forkPoint,
           sessionScope:
             manualTitle === null
-              ? { kind: "repository" }
-              : { kind: "repository", title: manualTitle },
+              ? { kind: "repository", workspaceId: input.workspaceId }
+              : { kind: "repository", workspaceId: input.workspaceId, title: manualTitle },
           systemPrompt: input.source.roleSnapshot?.systemPrompt ?? "",
           model: input.model,
         }),
@@ -238,6 +243,7 @@ const forkAndSave = (
                 "The runtime did not return a distinct idle fork in the selected folder. Reopen the source chat and retry.",
             });
           const now = yield* Clock.currentTimeMillis;
+          const ownershipScope = yield* resolveRuntimeOwnershipScope(deps, input);
           const record: WorkspaceSession = {
             id: input.id,
             runtimeKind: input.source.runtimeKind,
@@ -258,6 +264,7 @@ const forkAndSave = (
               .create({
                 workspaceId: input.workspaceId,
                 repoPath: input.repoPath,
+                ownershipScope,
                 session: record,
               })
               .pipe(

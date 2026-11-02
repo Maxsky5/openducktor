@@ -37,7 +37,7 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
       workingDirectory: "/repo/worktree/",
       externalSessionId: "session-1",
       runtimePolicy: { kind: "claude" },
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       systemPrompt: "Build",
     },
     runtimeId: "runtime-1",
@@ -45,7 +45,12 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
       externalSessionId: "session-1",
       runtimeKind: "claude",
       workingDirectory: "/repo/worktree/",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build",
+      },
       startedAt: "2026-06-25T20:00:00.000Z",
       status: "idle",
     },
@@ -60,7 +65,12 @@ describe("createClaudeAgentSdkService", () => {
         runtimeKind: "claude" as const,
         workingDirectory: "/repo/worktree/",
         runtimePolicy: { kind: "claude" as const },
-        sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "qa" as const },
+        sessionScope: {
+          kind: "workflow" as const,
+          workspaceId: "repo",
+          taskId: "task-1",
+          role: "qa" as const,
+        },
         systemPrompt: "Review",
       };
       const currentPolicy = {
@@ -449,7 +459,12 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/worktree/",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
           },
           "runtime-claude",
         ),
@@ -465,7 +480,7 @@ describe("createClaudeAgentSdkService", () => {
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         systemPrompt: "Build",
         parentExternalSessionId: "parent-session",
       },
@@ -503,7 +518,7 @@ describe("createClaudeAgentSdkService", () => {
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         systemPrompt: "Build",
       },
     });
@@ -624,7 +639,7 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1::claude-subagent::task-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         }),
       ),
     ).resolves.toBeNull();
@@ -639,7 +654,7 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         }),
       ),
     ).resolves.toEqual({ totalTokens: 176_005, contextWindow: 272_000 });
@@ -672,7 +687,7 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1::claude-subagent::task-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         }),
       ),
     ).resolves.toBeNull();
@@ -699,7 +714,7 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         }),
       ),
     ).resolves.toEqual({ totalTokens: 176_005, contextWindow: 272_000 });
@@ -808,7 +823,7 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         }),
       ),
     ).resolves.toEqual([todo]);
@@ -843,7 +858,12 @@ describe("createClaudeAgentSdkService", () => {
             runtimeKind: "claude",
             workingDirectory: "/repo/worktree/",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             systemPrompt: "Build",
           },
           "runtime-claude",
@@ -895,7 +915,12 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/worktree",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             systemPrompt: "Build",
           },
           "runtime-claude",
@@ -917,7 +942,12 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/other/",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             parts: [{ kind: "text", text: "Hello" }],
             delivery: "new_turn",
           },
@@ -954,7 +984,12 @@ describe("createClaudeAgentSdkService", () => {
       Effect.runPromise(
         service.updateSessionModel(
           {
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             repoPath: "/repo/",
             runtimeKind: "claude",
             workingDirectory: "/repo/worktree/",
@@ -994,7 +1029,12 @@ describe("createClaudeAgentSdkService", () => {
       Effect.runPromise(
         service.updateSessionModel(
           {
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             repoPath: "/repo/",
             runtimeKind: "claude",
             workingDirectory: "/repo/worktree/",
@@ -1106,7 +1146,7 @@ describe("createClaudeAgentSdkService", () => {
     await Effect.runPromise(
       service.updateSessionModel(
         {
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           repoPath: "/repo/",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
@@ -1139,7 +1179,12 @@ describe("createClaudeAgentSdkService", () => {
       const sessionScope =
         kind === "repository"
           ? { kind: "repository" as const }
-          : { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+          : {
+              kind: "workflow" as const,
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build" as const,
+            };
       const ref = {
         repoPath: "/repo/",
         workingDirectory: "/repo/worktree/",
@@ -1323,7 +1368,7 @@ describe("createClaudeAgentSdkService", () => {
         workingDirectory: "/repo/worktree/",
         externalSessionId: "session-1",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         requestId: "question-1",
         answers: [["Require email"]],
       }),
@@ -1373,7 +1418,7 @@ describe("createClaudeAgentSdkService", () => {
         workingDirectory: "/repo/worktree/",
         externalSessionId: "session-1",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         requestId: "approval-1",
         outcome: "approve_once",
       }),
@@ -1428,7 +1473,7 @@ describe("createClaudeAgentSdkService", () => {
         workingDirectory: "/repo/worktree/",
         externalSessionId: childExternalSessionId,
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         requestId: "approval-child-1",
         outcome: "approve_once",
       }),
@@ -1480,7 +1525,7 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           requestId: "approval-1",
           outcome: "approve_session",
         }),
@@ -1528,7 +1573,12 @@ describe("createClaudeAgentSdkService", () => {
       workingDirectory: "/repo/worktree/",
       externalSessionId: "session-1",
       runtimePolicy: { kind: "claude" as const },
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build" as const,
+      },
       requestId: "question-1",
     };
     const invalidAnswers = [
@@ -1560,7 +1610,12 @@ describe("continueInterruptedTurn eligibility", () => {
     workingDirectory: "/repo/worktree/",
     externalSessionId: "session-1",
     runtimePolicy: { kind: "claude" as const },
-    sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+    sessionScope: {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    },
   };
 
   const resumeFailureReason = async (operation: Effect.Effect<unknown, unknown, never>) => {
@@ -1625,7 +1680,7 @@ describe("continueInterruptedTurn eligibility", () => {
           workingDirectory: "/repo/other-worktree/",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: "Build",
         },
       }),
@@ -1696,7 +1751,7 @@ describe("continueInterruptedTurn eligibility", () => {
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: "Build",
         },
       }),

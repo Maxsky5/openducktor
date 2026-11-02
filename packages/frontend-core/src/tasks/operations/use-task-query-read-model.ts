@@ -1,14 +1,17 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { type MutableRefObject, useEffect } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { summarizeTaskLoadError } from "../task-load-errors";
-import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
+import { repoTaskDataQueryOptions, taskQueryKeys, type RepoTaskData } from "../../queries/tasks";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseTaskQueryReadModelArgs = {
+  activeWorkspaceId: string | null;
   activeRepoPath: string | null;
   lastTaskLoadErrorToastRef: MutableRefObject<{
+    workspaceId: string;
     repoPath: string;
     description: string;
   } | null>;
@@ -24,6 +27,7 @@ export type TaskQueryReadModel = {
 };
 
 export function useTaskQueryReadModel({
+  activeWorkspaceId,
   activeRepoPath,
   lastTaskLoadErrorToastRef,
 }: UseTaskQueryReadModelArgs): TaskQueryReadModel {
@@ -32,12 +36,16 @@ export function useTaskQueryReadModel({
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const settingsSnapshot = settingsSnapshotQuery.data ?? null;
   const doneVisibleDays = settingsSnapshot?.kanban.doneVisibleDays ?? null;
-  const taskRepoPath = activeRepoPath ?? "__disabled__";
+  const scope: WorkspaceRef = {
+    workspaceId: activeWorkspaceId ?? "__disabled__",
+    repoPath: activeRepoPath ?? "__disabled__",
+  };
+  const hasActiveWorkspace = activeWorkspaceId !== null && activeRepoPath !== null;
   const hasLoadedTaskData =
-    queryClient.getQueryState(taskQueryKeys.repoData(taskRepoPath))?.status === "success";
+    queryClient.getQueryState(taskQueryKeys.repoData(scope))?.status === "success";
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(taskRepoPath),
-    enabled: activeRepoPath !== null && doneVisibleDays !== null && hasLoadedTaskData,
+    ...repoTaskDataQueryOptions(scope),
+    enabled: hasActiveWorkspace && doneVisibleDays !== null && hasLoadedTaskData,
   });
 
   useEffect(() => {
@@ -47,7 +55,7 @@ export function useTaskQueryReadModel({
         ? repoTaskDataQuery.error
         : null;
 
-    if (!taskLoadError || !activeRepoPath) {
+    if (!taskLoadError || !activeRepoPath || !activeWorkspaceId) {
       if (!taskLoadError) {
         lastTaskLoadErrorToastRef.current = null;
       }
@@ -56,13 +64,22 @@ export function useTaskQueryReadModel({
 
     const description = summarizeTaskLoadError({ error: taskLoadError });
     const lastToast = lastTaskLoadErrorToastRef.current;
-    if (lastToast?.repoPath === activeRepoPath && lastToast.description === description) {
+    if (
+      lastToast?.workspaceId === activeWorkspaceId &&
+      lastToast.repoPath === activeRepoPath &&
+      lastToast.description === description
+    ) {
       return;
     }
 
-    lastTaskLoadErrorToastRef.current = { repoPath: activeRepoPath, description };
+    lastTaskLoadErrorToastRef.current = {
+      workspaceId: activeWorkspaceId,
+      repoPath: activeRepoPath,
+      description,
+    };
     feedback.show("error", "Failed to load tasks", { description });
   }, [
+    activeWorkspaceId,
     activeRepoPath,
     feedback,
     lastTaskLoadErrorToastRef,
@@ -72,14 +89,32 @@ export function useTaskQueryReadModel({
     settingsSnapshotQuery.isError,
   ]);
 
-  return {
-    tasks: activeRepoPath && doneVisibleDays !== null ? (repoTaskDataQuery.data?.tasks ?? []) : [],
+  return taskQueryReadModel({
+    hasActiveWorkspace,
     doneVisibleDays,
-    isSettingsLoadingForActiveRepo: activeRepoPath !== null && settingsSnapshotQuery.isPending,
-    isTaskQueryLoadingForActiveRepo:
-      activeRepoPath !== null && doneVisibleDays !== null && repoTaskDataQuery.isPending,
-    isTaskQueryFetchingForActiveRepo: activeRepoPath !== null && repoTaskDataQuery.isFetching,
-    isTaskQuerySuccessForActiveRepo:
-      activeRepoPath !== null && doneVisibleDays !== null && repoTaskDataQuery.isSuccess,
+    isSettingsPending: settingsSnapshotQuery.isPending,
+    taskQuery: repoTaskDataQuery,
+  });
+}
+
+function taskQueryReadModel({
+  hasActiveWorkspace,
+  doneVisibleDays,
+  isSettingsPending,
+  taskQuery,
+}: {
+  hasActiveWorkspace: boolean;
+  doneVisibleDays: number | null;
+  isSettingsPending: boolean;
+  taskQuery: Pick<UseQueryResult<RepoTaskData>, "data" | "isPending" | "isFetching" | "isSuccess">;
+}): TaskQueryReadModel {
+  const hasTaskSettings = hasActiveWorkspace && doneVisibleDays !== null;
+  return {
+    tasks: hasTaskSettings ? (taskQuery.data?.tasks ?? []) : [],
+    doneVisibleDays,
+    isSettingsLoadingForActiveRepo: hasActiveWorkspace && isSettingsPending,
+    isTaskQueryLoadingForActiveRepo: hasTaskSettings && taskQuery.isPending,
+    isTaskQueryFetchingForActiveRepo: hasActiveWorkspace && taskQuery.isFetching,
+    isTaskQuerySuccessForActiveRepo: hasTaskSettings && taskQuery.isSuccess,
   };
 }

@@ -1,4 +1,4 @@
-import type { AutopilotOutcome } from "@openducktor/contracts";
+import type { AutopilotOutcome, WorkspaceRef } from "@openducktor/contracts";
 import { toast } from "sonner";
 import {
   AUTOPILOT_FAILURE_TITLE,
@@ -22,7 +22,7 @@ import { RESULT_UNKNOWN_TITLE } from "@openducktor/frontend-core/lib/command-out
 export type AutopilotOutcomePresenterPorts = AutopilotRecoveryPorts & {
   /** Another view shows this host session error, so its notification skips the in-app toast. */
   markInAppFeedbackHandled: (errorId: string) => void;
-  refreshTaskViews: (repoPath: string, taskId: string) => Promise<void>;
+  refreshTaskViews: (workspace: WorkspaceRef, taskId: string) => Promise<void>;
 };
 
 const FAILURE_TOAST_ID = "autopilot-failure";
@@ -32,7 +32,9 @@ const RECOVERY_TOAST_CLASS_NAMES = {
   actionButton: "!m-0 !h-9 !w-full !rounded-md justify-center",
 };
 
-const toastId = (outcome: AutopilotOutcome): string => `autopilot:${outcome.outcomeId}`;
+const outcomeKey = (outcome: AutopilotOutcome): string =>
+  JSON.stringify([outcome.workspaceId, outcome.workflowId, outcome.outcomeId]);
+const toastId = (outcome: AutopilotOutcome): string => `autopilot:${outcomeKey(outcome)}`;
 
 /**
  * Shows Autopilot outcomes from the host. Each outcome appears once in a page session, and a
@@ -100,7 +102,7 @@ export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenter
     if (errorId) ports.markInAppFeedbackHandled(errorId);
     const recovery = createAutopilotRecovery(outcome);
     if (recovery) {
-      recoveries.set(outcome.outcomeId, recovery);
+      recoveries.set(outcomeKey(outcome), recovery);
       showRecovery(recovery);
       return;
     }
@@ -114,17 +116,21 @@ export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenter
   return {
     /** `workspaceSelected` marks outcomes that a client reads after it selects their workspace. */
     present(outcome: AutopilotOutcome, { workspaceSelected = false } = {}): void {
-      if (shown.has(outcome.outcomeId)) {
-        const recovery = recoveries.get(outcome.outcomeId);
+      const key = outcomeKey(outcome);
+      if (shown.has(key)) {
+        const recovery = recoveries.get(key);
         if (workspaceSelected && recovery && !recovery.pending && !recovery.done)
           showRecovery(recovery);
         return;
       }
-      shown.add(outcome.outcomeId);
+      shown.add(key);
       // A failed launch can still create a worktree or a terminal.
       if (outcome.kind !== "skipped")
         void ports
-          .refreshTaskViews(outcome.repoPath, outcome.task.id)
+          .refreshTaskViews(
+            { workspaceId: outcome.workspaceId, repoPath: outcome.repoPath },
+            outcome.task.id,
+          )
           .catch((cause) => console.error("Cannot refresh the Autopilot task views.", cause));
       // The host notification shows a started session.
       if (outcome.kind === "started") return;

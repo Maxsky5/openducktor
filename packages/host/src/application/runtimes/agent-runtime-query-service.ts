@@ -81,6 +81,7 @@ export const createAgentRuntimeQueryService = (
         directory,
         Effect.gen(function* () {
           const readsRemovedWorktree = yield* requireRuntimeWorkingDirectory(dependencies, {
+            sessionScope: input.sessionScope,
             repoPath,
             workingDirectory: directory,
           }).pipe(
@@ -106,6 +107,7 @@ export const createAgentRuntimeQueryService = (
           yield* requireSessionScope(dependencies.taskReader, adapter, request, method);
           if (readsRemovedWorktree) {
             yield* requireManagedHistoryDirectory(dependencies, {
+              sessionScope: input.sessionScope,
               repoPath,
               workingDirectory: directory,
             }).pipe(Effect.mapError(directoryFailure));

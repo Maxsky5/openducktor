@@ -268,12 +268,14 @@ export function useAgentsPageRightPanelModel({
   const linkedPullRequestNumber = selectedView.selectedTask?.pullRequest?.number ?? null;
   const ciReviewQueryInput = useMemo<PullRequestReviewContextQueryInput | null>(
     () =>
+      activeWorkspace?.workspaceId &&
       workspaceRepoPath &&
       selectedView.taskId &&
       linkedPullRequestProviderId &&
       linkedPullRequestNumber &&
       pullRequestReviewUnavailableReason === null
         ? {
+            workspaceId: activeWorkspace.workspaceId,
             repoPath: workspaceRepoPath,
             taskId: selectedView.taskId,
             pullRequest: {
@@ -283,6 +285,7 @@ export function useAgentsPageRightPanelModel({
           }
         : null,
     [
+      activeWorkspace?.workspaceId,
       linkedPullRequestNumber,
       linkedPullRequestProviderId,
       pullRequestReviewUnavailableReason,

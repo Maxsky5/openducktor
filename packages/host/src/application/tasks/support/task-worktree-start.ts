@@ -114,6 +114,7 @@ export const prepareNewTaskWorktree = (
           dependencies.workspaceSettingsService,
           task,
           canonicalRepoPath,
+          repoConfig.workspaceId,
         );
         const startPoint = yield* resolveBuildStartPoint(
           dependencies,
@@ -184,7 +185,11 @@ export const prepareNewTaskWorktree = (
         );
 
         yield* actionRun.run({
-          context: { repoPath: canonicalRepoPath, taskId: task.id },
+          context: {
+            workspaceId: repoConfig.workspaceId,
+            repoPath: canonicalRepoPath,
+            taskId: task.id,
+          },
           actions: repoConfig.actions,
         });
       }).pipe(

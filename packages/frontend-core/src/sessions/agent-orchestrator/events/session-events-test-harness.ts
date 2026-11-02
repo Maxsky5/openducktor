@@ -233,7 +233,12 @@ export const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessio
     {
       runtimeKind: "opencode",
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
 
       status: "running",
       runtimeStatusMessage: null,
@@ -295,6 +300,7 @@ const runtimeRefForSession = ({
     throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
   }
   const sessionScope = workflowAgentSessionScope(
+    "workspace-1",
     session.sessionAssociation.taskId,
     session.sessionAssociation.role,
   );

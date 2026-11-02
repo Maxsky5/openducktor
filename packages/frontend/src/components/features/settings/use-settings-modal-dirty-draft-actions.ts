@@ -6,12 +6,10 @@ import type {
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useCallback } from "react";
-import type { DirtySections } from "./use-settings-modal-dirty-state";
 import type { SettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 
 type UseSettingsModalDirtyDraftActionsArgs = {
   clearSaveError: () => void;
-  markDirty: (section: keyof DirtySections) => void;
   draftActions: SettingsModalDraftActions;
 };
 
@@ -19,21 +17,19 @@ type SettingsModalDirtyDraftActions = SettingsModalDraftActions;
 
 export const useSettingsModalDirtyDraftActions = ({
   clearSaveError,
-  markDirty,
   draftActions,
 }: UseSettingsModalDirtyDraftActionsArgs): SettingsModalDirtyDraftActions => {
   const runDirtyAction = useCallback(
-    (section: keyof DirtySections, action: () => void): void => {
+    (action: () => void): void => {
       clearSaveError();
-      markDirty(section);
       action();
     },
-    [clearSaveError, markDirty],
+    [clearSaveError],
   );
 
   const updateSelectedRepoConfig = useCallback(
     (updater: (current: SettingsRepoConfig) => SettingsRepoConfig): void => {
-      runDirtyAction("repoSettings", () => {
+      runDirtyAction(() => {
         draftActions.updateSelectedRepoConfig(updater);
       });
     },
@@ -42,7 +38,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalGitConfig = useCallback(
     (updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"]): void => {
-      runDirtyAction("globalGit", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalGitConfig(updater);
       });
     },
@@ -51,7 +47,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalChatSettings = useCallback(
     (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
-      runDirtyAction("chat", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalChatSettings(updater);
       });
     },
@@ -60,7 +56,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalSystemSettings = useCallback(
     (updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"]): void => {
-      runDirtyAction("appearance", () => draftActions.updateGlobalSystemSettings(updater));
+      runDirtyAction(() => draftActions.updateGlobalSystemSettings(updater));
     },
     [draftActions, runDirtyAction],
   );
@@ -69,7 +65,7 @@ export const useSettingsModalDirtyDraftActions = ({
     (
       updater: (current: SettingsSnapshot["notifications"]) => SettingsSnapshot["notifications"],
     ): void => {
-      runDirtyAction("notifications", () => {
+      runDirtyAction(() => {
         draftActions.updateNotificationSettings(updater);
       });
     },
@@ -78,7 +74,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalGeneralSettings = useCallback(
     (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
-      runDirtyAction("general", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalGeneralSettings(updater);
       });
     },
@@ -89,7 +85,7 @@ export const useSettingsModalDirtyDraftActions = ({
     (
       updater: (current: SettingsSnapshot["appearance"]) => SettingsSnapshot["appearance"],
     ): void => {
-      runDirtyAction("appearance", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalAppearanceSettings(updater);
       });
     },
@@ -98,7 +94,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateAgentRuntimes = useCallback(
     (updater: (current: AgentRuntimes) => AgentRuntimes): void => {
-      runDirtyAction("agentRuntimes", () => {
+      runDirtyAction(() => {
         draftActions.updateAgentRuntimes(updater);
       });
     },
@@ -107,7 +103,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateReusablePrompts = useCallback(
     (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
-      runDirtyAction("reusablePrompts", () => {
+      runDirtyAction(() => {
         draftActions.updateReusablePrompts(updater);
       });
     },
@@ -120,14 +116,14 @@ export const useSettingsModalDirtyDraftActions = ({
         current: SettingsSnapshot["customAgentRoles"],
       ) => SettingsSnapshot["customAgentRoles"],
     ): void => {
-      runDirtyAction("customAgentRoles", () => draftActions.updateCustomAgentRoles(updater));
+      runDirtyAction(() => draftActions.updateCustomAgentRoles(updater));
     },
     [draftActions, runDirtyAction],
   );
 
   const updateGlobalKanbanSettings = useCallback(
     (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
-      runDirtyAction("kanban", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalKanbanSettings(updater);
       });
     },
@@ -136,7 +132,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalAutopilotSettings = useCallback(
     (updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"]): void => {
-      runDirtyAction("autopilot", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalAutopilotSettings(updater);
       });
     },
@@ -145,7 +141,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalPromptOverrides = useCallback(
     (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      runDirtyAction("globalPromptOverrides", () => {
+      runDirtyAction(() => {
         draftActions.updateGlobalPromptOverrides(updater);
       });
     },
@@ -154,7 +150,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateRepoPromptOverrides = useCallback(
     (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      runDirtyAction("repoSettings", () => {
+      runDirtyAction(() => {
         draftActions.updateRepoPromptOverrides(updater);
       });
     },
@@ -167,7 +163,7 @@ export const useSettingsModalDirtyDraftActions = ({
       field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
-      runDirtyAction("repoSettings", () => {
+      runDirtyAction(() => {
         draftActions.updateSelectedRepoAgentDefault(role, field, value);
       });
     },
@@ -176,7 +172,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const clearSelectedRepoAgentDefault = useCallback(
     (role: "spec" | "planner" | "build" | "qa"): void => {
-      runDirtyAction("repoSettings", () => {
+      runDirtyAction(() => {
         draftActions.clearSelectedRepoAgentDefault(role);
       });
     },
@@ -188,7 +184,7 @@ export const useSettingsModalDirtyDraftActions = ({
       field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
-      runDirtyAction("repoSettings", () => {
+      runDirtyAction(() => {
         draftActions.updateSelectedRepoDefaultModel(field, value);
       });
     },
@@ -196,7 +192,7 @@ export const useSettingsModalDirtyDraftActions = ({
   );
 
   const clearSelectedRepoDefaultModel = useCallback((): void => {
-    runDirtyAction("repoSettings", () => {
+    runDirtyAction(() => {
       draftActions.clearSelectedRepoDefaultModel();
     });
   }, [draftActions, runDirtyAction]);

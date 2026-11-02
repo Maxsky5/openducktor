@@ -41,7 +41,12 @@ export const baseMessage: AgentChatMessage = {
 
 const baseSession: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "spec",
+  },
   runtimeKind: "opencode",
   status: "running",
   runtimeStatusMessage: null,

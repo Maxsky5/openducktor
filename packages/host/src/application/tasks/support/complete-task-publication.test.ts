@@ -30,6 +30,7 @@ const merge: DirectMergeRecord = {
   mergedAt: "2026-10-13T12:00:00Z",
 };
 const consent: TaskDirectMergeCompleteIntent = {
+  workspaceId: "repo",
   repoPath: "/repo",
   taskId: "task-1",
   removeWorktree: true,
@@ -44,7 +45,11 @@ const consent: TaskDirectMergeCompleteIntent = {
   },
 };
 const setup = () => {
-  const state = createTaskCompletionState(undefined).ensure("/repo", "task-1");
+  const state = createTaskCompletionState(undefined).ensure({
+    workspaceId: "repo",
+    repoPath: "/repo",
+    taskId: "task-1",
+  });
   state.appliedTargetOid = target.sourceOid;
   let observed: (string | null)[] = [null, null];
   const pushes: string[][] = [];
@@ -141,9 +146,14 @@ describe("task completion publication recovery", () => {
           targetRef: "refs/heads/main",
         }),
       );
-      const state = createTaskCompletionState(undefined).ensure(repoPath, "task-1");
+      const state = createTaskCompletionState(undefined).ensure({
+        workspaceId: "repo",
+        repoPath,
+        taskId: "task-1",
+      });
       state.appliedTargetOid = publication.sourceOid;
       const input: TaskDirectMergeCompleteIntent = {
+        workspaceId: "repo",
         repoPath,
         taskId: "task-1",
         removeWorktree: true,
@@ -207,7 +217,7 @@ describe("task completion publication recovery", () => {
           Effect.result(
             completeTaskPublication(
               h.git,
-              { repoPath: "/repo", taskId: "task-1", removeWorktree: true },
+              { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: true },
               merge,
               h.state,
             ),
@@ -244,7 +254,7 @@ describe("task completion publication recovery", () => {
     await Effect.runPromise(
       completeTaskPublication(
         h.git,
-        { repoPath: "/repo", taskId: "task-1", removeWorktree: true },
+        { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: true },
         merge,
         h.state,
       ),

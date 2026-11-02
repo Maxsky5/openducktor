@@ -69,6 +69,7 @@ describe("task session preparation in an existing worktree", () => {
     const service = createService({ getCurrentBranch: () => Effect.succeed(branch) });
     const prepared = await Effect.runPromise(
       service.prepare({
+        workspaceId: "repo",
         canonicalRepoPath: "/repo",
         taskId: "task-1",
         role,
@@ -124,6 +125,7 @@ describe("task session preparation in an existing worktree", () => {
     const result = await Effect.runPromise(
       Effect.result(
         createService(gitOverrides).prepare({
+          workspaceId: "repo",
           canonicalRepoPath: "/repo",
           taskId: "task-1",
           role: "qa",
@@ -176,6 +178,7 @@ const createNewWorktreeService = (calls: unknown[], worktreeActions: WorktreeAct
   });
 
 const buildPreparation = {
+  workspaceId: "repo",
   canonicalRepoPath: "/repo",
   taskId: "task-1",
   role: "build",
@@ -197,7 +200,7 @@ describe("task session preparation in a new worktree", () => {
     expect(prepared.workingDirectory).toBe(worktreePath);
     expect(calls).toContainEqual({
       type: "runWorktreeActions",
-      context: { repoPath: "/repo", taskId: "task-1" },
+      context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       worktreePath: worktreePath,
       actions,
     });

@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "./scoped-repo-config";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -55,11 +56,13 @@ export const collectCloseWorktreePaths = (
   workflow: TaskWorkflow,
   task: TaskRecord,
   sessions: AgentSessionRecord[],
+  workspaceId: string,
 ) =>
   Effect.gen(function* () {
     const normalizedRepo = normalizePathForComparison(repoPath);
     const taskWorktree = dependencies.taskWorktreeService
       ? yield* dependencies.taskWorktreeService.getTaskWorktree({
+          workspaceId,
           repoPath,
           taskId: task.id,
         })
@@ -125,6 +128,7 @@ export const collectTaskCleanupTargets = ({
   dependencies,
   lifecycle,
   repoPath,
+  workspaceId,
   branchPrefix,
   workflow,
   task,
@@ -134,6 +138,7 @@ export const collectTaskCleanupTargets = ({
   dependencies: Parameters<typeof collectCloseWorktreePaths>[0];
   lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
   repoPath: string;
+  workspaceId: string;
   branchPrefix: string;
   workflow: TaskWorkflow;
   task: TaskRecord;
@@ -147,6 +152,7 @@ export const collectTaskCleanupTargets = ({
       workflow,
       task,
       sessions,
+      workspaceId,
     );
     yield* lifecycle.acquireWorktreeLifecycle(worktreePaths);
     const branchNames = yield* collectRelatedTaskBranches(
@@ -170,6 +176,7 @@ export const cleanupConfirmedMergeClose = ({
   taskStore,
   lifecycle,
   repoPath,
+  workspaceId,
   workflow,
   task,
   worktreeCleanup,
@@ -181,6 +188,7 @@ export const cleanupConfirmedMergeClose = ({
   taskStore: Pick<TaskStorePort, "getTaskMetadata">;
   lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
   repoPath: string;
+  workspaceId: string;
   workflow: TaskWorkflow;
   task: TaskRecord;
   worktreeCleanup: WorktreeCleanup;
@@ -189,15 +197,24 @@ export const cleanupConfirmedMergeClose = ({
   Effect.gen(function* () {
     const releaseDependencies = { ...dependencies, workflow };
     if (!worktreeCleanup.remove) {
-      return yield* cleanupKeptTaskWorktree(releaseDependencies, taskStore, repoPath, task.id);
+      return yield* cleanupKeptTaskWorktree(
+        releaseDependencies,
+        taskStore,
+        repoPath,
+        task.id,
+        workspaceId,
+      );
     }
     const progress = createTaskCleanupProgressState();
-    const repoConfig =
-      yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId: task.id });
+    const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, {
+      workspaceId,
+      repoPath,
+    });
+    const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId: task.id });
     const { worktreePaths, branchNames } = yield* collectTaskCleanupTargets({
       dependencies,
       lifecycle,
+      workspaceId,
       repoPath,
       branchPrefix: repoConfig.branchPrefix,
       workflow,
@@ -206,8 +223,15 @@ export const cleanupConfirmedMergeClose = ({
       operationLabel: "close",
     });
     // The worktree lifecycle is held, so no runtime read restores a released session.
-    yield* releaseMergedTaskSessions(releaseDependencies, taskStore, repoPath, task.id);
+    yield* releaseMergedTaskSessions(
+      releaseDependencies,
+      taskStore,
+      repoPath,
+      task.id,
+      workspaceId,
+    );
     yield* runTaskLocalCleanup({
+      workspaceId,
       branchNames,
       gitPort: dependencies.gitPort,
       managedWorktreeBasePath: managedWorktreeBaseForRepoConfig(

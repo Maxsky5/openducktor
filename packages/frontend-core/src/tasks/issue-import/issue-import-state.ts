@@ -105,6 +105,7 @@ export function useIssueSelectionState() {
 export function useIssueImportSubmission({
   selectedItems,
   reviews,
+  workspaceId,
   repoPath,
   providerId,
   providerScope,
@@ -113,6 +114,7 @@ export function useIssueImportSubmission({
 }: {
   selectedItems: SourceIssue[];
   reviews: Map<string, IssueReview>;
+  workspaceId: string;
   repoPath: string;
   providerId: string;
   providerScope: NonNullable<RepositoryGitProviderContext>["config"];
@@ -148,6 +150,7 @@ export function useIssueImportSubmission({
     let completedCount = 0;
     try {
       const result = await host.issueItemsImport({
+        workspaceId,
         repoPath,
         items: pendingItems.map((item) => {
           const review = reviews.get(item.sourceId) ?? initialReview(item);
@@ -166,7 +169,7 @@ export function useIssueImportSubmission({
       ]);
       setOutcomes(nextOutcomes);
       if (result.results.some((item) => item.outcome === "created")) {
-        void invalidateRepoIssueItemsQueries(queryClient, repoPath);
+        void invalidateRepoIssueItemsQueries(queryClient, { workspaceId, repoPath });
       }
       if (
         selectedItems.length > 0 &&
@@ -193,8 +196,9 @@ export function useIssueImportSubmission({
     setRefreshingId(sourceId);
     try {
       const item = await queryClient.fetchQuery({
-        queryKey: ["issue-item", providerId, repoPath, providerScope, sourceId],
-        queryFn: ({ client }) => connectionHost(client).issueItemGet({ repoPath, sourceId }),
+        queryKey: ["issue-item", providerId, { workspaceId, repoPath }, providerScope, sourceId],
+        queryFn: ({ client }) =>
+          connectionHost(client).issueItemGet({ workspaceId, repoPath, sourceId }),
         staleTime: 0,
       });
       onRefreshed(item);

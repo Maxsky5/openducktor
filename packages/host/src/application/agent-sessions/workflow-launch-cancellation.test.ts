@@ -125,7 +125,12 @@ test.each(["queue", "send"] as const)(
       await Effect.runPromise(
         h.messageDelivery.submit({
           ...ref,
-          sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "workspace",
+            taskId: "task",
+            role: "build",
+          },
           submissionId: "earlier-message",
           mode: "default",
           parts: [{ kind: "text", text: "Earlier message" }],

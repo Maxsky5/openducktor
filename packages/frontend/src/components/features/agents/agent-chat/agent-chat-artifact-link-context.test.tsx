@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 import type { TaskArtifactCollection } from "@openducktor/contracts";
@@ -50,14 +51,23 @@ for (const cached of [true, false]) {
     const connection = createTestClientConnection({ client: { taskArtifactsList: list } });
     const client = connection.queryClient;
     if (cached) {
-      client.setQueryData(artifactQueryKeys.collection("/repo", "task-1"), createCollection());
+      client.setQueryData(
+        artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
+        createCollection(),
+      );
     }
     const onOpenArtifact = mock<ChatArtifactLinkOwner["onOpenArtifact"]>(() => {});
     const view = renderHook(useChatArtifactLinkAction, {
       wrapper: ({ children }: PropsWithChildren) => (
         <QueryProvider connection={connection}>
           <ChatArtifactLinkProvider
-            owner={{ repoPath: "/repo", taskId: "task-1", ownerKey: "session-1", onOpenArtifact }}
+            owner={{
+              workspaceId: "workspace-1",
+              repoPath: "/repo",
+              taskId: "task-1",
+              ownerKey: "session-1",
+              onOpenArtifact,
+            }}
           >
             {children}
           </ChatArtifactLinkProvider>
@@ -86,14 +96,23 @@ for (const failure of ["task-mismatch", "removed", "read-failed"] as const) {
     if (failure !== "read-failed") {
       const collection = createCollection();
       if (failure === "removed") collection.artifacts.splice(1, 1);
-      client.setQueryData(artifactQueryKeys.collection("/repo", "task-1"), collection);
+      client.setQueryData(
+        artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
+        collection,
+      );
     }
     const onOpenArtifact = mock<ChatArtifactLinkOwner["onOpenArtifact"]>(() => {});
     const view = renderHook(useChatArtifactLinkAction, {
       wrapper: ({ children }: PropsWithChildren) => (
         <QueryProvider connection={connection}>
           <ChatArtifactLinkProvider
-            owner={{ repoPath: "/repo", taskId: "task-1", ownerKey: "session-1", onOpenArtifact }}
+            owner={{
+              workspaceId: "workspace-1",
+              repoPath: "/repo",
+              taskId: "task-1",
+              ownerKey: "session-1",
+              onOpenArtifact,
+            }}
           >
             {children}
           </ChatArtifactLinkProvider>
@@ -137,6 +156,7 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
       const client = connection.queryClient;
       const onOpenArtifact = mock<ChatArtifactLinkOwner["onOpenArtifact"]>(() => {});
       let owner: ChatArtifactLinkOwner = {
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-1",
         ownerKey: "session-1",
@@ -194,7 +214,13 @@ test("a pending artifact read uses the current panel action for the same owner",
     wrapper: ({ children }: PropsWithChildren) => (
       <QueryProvider connection={connection}>
         <ChatArtifactLinkProvider
-          owner={{ repoPath: "/repo", taskId: "task-1", ownerKey: "session-1", onOpenArtifact }}
+          owner={{
+            workspaceId: "workspace-1",
+            repoPath: "/repo",
+            taskId: "task-1",
+            ownerKey: "session-1",
+            onOpenArtifact,
+          }}
         >
           {children}
         </ChatArtifactLinkProvider>

@@ -114,6 +114,10 @@ function TranscriptContent({
             >
               <ChatFileLinkProvider
                 owner={{
+                  workspaceId:
+                    target.sessionScope?.kind === "workflow"
+                      ? target.sessionScope.workspaceId
+                      : null,
                   repoPath: workspaceRepoPath,
                   taskId:
                     target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,

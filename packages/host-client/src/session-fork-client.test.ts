@@ -47,7 +47,12 @@ test("fork commands return committed records with synchronization warnings", asy
     runtimeKind: "codex" as const,
     workingDirectory: "/repo",
     externalSessionId: "source",
-    sessionScope: { kind: "workflow" as const, taskId: "task", role: "build" as const },
+    sessionScope: {
+      kind: "workflow" as const,
+      workspaceId: "workspace-1",
+      taskId: "task",
+      role: "build" as const,
+    },
     forkPoint: { messageId: "reply" },
   };
   const workspaceInput = {

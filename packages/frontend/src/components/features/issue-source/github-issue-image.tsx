@@ -4,6 +4,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 export type IssueImageContext = {
+  workspaceId: string;
   repoPath: string;
   sourceId: string;
   providerId: string;
@@ -29,15 +30,25 @@ export function GithubIssueImage({
     queryKey: [
       "issue-image",
       context.providerId,
-      context.repoPath,
+      { workspaceId: context.workspaceId, repoPath: context.repoPath },
       context.taskId ?? context.sourceId,
       src,
     ],
     queryFn: ({ client }) =>
       connectionHost(client).issueImageGet(
         context.taskId
-          ? { repoPath: context.repoPath, taskId: context.taskId, url: src }
-          : { repoPath: context.repoPath, sourceId: context.sourceId, url: src },
+          ? {
+              workspaceId: context.workspaceId,
+              repoPath: context.repoPath,
+              taskId: context.taskId,
+              url: src,
+            }
+          : {
+              workspaceId: context.workspaceId,
+              repoPath: context.repoPath,
+              sourceId: context.sourceId,
+              url: src,
+            },
       ),
     staleTime: Infinity,
   });

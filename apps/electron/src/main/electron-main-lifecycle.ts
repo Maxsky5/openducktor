@@ -136,24 +136,26 @@ export const composeElectronMainStartupEffect = <PreReady, Ready>({
 type StartupBoundaryOptions = {
   cleanupAfterFailure(): Effect.Effect<void, ElectronLifecycleError>;
   exitProcess(exitCode: number): void;
-  invalidSettingsMessage?(cause: unknown): string | null;
   logger: ElectronMainLifecycleLogger;
   markShutdownComplete(): void;
   markShutdownStarted(): void;
   reportFailure(cause: unknown): void;
-  showInvalidSettingsError?(message: string): Promise<void>;
+  /** Shows an error window. The boundary calls it only for a failure with a startup error message. */
+  showStartupError?(message: string): Promise<void>;
+  /** The message for the user when the failure has a known cause and next action, or null. */
+  startupErrorMessage?(cause: unknown): string | null;
   startupEffect: Effect.Effect<unknown, ElectronError>;
 };
 
 export const runElectronMainStartupBoundary = async ({
   cleanupAfterFailure,
   exitProcess,
-  invalidSettingsMessage,
   logger,
   markShutdownComplete,
   markShutdownStarted,
   reportFailure,
-  showInvalidSettingsError,
+  showStartupError,
+  startupErrorMessage,
   startupEffect,
 }: StartupBoundaryOptions): Promise<void> => {
   const startupExit = await Effect.runPromiseExit(startupEffect);
@@ -164,12 +166,9 @@ export const runElectronMainStartupBoundary = async ({
   markShutdownStarted();
   const loggingFailures: Error[] = [];
   const startupFailure = causeToElectronBoundaryError(startupExit.cause);
-  const settingsMessage = invalidSettingsMessage?.(startupFailure) ?? null;
+  const userMessage = startupErrorMessage?.(startupFailure) ?? null;
   const startupLoggingFailure = await captureLoggingFailure(() =>
-    logger.error(
-      settingsMessage ?? "OpenDucktor Electron startup failed",
-      settingsMessage === null ? startupFailure : undefined,
-    ),
+    logger.error(userMessage ?? "OpenDucktor Electron startup failed", startupFailure),
   );
   if (startupLoggingFailure !== undefined) {
     loggingFailures.push(startupLoggingFailure);
@@ -196,14 +195,14 @@ export const runElectronMainStartupBoundary = async ({
   if (reportingFailure !== undefined) {
     reportFailure(reportingFailure);
   }
-  if (settingsMessage !== null && showInvalidSettingsError !== undefined) {
+  if (userMessage !== null && showStartupError !== undefined) {
     try {
-      await showInvalidSettingsError(settingsMessage);
+      await showStartupError(userMessage);
       return;
     } catch (cause) {
-      const displayFailure = toLifecycleError(cause, "electron.main.show-settings-error");
+      const displayFailure = toLifecycleError(cause, "electron.main.show-startup-error");
       const displayLoggingFailure = await captureLoggingFailure(() =>
-        logger.error("OpenDucktor could not show the settings error window", displayFailure),
+        logger.error("OpenDucktor could not show the startup error window", displayFailure),
       );
       if (displayLoggingFailure !== undefined) {
         reportFailure(displayLoggingFailure);

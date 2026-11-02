@@ -6,16 +6,29 @@ import {
   type NotificationService,
 } from "../../application/notifications/notification-service";
 import type { HostEventBusPort } from "../../events/host-event-bus";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { SettingsConfigPort, SettingsConfigView } from "../../ports/settings-config-port";
 
 export const createNodeNotificationServices = (
   baseSettings: SettingsConfigPort,
   eventBus: HostEventBusPort | undefined,
+  configCommitted: (config: SettingsConfigView) => Effect.Effect<void>,
 ) => {
   let service: NotificationService | undefined;
-  const settingsConfig = withConfigCommit(baseSettings, (config) =>
-    service ? service.configCommitted(config) : Effect.void,
+  const observedSettings = withConfigCommit(baseSettings, (config) =>
+    configCommitted(config).pipe(
+      Effect.andThen(service ? service.configCommitted(config) : Effect.void),
+    ),
   );
+  const settingsConfig: SettingsConfigPort = {
+    ...observedSettings,
+    updatePreferences: (change) =>
+      observedSettings.updatePreferences(change).pipe(
+        Effect.tap((preferences) =>
+          service ? service.preferencesCommitted(preferences.notifications) : Effect.void,
+        ),
+        Effect.uninterruptible,
+      ),
+  };
   return {
     settingsConfig,
     acceptLive: (...args: Parameters<NotificationService["acceptLive"]>) =>

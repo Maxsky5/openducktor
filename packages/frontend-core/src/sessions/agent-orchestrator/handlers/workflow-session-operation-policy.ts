@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
 
@@ -9,8 +10,12 @@ export const createRefreshStoppedWorkflowSession = ({
   refreshTaskData,
 }: {
   workspaceRepoPath: string | null;
-  invalidateSessionStopQueries: (input: { repoPath: string; taskId: string }) => Promise<void>;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  invalidateSessionStopQueries: (input: {
+    workspaceId: string;
+    repoPath: string;
+    taskId: string;
+  }) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
 }): RefreshStoppedWorkflowSession => {
   return async (session): Promise<void> => {
     if (session.sessionAssociation.kind !== "workflow") {
@@ -20,8 +25,12 @@ export const createRefreshStoppedWorkflowSession = ({
     const taskId = session.sessionAssociation.taskId;
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await Promise.all([
-      invalidateSessionStopQueries({ repoPath, taskId }),
-      refreshTaskData(repoPath, taskId),
+      invalidateSessionStopQueries({
+        workspaceId: session.sessionAssociation.workspaceId,
+        repoPath,
+        taskId,
+      }),
+      refreshTaskData({ workspaceId: session.sessionAssociation.workspaceId, repoPath }, taskId),
     ]);
   };
 };

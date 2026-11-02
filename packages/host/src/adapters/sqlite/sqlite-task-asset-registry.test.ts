@@ -28,7 +28,7 @@ describe("SQLite task asset registry", () => {
 
     const exit = await Effect.runPromiseExit(
       registry.createTaskWithDescriptionAssets({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Atomic asset create",
@@ -55,12 +55,10 @@ describe("SQLite task asset registry", () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     expect(preparedTaskId).not.toBeNull();
-    expect(
-      await Effect.runPromise(harness.store.listTasks({ repoPath: harness.repoPath })),
-    ).toEqual([]);
-    expect(
-      await Effect.runPromise(registry.assetIdExists({ repoPath: harness.repoPath, assetId })),
-    ).toBe(false);
+    expect(await Effect.runPromise(harness.store.listTasks(harness.scope))).toEqual([]);
+    expect(await Effect.runPromise(registry.assetIdExists({ ...harness.scope, assetId }))).toBe(
+      false,
+    );
   });
 
   test("registers exact ownership and updates description rows in one transaction", async () => {
@@ -71,7 +69,7 @@ describe("SQLite task asset registry", () => {
     });
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Assets", issueType: "task", priority: 2 },
       }),
@@ -81,7 +79,7 @@ describe("SQLite task asset registry", () => {
 
     await Effect.runPromise(
       registry.registerAssets({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         assets: [
           {
@@ -96,14 +94,12 @@ describe("SQLite task asset registry", () => {
       }),
     );
     expect(
-      await Effect.runPromise(
-        registry.assetIdExists({ repoPath: harness.repoPath, assetId: firstId }),
-      ),
+      await Effect.runPromise(registry.assetIdExists({ ...harness.scope, assetId: firstId })),
     ).toBe(true);
     expect(
       await Effect.runPromise(
         registry.getAsset({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           taskId: task.id,
           scope: "description",
           assetId: firstId,
@@ -113,7 +109,7 @@ describe("SQLite task asset registry", () => {
 
     const updated = await Effect.runPromise(
       registry.updateTaskWithDescriptionAssets({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         expectedTask: task,
         expectedAssetIds: [firstId],
@@ -135,7 +131,7 @@ describe("SQLite task asset registry", () => {
     expect(updated.description).toBe(`![two](odt-asset:${secondId})`);
     expect(
       await Effect.runPromise(
-        registry.listAssets({ repoPath: harness.repoPath, taskId: task.id, scope: "description" }),
+        registry.listAssets({ ...harness.scope, taskId: task.id, scope: "description" }),
       ),
     ).toEqual([expect.objectContaining({ id: secondId, taskId: task.id })]);
   });
@@ -148,7 +144,7 @@ describe("SQLite task asset registry", () => {
     });
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Concurrent assets",
@@ -161,7 +157,7 @@ describe("SQLite task asset registry", () => {
 
     await Effect.runPromise(
       registry.updateTaskWithDescriptionAssets({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         expectedTask: task,
         expectedAssetIds: [],
@@ -173,7 +169,7 @@ describe("SQLite task asset registry", () => {
 
     const exit = await Effect.runPromiseExit(
       registry.updateTaskWithDescriptionAssets({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         expectedTask: task,
         expectedAssetIds: [],
@@ -196,11 +192,8 @@ describe("SQLite task asset registry", () => {
       retryAllowed: true,
     });
     expect(
-      (
-        await Effect.runPromise(
-          harness.store.getTask({ repoPath: harness.repoPath, taskId: task.id }),
-        )
-      ).description,
+      (await Effect.runPromise(harness.store.getTask({ ...harness.scope, taskId: task.id })))
+        .description,
     ).toBe("First save");
   });
 
@@ -212,7 +205,7 @@ describe("SQLite task asset registry", () => {
     });
     const expectedTask = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Original title",
@@ -224,7 +217,7 @@ describe("SQLite task asset registry", () => {
     );
     await Effect.runPromise(
       harness.store.updateTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: expectedTask.id,
         patch: { title: "Concurrent title" },
       }),
@@ -232,7 +225,7 @@ describe("SQLite task asset registry", () => {
 
     const exit = await Effect.runPromiseExit(
       registry.updateTaskWithDescriptionAssets({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: expectedTask.id,
         expectedAssetIds: [],
         expectedTask,
@@ -246,7 +239,7 @@ describe("SQLite task asset registry", () => {
     expect(
       (
         await Effect.runPromise(
-          harness.store.getTask({ repoPath: harness.repoPath, taskId: expectedTask.id }),
+          harness.store.getTask({ ...harness.scope, taskId: expectedTask.id }),
         )
       ).title,
     ).toBe("Concurrent title");

@@ -41,6 +41,7 @@ const createTaskServiceDefaults = () =>
     linkMergedPullRequest: unexpectedTaskServiceCall("linkMergedPullRequest"),
     linkPullRequest: unexpectedTaskServiceCall("linkPullRequest"),
     listTasks: unexpectedTaskServiceCall("listTasks"),
+    searchTasks: unexpectedTaskServiceCall("searchTasks"),
     listKanbanTasks: unexpectedTaskServiceCall("listKanbanTasks"),
     listTaskIds: unexpectedTaskServiceCall("listTaskIds"),
     repoPullRequestSync: unexpectedTaskServiceCall("repoPullRequestSync"),

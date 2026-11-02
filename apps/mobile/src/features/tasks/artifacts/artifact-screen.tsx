@@ -1,4 +1,4 @@
-import type { FreeTaskArtifact } from "@openducktor/contracts";
+import type { FreeTaskArtifact, WorkspaceRef } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { taskArtifactsQueryOptions } from "@openducktor/frontend-core/queries/artifacts";
@@ -45,26 +45,32 @@ function ArtifactContent({ owner }: { owner: WorkOwner }): ReactElement {
       </>
     );
   }
-  return <ArtifactFromLink repoPath={owner.repoPath} taskId={owner.task.id} code={code} />;
+  return (
+    <ArtifactFromLink
+      scope={{ workspaceId: owner.workspace.workspaceId, repoPath: owner.repoPath }}
+      taskId={owner.task.id}
+      code={code}
+    />
+  );
 }
 
 /** Finds the saved file of the link in the artifact collection, which live changes keep current. */
 function ArtifactFromLink({
-  repoPath,
+  scope,
   taskId,
   code,
 }: {
-  repoPath: string;
+  scope: WorkspaceRef;
   taskId: string;
   code: string;
 }): ReactElement {
   const queryClient = useQueryClient();
   const gate = useCommandGate();
-  const collection = useQuery(taskArtifactsQueryOptions(queryClient, repoPath, taskId));
+  const collection = useQuery(taskArtifactsQueryOptions(queryClient, scope, taskId));
   const artifact = collection.data?.artifacts.find(
     (item): item is FreeTaskArtifact => item.classification === "free" && item.code === code,
   );
-  if (artifact) return <ArtifactView repoPath={repoPath} artifact={artifact} />;
+  if (artifact) return <ArtifactView scope={scope} artifact={artifact} />;
   let body: ReactElement;
   if (collection.data) {
     body = (
@@ -94,16 +100,16 @@ function ArtifactFromLink({
 }
 
 function ArtifactView({
-  repoPath,
+  scope,
   artifact,
 }: {
-  repoPath: string;
+  scope: WorkspaceRef;
   artifact: FreeTaskArtifact;
 }): ReactElement {
   const queryClient = useQueryClient();
   const files = useResourceFiles();
   const gate = useCommandGate();
-  const read = useQuery(artifactFileQueryOptions(queryClient, files, repoPath, artifact));
+  const read = useQuery(artifactFileQueryOptions(queryClient, files, scope, artifact));
   // A failed read shows its error instead of an earlier version, as the desktop preview does.
   const file = read.error ? null : (read.data ?? null);
   const { sharing, share } = useShareArtifact(artifact);

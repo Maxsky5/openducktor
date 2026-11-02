@@ -23,7 +23,6 @@ describe("taskEditorSaveDisabled", () => {
     documentSection: false,
     title: "Add login",
     typeStep: false,
-    conflict: false,
     destinationError: false,
     documentDirty: false,
     documentDraft: "",
@@ -33,10 +32,9 @@ describe("taskEditorSaveDisabled", () => {
     expect(taskEditorSaveDisabled(task)).toBe(false);
   });
 
-  test("waits for a title, the type step, a conflict, and a destination error", () => {
+  test("waits for a title, the type step, and a destination error", () => {
     expect(taskEditorSaveDisabled({ ...task, title: "  " })).toBe(true);
     expect(taskEditorSaveDisabled({ ...task, typeStep: true })).toBe(true);
-    expect(taskEditorSaveDisabled({ ...task, conflict: true })).toBe(true);
     expect(taskEditorSaveDisabled({ ...task, destinationError: true })).toBe(true);
   });
 

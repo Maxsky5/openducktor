@@ -5,7 +5,6 @@ import type { UseTaskOperationsArgs, UseTaskOperationsResult } from "./task-oper
 import { useTaskMutationCommands } from "./use-task-mutation-commands";
 import {
   type TaskPullRequestChatDraftCleanupPort,
-  type TaskPullRequestHostPort,
   useTaskPullRequestOperations,
 } from "./use-task-pull-request-operations";
 import { useTaskReadFlow } from "./use-task-read-flow";
@@ -21,14 +20,6 @@ export function useTaskOperations({
   const agentSessionReadPort = suppliedAgentSessionReadPort ?? host;
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
-  const pullRequestHostPort = useMemo<TaskPullRequestHostPort>(
-    () => ({
-      detectPullRequest: host.taskPullRequestDetect,
-      linkMergedPullRequest: host.taskPullRequestLinkMerged,
-      unlinkPullRequest: host.taskPullRequestUnlink,
-    }),
-    [host],
-  );
   const pullRequestChatDraftCleanup = useMemo<TaskPullRequestChatDraftCleanupPort>(
     () => ({
       runMutation: (input) =>
@@ -36,7 +27,7 @@ export function useTaskOperations({
     }),
     [agentSessionReadPort],
   );
-  const taskReadFlow = useTaskReadFlow({ activeRepoPath });
+  const taskReadFlow = useTaskReadFlow({ activeRepoPath, activeWorkspaceId });
   const { clearTaskReadState } = taskReadFlow;
   const mutationRunner = useTaskMutationRunner({ activeRepoPath });
   const mutationCommands = useTaskMutationCommands({
@@ -47,6 +38,7 @@ export function useTaskOperations({
   });
   const resetOperations = useTaskResetOperations({
     activeRepoPath,
+    activeWorkspaceId,
     agentSessionReadPort,
     refreshTaskData: taskReadFlow.refreshTaskData,
   });
@@ -56,7 +48,7 @@ export function useTaskOperations({
     tasks: taskReadFlow.tasks,
     refreshTaskData: taskReadFlow.refreshTaskData,
     runTaskMutation: mutationRunner.runTaskMutation,
-    pullRequestHostPort,
+    pullRequestHostPort: host,
     feedback,
     taskChatDraftCleanup: pullRequestChatDraftCleanup,
   });

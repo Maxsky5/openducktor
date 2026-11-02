@@ -10,7 +10,7 @@ export const createTaskReviewUseCases = ({
   humanRequestChanges(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const metadata = yield* taskStore.getTaskMetadata(input);
       yield* ensureNoDirectMergeEffect({
         operation: "human_request_changes",
         repoPath,
@@ -18,12 +18,7 @@ export const createTaskReviewUseCases = ({
         directMerge: metadata.directMerge,
       });
 
-      return yield* applyEffect(
-        taskStore,
-        taskWorkflows,
-        { repoPath, taskId },
-        "review.request_changes",
-      );
+      return yield* applyEffect(taskStore, taskWorkflows, input, "review.request_changes");
     });
   },
 });

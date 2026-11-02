@@ -2,12 +2,21 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionLiveAttachInput,
+  TaskCompletionObservation,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { errorMessage } from "../../../lib/errors";
 import type { ClientFeedback } from "../../../platform/client-feedback";
 import type { AgentMessageQueuesStore } from "../../agent-message-queues-store";
@@ -109,18 +118,21 @@ type TaskRecordApplyState =
   | {
       kind: "ready";
       repoPath: string;
+      workspaceId: string;
       taskIdsKey: string;
       records: TaskSessionRecords;
     }
   | {
       kind: "failed";
       repoPath: string;
+      workspaceId: string;
       taskIdsKey: string;
       failedAt: "load" | "apply";
       message: string;
     };
 
 type RecordRetryKey = {
+  workspaceId: string;
   retryId: number;
   repoPath: string;
   repoEpoch: number;
@@ -186,17 +198,27 @@ export const useRepoSessionReadModel = ({
   });
   const applyWorkspaceRecords = useEffectEvent(
     (projected: AgentSessionCollection, previous: AgentSessionCollection) =>
-      workspaceRecords.records.data
-        ? applyWorkspaceSessionRecords(projected, workspaceRecords.records.data, previous)
+      workspaceRecords.records.data && workspaceId
+        ? applyWorkspaceSessionRecords(
+            projected,
+            workspaceRecords.records.data,
+            workspaceId,
+            previous,
+          )
         : projected,
   );
   // Hydrates the shared session store from the durable query, without copying transcripts.
   useEffect(() => {
     const records = workspaceRecords.records.data;
-    if (!records || !workspaceRepoPath || currentWorkspaceRepoPathRef.current !== workspaceRepoPath)
+    if (
+      !records ||
+      !workspaceId ||
+      !workspaceRepoPath ||
+      currentWorkspaceRepoPathRef.current !== workspaceRepoPath
+    )
       return;
     const collection = commitSessionCollection((current) => {
-      const next = applyWorkspaceSessionRecords(current, records);
+      const next = applyWorkspaceSessionRecords(current, records, workspaceId);
       return { collection: next, result: next };
     });
     // Check durable target identity after the shared store commit, not during render.
@@ -207,11 +229,15 @@ export const useRepoSessionReadModel = ({
     currentWorkspaceRepoPathRef,
     workspaceRecords.records.data,
     workspaceRepoPath,
+    workspaceId,
   ]);
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
   const retryIdRef = useRef(0);
+  useLayoutEffect(() => {
+    retryIdRef.current += 1;
+  }, [workspaceId]);
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
   // An unresolved live-stream failure survives task-record recovery so a
   // durable success cannot report a broken stream as healthy.
@@ -300,6 +326,7 @@ export const useRepoSessionReadModel = ({
         }));
         taskRecordApplyRef.current = {
           kind: "ready",
+          workspaceId: records.workspaceId,
           repoPath,
           taskIdsKey: taskIdsScopeKey(records.taskIds),
           records,
@@ -309,6 +336,7 @@ export const useRepoSessionReadModel = ({
         const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(error)}`;
         taskRecordApplyRef.current = {
           kind: "failed",
+          workspaceId: records.workspaceId,
           repoPath,
           taskIdsKey: taskIdsScopeKey(records.taskIds),
           failedAt: "apply",
@@ -326,7 +354,7 @@ export const useRepoSessionReadModel = ({
     const retryId = retryIdRef.current + 1;
     retryIdRef.current = retryId;
     setRecordRetryResult(null);
-    if (!workspaceRepoPath) {
+    if (!workspaceRepoPath || !workspaceId) {
       setReloadGeneration((current) => current + 1);
       return;
     }
@@ -335,6 +363,7 @@ export const useRepoSessionReadModel = ({
     const retryTaskIds = normalizeAgentSessionTaskIds(taskIds);
     const retryKey: RecordRetryKey = {
       retryId,
+      workspaceId,
       repoPath,
       repoEpoch,
       taskIdsKey,
@@ -343,6 +372,7 @@ export const useRepoSessionReadModel = ({
     const retriesApplyFailure =
       taskRecordState?.kind === "failed" &&
       taskRecordState.repoPath === repoPath &&
+      taskRecordState.workspaceId === workspaceId &&
       taskRecordState.failedAt === "apply";
     const isCurrentRetry = (): boolean =>
       retryIdRef.current === retryId &&
@@ -365,7 +395,7 @@ export const useRepoSessionReadModel = ({
     if (retriesApplyFailure) {
       void Promise.all([
         workspaceRetry,
-        loadAgentSessionListsFromQuery(queryClient, repoPath, retryTaskIds, {
+        loadAgentSessionListsFromQuery(queryClient, { workspaceId, repoPath }, retryTaskIds, {
           forceFresh: true,
           readPort: sessionReadPort,
         }),
@@ -394,7 +424,12 @@ export const useRepoSessionReadModel = ({
     }
     void Promise.all([
       workspaceRetry,
-      retryAgentSessionListQueries(queryClient, repoPath, retryTaskIds, sessionReadPort),
+      retryAgentSessionListQueries(
+        queryClient,
+        { workspaceId, repoPath },
+        retryTaskIds,
+        sessionReadPort,
+      ),
     ]).then(
       () => {
         if (isCurrentRetry()) {
@@ -426,10 +461,10 @@ export const useRepoSessionReadModel = ({
   ]);
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
-    if (!workspaceRepoPath) {
+    if (!workspaceRepoPath || !workspaceId) {
       clearSessionFaults();
     }
-  }, [clearSessionFaults, workspaceRepoPath]);
+  }, [clearSessionFaults, workspaceRepoPath, workspaceId]);
   const currentSessionReadModelLoadState = useMemo(
     () =>
       currentAgentSessionReadModelLoadState({
@@ -439,26 +474,28 @@ export const useRepoSessionReadModel = ({
     [sessionReadModelLoadState, workspaceRepoPath],
   );
   const taskRecords = useTaskSessionRecords({
+    workspaceId,
     repoPath: workspaceRepoPath,
     taskIds,
     enabled: !isLoadingTasks,
     queryClient,
     readPort: sessionReadPort,
   });
-  const observedRepoPathRef = useRef<string | null>(null);
+  const observedScopeKeyRef = useRef<string | null>(null);
+  const scopeKey = JSON.stringify([workspaceId, workspaceRepoPath]);
   const canObserveRepo =
     (taskRecords.kind === "ready" &&
       (workspaceId === null || !workspaceRecords.records.isPending)) ||
-    observedRepoPathRef.current === workspaceRepoPath;
+    observedScopeKeyRef.current === scopeKey;
 
   // Synchronizes an async query lifecycle with the parent-owned session read model.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
-    if (!workspaceRepoPath) {
+    if (!workspaceRepoPath || !workspaceId) {
       return;
     }
     if (taskRecords.kind === "loading") {
-      if (observedRepoPathRef.current !== workspaceRepoPath) {
+      if (observedScopeKeyRef.current !== scopeKey) {
         // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       } else {
@@ -468,6 +505,7 @@ export const useRepoSessionReadModel = ({
         const staleScopeFailure =
           appliedRecords &&
           appliedRecords.repoPath === workspaceRepoPath &&
+          appliedRecords.workspaceId === workspaceId &&
           appliedRecords.kind === "failed" &&
           appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
         if (staleScopeFailure) {
@@ -485,6 +523,7 @@ export const useRepoSessionReadModel = ({
       taskRecordApplyRef.current = {
         kind: "failed",
         repoPath: workspaceRepoPath,
+        workspaceId,
         taskIdsKey: readCurrentTaskIdsKey(),
         failedAt: "load",
         message,
@@ -542,7 +581,15 @@ export const useRepoSessionReadModel = ({
       }
       return currentLoadState;
     });
-  }, [applyTaskRecords, currentWorkspaceRepoPathRef, repoEpochRef, taskRecords, workspaceRepoPath]);
+  }, [
+    applyTaskRecords,
+    currentWorkspaceRepoPathRef,
+    repoEpochRef,
+    taskRecords,
+    scopeKey,
+    workspaceRepoPath,
+    workspaceId,
+  ]);
 
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
@@ -552,6 +599,7 @@ export const useRepoSessionReadModel = ({
     const retryIsCurrent =
       recordRetryResult.retryId === retryIdRef.current &&
       recordRetryResult.repoPath === workspaceRepoPath &&
+      recordRetryResult.workspaceId === workspaceId &&
       recordRetryResult.repoEpoch === repoEpochRef.current;
     if (!retryIsCurrent) {
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
@@ -564,6 +612,7 @@ export const useRepoSessionReadModel = ({
       taskRecordApplyRef.current = {
         kind: "failed",
         repoPath: recordRetryResult.repoPath,
+        workspaceId: recordRetryResult.workspaceId,
         taskIdsKey: recordRetryResult.taskIdsKey,
         failedAt: "apply",
         message: recordRetryResult.message,
@@ -589,6 +638,7 @@ export const useRepoSessionReadModel = ({
     const recordsAreCurrent =
       lastApply?.kind === "ready" &&
       lastApply.repoPath === workspaceRepoPath &&
+      lastApply.workspaceId === workspaceId &&
       lastApply.records === taskRecords.records;
     let recordsApplied = recordsAreCurrent;
     if (!recordsApplied) {
@@ -604,11 +654,13 @@ export const useRepoSessionReadModel = ({
     taskIdsKey,
     recordRetryResult,
     taskRecords,
+    scopeKey,
     workspaceRepoPath,
+    workspaceId,
   ]);
 
   useEffect(() => {
-    if (!workspaceRepoPath || !canObserveRepo) {
+    if (!workspaceRepoPath || !workspaceId || !canObserveRepo) {
       return;
     }
     return () => transcriptEvents.close();
@@ -621,12 +673,13 @@ export const useRepoSessionReadModel = ({
     repoEpochRef,
     transcriptEvents,
     workspaceRepoPath,
+    workspaceId,
   ]);
 
   // Owns the async stream lifecycle; its loading state is not render-derived.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
-    if (!workspaceRepoPath || !canObserveRepo) {
+    if (!workspaceRepoPath || !workspaceId || !canObserveRepo) {
       return;
     }
 
@@ -641,12 +694,21 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
-      const cached = readCachedTaskSessionRecords(queryClient, repoPath, readCurrentTaskIds());
+      const cached = readCachedTaskSessionRecords(
+        queryClient,
+        { workspaceId, repoPath },
+        readCurrentTaskIds(),
+      );
       if (cached) {
         return toLoadedWorkflowSessionRecords(cached);
       }
       const current = taskRecordApplyRef.current;
-      if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
+      if (
+        !current ||
+        current.repoPath !== repoPath ||
+        current.workspaceId !== workspaceId ||
+        current.kind !== "ready"
+      ) {
         return null;
       }
       // Records applied for a prior task set are stale: the current set stays
@@ -787,6 +849,7 @@ export const useRepoSessionReadModel = ({
       if (
         appliedRecords &&
         appliedRecords.repoPath === repoPath &&
+        appliedRecords.workspaceId === workspaceId &&
         appliedRecords.kind === "failed" &&
         appliedRecords.taskIdsKey === readCurrentTaskIdsKey()
       ) {
@@ -809,10 +872,12 @@ export const useRepoSessionReadModel = ({
       snapshotAwaitsRecordsRef.current = true;
     };
     const shownCompletionIds = shownCompletionIdsOf(queryClient);
-    const projectCompletion = (
-      observation: import("@openducktor/contracts").TaskCompletionObservation,
-    ) => {
-      const id = `task-completion:${observation.repoPath}:${observation.taskId}`;
+    const completionPrefix = `task-completion:${JSON.stringify([workspaceId, repoPath])}:`;
+    const completionMatchesWorkspace = (observation: TaskCompletionObservation): boolean =>
+      observation.workspaceId === workspaceId && observation.repoPath === repoPath;
+    const projectCompletion = (observation: TaskCompletionObservation) => {
+      if (!completionMatchesWorkspace(observation)) return;
+      const id = `${completionPrefix}${observation.taskId}`;
       if (observation.failure) {
         shownCompletionIds.add(id);
         feedback.show("error", `Task ${observation.taskId} completion needs attention`, {
@@ -830,11 +895,10 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "snapshot") {
-        const completions = envelope.taskCompletions ?? [];
-        const prefix = `task-completion:${envelope.repoPath}:`;
-        const currentIds = new Set(completions.map(({ taskId }) => `${prefix}${taskId}`));
+        const completions = (envelope.taskCompletions ?? []).filter(completionMatchesWorkspace);
+        const currentIds = new Set(completions.map(({ taskId }) => `${completionPrefix}${taskId}`));
         for (const id of shownCompletionIds) {
-          if (id.startsWith(prefix) && !currentIds.has(id)) {
+          if (id.startsWith(completionPrefix) && !currentIds.has(id)) {
             shownCompletionIds.delete(id);
             feedback.dismiss(id);
           }
@@ -882,13 +946,16 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "task_session_records_updated") {
+        if (envelope.workspaceId !== workspaceId) return;
         commitProjected((current) => {
           const owned = applyWorkflowSessionRecords({
             projected: current,
             associationEvidence: current,
             records: {
+              workspaceId: envelope.workspaceId,
               loadedTaskIds: new Set([envelope.taskId]),
               records: envelope.agentSessions.map((record) => ({
+                workspaceId: envelope.workspaceId,
                 taskId: envelope.taskId,
                 record,
               })),
@@ -1004,7 +1071,7 @@ export const useRepoSessionReadModel = ({
       );
     };
 
-    observedRepoPathRef.current = repoPath;
+    observedScopeKeyRef.current = scopeKey;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
     snapshotAwaitsRecordsRef.current = false;
@@ -1037,8 +1104,8 @@ export const useRepoSessionReadModel = ({
 
     return () => {
       cancelled = true;
-      if (observedRepoPathRef.current === repoPath) {
-        observedRepoPathRef.current = null;
+      if (observedScopeKeyRef.current === scopeKey) {
+        observedScopeKeyRef.current = null;
       }
       liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
@@ -1061,6 +1128,8 @@ export const useRepoSessionReadModel = ({
     clearSessionFaults,
     recordSessionFault,
     workspaceRepoPath,
+    workspaceId,
+    scopeKey,
   ]);
 
   return useMemo(

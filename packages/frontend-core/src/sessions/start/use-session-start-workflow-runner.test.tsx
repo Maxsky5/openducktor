@@ -317,12 +317,17 @@ test.each(["completed", "failed", "disconnected"] as const)(
     const { queryClient } = connection;
     const wrapper = createWrapper(connection);
     const reads = [null, "old-version"].map((taskVersion) =>
-      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "task", taskVersion }),
+      taskWorktreeQueryOptions({
+        workspaceId: workspace.workspaceId,
+        repoPath: "/repo",
+        taskId: "task",
+        taskVersion,
+      }),
     );
     const otherReads = [
       { repoPath: "/repo", taskId: "other-task" },
       { repoPath: "/other-repo", taskId: "task" },
-    ].map((input) => taskWorktreeQueryOptions(input));
+    ].map((input) => taskWorktreeQueryOptions({ ...input, workspaceId: workspace.workspaceId }));
     const terminalKey = terminalQueryKeys.task({ repoPath: "/repo", taskId: "task" });
     const otherTerminalKey = terminalQueryKeys.task({ repoPath: "/repo", taskId: "other-task" });
     for (const key of [terminalKey, otherTerminalKey])

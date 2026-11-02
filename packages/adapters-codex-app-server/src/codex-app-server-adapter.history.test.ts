@@ -953,7 +953,7 @@ describe("CodexAppServerAdapter history loading", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -964,7 +964,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread/start-runtime-live",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       },
       () => {},
@@ -975,7 +975,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPromptContext: {
         startedAt: "2026-05-08T00:00:00.000Z",
@@ -1011,7 +1011,7 @@ describe("CodexAppServerAdapter history loading", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -1022,7 +1022,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread/start-runtime-live",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     expect(history).toEqual([
@@ -1523,7 +1523,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-saved",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPromptContext: {
         startedAt: "2026-05-07T00:00:00.000Z",
@@ -1670,7 +1670,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-search",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -1757,7 +1757,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-skill",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -1841,7 +1841,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-unloaded-idle",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -1903,7 +1903,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-unloaded",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -1996,7 +1996,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-contract",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -2131,7 +2131,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-command-actions",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -2212,7 +2212,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "missing-thread",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).rejects.toThrow();
@@ -2272,7 +2272,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-todos",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -2342,7 +2342,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-history-todos",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -2362,7 +2362,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-history-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([
@@ -2429,7 +2429,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-history-todos",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     calls.length = 0;
@@ -2440,7 +2440,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-history-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         // @ts-expect-error -- This test verifies rejection of a runtime policy from another adapter.
         runtimePolicy: { kind: "opencode" },
       }),
@@ -2505,7 +2505,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-empty-todos",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     calls.length = 0;
@@ -2515,7 +2515,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-empty-todos",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -2582,7 +2582,7 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-final-message",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -2640,7 +2640,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-plan-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([
@@ -2705,7 +2705,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-plan-text-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([
@@ -2768,7 +2768,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-named-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([
@@ -2828,7 +2828,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-json-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([
@@ -2893,7 +2893,7 @@ describe("CodexAppServerAdapter history loading", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-bad-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toEqual([]);

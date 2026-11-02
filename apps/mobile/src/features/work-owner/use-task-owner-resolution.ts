@@ -30,7 +30,10 @@ export const useTaskOwnerResolution = (
   const workspace =
     workspaces.read.data?.find((entry) => entry.workspaceId === ownerRef.workspaceId) ?? null;
   const repoPath = workspace?.repoPath ?? null;
-  const taskRead = useRepoTask(repoPath, ownerRef.taskId);
+  const taskRead = useRepoTask(
+    workspace ? { workspaceId: workspace.workspaceId, repoPath: workspace.repoPath } : null,
+    ownerRef.taskId,
+  );
   const { tasks, error, isPending } = taskRead;
   const resolution = useMemo(
     () => resolveTaskOwner(ownerRef, workspaces.read, { data: tasks, error, isPending }),

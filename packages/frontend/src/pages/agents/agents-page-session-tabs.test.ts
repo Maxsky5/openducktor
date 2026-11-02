@@ -1,3 +1,4 @@
+import { createWorkflowAssociationFixture } from "./agent-studio-test-utils";
 import {
   BUILTIN_ROLE_LABELS,
   resolveSessionContinuationLaunchAction,
@@ -28,7 +29,7 @@ const buildSession = (
     {
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
 
       status: "idle",
       runtimeStatusMessage: null,
@@ -49,17 +50,17 @@ describe("agents-page-session-tabs", () => {
   test("selects latest session per task", () => {
     const map = buildLatestSessionByTaskMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         externalSessionId: "older",
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         externalSessionId: "newer",
         startedAt: "2026-02-20T11:00:00.000Z",
       }),
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec", "task-2"),
         externalSessionId: "task-2-session",
       }),
     ]);
@@ -71,12 +72,12 @@ describe("agents-page-session-tabs", () => {
   test("uses deterministic tiebreaker when timestamps are equal", () => {
     const map = buildLatestSessionByTaskMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         externalSessionId: "first",
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         externalSessionId: "second",
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
@@ -204,7 +205,7 @@ describe("agents-page-session-tabs", () => {
         liveSessionByRole: buildLiveSessionByRoleMap([
           {
             ...buildSession({
-              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+              sessionAssociation: createWorkflowAssociationFixture("build"),
             }),
             activityState,
             statusUnavailableReason: "Update Claude Code and reconnect the runtime.",
@@ -219,7 +220,7 @@ describe("agents-page-session-tabs", () => {
   test("does not mark builder as in_progress when stopped session exists but builder is not available", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         status: "stopped",
       }),
     ]);
@@ -245,7 +246,7 @@ describe("agents-page-session-tabs", () => {
   test("marks builder as in_progress when builder session exists but is stopped without build_completed", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         status: "stopped",
       }),
     ]);
@@ -271,7 +272,7 @@ describe("agents-page-session-tabs", () => {
   test("uses warning tone for blocked builder tasks even when the latest session is stopped", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         status: "stopped",
       }),
     ]);
@@ -320,7 +321,7 @@ describe("agents-page-session-tabs", () => {
   test("keeps blocked builder tasks in progress while the live builder session is still running", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         status: "running",
       }),
     ]);
@@ -346,7 +347,7 @@ describe("agents-page-session-tabs", () => {
   test("keeps blocked builder tasks failed when the latest builder session errored", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         status: "error",
       }),
     ]);
@@ -372,7 +373,7 @@ describe("agents-page-session-tabs", () => {
   test("marks workflow role as in_progress when latest role session is started but not completed", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        sessionAssociation: createWorkflowAssociationFixture("planner"),
         status: "idle",
       }),
     ]);
@@ -418,7 +419,7 @@ describe("agents-page-session-tabs", () => {
   test("keeps workflow role in_progress while the latest role session is still running even if workflow is completed", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         status: "running",
       }),
     ]);
@@ -464,7 +465,7 @@ describe("agents-page-session-tabs", () => {
   test("does not mark unavailable roles as in_progress when a session exists", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: createWorkflowAssociationFixture("qa"),
         status: "idle",
       }),
     ]);
@@ -533,7 +534,7 @@ describe("agents-page-session-tabs", () => {
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+          sessionAssociation: createWorkflowAssociationFixture("qa"),
           status: "idle",
         }),
       ]),
@@ -605,7 +606,12 @@ describe("agents-page-session-tabs", () => {
         });
         const savedTask = structuredClone(task);
         const qaSession = buildSession({
-          sessionAssociation: { kind: "workflow", taskId: task.id, role: "qa" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: task.id,
+            role: "qa",
+          },
           status,
           pendingQuestions:
             activity === "waiting_input" ? [{ requestId: "q-1", questions: [] }] : [],
@@ -659,20 +665,20 @@ describe("agents-page-session-tabs", () => {
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+          sessionAssociation: createWorkflowAssociationFixture("spec"),
           status: "idle",
         }),
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+          sessionAssociation: createWorkflowAssociationFixture("planner"),
           status: "idle",
         }),
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: createWorkflowAssociationFixture("build"),
           status: "stopped",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+          sessionAssociation: createWorkflowAssociationFixture("qa"),
           status: "idle",
           startedAt: "2026-02-22T10:00:00.000Z",
         }),
@@ -742,13 +748,13 @@ describe("agents-page-session-tabs", () => {
   test("keeps the newest role session as the workflow target even when an older one is waiting", () => {
     const sessions = [
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         externalSessionId: "session-newer",
         startedAt: "2026-02-22T11:00:00.000Z",
         status: "idle",
       }),
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         externalSessionId: "session-waiting",
         startedAt: "2026-02-22T10:00:00.000Z",
         status: "running",
@@ -791,7 +797,7 @@ describe("agents-page-session-tabs", () => {
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+          sessionAssociation: createWorkflowAssociationFixture("spec"),
           status: "running",
           pendingApprovals: [
             {
@@ -811,7 +817,7 @@ describe("agents-page-session-tabs", () => {
           ],
         }),
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+          sessionAssociation: createWorkflowAssociationFixture("planner"),
           status: "error",
         }),
       ]),
@@ -827,19 +833,19 @@ describe("agents-page-session-tabs", () => {
     const specSessionOne = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
       startedAt: "2026-02-22T09:20:00.000Z",
     });
     const specSessionTwo = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-2",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: createWorkflowAssociationFixture("spec"),
       startedAt: "2026-02-22T08:20:00.000Z",
     });
     const plannerSession = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "planner-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: createWorkflowAssociationFixture("planner"),
       startedAt: "2026-02-22T10:20:00.000Z",
     });
     const groups = buildSessionSelectorGroups({
@@ -862,18 +868,18 @@ describe("agents-page-session-tabs", () => {
     const sessions = [
       buildSession({
         externalSessionId: "spec-1",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: createWorkflowAssociationFixture("spec"),
         startedAt: "2026-02-20T08:00:00.000Z",
       }),
       buildSession({
         runtimeKind: "opencode",
         externalSessionId: "planner-1",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        sessionAssociation: createWorkflowAssociationFixture("planner"),
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
       buildSession({
         externalSessionId: "build-1",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
     ];
@@ -889,12 +895,12 @@ describe("agents-page-session-tabs", () => {
     const sessions = [
       buildSession({
         externalSessionId: "build-older",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
       buildSession({
         externalSessionId: "build-newer",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: createWorkflowAssociationFixture("build"),
         startedAt: "2026-02-20T11:00:00.000Z",
       }),
     ];

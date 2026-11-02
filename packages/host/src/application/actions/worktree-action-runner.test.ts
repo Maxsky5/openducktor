@@ -10,7 +10,7 @@ import {
   type WorktreeActionTerminals,
 } from "./worktree-action-runner";
 
-const context = { repoPath: "/repo", taskId: "task-1" };
+const context = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
 const target = { worktreePath: "/worktrees/task-1", branch: "odt/task-1" };
 
 const action = (id: string, overrides: Partial<RepoAction> = {}): RepoAction => ({

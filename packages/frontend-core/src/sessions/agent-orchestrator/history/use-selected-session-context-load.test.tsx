@@ -15,7 +15,12 @@ import { createAgentOperationsFixture } from "../../../test-support/agent-operat
 
 const session = (externalSessionId: string): AgentSessionState => ({
   externalSessionId,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build",
+  },
   runtimeKind: "codex",
   workingDirectory: "/repo/worktree",
   status: "idle",
@@ -61,7 +66,12 @@ describe("useSelectedSessionContextLoad", () => {
         externalSessionId: "thread-1",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       });
       expect(loadAgentSessionContext).not.toHaveBeenCalledWith(
         expect.objectContaining({ externalSessionId: second.externalSessionId }),

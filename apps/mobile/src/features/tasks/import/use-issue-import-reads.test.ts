@@ -16,11 +16,12 @@ import {
   createGitProviderContextFixture,
 } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { useIssueImportReads } from "./use-issue-import-reads";
 
-const repoPath = "/repo";
+const workspace = workspaceRefFixture("/repo");
 const provider = (options: Parameters<typeof createGitProviderContextFixture>[0] = {}) => ({
   ...createGitProviderContextFixture(options),
   descriptor: GITHUB_PROVIDER_DESCRIPTOR,
@@ -32,7 +33,7 @@ function renderReads(connection: ClientConnection) {
     createElement(ClientConnectionProvider, { connection }, children);
   return renderHook(
     () => {
-      const model = useIssueImportReads(repoPath);
+      const model = useIssueImportReads(workspace);
       // Query tracks the fields that the sheet reads during render.
       const { data, error, isFetching, refetch } = model.query;
       return { ...model, query: { data, error, isFetching, refetch } };
@@ -43,7 +44,7 @@ function renderReads(connection: ClientConnection) {
 
 function cacheProvider(connection: ClientConnection) {
   connection.queryClient.setQueryData(
-    repositoryGitProviderContextQueryOptions(repoPath).queryKey,
+    repositoryGitProviderContextQueryOptions(workspace).queryKey,
     provider(),
   );
 }
@@ -172,8 +173,12 @@ test("ready content stays during background refresh, search, and pagination", as
   cacheProvider(connection);
   const firstPage = { ...page, nextCursor: "page-2" };
   connection.queryClient.setQueryData(
-    issueImportListQueryOptions({ repoPath, provider: provider(), search: "", cursor: undefined })
-      .queryKey,
+    issueImportListQueryOptions({
+      ...workspace,
+      provider: provider(),
+      search: "",
+      cursor: undefined,
+    }).queryKey,
     firstPage,
   );
   const view = renderReads(connection);
@@ -182,7 +187,7 @@ test("ready content stays during background refresh, search, and pagination", as
     act(
       () =>
         void connection.queryClient.invalidateQueries({
-          queryKey: issueItemsQueryKeys.repo(repoPath),
+          queryKey: issueItemsQueryKeys.repo(workspace),
         }),
     );
     await waitFor(() => expect(view.result.current.query.isFetching).toBe(true));
@@ -195,7 +200,7 @@ test("ready content stays during background refresh, search, and pagination", as
     act(() => view.result.current.search.setSearchText("bug"));
     await waitFor(() => expect(requests).toHaveLength(2));
     await waitFor(() => expect(view.result.current.query.isFetching).toBe(true));
-    expect(requests[1]).toEqual({ repoPath, search: "bug", cursor: undefined });
+    expect(requests[1]).toEqual({ ...workspace, search: "bug", cursor: undefined });
     expect(view.result.current.query.data).toEqual(firstPage);
     expect(view.result.current.loading).toBe(false);
     await act(async () => reads[1]!.resolve(firstPage));
@@ -207,7 +212,7 @@ test("ready content stays during background refresh, search, and pagination", as
     });
     await waitFor(() => expect(requests).toHaveLength(3));
     await waitFor(() => expect(view.result.current.query.isFetching).toBe(true));
-    expect(requests[2]).toEqual({ repoPath, search: "bug", cursor: "page-2" });
+    expect(requests[2]).toEqual({ ...workspace, search: "bug", cursor: "page-2" });
     expect(view.result.current.query.data).toEqual(firstPage);
     expect(view.result.current.loading).toBe(false);
     await act(async () => reads[2]!.resolve(page));
@@ -224,7 +229,7 @@ test.each(["missing", "unavailable"] as const)(
     const list = mock(async () => page);
     const connection = createTestClientConnection({ client: { issueItemsList: list } });
     connection.queryClient.setQueryData(
-      repositoryGitProviderContextQueryOptions(repoPath).queryKey,
+      repositoryGitProviderContextQueryOptions(workspace).queryKey,
       provider({ enabled: setup !== "missing", available: setup !== "unavailable" }),
     );
     const view = renderReads(connection);

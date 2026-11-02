@@ -19,6 +19,7 @@ export const useOwnerTerminals = (owner: WorkOwner): TerminalSessionsModel => {
   const { task, record } = owner;
   const taskScope = useTaskTerminalScope({
     key: task ? owner.key : null,
+    workspaceId: task ? owner.workspace.workspaceId : null,
     repoPath: task ? owner.repoPath : null,
     taskId: task?.id ?? null,
     taskVersion: task?.updatedAt ?? null,

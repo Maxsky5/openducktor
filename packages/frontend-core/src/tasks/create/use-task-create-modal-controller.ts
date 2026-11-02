@@ -1,9 +1,14 @@
 import {
+  taskEditorDraftKey,
+  rebaseTaskComposer,
+  type RetainedTaskFields,
+} from "./task-editor-drafts";
+import {
   byDocumentCode,
   type BuiltinIssueTypeId as IssueType,
   type BuiltinTaskCard as TaskCard,
 } from "@openducktor/workflows";
-import type { TaskAssetFailure } from "@openducktor/contracts";
+import type { TaskAssetFailure, WorkspaceRef } from "@openducktor/contracts";
 import {
   type Dispatch,
   useCallback,
@@ -68,7 +73,11 @@ type PendingDiscardIntent =
   | { type: "switch-section"; next: EditTaskSection };
 
 /** The workspace that was active when New task opened. A new task is created only there. */
-export type TaskCreateDestination = { workspaceId: string; workspaceName: string };
+export type TaskCreateDestination = {
+  workspaceId: string;
+  workspaceName: string;
+  repoPath?: string;
+};
 
 export type TaskCreateModalControllerOptions<F extends TaskDescriptionImageFile> = {
   open: boolean;
@@ -102,7 +111,6 @@ type TaskCreateModalState = {
   isSavingDocument: DocumentSection | null;
   pendingDiscardIntent: PendingDiscardIntent | null;
   taskAssetFailure: TaskAssetFailure | null;
-  hasExternalTaskConflict: boolean;
 };
 
 type TaskCreateModalAction =
@@ -111,9 +119,9 @@ type TaskCreateModalAction =
       task: TaskCard | null;
       initialTitle: string;
       initialEditSection: EditTaskSection;
+      composer?: ComposerState;
     }
   | { type: "externalTaskApplied"; composer: ComposerState }
-  | { type: "externalTaskConflictDetected" }
   | { type: "composerPatched"; patch: Partial<ComposerState> }
   | { type: "issueTypeSelected"; issueType: IssueType }
   | { type: "stepChanged"; step: ComposerStep }
@@ -152,7 +160,6 @@ const initialTaskCreateModalState = (
   isSavingDocument: null,
   pendingDiscardIntent: null,
   taskAssetFailure: null,
-  hasExternalTaskConflict: false,
 });
 
 const areComposerStatesEqual = (left: ComposerState, right: ComposerState): boolean =>
@@ -164,9 +171,6 @@ const areComposerStatesEqual = (left: ComposerState, right: ComposerState): bool
   left.labels.length === right.labels.length &&
   left.labels.every((label, index) => label === right.labels[index]);
 
-const EXTERNAL_TASK_CONFLICT_MESSAGE =
-  "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
-
 const EXTERNAL_DOCUMENT_CONFLICT_MESSAGE =
   "This document changed on the host while you were editing. Your edits are kept. Copy what you need, then close and reopen the task to load the latest version.";
 
@@ -176,11 +180,10 @@ const taskCreateModalReducer = (
 ): TaskCreateModalState => {
   switch (action.type) {
     case "resetForOpenTask":
-      return initialTaskCreateModalState(
-        action.task,
-        action.initialTitle,
-        action.initialEditSection,
-      );
+      return {
+        ...initialTaskCreateModalState(action.task, action.initialTitle, action.initialEditSection),
+        composer: action.composer ?? startComposer(action.task, action.initialTitle),
+      };
     case "externalTaskApplied":
       return {
         ...state,
@@ -188,10 +191,7 @@ const taskCreateModalReducer = (
         selectedCreateIssueType: action.composer.issueType,
         error: null,
         taskAssetFailure: null,
-        hasExternalTaskConflict: false,
       };
-    case "externalTaskConflictDetected":
-      return { ...state, hasExternalTaskConflict: true };
     case "composerPatched":
       return { ...state, composer: { ...state.composer, ...action.patch } };
     case "issueTypeSelected":
@@ -242,7 +242,11 @@ function useExternalTaskSync({
   initialEditSection,
   composer,
   dispatch,
+  draftKey,
+  drafts,
 }: {
+  draftKey: string | null;
+  drafts: Map<string, RetainedTaskFields>;
   open: boolean;
   task: TaskCard | null;
   taskId: string | null;
@@ -251,38 +255,50 @@ function useExternalTaskSync({
   composer: ComposerState;
   dispatch: Dispatch<TaskCreateModalAction>;
 }): void {
-  const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
+  const previousModalContext = useRef<{
+    open: boolean;
+    taskId: string | null;
+    draftKey: string | null;
+  } | null>(null);
   const serverComposer = useRef<ComposerState | null>(null);
 
   useEffect(() => {
-    const nextServerComposer = toComposerState(task);
+    const nextServerComposer = startComposer(task, initialTitle);
     const contextChanged =
       previousModalContext.current?.open !== open ||
-      previousModalContext.current?.taskId !== taskId;
+      previousModalContext.current?.taskId !== taskId ||
+      previousModalContext.current?.draftKey !== draftKey;
     if (contextChanged) {
-      previousModalContext.current = { open, taskId };
+      previousModalContext.current = { open, taskId, draftKey };
       serverComposer.current = nextServerComposer;
-      if (open) dispatch({ type: "resetForOpenTask", task, initialTitle, initialEditSection });
+      const retained = draftKey === null ? undefined : drafts.get(draftKey);
+      if (open)
+        dispatch({
+          type: "resetForOpenTask",
+          task,
+          initialTitle,
+          initialEditSection,
+          composer: retained
+            ? rebaseTaskComposer(retained.composer, retained.baseline, nextServerComposer)
+            : startComposer(task, initialTitle),
+        });
       return;
     }
     if (!open) return;
 
     const previousServerComposer = serverComposer.current;
-    if (
-      previousServerComposer === null ||
-      areComposerStatesEqual(previousServerComposer, nextServerComposer)
-    )
-      return;
-
+    const nextComposer =
+      previousServerComposer === null
+        ? composer
+        : rebaseTaskComposer(composer, previousServerComposer, nextServerComposer);
     serverComposer.current = nextServerComposer;
-    const draftWasUntouched = areComposerStatesEqual(composer, previousServerComposer);
-    const draftMatchesReplacement = areComposerStatesEqual(composer, nextServerComposer);
-    dispatch(
-      draftWasUntouched || draftMatchesReplacement
-        ? { type: "externalTaskApplied", composer: nextServerComposer }
-        : { type: "externalTaskConflictDetected" },
-    );
-  }, [composer, dispatch, initialTitle, initialEditSection, open, task, taskId]);
+    if (draftKey !== null) {
+      if (areComposerStatesEqual(nextComposer, nextServerComposer)) drafts.delete(draftKey);
+      else drafts.set(draftKey, { composer: nextComposer, baseline: nextServerComposer });
+    }
+    if (!areComposerStatesEqual(composer, nextComposer))
+      dispatch({ type: "externalTaskApplied", composer: nextComposer });
+  }, [composer, dispatch, draftKey, drafts, initialTitle, initialEditSection, open, task, taskId]);
 }
 
 function createTaskSubmit({
@@ -292,7 +308,6 @@ function createTaskSubmit({
   descriptionAssetDraft,
   destinationError,
   dispatch,
-  hasExternalTaskConflict,
   isRecoveryBlocked,
   mode,
   onCleanupFailure,
@@ -307,7 +322,6 @@ function createTaskSubmit({
   descriptionAssetDraft: TaskDescriptionAssetDraftControls;
   destinationError: string | null;
   dispatch: Dispatch<TaskCreateModalAction>;
-  hasExternalTaskConflict: boolean;
   isRecoveryBlocked: boolean;
   mode: ComposerMode;
   onCleanupFailure: (description: string) => void;
@@ -317,7 +331,7 @@ function createTaskSubmit({
   workspaceRepoPath: string | null;
 }): () => Promise<void> {
   return async () => {
-    if (isRecoveryBlocked || hasExternalTaskConflict) return;
+    if (isRecoveryBlocked) return;
     if (destinationError) {
       dispatch({ type: "submitBlocked", error: destinationError });
       return;
@@ -350,7 +364,18 @@ function createTaskSubmit({
       if (mode === "create") {
         await createTask(toTaskCreateInput(composer), descriptionAssets);
       } else if (task) {
-        await updateTask(task.id, toTaskUpdatePatch(composer), descriptionAssets);
+        const patch = toTaskUpdatePatch(composer);
+        const baseline = toTaskUpdatePatch(toComposerState(task));
+        for (const field of [
+          "title",
+          "removeWorktreeOnClose",
+          "priority",
+          "description",
+          "labels",
+        ] as const) {
+          if (JSON.stringify(patch[field]) === JSON.stringify(baseline[field])) delete patch[field];
+        }
+        await updateTask(task.id, patch, descriptionAssets);
       }
       try {
         await descriptionAssetDraft.reconcileSuccessfulSave(referencedAssetIds);
@@ -451,8 +476,7 @@ function selectTaskCreateModalView({
   mode: ComposerMode;
 }) {
   const dirtyDocuments = byDocumentCode(
-    (code) =>
-      documents[code].loaded && documents[code].draftMarkdown !== documents[code].serverMarkdown,
+    (code) => documents[code].draftMarkdown !== documents[code].serverMarkdown,
   );
   const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
   const activeDraft = activeDocument?.draftMarkdown ?? "";
@@ -464,12 +488,7 @@ function selectTaskCreateModalView({
   const isFormDisabled = isSaveOrRecoveryLocked || isUploading;
   const isTypeStepVisible = mode === "create" && modalState.step === "type";
   const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
-  let footerError = modalState.error;
-  if (isEditingDocument) {
-    footerError = modalState.documentError;
-  } else if (modalState.hasExternalTaskConflict) {
-    footerError = { message: EXTERNAL_TASK_CONFLICT_MESSAGE, outcomeUnknown: false };
-  }
+  const footerError = isEditingDocument ? modalState.documentError : modalState.error;
   const isActiveDocumentDirty = hasUnsavedActiveDocument;
   return {
     dirtyDocuments,
@@ -486,6 +505,20 @@ function selectTaskCreateModalView({
     isActiveDocumentDirty,
   };
 }
+
+const resolveTaskEditorDestination = (
+  destination: TaskCreateDestination | null,
+  activeWorkspace: WorkspaceRef | null,
+) => ({
+  workspaceRepoPath: destination?.repoPath ?? activeWorkspace?.repoPath ?? null,
+  workspaceId: destination?.workspaceId ?? activeWorkspace?.workspaceId ?? null,
+  destinationError:
+    destination &&
+    (destination.workspaceId !== activeWorkspace?.workspaceId ||
+      (destination.repoPath !== undefined && destination.repoPath !== activeWorkspace?.repoPath))
+      ? `This task is for ${destination.workspaceName}. Open ${destination.workspaceName} again to save this task.`
+      : null,
+});
 
 /**
  * The New task and Edit task form: the task fields, the Spec and Plan documents, the staged
@@ -504,16 +537,14 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   revokePreviewUrl,
   collectAssetIds,
 }: TaskCreateModalControllerOptions<F>) {
-  const { feedback } = useClientConnection();
+  const connection = useClientConnection();
+  const { feedback } = connection;
+  const retainedDrafts = connection.drafts.taskEditors;
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  // Images stage in the destination. Task creation runs in the active workspace, so another
-  // active workspace blocks it.
-  const workspaceId = destination?.workspaceId ?? activeWorkspace?.workspaceId ?? null;
-  const destinationError =
-    destination && destination.workspaceId !== activeWorkspace?.workspaceId
-      ? `This task is for ${destination.workspaceName}. Open ${destination.workspaceName} again to create it.`
-      : null;
+  const { workspaceRepoPath, workspaceId, destinationError } = resolveTaskEditorDestination(
+    destination,
+    activeWorkspace,
+  );
   const { createTask, updateTask } = useRequiredContext(
     TasksStateContext,
     "useTaskCreateModalController",
@@ -526,6 +557,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
 
   const mode: ComposerMode = task ? "edit" : "create";
   const taskId = task?.id ?? null;
+  const draftKey = workspaceId === null ? null : taskEditorDraftKey(workspaceId, taskId);
 
   const [modalState, dispatch] = useReducer(
     taskCreateModalReducer,
@@ -541,11 +573,18 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     isSubmitting,
     isSavingDocument,
     pendingDiscardIntent,
-    hasExternalTaskConflict,
   } = modalState;
 
   const activeDocumentSection =
     mode === "edit" && isDocumentSection(editSection) ? editSection : null;
+
+  const loadScopedDocument = useCallback(
+    (taskId: string, code: DocumentSection) => {
+      if (destinationError !== null) return Promise.reject(new Error(destinationError));
+      return loadDocument(taskId, code);
+    },
+    [destinationError, loadDocument],
+  );
 
   const {
     documents,
@@ -560,10 +599,22 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     taskId,
     repoPath: activeWorkspace?.repoPath ?? null,
     activeSection: activeDocumentSection,
-    loadDocument,
+    loadDocument: loadScopedDocument,
+    workspaceId,
+    retainedDrafts: retainedDrafts.documents,
   });
 
-  useExternalTaskSync({ open, task, taskId, initialTitle, initialEditSection, composer, dispatch });
+  useExternalTaskSync({
+    open,
+    task,
+    taskId,
+    initialTitle,
+    initialEditSection,
+    composer,
+    dispatch,
+    draftKey,
+    drafts: retainedDrafts.fields,
+  });
   // The task fields differ from the saved task, or from a new task: a type, priority, AI Review,
   // or label choice counts as an edit too.
   const isTaskDraftDirty = useMemo(
@@ -591,9 +642,20 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     [collectAssetIds],
   );
 
+  const descriptionAssetRetention = useMemo(
+    () => ({
+      drafts: retainedDrafts.descriptionAssets,
+      referencedAssetIds: (ownerKey: string): ReadonlySet<string> => {
+        const draft = retainedDrafts.fields.get(ownerKey);
+        return draft ? collectAssetIds(draft.composer.description) : new Set<string>();
+      },
+    }),
+    [collectAssetIds, retainedDrafts],
+  );
+
   const descriptionAssetDraft = useTaskDescriptionAssetDraft({
     active: open,
-    draftKey: taskId ?? "new-task",
+    draftKey: draftKey ?? "__inactive__",
     workspaceId,
     readReferencedAssetIds: readReferencedDescriptionAssetIds,
     stageImage: descriptionAssetOperations.stageImage,
@@ -601,6 +663,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     onDiscardError: reportDescriptionAssetDiscardError,
     createPreviewUrl,
     revokePreviewUrl,
+    retention: descriptionAssetRetention,
   });
 
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
@@ -667,6 +730,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     }
     try {
       await descriptionAssetDraft.discardAll();
+      if (draftKey !== null) retainedDrafts.fields.delete(draftKey);
       onOpenChange(false);
     } catch (reason) {
       reportStagedImageDiscardFailure(errorMessage(reason));
@@ -682,13 +746,15 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     descriptionAssetDraft,
     destinationError,
     dispatch,
-    hasExternalTaskConflict,
     isRecoveryBlocked,
     mode,
     onCleanupFailure: (description) => {
       feedback.show("error", "Task saved, but temporary image cleanup failed", { description });
     },
-    onOpenChange,
+    onOpenChange: (nextOpen) => {
+      if (!nextOpen && draftKey !== null) retainedDrafts.fields.delete(draftKey);
+      onOpenChange(nextOpen);
+    },
     task,
     updateTask,
     workspaceRepoPath,
@@ -698,7 +764,12 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   };
 
   const saveDocument = async (): Promise<void> => {
-    if (!task || !activeDocumentSection || !activeDocument) {
+    if (!task || !activeDocumentSection || !activeDocument) return;
+    if (destinationError) {
+      dispatch({
+        type: "documentSaveFailed",
+        error: { message: destinationError, outcomeUnknown: false },
+      });
       return;
     }
     // The live task card carries the version of each document, so a save never overwrites a
@@ -776,7 +847,6 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     isFormDisabled,
     isRecoveryBlocked,
     isSaveOrRecoveryLocked,
-    hasExternalTaskConflict,
     isTypeStepVisible,
     isEditingDocument,
     footerError: destinationError ?? footerError?.message ?? null,

@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useActiveWorkspaceContext } from "../../app-state/app-state-contexts";
@@ -19,16 +20,16 @@ export type TaskCloseMergeCheck = {
  */
 export function useTaskApprovalMergeCheck(taskId: string): TaskCloseMergeCheck | undefined {
   const queryClient = useQueryClient();
-  const repoPath = useActiveWorkspaceContext().activeWorkspace?.repoPath ?? null;
+  const workspace = useActiveWorkspaceContext().activeWorkspace;
   const check = useMutation({
-    mutationFn: async (checkedRepoPath: string): Promise<void> => {
-      await checkTaskMergeStatus(queryClient, checkedRepoPath);
-      await invalidateTaskWorktreeCleanupImpact(queryClient, checkedRepoPath, taskId);
+    mutationFn: async (checkedWorkspace: WorkspaceRef): Promise<void> => {
+      await checkTaskMergeStatus(queryClient, checkedWorkspace);
+      await invalidateTaskWorktreeCleanupImpact(queryClient, checkedWorkspace, taskId);
     },
   });
-  if (repoPath === null) return undefined;
+  if (workspace === null) return undefined;
   return {
-    onCheckAgain: () => check.mutate(repoPath),
+    onCheckAgain: () => check.mutate(workspace),
     isChecking: check.isPending,
     error: check.error ? errorMessage(check.error) : null,
   };

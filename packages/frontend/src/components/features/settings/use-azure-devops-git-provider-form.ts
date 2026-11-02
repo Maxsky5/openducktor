@@ -96,7 +96,11 @@ export const useAzureDevOpsGitProviderForm = ({
     httpCollectionUrl !== null &&
     configuredProvider?.settings?.httpConsentCollectionUrl === httpCollectionUrl;
   const connectionInput: AzureDevOpsConnectionInput | null = parsedRepository
-    ? { repoPath: selectedRepoPath, repository: parsedRepository }
+    ? {
+        workspaceId: selectedRepoConfig.workspaceId,
+        repoPath: selectedRepoPath,
+        repository: parsedRepository,
+      }
     : null;
   const { actionError: connectionActionError, ...connectionController } =
     useAzureDevOpsConnectionController({
@@ -223,7 +227,10 @@ export const useAzureDevOpsGitProviderForm = ({
       setIsDetecting(true);
       setRepositoryActionError(null);
       try {
-        const repository = await host.workspaceDetectAzureDevOpsRepository(selectedRepoPath);
+        const repository = await host.workspaceDetectAzureDevOpsRepository({
+          workspaceId: selectedRepoConfig.workspaceId,
+          repoPath: selectedRepoPath,
+        });
         if (!repository || !isAzureDevOpsRepository(repository)) return false;
         const currentRepository = configuredRepositoryRef.current;
         const repositoryChanged =
@@ -237,7 +244,9 @@ export const useAzureDevOpsGitProviderForm = ({
           azureDevOpsValidationErrorCount(repositoryDraft, nextMappings, providerEnabled),
         );
         onUpdateSelectedRepoConfig((repoConfig) =>
-          repoConfig.repoPath !== selectedRepoPath || repoConfig.git.provider?.id !== "azure_devops"
+          repoConfig.workspaceId !== selectedRepoConfig.workspaceId ||
+          repoConfig.repoPath !== selectedRepoPath ||
+          repoConfig.git.provider?.id !== "azure_devops"
             ? repoConfig
             : {
                 ...repoConfig,
@@ -332,7 +341,10 @@ const useAzureDevOpsAreaPaths = ({
       if (!savedRepository || !sameAzureProject(savedRepository, parsedRepository)) {
         throw new Error("Save the Azure DevOps project settings, then load its area paths.");
       }
-      return host.azureAreaPathsList(selectedRepoPath);
+      return host.azureAreaPathsList({
+        workspaceId: selectedRepoConfig.workspaceId,
+        repoPath: selectedRepoPath,
+      });
     },
   });
 

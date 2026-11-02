@@ -1,7 +1,8 @@
+import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, describe, expect, test } from "bun:test";
-import { noMergeDetection } from "../tasks/sync/task-sync-service.test-support";
+import { noMergeDetection, syncWorkspace } from "../tasks/sync/task-sync-service.test-support";
 import {
   type AutopilotOutcome,
   type AutopilotRunEvent,
@@ -19,13 +20,13 @@ import {
   workflowArtifactSubmitEvent,
   createBuiltinNotificationSettings,
 } from "@openducktor/workflows";
-import { Deferred, Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber, Result } from "effect";
 import { withConfigCommit } from "../../adapters/config/config-commit";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
+import { type HostError, HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import { createHostEventBus } from "../../events/host-event-bus";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskRecord, TaskStorePort } from "../../ports/task-repository-ports";
@@ -35,7 +36,11 @@ import type { AutomaticLaunchInput } from "../agent-sessions/test-support/workfl
 import { createSerialGate } from "../../effect/serial-gate";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
 import { enrichTask, enrichTasks } from "../tasks/support/task-workflow-helpers";
-import { createTaskSyncService } from "../tasks/sync/task-sync-service";
+import { createTaskEventStream } from "../../events/task-event-stream";
+import {
+  applyHostSharedConfigEdits,
+  readHostSharedConfig,
+} from "../../adapters/sqlite/sqlite-host-settings-store";
 import { type AutopilotService, createAutopilotService } from "./autopilot-service";
 
 const ALL_RULES: Array<{ eventId: string; actionIds: string[] }> = [
@@ -52,7 +57,7 @@ const configFor = (
 ): GlobalConfig =>
   globalConfigSchema.parse({
     version: 4,
-    autopilot: { rules },
+    autopilot: { rules: rules.map((rule) => ({ workflowId: "openducktor", ...rule })) },
     workspaces: Object.fromEntries(
       ["alpha", "beta"].map((id) => {
         const repo = repoConfigSchema.parse({
@@ -105,6 +110,7 @@ const settleFibers = async (): Promise<void> => {
 };
 
 const harnesses: SqliteTaskStoreTestHarness[] = [];
+const contextByStore = new WeakMap<TaskStorePort, SqliteTaskStoreTestHarness>();
 afterEach(async () => {
   await Promise.all(harnesses.splice(0).map((harness) => harness.cleanup()));
 });
@@ -118,13 +124,13 @@ const createAutopilotHarness = async ({
 } = {}) => {
   let taskStores = stores;
   if (!taskStores) {
-    const created = await Promise.all(
-      ["alpha", "beta"].map((id) =>
-        createSqliteTaskStoreHarness({ repoPath: `/repos/${id}`, workspaceId: id }),
-      ),
-    );
-    harnesses.push(...created);
-    taskStores = new Map(created.map((harness) => [harness.repoPath, harness.store]));
+    const created = await createSqliteTaskStoreHarness({
+      workspaceId: "alpha",
+      repoPath: "/repos/alpha",
+    });
+    harnesses.push(created);
+    contextByStore.set(created.store, created);
+    taskStores = new Map(["alpha", "beta"].map((id) => [`/repos/${id}`, created.store]));
   }
   const storeMap = taskStores;
   const store = (repoPath: string): TaskStorePort => {
@@ -137,29 +143,30 @@ const createAutopilotHarness = async ({
   let afterCommitGate: Effect.Effect<void> = Effect.void;
   let taskIdsGate: Effect.Effect<void> = Effect.void;
   let buildCompletedStatus: string = "ai_review";
-  const move = (status: string) => (input: { repoPath: string; taskId: string }) =>
-    store(input.repoPath)
-      .transitionTask({ repoPath: input.repoPath, taskId: input.taskId, status })
-      .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
-  // Each operation commits the workflow decision of its event, with the signal of its outcome.
+  const move =
+    (status: string) => (input: { workspaceId: string; repoPath: string; taskId: string }) =>
+      store(input.repoPath)
+        .transitionTask({
+          ...input,
+          decide: () => Result.succeed({ status, workflowId: "openducktor" }),
+        })
+        .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
   const decided =
     (eventId: BuiltinTaskEventId, prepare: (task: TaskRecord) => TaskRecord = (task) => task) =>
-    (input: { repoPath: string; taskId: string }) =>
+    (input: { workspaceId: string; repoPath: string; taskId: string }) =>
       store(input.repoPath)
-        .getTask(input)
-        .pipe(
-          Effect.flatMap((task) => {
-            const decision = builtinTaskWorkflow.decide(eventId, prepare(task));
-            if (decision.kind !== "transition") return Effect.succeed(task);
-            return store(input.repoPath).transitionTask({
-              repoPath: input.repoPath,
-              taskId: input.taskId,
-              status: decision.to,
-              cause: decision.cause,
+        .transitionTask({
+          ...input,
+          decide: (current) => {
+            const decision = builtinTaskWorkflow.decide(eventId, prepare(current));
+            return Result.succeed({
+              status: decision.kind === "transition" ? decision.to : current.status,
+              workflowId: "openducktor",
+              ...(decision.kind === "transition" && { cause: decision.cause }),
             });
-          }),
-          Effect.map((task) => enrichTask(builtinTaskWorkflow, task)),
-        );
+          },
+        })
+        .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
   const withApprovedQa = (task: TaskRecord): TaskRecord =>
     buildCompletedStatus === "human_review"
       ? {
@@ -198,7 +205,7 @@ const createAutopilotHarness = async ({
     transitionTask: (input) => move(input.status)(input),
     deleteTask: (input) =>
       store(input.repoPath)
-        .deleteTask({ repoPath: input.repoPath, taskId: input.taskId })
+        .deleteTask(input)
         .pipe(
           Effect.as({
             ok: true,
@@ -209,18 +216,25 @@ const createAutopilotHarness = async ({
   const backgroundFailures: HostError[] = [];
   let autopilot: AutopilotService | undefined;
   let saved = configFor(rules);
+  const database = contextByStore.get(store("/repos/alpha"));
+  if (!database) throw new Error("Missing test host database");
+  const writeSavedConfig = (next: GlobalConfig) =>
+    database
+      .withHostDatabase("test.settings", (session) =>
+        session.transaction("test.settings", (transaction) =>
+          Effect.gen(function* () {
+            const previous = yield* readHostSharedConfig(transaction);
+            yield* applyHostSharedConfigEdits(transaction, previous, next);
+          }),
+        ),
+      )
+      .pipe(Effect.mapError((error) => toHostOperationError(error, "test.settings")));
+  await Effect.runPromise(writeSavedConfig(saved));
   const sync = createTaskSyncService({
     taskService: base,
+    settingsConfig: { readGlobalConfig: () => settingsConfig.readGlobalConfig() },
     mergeDetection: noMergeDetection,
-    taskEventStream: {
-      publish: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 }),
-      subscribe: () => {
-        throw new Error("Unexpected subscription");
-      },
-      acknowledge: () => {
-        throw new Error("Unexpected acknowledgement");
-      },
-    },
+    taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
     publicationReporter: { report: () => Effect.void },
     onBackgroundFailure: (failure) =>
       Effect.sync(() => {
@@ -228,8 +242,14 @@ const createAutopilotHarness = async ({
       }),
     workspaceSettingsService: {
       getWorkspaceCatalog: () =>
-        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
-      getSettingsSnapshot: () => Effect.succeed(saved),
+        Effect.succeed({
+          catalogRevision: 0,
+          openWorkspaces: Object.entries(saved.workspaces)
+            .filter(([, workspace]) => !workspace.closed && !workspace.removal)
+            .map(([id, workspace]) => syncWorkspace(workspace.repoPath, id)),
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+        }),
       listWorkspaces: () => Effect.succeed([]),
     },
     observeStatusChanges: (changes) => autopilot?.observe(changes),
@@ -244,9 +264,20 @@ const createAutopilotHarness = async ({
   const settingsConfig: SettingsConfigPort = withConfigCommit(
     createSettingsConfigTestDouble({
       readConfig: () => (readFailure ? Effect.fail(readFailure) : Effect.succeed(saved)),
-      writeConfig: (next) =>
-        Effect.sync(() => {
-          saved = next;
+      updateConfig: (change) =>
+        Effect.suspend(() => {
+          const next = change(
+            structuredClone(saved),
+            Object.values(structuredClone(saved).workspaces),
+          );
+          return writeSavedConfig(next).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                saved = next;
+                return saved;
+              }),
+            ),
+          );
         }),
     }),
     (config) => (autopilot ? autopilot.configCommitted(config) : Effect.void),
@@ -318,6 +349,7 @@ const createAutopilotHarness = async ({
   const createTask = async (repoPath: string, status: string, title = "Task") => {
     const task = await Effect.runPromise(
       store(repoPath).createTask({
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         status: "open",
         task: { title, issueType: "task", priority: 2 },
@@ -325,7 +357,12 @@ const createAutopilotHarness = async ({
     );
     if (status !== "open")
       await Effect.runPromise(
-        store(repoPath).transitionTask({ repoPath, taskId: task.id, status }),
+        store(repoPath).transitionTask({
+          workspaceId: repoPath.split("/").at(-1)!,
+          repoPath,
+          taskId: task.id,
+          decide: () => Result.succeed({ status, workflowId: "openducktor" }),
+        }),
       );
     return task.id;
   };
@@ -345,7 +382,12 @@ const createAutopilotHarness = async ({
     runEvents,
     outcomes,
     backgroundFailures,
-    saveConfig: (config: GlobalConfig) => Effect.runPromise(settingsConfig.writeConfig(config)),
+    saveConfig: (config: GlobalConfig) =>
+      Effect.runPromise(settingsConfig.updateConfig(() => config)),
+    saveExternalConfig: async (config: GlobalConfig) => {
+      await Effect.runPromise(writeSavedConfig(config));
+      saved = config;
+    },
     setPublicationGate: (gate: Effect.Effect<void, HostOperationError>) => {
       publicationGate = gate;
     },
@@ -387,6 +429,7 @@ const actionsOf = (h: Harness) => h.launched.map((request) => request.policy.act
 
 describe("host Autopilot", () => {
   const plan = (repoPath: string, taskId: string) => ({
+    workspaceId: repoPath.split("/").at(-1)!,
     repoPath,
     taskId,
     code: "plan",
@@ -412,6 +455,7 @@ describe("host Autopilot", () => {
         h.tasks.workflowArtifactSave({
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
+          workspaceId: "alpha",
           repoPath: "/repos/alpha",
           taskId,
           code: "spec",
@@ -447,7 +491,7 @@ describe("host Autopilot", () => {
       from: "in_progress",
       to: "ai_review",
       mutate: (h: Harness, taskId: string) =>
-        h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId }),
+        h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }),
       eventId: "taskProgressedToAiReview",
       actionId: "startQa",
       role: "qa",
@@ -460,6 +504,7 @@ describe("host Autopilot", () => {
         h.tasks.workflowArtifactSave({
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
+          workspaceId: "alpha",
           repoPath: "/repos/alpha",
           taskId,
           markdown: "Rejected",
@@ -479,6 +524,7 @@ describe("host Autopilot", () => {
         h.tasks.workflowArtifactSave({
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
+          workspaceId: "alpha",
           repoPath: "/repos/alpha",
           taskId,
           markdown: "Rejected",
@@ -498,6 +544,7 @@ describe("host Autopilot", () => {
         h.tasks.workflowArtifactSave({
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
+          workspaceId: "alpha",
           repoPath: "/repos/alpha",
           taskId,
           markdown: "Approved",
@@ -514,7 +561,7 @@ describe("host Autopilot", () => {
       from: "in_progress",
       to: "human_review",
       mutate: (h: Harness, taskId: string) =>
-        h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId }),
+        h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }),
       eventId: "taskProgressedToHumanReview",
       actionId: "startGeneratePullRequest",
       role: "build",
@@ -547,6 +594,7 @@ describe("host Autopilot", () => {
     expect(h.notifications).toEqual([
       expect.objectContaining({
         kind: "agent.session_started",
+
         repoPath: "/repos/alpha",
         repositoryLabel: "Alpha",
         role,
@@ -565,15 +613,37 @@ describe("host Autopilot", () => {
     await run(h.start().initialize());
     const repoPath = "/repos/alpha";
 
-    await run(h.tasks.listTasks({ repoPath }));
-    await run(h.tasks.humanRequestChanges({ repoPath, taskId: rejected }));
-    await run(h.tasks.buildResumed({ repoPath, taskId: blocked }));
-    await run(h.tasks.resetImplementation({ repoPath, taskId: building }));
-    await run(h.tasks.transitionTask({ repoPath, taskId: planned, status: "ai_review" }));
+    await run(h.tasks.listTasks({ workspaceId: repoPath.split("/").at(-1)!, repoPath }));
+    await run(
+      h.tasks.humanRequestChanges({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: rejected,
+      }),
+    );
+    await run(
+      h.tasks.buildResumed({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId: blocked }),
+    );
+    await run(
+      h.tasks.resetImplementation({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: building,
+      }),
+    );
+    await run(
+      h.tasks.transitionTask({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: planned,
+        status: "ai_review",
+      }),
+    );
     await run(
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId: eligible,
         code: "spec",
@@ -592,13 +662,17 @@ describe("host Autopilot", () => {
     const alphaTask = await h.createTask("/repos/alpha", "in_progress");
     const betaTask = await h.createTask("/repos/beta", "in_progress");
 
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId: alphaTask }));
+    await run(
+      h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId: alphaTask }),
+    );
     await waitUntil(() => h.launched.length === 1, "the alpha launch");
 
     const browsers: HostEventEnvelope[][] = [[], []];
     for (const received of browsers)
       h.eventBus.subscribe("openducktor://run-event", (envelope) => received.push(envelope));
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/beta", taskId: betaTask }));
+    await run(
+      h.tasks.buildCompleted({ workspaceId: "beta", repoPath: "/repos/beta", taskId: betaTask }),
+    );
     await waitUntil(() => h.outcomes().length === 2, "the beta outcome");
 
     expect(h.launched.map(({ workspaceId, taskId }) => [workspaceId, taskId])).toEqual([
@@ -638,6 +712,7 @@ describe("host Autopilot", () => {
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: "alpha",
         repoPath: "/repos/alpha",
         taskId,
         markdown: "Rejected",
@@ -669,11 +744,15 @@ describe("host Autopilot", () => {
       await waitUntil(() => h.outcomes().length === outcomes, `outcome ${outcomes}`);
     };
 
-    await step(h.tasks.buildCompleted({ repoPath, taskId }), 1);
+    await step(
+      h.tasks.buildCompleted({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }),
+      1,
+    );
     await step(
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
         markdown: "Rejected",
@@ -683,11 +762,15 @@ describe("host Autopilot", () => {
       }),
       2,
     );
-    await step(h.tasks.buildCompleted({ repoPath, taskId }), 3);
+    await step(
+      h.tasks.buildCompleted({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }),
+      3,
+    );
     await step(
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
         markdown: "Rejected again",
@@ -697,11 +780,19 @@ describe("host Autopilot", () => {
       }),
       4,
     );
-    await run(h.tasks.buildBlocked({ repoPath, taskId, reason: "Needs input" }));
+    await run(
+      h.tasks.buildBlocked({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId,
+        reason: "Needs input",
+      }),
+    );
     await step(
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
         markdown: "Rejected from blocked",
@@ -711,11 +802,15 @@ describe("host Autopilot", () => {
       }),
       5,
     );
-    await step(h.tasks.buildCompleted({ repoPath, taskId }), 6);
+    await step(
+      h.tasks.buildCompleted({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }),
+      6,
+    );
     await step(
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
         markdown: "Approved",
@@ -726,7 +821,14 @@ describe("host Autopilot", () => {
       7,
     );
     // Human Review to In Progress is a QA rejection's status pair, but a human request is not one.
-    await run(h.tasks.humanRequestChanges({ repoPath, taskId, note: "Change it" }));
+    await run(
+      h.tasks.humanRequestChanges({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId,
+        note: "Change it",
+      }),
+    );
     await settleFibers();
 
     expect(actionsOf(h)).toEqual([
@@ -758,7 +860,11 @@ describe("host Autopilot", () => {
     // The rule is disabled when the change commits. A save before the mutation ends does not count.
     const first = await pause();
     const firstMutation = Effect.runFork(
-      h.tasks.buildCompleted({ repoPath, taskId: disabledAtCommit }),
+      h.tasks.buildCompleted({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: disabledAtCommit,
+      }),
     );
     await run(Deferred.await(first.committed));
     await h.saveConfig(configFor(ALL_RULES));
@@ -770,7 +876,11 @@ describe("host Autopilot", () => {
     // The change counts at its commit, although its caller is interrupted before the end.
     const second = await pause();
     const secondMutation = Effect.runFork(
-      h.tasks.buildCompleted({ repoPath, taskId: interrupted }),
+      h.tasks.buildCompleted({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: interrupted,
+      }),
     );
     await run(Deferred.await(second.committed));
     await run(Fiber.interrupt(secondMutation));
@@ -795,9 +905,13 @@ describe("host Autopilot", () => {
       }),
     );
     h.setLaunchGate(Effect.void);
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/beta", taskId: betaTask }));
+    await run(
+      h.tasks.buildCompleted({ workspaceId: "beta", repoPath: "/repos/beta", taskId: betaTask }),
+    );
     await waitUntil(() => h.outcomes().length === 1, "the first launch");
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId: alphaTask }));
+    await run(
+      h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId: alphaTask }),
+    );
     await run(Deferred.await(entered));
 
     // Close and reopen alpha while its start check reads the task list.
@@ -825,6 +939,7 @@ describe("host Autopilot", () => {
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: "beta",
         repoPath: "/repos/beta",
         taskId: betaTask,
         markdown: "No",
@@ -849,9 +964,20 @@ describe("host Autopilot", () => {
     const release = await run(Deferred.make<void>());
     h.setLaunchGate(Deferred.await(release));
 
-    await run(h.tasks.buildCompleted({ repoPath, taskId }));
-    await run(h.tasks.buildBlocked({ repoPath, taskId, reason: "Needs input" }));
-    await run(h.tasks.buildCompleted({ repoPath, taskId }));
+    await run(
+      h.tasks.buildCompleted({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }),
+    );
+    await run(
+      h.tasks.buildBlocked({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId,
+        reason: "Needs input",
+      }),
+    );
+    await run(
+      h.tasks.buildCompleted({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }),
+    );
     await run(Deferred.succeed(release, undefined));
     await waitUntil(() => h.outcomes().length === 2, "both outcomes");
 
@@ -862,41 +988,71 @@ describe("host Autopilot", () => {
     expect(actionsOf(h)).toEqual(["startQa"]);
   });
 
-  test("disabled rules stay inactive, and saved settings govern later changes and waiting attempts", async () => {
-    const h = await startedHarness({ rules: [] });
-    const repoPath = "/repos/alpha";
-    const first = await h.createTask(repoPath, "in_progress");
-    const second = await h.createTask(repoPath, "in_progress");
-    const third = await h.createTask(repoPath, "in_progress");
+  test.each(["this host", "another host"])(
+    "rules saved by %s govern later changes and waiting attempts without replay",
+    async (source) => {
+      const h = await startedHarness({ rules: [] });
+      const save = source === "this host" ? h.saveConfig : h.saveExternalConfig;
+      const repoPath = "/repos/alpha";
+      const first = await h.createTask(repoPath, "in_progress");
+      const second = await h.createTask(repoPath, "in_progress");
+      const third = await h.createTask(repoPath, "in_progress");
 
-    await run(h.tasks.buildCompleted({ repoPath, taskId: first }));
-    await h.saveConfig(configFor(ALL_RULES));
-    // A save of the same rules sends nothing new.
-    await h.saveConfig(configFor(ALL_RULES));
-    await settleFibers();
-    // Every client reads the saved rules again. The earlier change starts nothing.
-    expect(h.runEvents).toEqual([{ type: "autopilot_settings_saved" }]);
+      await run(
+        h.tasks.buildCompleted({
+          workspaceId: repoPath.split("/").at(-1)!,
+          repoPath,
+          taskId: first,
+        }),
+      );
+      await save(configFor(ALL_RULES));
+      // A save of the same rules sends nothing new.
+      await save(configFor(ALL_RULES));
+      await settleFibers();
+      // Saving rules notifies clients without replaying an earlier task transition.
+      expect(h.runEvents).toEqual(
+        source === "this host" ? [{ type: "autopilot_settings_saved" }] : [],
+      );
 
-    await run(h.tasks.buildCompleted({ repoPath, taskId: second }));
-    await waitUntil(() => h.outcomes().length === 1, "the enabled rule");
+      await run(
+        h.tasks.buildCompleted({
+          workspaceId: repoPath.split("/").at(-1)!,
+          repoPath,
+          taskId: second,
+        }),
+      );
+      await waitUntil(() => h.outcomes().length === 1, "the enabled rule");
 
-    const release = await run(Deferred.make<void>());
-    h.setLaunchGate(Deferred.await(release));
-    await run(h.tasks.buildCompleted({ repoPath, taskId: third }));
-    await settleFibers();
-    await h.saveConfig(configFor([]));
-    await run(Deferred.succeed(release, undefined));
-    await waitUntil(() => h.outcomes().length === 2, "the skipped attempt");
+      const entered = await run(Deferred.make<void>());
+      const release = await run(Deferred.make<void>());
+      if (source === "this host")
+        h.setTaskIdsGate(
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+        );
+      else h.setLaunchGate(Deferred.await(release));
+      await run(
+        h.tasks.buildCompleted({
+          workspaceId: repoPath.split("/").at(-1)!,
+          repoPath,
+          taskId: third,
+        }),
+      );
+      if (source === "this host") await run(Deferred.await(entered));
+      else await settleFibers();
+      await save(configFor([]));
+      await run(Deferred.succeed(release, undefined));
+      await waitUntil(() => h.outcomes().length === 2, "the skipped attempt");
 
-    expect(h.outcomes().map((outcome) => [outcome.task.id, outcome.kind])).toEqual([
-      [second, "started"],
-      [third, "skipped"],
-    ]);
-    expect(h.outcomes()[1]).toMatchObject({
-      reason: "The Autopilot rule was disabled before the action started.",
-    });
-    expect(h.launched.map((request) => request.taskId)).toEqual([second]);
-  });
+      expect(h.outcomes().map((outcome) => [outcome.task.id, outcome.kind])).toEqual([
+        [second, "started"],
+        [third, "skipped"],
+      ]);
+      expect(h.outcomes()[1]).toMatchObject({
+        reason: "The Autopilot rule was disabled before the action started.",
+      });
+      expect(h.launched.map((request) => request.taskId)).toEqual([second]);
+    },
+  );
 
   test("closing a workspace skips its waiting attempts, reopening does not restart them, and removal discards them", async () => {
     const h = await startedHarness();
@@ -905,8 +1061,12 @@ describe("host Autopilot", () => {
     const release = await run(Deferred.make<void>());
     h.setLaunchGate(Deferred.await(release));
 
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId: alphaTask }));
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/beta", taskId: betaTask }));
+    await run(
+      h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId: alphaTask }),
+    );
+    await run(
+      h.tasks.buildCompleted({ workspaceId: "beta", repoPath: "/repos/beta", taskId: betaTask }),
+    );
     await settleFibers();
     await h.saveConfig(configFor(ALL_RULES, { alpha: { closed: true }, beta: { removal: true } }));
     await h.saveConfig(configFor(ALL_RULES, { alpha: {}, beta: { removal: true } }));
@@ -929,6 +1089,7 @@ describe("host Autopilot", () => {
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: "alpha",
         repoPath: "/repos/alpha",
         taskId: alphaTask,
         markdown: "No",
@@ -948,8 +1109,14 @@ describe("host Autopilot", () => {
     // The Builder launch completes the build while it still runs, as a chained agent would.
     h.setRespond((request) =>
       request.policy.actionId === "startBuilder"
-        ? h.tasks.buildResumed({ repoPath, taskId }).pipe(
-            Effect.andThen(h.tasks.buildCompleted({ repoPath, taskId })),
+        ? h.tasks.buildResumed({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }).pipe(
+            Effect.andThen(
+              h.tasks.buildCompleted({
+                workspaceId: repoPath.split("/").at(-1)!,
+                repoPath,
+                taskId,
+              }),
+            ),
             Effect.mapError(
               (cause) => new HostOperationError({ operation: "x", message: String(cause) }),
             ),
@@ -985,8 +1152,20 @@ describe("host Autopilot", () => {
         : Effect.fail(new HostOperationError({ operation: "launch", message: "Runtime is down." })),
     );
 
-    await run(h.tasks.buildCompleted({ repoPath, taskId: unsent }));
-    await run(h.tasks.buildCompleted({ repoPath, taskId: failed }));
+    await run(
+      h.tasks.buildCompleted({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: unsent,
+      }),
+    );
+    await run(
+      h.tasks.buildCompleted({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: failed,
+      }),
+    );
     await waitUntil(() => h.outcomes().length === 2, "both failures");
     await settleFibers();
 
@@ -1008,6 +1187,8 @@ describe("host Autopilot", () => {
         status: "Runtime is down.",
         navigationTarget: {
           type: "agent_studio_task",
+          workspaceId: "alpha",
+
           repoPath,
           taskId: failed,
           preferredRole: "qa",
@@ -1027,7 +1208,7 @@ describe("host Autopilot", () => {
     const taskId = await h.createTask("/repos/alpha", "in_progress");
     h.setNotificationFailure(new HostOperationError({ operation: "notify", message: "Closed" }));
 
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId }));
+    await run(h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }));
     await waitUntil(() => h.backgroundFailures.length === 1, "the background failure");
     await settleFibers();
 
@@ -1043,13 +1224,27 @@ describe("host Autopilot", () => {
     h.setRespond((request) =>
       Effect.succeed(launchResult(request, { status: "skipped", skipReason: "No worktree." })),
     );
-    await run(h.tasks.buildCompleted({ repoPath, taskId: skipped }));
+    await run(
+      h.tasks.buildCompleted({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: skipped,
+      }),
+    );
     await waitUntil(() => h.outcomes().length === 1, "the policy skip");
 
     const release = await run(Deferred.make<void>());
     h.setLaunchGate(Deferred.await(release));
-    await run(h.tasks.buildCompleted({ repoPath, taskId: deleted }));
-    await run(h.tasks.deleteTask({ repoPath, taskId: deleted }));
+    await run(
+      h.tasks.buildCompleted({
+        workspaceId: repoPath.split("/").at(-1)!,
+        repoPath,
+        taskId: deleted,
+      }),
+    );
+    await run(
+      h.tasks.deleteTask({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId: deleted }),
+    );
     await run(Deferred.succeed(release, undefined));
     await waitUntil(() => h.outcomes().length === 2, "the deleted task skip");
 
@@ -1090,7 +1285,7 @@ describe("host Autopilot", () => {
     const taskId = await h.createTask("/repos/alpha", "in_progress");
     h.setRespond(respond);
 
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId }));
+    await run(h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }));
     await waitUntil(() => h.outcomes().length === 1, "the outcome");
 
     const state = autopilotStateSchema.parse(h.service().readState({ workspaceId: "alpha" }));
@@ -1104,7 +1299,9 @@ describe("host Autopilot", () => {
     first.setRespond(() =>
       Effect.fail(new HostOperationError({ operation: "launch", message: "x" })),
     );
-    await run(first.tasks.buildCompleted({ repoPath, taskId }));
+    await run(
+      first.tasks.buildCompleted({ workspaceId: repoPath.split("/").at(-1)!, repoPath, taskId }),
+    );
     await waitUntil(() => first.outcomes().length === 1, "the failure");
     await run(first.service().dispose());
 
@@ -1120,6 +1317,7 @@ describe("host Autopilot", () => {
       restarted.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
         markdown: "Rejected",
@@ -1137,7 +1335,7 @@ describe("host Autopilot", () => {
     const taskId = await h.createTask("/repos/alpha", "in_progress");
     const release = await run(Deferred.make<void>());
     h.setLaunchGate(Deferred.await(release));
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId }));
+    await run(h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }));
     await settleFibers();
 
     await run(h.service().dispose());
@@ -1146,6 +1344,7 @@ describe("host Autopilot", () => {
       h.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: "alpha",
         repoPath: "/repos/alpha",
         taskId,
         markdown: "Rejected",
@@ -1165,7 +1364,7 @@ describe("host Autopilot", () => {
     const taskId = await h.createTask("/repos/alpha", "in_progress");
     h.setRespond(() => Effect.die(new Error("Launch crashed.")));
 
-    await run(h.tasks.buildCompleted({ repoPath: "/repos/alpha", taskId }));
+    await run(h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }));
     await waitUntil(() => h.backgroundFailures.length === 1, "the attempt failure");
     await settleFibers();
 
@@ -1175,6 +1374,28 @@ describe("host Autopilot", () => {
     expect(h.outcomes()).toEqual([]);
   });
 
+  test("a settings read failure stops a waiting action and gives a recovery step without retry", async () => {
+    const h = await startedHarness();
+    const taskId = await h.createTask("/repos/alpha", "in_progress");
+    const release = await run(Deferred.make<void>());
+    h.setLaunchGate(Deferred.await(release));
+    await run(h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }));
+    h.setReadFailure(new HostOperationError({ operation: "read", message: "Config is invalid." }));
+    await run(Deferred.succeed(release, undefined));
+    await waitUntil(() => h.outcomes().length === 1, "the settings failure");
+    await settleFibers();
+
+    expect(h.launched).toEqual([]);
+    expect(h.outcomes()).toEqual([
+      expect.objectContaining({
+        kind: "failed",
+        message:
+          "Autopilot could not read the application settings: Config is invalid. Correct the application settings, then start the action manually.",
+      }),
+    ]);
+    expect(h.backgroundFailures).toEqual([]);
+  });
+
   test("reports why it cannot evaluate changes, with the recovery step", async () => {
     const h = await createAutopilotHarness();
     h.setReadFailure(new HostOperationError({ operation: "read", message: "Config is invalid." }));
@@ -1182,23 +1403,20 @@ describe("host Autopilot", () => {
     expect(h.service().readState({ workspaceId: "alpha" }).failure).toBe(
       "Autopilot could not read the application settings: Config is invalid. Correct the application settings, then restart the host.",
     );
+  });
 
-    const ready = await startedHarness({ stores: h.stores });
-    ready.service().observe({
-      repoPath: "/repos/unknown",
-      operation: "save-workflow-artifact",
-      signal: "taskRejectedByQa",
-      statusChange: {
-        previousStatus: "ai_review",
-        task: { id: "task", title: "Task", status: "in_progress" },
-      },
-    });
-    expect(ready.runEvents).toEqual([
-      {
-        type: "autopilot_failure",
-        failure:
-          "Autopilot cannot match task changes in /repos/unknown to a workspace. Restart the host.",
-      },
-    ]);
+  test("starts actions in a workspace that another host reopened, from the committed change", async () => {
+    const h = await startedHarness();
+    const taskId = await h.createTask("/repos/alpha", "in_progress");
+    await h.saveConfig(configFor(ALL_RULES, { alpha: { closed: true } }));
+    // Another host reopens the workspace. The committed change carries the open state.
+    await h.saveExternalConfig(configFor(ALL_RULES));
+
+    await run(h.tasks.buildCompleted({ workspaceId: "alpha", repoPath: "/repos/alpha", taskId }));
+    await waitUntil(() => h.outcomes().length === 1, "the action of the reopened workspace");
+
+    expect(h.outcomes()[0]).toMatchObject({ workspaceId: "alpha", kind: "started" });
+    expect(actionsOf(h)).toEqual(["startQa"]);
+    expect(h.service().readState({ workspaceId: "alpha" }).failure).toBeNull();
   });
 });

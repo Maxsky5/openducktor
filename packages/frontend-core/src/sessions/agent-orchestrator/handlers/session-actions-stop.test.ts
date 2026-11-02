@@ -164,7 +164,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "planner",
+        },
         workingDirectory: "/tmp/repo",
         runtimeStatusMessage: "Safety buffering",
         pendingApprovals: [
@@ -323,7 +328,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       }),
     ]);
     const actions = createSessionActions({
@@ -359,7 +369,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     };
 
     const session = buildSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       messages: [
         {
           id: "tool-running",
@@ -495,7 +510,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         runtimeKind: "codex",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         messages: [
           {
             id: "tool-running",
@@ -594,7 +614,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
       }),
     ]);
 
@@ -681,10 +706,17 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
   test("refreshes task-owned state after successful authoritative stop", async () => {
     const adapter = new AgentRuntimeTestAdapter();
-    const refreshTaskDataCalls: Array<[string, string | string[] | undefined]> = [];
+    const refreshTaskDataCalls: Array<
+      [import("@openducktor/contracts").WorkspaceRef, string | string[] | undefined]
+    > = [];
     let loadSourceSessionCalls = 0;
     let stopCalls = 0;
-    const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
+    const invalidationCalls: Array<{
+      workspaceId: string;
+      repoPath: string;
+      taskId: string;
+      runtimeKind?: string;
+    }> = [];
 
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -710,10 +742,13 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     await actions.stopAgentSession(getSession(sessionsRef));
     expect(stopCalls).toBe(1);
-    expect(refreshTaskDataCalls).toEqual([["/tmp/repo", "task-1"]]);
+    expect(refreshTaskDataCalls).toEqual([
+      [{ workspaceId: "workspace-1", repoPath: "/tmp/repo" }, "task-1"],
+    ]);
     expect(loadSourceSessionCalls).toBe(0);
     expect(invalidationCalls).toEqual([
       {
+        workspaceId: "workspace-1",
         repoPath: "/tmp/repo",
         taskId: "task-1",
       },
@@ -867,7 +902,12 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "running",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       }),
     ]);
 

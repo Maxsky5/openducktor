@@ -8,6 +8,8 @@ describe("settings save follow-up reporting", () => {
     reportSettingsSaveFollowUps(
       {
         type: "saved",
+        shared: "saved",
+        preferences: "saved",
         workspaces: [],
         runtimeApplications: [
           { kind: "codex", effect: "start", outcome: "failed", message: "Codex is missing." },
@@ -33,7 +35,14 @@ describe("settings save follow-up reporting", () => {
   test("reports nothing for a clean save", () => {
     const warnings: string[] = [];
     reportSettingsSaveFollowUps(
-      { type: "saved", workspaces: [], runtimeApplications: [], refreshError: null },
+      {
+        type: "saved",
+        shared: "saved",
+        preferences: "saved",
+        workspaces: [],
+        runtimeApplications: [],
+        refreshError: null,
+      },
       (title) => warnings.push(title),
     );
     expect(warnings).toEqual([]);

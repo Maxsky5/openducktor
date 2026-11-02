@@ -1847,6 +1847,7 @@ describe("runtime schemas", () => {
 
   test("agent session stop target parses durable session identity", () => {
     const parsed = agentSessionStopTargetSchema.parse({
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       externalSessionId: "external-session-1",
@@ -1855,12 +1856,15 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed).toEqual({
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       externalSessionId: "external-session-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/task-1",
     });
+    const { workspaceId: _workspaceId, ...missingWorkspace } = parsed;
+    expect(agentSessionStopTargetSchema.safeParse(missingWorkspace).success).toBe(false);
   });
 
   test("agent session approval request accepts recursive metadata values", () => {

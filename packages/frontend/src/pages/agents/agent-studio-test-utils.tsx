@@ -65,6 +65,13 @@ const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   createdAt: "2026-02-22T12:00:00.000Z",
 };
 
+type WorkflowAssociation = Extract<AgentSessionState["sessionAssociation"], { kind: "workflow" }>;
+
+export const createWorkflowAssociationFixture = (
+  role: WorkflowAssociation["role"],
+  taskId = "task-1",
+): WorkflowAssociation => ({ kind: "workflow", workspaceId: "workspace-1", taskId, role });
+
 type PageAgentSessionOverrides = AgentSessionFixtureOverrides;
 
 const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {

@@ -73,3 +73,33 @@ describe("compactAgentSessionRecord", () => {
     });
   });
 });
+
+describe("task session start timestamps", () => {
+  test.each([
+    ["2026-06-19T03:30:00.123+02:30", "2026-06-19T01:00:00.123Z"],
+    ["1969-12-31T23:59:59.999000Z", "1969-12-31T23:59:59.999Z"],
+    ["2024-02-29T24:00:00Z", "2024-03-01T00:00:00.000Z"],
+    ["-271821-04-19T23:00:00-01:00", "-271821-04-20T00:00:00.000Z"],
+    ["+275760-09-13T01:00:00+01:00", "+275760-09-13T00:00:00.000Z"],
+  ])("normalizes %s without changing its instant", (startedAt, expected) => {
+    const result = compactAgentSessionRecord(createSession({ startedAt }));
+    expect(result.success && result.session.startedAt).toBe(expected);
+  });
+
+  test.each([
+    "2023-02-29T00:00:00Z",
+    "2026-04-31T00:00:00Z",
+    "2026-06-19T00:00:00",
+    "2026-06-19T00:00:00.123001Z",
+    "2026-06-19T00:00:00+24:00",
+    "2026-06-19T24:00:00.001Z",
+    "+275760-09-13T00:00:00.001Z",
+    "-271821-04-19T23:59:59.999Z",
+    "-000000-01-01T00:00:00Z",
+  ])("rejects invalid or lossy start timestamp %s", (startedAt) => {
+    expect(compactAgentSessionRecord(createSession({ startedAt }))).toMatchObject({
+      success: false,
+      error: { field: "startedAt" },
+    });
+  });
+});

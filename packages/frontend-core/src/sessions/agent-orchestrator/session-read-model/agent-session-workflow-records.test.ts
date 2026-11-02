@@ -39,8 +39,9 @@ const record = (
 const loadedRecords = (
   ...entries: Array<{ taskId: string; record: AgentSessionRecord }>
 ): LoadedWorkflowSessionRecords => ({
+  workspaceId: "workspace-1",
   loadedTaskIds: new Set(entries.map(({ taskId }) => taskId)),
-  records: entries,
+  records: entries.map((entry) => ({ workspaceId: "workspace-1", ...entry })),
 });
 
 const snapshot = (
@@ -144,7 +145,12 @@ describe("agent session workflow records", () => {
     });
 
     expect(getAgentSession(sessions, identity("thread-1"))).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "qa",
+      },
       status: "idle",
       title: "QA task-1",
     });
@@ -172,7 +178,12 @@ describe("agent session workflow records", () => {
     });
 
     expect(getAgentSession(sessions, identity("thread-1"))).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       title: "Runtime title",
       status: "idle",
       contextUsage: { totalTokens: 900 },
@@ -239,7 +250,12 @@ describe("agent session workflow records", () => {
     });
 
     expect(getAgentSession(sessions, identity("thread-1"))).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       livePresence: "absent",
       pendingApprovals: [],
     });
@@ -258,6 +274,7 @@ describe("agent session workflow records", () => {
 
     expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual({
       kind: "workflow",
+      workspaceId: "workspace-1",
       taskId: "task-1",
       role: "build",
     });
@@ -274,7 +291,12 @@ describe("agent session workflow records", () => {
     }
     const projected = replaceAgentSession(discovered, {
       ...discoveredSession,
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
     });
 
     expect(() =>
@@ -321,7 +343,12 @@ describe("agent session workflow records", () => {
       projected,
       records: loadedRecords({ taskId: "task-1", record: record("child-thread") }),
     });
-    const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const workflowAssociation = {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    } as const;
 
     expect(getAgentSession(next, identity("child-thread"))?.sessionAssociation).toEqual(
       workflowAssociation,
@@ -358,7 +385,12 @@ describe("agent session workflow records", () => {
         (session) => session.externalSessionId === externalSessionId,
       );
     expect(byExternalId("live-workflow-thread")).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
     expect(byExternalId("repository-thread")).toMatchObject({
       sessionAssociation: { kind: "repository" },
@@ -367,7 +399,12 @@ describe("agent session workflow records", () => {
       sessionAssociation: { kind: "unbound" },
     });
     expect(byExternalId("historical-thread")).toMatchObject({
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "planner",
+      },
     });
   });
 
@@ -402,14 +439,22 @@ describe("agent session workflow records", () => {
     const refreshed = applyRecordsOnly({
       projected: composed,
       records: {
+        workspaceId: "workspace-1",
         loadedTaskIds: new Set(["task-1", "task-2"]),
-        records: [{ taskId: "task-2", record: record("kept-thread", { role: "qa" }) }],
+        records: [
+          {
+            workspaceId: "workspace-1",
+            taskId: "task-2",
+            record: record("kept-thread", { role: "qa" }),
+          },
+        ],
       },
     });
 
     expect(getAgentSession(refreshed, identity("gone-thread"))).toBeNull();
     expect(getAgentSession(refreshed, identity("kept-thread"))?.sessionAssociation).toEqual({
       kind: "workflow",
+      workspaceId: "workspace-1",
       taskId: "task-2",
       role: "qa",
     });
@@ -429,7 +474,7 @@ describe("agent session workflow records", () => {
 
     const refreshedWithNoLoadedTasks = applyRecordsOnly({
       projected: composed,
-      records: { loadedTaskIds: new Set(), records: [] },
+      records: { workspaceId: "workspace-1", loadedTaskIds: new Set(), records: [] },
     });
 
     expect(listAgentSessions(refreshedWithNoLoadedTasks)).toHaveLength(4);
@@ -463,7 +508,7 @@ describe("agent session workflow records", () => {
 
     const afterTaskRefresh = applyRecordsOnly({
       projected,
-      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { workspaceId: "workspace-1", loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).not.toBeNull();
   });
@@ -486,7 +531,7 @@ describe("agent session workflow records", () => {
 
     const afterTaskRefresh = applyRecordsOnly({
       projected: removed,
-      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { workspaceId: "workspace-1", loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).toBeNull();
   });
@@ -533,6 +578,7 @@ describe("agent session workflow records", () => {
 
       expect(getAgentSession(sessions, runtimeIdentity)?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -563,9 +609,11 @@ describe("agent session workflow records", () => {
     const prunedOnly = pruneVanishedWorkflowSessions({
       projected: withUserModel,
       records: {
+        workspaceId: "workspace-1",
         loadedTaskIds: new Set(["task-1"]),
         records: [
           {
+            workspaceId: "workspace-1",
             taskId: "task-1",
             record: record("live-thread", {
               selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5-old" },
@@ -582,9 +630,11 @@ describe("agent session workflow records", () => {
     const fullApply = applyWorkflowSessionRecords({
       projected: withUserModel,
       records: {
+        workspaceId: "workspace-1",
         loadedTaskIds: new Set(["task-1"]),
         records: [
           {
+            workspaceId: "workspace-1",
             taskId: "task-1",
             record: record("live-thread", {
               selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5-old" },
@@ -610,7 +660,7 @@ describe("agent session workflow records", () => {
     // still reports the session, so it stays.
     const refreshedWhileLive = applyRecordsOnly({
       projected: withRecord,
-      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { workspaceId: "workspace-1", loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(refreshedWhileLive, identity("live-thread"))?.livePresence).toBe(
       "present",
@@ -623,18 +673,69 @@ describe("agent session workflow records", () => {
       envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
     });
     expect(getAgentSession(removed, identity("live-thread"))?.livePresence).toBe("absent");
+    const foreignRefresh = applyRecordsOnly({
+      projected: removed,
+      records: {
+        workspaceId: "another-workspace",
+        loadedTaskIds: new Set(["task-1"]),
+        records: [],
+      },
+    });
+    expect(getAgentSession(foreignRefresh, identity("live-thread"))).not.toBeNull();
     const afterRemovalApply = applyRecordsOnly({
       projected: removed,
-      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { workspaceId: "workspace-1", loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(afterRemovalApply, identity("live-thread"))).toBeNull();
   });
+
+  test.each(["workspace-1", "another-workspace"])(
+    "keeps live model changes only within the saved workspace binding: %s",
+    (workspaceId) => {
+      const savedModel = { runtimeKind: "codex" as const, providerId: "openai", modelId: "saved" };
+      const current = createAgentSessionFixture({
+        ...identity("live-thread"),
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+        selectedModel: { ...savedModel, modelId: "live-edit" },
+      });
+      const projected = replaceAgentSession(emptyAgentSessionCollection(), current);
+      const applied = applyWorkflowSessionRecords({
+        projected,
+        associationEvidence: projected,
+        records: {
+          workspaceId,
+          loadedTaskIds: new Set(["task-1"]),
+          records: [
+            {
+              workspaceId,
+              taskId: "task-1",
+              record: record("live-thread", { selectedModel: savedModel }),
+            },
+          ],
+        },
+        existingSelectedModelSource: "current",
+      });
+      expect(getAgentSession(applied, current)?.selectedModel?.modelId).toBe(
+        workspaceId === "workspace-1" ? "live-edit" : "saved",
+      );
+    },
+  );
 
   test("protects a locally launched session before live observation", () => {
     const launched = {
       externalSessionId: "launching-thread",
       title: "Launching",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       runtimeKind: "codex",
       workingDirectory,
       status: "idle",
@@ -652,7 +753,7 @@ describe("agent session workflow records", () => {
 
     const refreshed = applyRecordsOnly({
       projected,
-      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { workspaceId: "workspace-1", loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(refreshed, identity("launching-thread"))).not.toBeNull();
   });
@@ -687,6 +788,7 @@ describe("agent session workflow records", () => {
     ]);
     expect(getAgentSession(refreshed, identity("other-thread"))?.sessionAssociation).toEqual({
       kind: "workflow",
+      workspaceId: "workspace-1",
       taskId: "task-2",
       role: "build",
     });

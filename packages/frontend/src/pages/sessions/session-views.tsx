@@ -198,9 +198,7 @@ const SessionView = memo(function SessionView({
 function hasOwner(client: QueryClient, view: View): boolean {
   const params = new URLSearchParams(view.search);
   if (view.kind === "task") {
-    const tasks = client.getQueryData<RepoTaskData>(
-      taskQueryKeys.repoData(view.workspace.repoPath),
-    );
+    const tasks = client.getQueryData<RepoTaskData>(taskQueryKeys.repoData(view.workspace));
     return (
       tasks === undefined ||
       tasks.tasks.some((task) => task.id === params.get("task") && taskHasSessionPage(task))

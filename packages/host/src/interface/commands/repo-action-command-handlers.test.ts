@@ -13,7 +13,7 @@ const invokeRunAction = (repoActions: RepoActionService) => {
     Effect.flip(
       handler({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
         actionId: "dev",
       }),
     ),

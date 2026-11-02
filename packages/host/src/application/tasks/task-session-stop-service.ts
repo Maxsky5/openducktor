@@ -1,10 +1,11 @@
+import { loadTaskSessions } from "./support/task-sessions";
 import type { AgentSessionStopTarget } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskReader, TaskStoreError } from "../../ports/task-repository-ports";
+import type { TaskStorePort, TaskStoreError } from "../../ports/task-repository-ports";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRepoPath, resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
 
@@ -18,16 +19,18 @@ export type TaskSessionStopService = {
 };
 
 const loadTargetSession = (
-  taskReader: Pick<TaskReader, "getTaskMetadata">,
+  taskReader: Pick<TaskStorePort, "listAgentSessionsForTasks">,
   repoPath: string,
   taskId: string,
   request: AgentSessionStopTarget,
 ) =>
   Effect.gen(function* () {
-    const metadata = yield* taskReader.getTaskMetadata({ repoPath, taskId });
-    const session = metadata.agentSessions.find((entry) =>
-      hasSameAgentSessionIdentity(entry, request),
-    );
+    const sessions = yield* loadTaskSessions(taskReader, {
+      workspaceId: request.workspaceId,
+      repoPath,
+      taskId,
+    });
+    const session = sessions.find((entry) => hasSameAgentSessionIdentity(entry, request));
     if (!session) {
       return yield* Effect.fail(
         new HostValidationError({
@@ -55,7 +58,7 @@ export const createTaskSessionStopService = ({
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeRegistry: Pick<RuntimeRegistryPort, "stopSession">;
-  taskReader: Pick<TaskReader, "getTaskMetadata">;
+  taskReader: Pick<TaskStorePort, "listAgentSessionsForTasks">;
 }): TaskSessionStopService => ({
   agentSessionStop(input) {
     return Effect.gen(function* () {

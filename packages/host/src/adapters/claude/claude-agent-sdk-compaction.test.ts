@@ -26,7 +26,7 @@ const compactMessageInput = (): SendAgentUserMessageInput => ({
   workingDirectory: "/repo",
   runtimePolicy: { kind: "claude" },
   delivery: "new_turn",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   parts: [
     {
       kind: "slash_command",

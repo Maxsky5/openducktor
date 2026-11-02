@@ -41,5 +41,4 @@ export type UseWorkspaceOperationsResult = {
   switchBranch: (branchName: string, onSwitched?: () => void) => Promise<void>;
   clearBranchData: (repoPath?: string | null) => void;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
-  applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };

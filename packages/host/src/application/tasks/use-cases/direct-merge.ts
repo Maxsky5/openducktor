@@ -9,6 +9,7 @@ import {
 import type { GitMergeBranchRequest } from "../../../ports/git-port";
 import { prepareDirectMerge } from "../support/approval-readiness";
 import { enrichTask } from "../support/task-workflow-helpers";
+import { decideEffectTransition } from "../support/task-workflow-events";
 import { closeMergedTask } from "../support/close-merged-task";
 import {
   TaskMutationProgressFailure,
@@ -21,8 +22,13 @@ export const createTaskDirectMergeUseCase = (
 ): Pick<TaskServiceWithMutationProgress, "directMerge"> => ({
   directMerge(input) {
     return Effect.gen(function* () {
-      const { taskStore, completionState, taskActivityGuard, taskSessionLifecycleCoordinator } =
-        services;
+      const {
+        taskStore,
+        taskWorkflows,
+        completionState,
+        taskActivityGuard,
+        taskSessionLifecycleCoordinator,
+      } = services;
       const { taskId, input: mergeInput } = input;
       const { dependencies, effectiveRepoPath, current, workflow, approval, state, decision } =
         yield* prepareDirectMerge(services, input);
@@ -87,7 +93,12 @@ export const createTaskDirectMergeUseCase = (
           const completed = yield* Effect.exit(
             Effect.gen(function* () {
               state.observation.phase = "settled";
-              yield* taskStore.setDirectMerge({ repoPath: effectiveRepoPath, taskId, directMerge });
+              yield* taskStore.setDirectMerge({
+                workspaceId: input.workspaceId,
+                repoPath: effectiveRepoPath,
+                taskId,
+                directMerge,
+              });
               delete state.observation.failure;
               stage = "publish";
               yield* completionState.publish(state);
@@ -100,8 +111,10 @@ export const createTaskDirectMergeUseCase = (
                     taskActivityGuard,
                     taskSessionLifecycleCoordinator,
                     workflow,
+                    taskWorkflows,
                   },
                   {
+                    workspaceId: input.workspaceId,
                     repoPath: effectiveRepoPath,
                     taskId,
                     removeWorktree: mergeInput.removeWorktree,
@@ -119,10 +132,15 @@ export const createTaskDirectMergeUseCase = (
               const task =
                 decision.kind === "transition"
                   ? yield* taskStore.transitionTask({
+                      workspaceId: input.workspaceId,
                       repoPath: effectiveRepoPath,
                       taskId,
-                      status: decision.to,
-                      cause: decision.cause,
+                      decide: (task) =>
+                        decideEffectTransition(
+                          services.taskWorkflows.forTask(task),
+                          "direct_merge.publish",
+                          task,
+                        ),
                     })
                   : current;
               return {

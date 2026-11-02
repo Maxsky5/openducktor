@@ -32,7 +32,7 @@ const waitForLaunches = async (pty: ReturnType<typeof makePty>, count: number) =
 const commandRequest = (
   label: string,
   commandLines: TerminalCommandLines,
-  context: TerminalOwnedContext = { repoPath: "/repo", taskId: "task-1" },
+  context: TerminalOwnedContext = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
   startedBy: TerminalStartedBy = "user",
 ): TerminalCommandRequest => ({
   context,
@@ -283,6 +283,7 @@ describe("TerminalService command terminals", () => {
     const started = await Effect.runPromise(
       service.startCommandInPreparedTarget(
         commandRequest("Dev", ["bun run dev"], {
+          workspaceId: "repo",
           repoPath: "/canonical/repo",
           taskId: "task-1",
         }),

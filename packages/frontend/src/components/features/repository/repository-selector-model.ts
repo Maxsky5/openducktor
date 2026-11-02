@@ -1,8 +1,13 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import type { ComboboxOption } from "@/components/ui/combobox";
 
+export type RepositorySelectorWorkspace = Pick<
+  WorkspaceRecord,
+  "workspaceId" | "workspaceName" | "repoPath"
+>;
+
 export const toRepositorySelectorOptions = (
-  workspaces: WorkspaceRecord[],
+  workspaces: RepositorySelectorWorkspace[],
   errorCountByWorkspaceId: Partial<Record<string, number>> = {},
 ): ComboboxOption[] => {
   return workspaces.map((workspace) => {

@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import {
   type ArtifactReadRequest,
@@ -32,48 +33,47 @@ const artifact = (revision = 1): FreeTaskArtifact => ({
   byteSize: 5,
 });
 const collection = (): TaskArtifactCollection => ({ artifacts: [artifact()], canManageFree: true });
-const chunk = (revision = 1) => ({
+const contentResult = (revision = 1) => ({
   artifact: artifact(revision),
-  version: `v${revision}`,
   dataBase64: "AAEC/wQ=",
-  byteOffset: 0,
-  nextByteOffset: null,
-  totalBytes: 5,
 });
 
-// These tests own frontend cache ordering. Host tests own byte-range validation and storage.
+// These tests own frontend cache ordering. Host tests own complete content validation and storage.
 describe("task artifact queries", () => {
-  test("discovers metadata without bodies and reads exact bytes across versioned chunks", async () => {
-    const read = mock(async (input: ArtifactReadRequest) =>
-      input.byteOffset === 0
-        ? { ...chunk(), dataBase64: "AAEC/w==", nextByteOffset: 4 }
-        : { ...chunk(), dataBase64: "BA==", byteOffset: 4 },
-    );
+  test("discovers metadata without bodies and reads complete bytes in one request", async () => {
+    const read = mock(async (_input: ArtifactReadRequest) => contentResult());
     const connection = createTestClientConnection({
       client: { taskArtifactsList: async () => collection(), taskArtifactRead: read },
     });
     const client = connection.queryClient;
     try {
-      await client.fetchQuery(taskArtifactsQueryOptions(client, "/repo", "task-1"));
+      await client.fetchQuery(
+        taskArtifactsQueryOptions(client, workspaceRefFixture("/repo"), "task-1"),
+      );
       expect(read).not.toHaveBeenCalled();
       const content = await client.fetchQuery(
-        taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1"),
+        taskArtifactContentQueryOptions(client, workspaceRefFixture("/repo"), "task-1", "file-1"),
       );
       expect([...content.bytes]).toEqual([0, 1, 2, 255, 4]);
-      expect(read.mock.calls[1]?.[0].expectedVersion).toBe("v1");
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(read.mock.calls[0]?.[0]).toEqual({
+        ...workspaceRefFixture("/repo"),
+        taskId: "task-1",
+        artifactId: "file-1",
+      });
     } finally {
       client.clear();
     }
   });
 
-  test("keeps equal bytes across refreshes while accepting fresh metadata and versions", async () => {
-    let current = chunk();
+  test("keeps equal bytes across refreshes while accepting fresh metadata", async () => {
+    let current = contentResult();
     const connection = createTestClientConnection({
       client: { taskArtifactRead: async () => current },
     });
     const client = connection.queryClient;
     const options = {
-      ...taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1"),
+      ...taskArtifactContentQueryOptions(client, workspaceRefFixture("/repo"), "task-1", "file-1"),
       staleTime: 0,
     };
     try {
@@ -82,13 +82,13 @@ describe("task artifact queries", () => {
       expect(client.getQueryData(options.queryKey)).toBe(first);
 
       current = {
-        ...chunk(2),
+        ...contentResult(2),
         artifact: { ...artifact(2), name: "Renamed image", mediaType: "image/png" },
       };
       await client.fetchQuery(options);
       const refreshed = client.getQueryData(options.queryKey);
       expect(refreshed?.artifact).toEqual(current.artifact);
-      expect(refreshed?.version).toBe("v2");
+      expect(refreshed?.artifact.revision).toBe(2);
       expect(refreshed?.bytes).toBe(first.bytes);
     } finally {
       client.clear();
@@ -96,25 +96,30 @@ describe("task artifact queries", () => {
   });
 
   test("shares a pending first read across preview mount and unmount", async () => {
-    const pendingChunk = Promise.withResolvers<ReturnType<typeof chunk>>();
+    const pendingChunk = Promise.withResolvers<ReturnType<typeof contentResult>>();
     const read = mock(() => pendingChunk.promise);
     const connection = createTestClientConnection({ client: { taskArtifactRead: read } });
     const client = connection.queryClient;
-    const options = taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1");
+    const options = taskArtifactContentQueryOptions(
+      client,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      "file-1",
+    );
     const prefetched = client.prefetchQuery(options);
     const firstStop = new QueryObserver(client, options).subscribe(() => {});
     firstStop();
     const stop = new QueryObserver(client, options).subscribe(() => {});
     try {
       expect(read).toHaveBeenCalledTimes(1);
-      pendingChunk.resolve(chunk());
+      pendingChunk.resolve(contentResult());
       await prefetched;
       expect(client.getQueryData(options.queryKey)?.bytes).toEqual(
         new Uint8Array([0, 1, 2, 255, 4]),
       );
       expect(read).toHaveBeenCalledTimes(1);
     } finally {
-      pendingChunk.resolve(chunk());
+      pendingChunk.resolve(contentResult());
       stop();
       client.clear();
       await prefetched;
@@ -125,22 +130,21 @@ describe("task artifact queries", () => {
     { dataBase64: "AAEC/wU=", bytes: [0, 1, 2, 255, 5] },
     { dataBase64: "AAEC/wQF", bytes: [0, 1, 2, 255, 4, 5] },
   ])("replaces cached bytes when the content changes to $bytes", async ({ dataBase64, bytes }) => {
-    let current = chunk();
+    let current = contentResult();
     const connection = createTestClientConnection({
       client: { taskArtifactRead: async () => current },
     });
     const client = connection.queryClient;
     const options = {
-      ...taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1"),
+      ...taskArtifactContentQueryOptions(client, workspaceRefFixture("/repo"), "task-1", "file-1"),
       staleTime: 0,
     };
     try {
       const first = await client.fetchQuery(options);
       current = {
-        ...chunk(2),
+        ...contentResult(2),
         artifact: { ...artifact(2), byteSize: bytes.length },
         dataBase64,
-        totalBytes: bytes.length,
       };
       await client.fetchQuery(options);
       const refreshed = client.getQueryData(options.queryKey);
@@ -155,13 +159,18 @@ describe("task artifact queries", () => {
   test("a status event updates closed-task permissions without reading unchanged content", async () => {
     let canManageFree = true;
     const list = mock(async () => ({ ...collection(), canManageFree }));
-    const read = mock(async () => chunk());
+    const read = mock(async () => contentResult());
     const connection = createTestClientConnection({
       client: { taskArtifactsList: list, taskArtifactRead: read },
     });
     const client = connection.queryClient;
-    const listOptions = taskArtifactsQueryOptions(client, "/repo", "task-1");
-    const readOptions = taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1");
+    const listOptions = taskArtifactsQueryOptions(client, workspaceRefFixture("/repo"), "task-1");
+    const readOptions = taskArtifactContentQueryOptions(
+      client,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      "file-1",
+    );
     await client.fetchQuery(listOptions);
     await client.fetchQuery(readOptions);
     const stopList = new QueryObserver(client, listOptions).subscribe(() => {});
@@ -176,7 +185,9 @@ describe("task artifact queries", () => {
     try {
       canManageFree = false;
       await sync.reconcileExternalEvent(
-        boardEvent("/repo", [createTaskCardFixture({ id: "task-1", status: "closed" })]),
+        boardEvent(workspaceRefFixture("/repo"), [
+          createTaskCardFixture({ id: "task-1", status: "closed" }),
+        ]),
         eventCursor(1),
       );
       expect(client.getQueryData(listOptions.queryKey)?.canManageFree).toBe(false);
@@ -200,7 +211,7 @@ describe("task artifact queries", () => {
     const read = mock(async (input: ArtifactReadRequest) => {
       const metadata = currentArtifacts.find((item) => item.artifactId === input.artifactId);
       if (!metadata) throw new Error("The artifact no longer exists.");
-      return { ...chunk(), artifact: metadata };
+      return { ...contentResult(), artifact: metadata };
     });
     const connection = createTestClientConnection({
       client: {
@@ -210,10 +221,15 @@ describe("task artifact queries", () => {
       },
     });
     const client = connection.queryClient;
-    const taskOptions = repoTaskDataQueryOptions("/repo");
-    const listOptions = taskArtifactsQueryOptions(client, "/repo", "task-1");
+    const taskOptions = repoTaskDataQueryOptions(workspaceRefFixture("/repo"));
+    const listOptions = taskArtifactsQueryOptions(client, workspaceRefFixture("/repo"), "task-1");
     const contentOptions = artifacts.map((item) =>
-      taskArtifactContentQueryOptions(client, "/repo", "task-1", item.artifactId),
+      taskArtifactContentQueryOptions(
+        client,
+        workspaceRefFixture("/repo"),
+        "task-1",
+        item.artifactId,
+      ),
     );
     await Promise.all([
       client.fetchQuery(taskOptions),
@@ -234,7 +250,7 @@ describe("task artifact queries", () => {
     });
     try {
       currentArtifacts = artifacts.filter((item) => item !== removedArtifact);
-      const event = boardEvent("/repo", [currentTask]);
+      const event = boardEvent(workspaceRefFixture("/repo"), [currentTask]);
       event.boardChanges!.artifactChanges = [
         {
           taskId: "task-1",
@@ -257,7 +273,7 @@ describe("task artifact queries", () => {
 
   test("snapshot recovery refreshes observed content for a task outside Done retention", async () => {
     let revision = 1;
-    const read = mock(async () => chunk(revision));
+    const read = mock(async () => contentResult(revision));
     const connection = createTestClientConnection({
       client: {
         taskArtifactsList: async () => ({ artifacts: [artifact(revision)], canManageFree: false }),
@@ -265,7 +281,12 @@ describe("task artifact queries", () => {
       },
     });
     const client = connection.queryClient;
-    const options = taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1");
+    const options = taskArtifactContentQueryOptions(
+      client,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      "file-1",
+    );
     await client.fetchQuery(options);
     const stop = new QueryObserver(client, options).subscribe(() => {});
     const sync = createTaskViewSync({
@@ -277,9 +298,9 @@ describe("task artifact queries", () => {
     });
     try {
       revision = 2;
-      const result = await sync.reconcileStreamSnapshot(["/repo"]);
+      const result = await sync.reconcileStreamSnapshot([workspaceRefFixture("/repo")]);
       expect(result.failures.size).toBe(0);
-      expect(client.getQueryData(options.queryKey)?.version).toBe("v2");
+      expect(client.getQueryData(options.queryKey)?.artifact.revision).toBe(2);
       expect(read).toHaveBeenCalledTimes(2);
     } finally {
       stop();
@@ -302,15 +323,15 @@ describe("task artifact queries", () => {
     });
     const connection = createTestClientConnection({ client: { taskArtifactsList: list } });
     const client = connection.queryClient;
-    const options = taskArtifactsQueryOptions(client, "/repo", "task-1");
+    const options = taskArtifactsQueryOptions(client, workspaceRefFixture("/repo"), "task-1");
     await client.fetchQuery(options);
     const stop = new QueryObserver(client, options).subscribe(() => {});
-    const acceptSave = createArtifactSaveGuard(client, "/repo", "task-1");
+    const acceptSave = createArtifactSaveGuard(client, workspaceRefFixture("/repo"), "task-1");
     try {
       const updatedSecond = { ...second, revision: 2 };
       const earlierRefresh = refreshArtifactQueries(
         client,
-        "/repo",
+        workspaceRefFixture("/repo"),
         [{ taskId: "task-1", artifactIds: [second.artifactId], removedArtifactIds: [] }],
         [],
         eventCursor(1),
@@ -328,7 +349,7 @@ describe("task artifact queries", () => {
   });
 
   test("a newer deletion supersedes an in-flight read and an older save receipt", async () => {
-    let finish!: (value: ReturnType<typeof chunk>) => void;
+    let finish!: (value: ReturnType<typeof contentResult>) => void;
     let removed = false;
     const connection = createTestClientConnection({
       client: {
@@ -343,28 +364,35 @@ describe("task artifact queries", () => {
       },
     });
     const client = connection.queryClient;
-    const listOptions = taskArtifactsQueryOptions(client, "/repo", "task-1");
+    const listOptions = taskArtifactsQueryOptions(client, workspaceRefFixture("/repo"), "task-1");
     await client.fetchQuery(listOptions);
-    const acceptSave = createArtifactSaveGuard(client, "/repo", "task-1");
-    const options = taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1");
+    const acceptSave = createArtifactSaveGuard(client, workspaceRefFixture("/repo"), "task-1");
+    const options = taskArtifactContentQueryOptions(
+      client,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      "file-1",
+    );
     const pending = client.fetchQuery(options).catch((error: Error) => error);
     removed = true;
     try {
       await refreshArtifactQueries(
         client,
-        "/repo",
+        workspaceRefFixture("/repo"),
         [{ taskId: "task-1", artifactIds: ["file-1"], removedArtifactIds: ["file-1"] }],
         [],
         eventCursor(3),
       );
       expect(client.getQueryState(options.queryKey)).toBeUndefined();
-      finish(chunk());
+      finish(contentResult());
       await pending;
       await expect(acceptSave({ artifact: artifact(2), cursor: eventCursor(2) })).rejects.toThrow(
         "changed after this save",
       );
       expect(
-        client.getQueryData(artifactQueryKeys.content("/repo", "task-1", "file-1")),
+        client.getQueryData(
+          artifactQueryKeys.content(workspaceRefFixture("/repo"), "task-1", "file-1"),
+        ),
       ).toBeUndefined();
     } finally {
       client.clear();
@@ -379,17 +407,28 @@ describe("task artifact queries", () => {
     },
   ])("a deletion from $name preserves content owned by a newer event", async ({ cursor }) => {
     const connection = createTestClientConnection({
-      client: { taskArtifactRead: async () => chunk(2) },
+      client: { taskArtifactRead: async () => contentResult(2) },
     });
     const client = connection.queryClient;
-    const options = taskArtifactContentQueryOptions(client, "/repo", "task-1", "file-1");
+    const options = taskArtifactContentQueryOptions(
+      client,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      "file-1",
+    );
     const change = { taskId: "task-1", artifactIds: ["file-1"], removedArtifactIds: [] };
     try {
       const content = await client.fetchQuery(options);
-      await refreshArtifactQueries(client, "/repo", [change], [], eventCursor(3));
       await refreshArtifactQueries(
         client,
-        "/repo",
+        workspaceRefFixture("/repo"),
+        [change],
+        [],
+        eventCursor(3),
+      );
+      await refreshArtifactQueries(
+        client,
+        workspaceRefFixture("/repo"),
         [{ ...change, removedArtifactIds: ["file-1"] }],
         [],
         cursor,
@@ -402,24 +441,16 @@ describe("task artifact queries", () => {
 
   test("live changes read a file read again and drop it when its artifact goes away", async () => {
     let revision = 1;
-    const read = mock(async (input: ArtifactReadRequest) =>
-      input.byteOffset === 0
-        ? { ...chunk(revision), dataBase64: "AAEC/w==", nextByteOffset: 4 }
-        : { ...chunk(revision), dataBase64: "BA==", byteOffset: 4 },
-    );
+    const read = mock(async (_input: ArtifactReadRequest) => contentResult(revision));
     const connection = createTestClientConnection({ client: { taskArtifactRead: read } });
     const client = connection.queryClient;
-    const written: string[] = [];
     const options = queryOptions({
-      queryKey: artifactQueryKeys.file("/repo", "task-1", "file-1"),
+      queryKey: artifactQueryKeys.file(workspaceRefFixture("/repo"), "task-1", "file-1"),
       queryFn: (context) =>
         readTaskArtifact(
           client,
-          { repoPath: "/repo", taskId: "task-1", artifactId: "file-1" },
+          { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1", artifactId: "file-1" },
           context,
-          ({ dataBase64, byteOffset }) => {
-            written.push(`${byteOffset}:${dataBase64}`);
-          },
         ),
     });
     await client.fetchQuery(options);
@@ -428,15 +459,15 @@ describe("task artifact queries", () => {
       { taskId: "task-1", artifactIds: ["file-1"], removedArtifactIds: removed ? ["file-1"] : [] },
     ];
     try {
-      expect(written).toEqual(["0:AAEC/w==", "4:BA=="]);
+      expect(read).toHaveBeenCalledTimes(1);
       revision = 2;
-      await refreshArtifactQueries(client, "/repo", change(false));
-      expect(client.getQueryData(options.queryKey)?.version).toBe("v2");
-      expect(written).toHaveLength(4);
+      await refreshArtifactQueries(client, workspaceRefFixture("/repo"), change(false));
+      expect(client.getQueryData(options.queryKey)?.artifact.revision).toBe(2);
+      expect(read).toHaveBeenCalledTimes(2);
 
-      await refreshArtifactQueries(client, "/repo", change(true));
+      await refreshArtifactQueries(client, workspaceRefFixture("/repo"), change(true));
       expect(client.getQueryState(options.queryKey)).toBeUndefined();
-      expect(read).toHaveBeenCalledTimes(4);
+      expect(read).toHaveBeenCalledTimes(2);
     } finally {
       stop();
       client.clear();

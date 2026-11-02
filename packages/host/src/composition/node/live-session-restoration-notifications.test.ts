@@ -2,13 +2,20 @@ import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-poli
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import {
+  workspaceSessionCatalog,
+  workspaceSessionOwnership,
+} from "../../test-support/workspace-session-ownership";
 import { createPrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import {
   globalConfigSchema,
   repoConfigSchema,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { Effect, Stream } from "effect";
+import { Effect, Result, Stream } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import {
@@ -31,14 +38,14 @@ test.each([
 ] as const)(
   "$status task with $failure preserves notification health across renderer attachments",
   async ({ status, failure }) => {
-    const db = await createSqliteTaskStoreHarness();
-    const repoPath = db.configDir;
+    const repoPath = await mkdtemp(path.join(tmpdir(), "odt-session-restoration-"));
+    const db = await createSqliteTaskStoreHarness({ repoPath });
     const workspaceId = "fairnest";
     const config = repoConfigSchema.parse({ workspaceId, workspaceName: "Fairnest", repoPath });
     const store = createSqliteWorkspaceSessionStore(db);
     const task = await Effect.runPromise(
       db.store.createTask({
-        repoPath,
+        ...db.scope,
         status: "open",
         task: { title: "Saved build", issueType: "bug", priority: 2 },
       }),
@@ -48,9 +55,21 @@ test.each([
       workingDirectory: failure === "missing directory" ? `${repoPath}/removed-worktree` : repoPath,
     });
     await Effect.runPromise(
-      db.store.upsertAgentSession({ repoPath, taskId: task.id, session: saved }),
+      db.store.upsertAgentSession({
+        workspaceId,
+        ownershipScope: workspaceSessionOwnership({ workspaceId, repoPath }),
+        repoPath,
+        taskId: task.id,
+        session: saved,
+      }),
     );
-    await Effect.runPromise(db.store.transitionTask({ repoPath, taskId: task.id, status }));
+    await Effect.runPromise(
+      db.store.transitionTask({
+        ...db.scope,
+        taskId: task.id,
+        decide: () => Result.succeed({ status, workflowId: "openducktor" }),
+      }),
+    );
     const chat: WorkspaceSession = {
       id: "workspace-chat",
       runtimeKind: "opencode",
@@ -65,9 +84,16 @@ test.each([
       updatedAt: 1,
       archivedAt: null,
     };
-    await Effect.runPromise(store.create({ repoPath, workspaceId, session: chat }));
+    await Effect.runPromise(
+      store.create({
+        repoPath,
+        workspaceId,
+        ownershipScope: workspaceSessionOwnership({ workspaceId, repoPath }),
+        session: chat,
+      }),
+    );
     const history = await Effect.runPromise(
-      db.store.getTaskMetadata({ repoPath, taskId: task.id }),
+      db.store.getTaskMetadata({ ...db.scope, taskId: task.id }),
     );
     const directoryReads: string[] = [];
     const nativeReads: string[] = [];
@@ -137,8 +163,7 @@ test.each([
       runtimeAdmission: { admit: (_kind, effect) => effect },
       readSessionRootRefs: createLiveSessionRootRefsReader({
         store,
-        taskStore: db.store,
-        settings: { getRepoConfigByRepoPath: () => Effect.succeed(config) },
+        settings: { getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(config)) },
       }),
       faultLog: () => Effect.void,
       publish: () => {},
@@ -236,13 +261,14 @@ test.each([
         },
       ]);
       expect(
-        await Effect.runPromise(db.store.getTaskMetadata({ repoPath, taskId: task.id })),
+        await Effect.runPromise(db.store.getTaskMetadata({ ...db.scope, taskId: task.id })),
       ).toEqual(history);
     } finally {
       await Effect.runPromise(notifications.dispose());
       await Effect.runPromise(live.releaseRuntime(runtime.runtimeId));
       server.stop(true);
       await db.cleanup();
+      await rm(repoPath, { recursive: true, force: true });
     }
   },
 );

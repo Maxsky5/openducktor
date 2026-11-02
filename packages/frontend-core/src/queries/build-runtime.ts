@@ -1,3 +1,5 @@
+import { workspaceScopeValue } from "./workspace-scope";
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
@@ -5,8 +7,7 @@ import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
 
 export type TaskWorktreeQueryHost = Pick<HostClient, "taskWorktreeGet">;
-type TaskWorktreeQueryInput = {
-  repoPath: string;
+type TaskWorktreeQueryInput = WorkspaceRef & {
   taskId: string;
   taskVersion?: string | null;
 };
@@ -37,23 +38,33 @@ const withTimeout = async <T>(
 
 export const taskWorktreeQueryKeys = {
   all: ["task-worktree"] as const,
-  taskWorktree: ({ repoPath, taskId, taskVersion = null }: TaskWorktreeQueryInput) =>
+  taskWorktree: ({ workspaceId, repoPath, taskId, taskVersion = null }: TaskWorktreeQueryInput) =>
     taskVersion == null
-      ? ([...taskWorktreeQueryKeys.all, repoPath, taskId] as const)
-      : ([...taskWorktreeQueryKeys.all, repoPath, taskId, taskVersion] as const),
+      ? ([
+          ...taskWorktreeQueryKeys.all,
+          workspaceScopeValue({ workspaceId, repoPath }),
+          taskId,
+        ] as const)
+      : ([
+          ...taskWorktreeQueryKeys.all,
+          workspaceScopeValue({ workspaceId, repoPath }),
+          taskId,
+          taskVersion,
+        ] as const),
 };
 
 export const taskWorktreeQueryOptions = ({
+  workspaceId,
   repoPath,
   taskId,
   scheduleTask: scheduler = scheduleTask,
   taskVersion = null,
 }: TaskWorktreeQueryOptionsInput) =>
   queryOptions({
-    queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId, taskVersion }),
+    queryKey: taskWorktreeQueryKeys.taskWorktree({ workspaceId, repoPath, taskId, taskVersion }),
     queryFn: ({ client }): Promise<TaskWorktreeSummary | null> =>
       withTimeout(
-        connectionHost(client).taskWorktreeGet(repoPath, taskId),
+        connectionHost(client).taskWorktreeGet({ workspaceId, repoPath }, taskId),
         TASK_WORKTREE_TIMEOUT_MS,
         `Timed out after ${TASK_WORKTREE_TIMEOUT_MS}ms while loading task worktree.`,
         scheduler,

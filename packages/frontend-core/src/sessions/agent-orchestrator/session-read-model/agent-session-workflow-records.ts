@@ -13,6 +13,7 @@ import { rebuildProjectedPendingInput } from "./agent-session-live-projection";
 
 /** Workflow session records loaded from the task store; a future record source can supply the same shape. */
 export type LoadedWorkflowSessionRecords = {
+  workspaceId: string;
   /** Owning ids whose durable lists were read successfully; an unread owner never proves deletion. */
   loadedTaskIds: ReadonlySet<string>;
   records: readonly PersistedTaskSessionRecord[];
@@ -23,12 +24,15 @@ const persistedRecordIdentityKeys = (records: readonly PersistedTaskSessionRecor
 
 const pruneRecordlessWorkflowSessions = (
   projected: AgentSessionCollection,
-  { loadedTaskIds, records }: LoadedWorkflowSessionRecords,
+  { workspaceId, loadedTaskIds, records }: LoadedWorkflowSessionRecords,
 ): AgentSessionCollection => {
   const persistedKeys = persistedRecordIdentityKeys(records);
   let collection = projected;
   for (const session of listAgentSessions(projected)) {
-    if (!isWorkflowAgentSession(session)) {
+    if (
+      !isWorkflowAgentSession(session) ||
+      session.sessionAssociation.workspaceId !== workspaceId
+    ) {
       continue;
     }
     const recordDisappeared =
@@ -86,7 +90,9 @@ export const applyWorkflowSessionRecords = ({
     }
     const persistedView = toPersistedSessionView(persistedInput);
     const reconciledView =
-      currentSession && existingSelectedModelSource === "current"
+      currentSession?.sessionAssociation.kind === "workflow" &&
+      currentSession.sessionAssociation.workspaceId === persistedRecord.workspaceId &&
+      existingSelectedModelSource === "current"
         ? { ...persistedView, selectedModel: currentSession.selectedModel }
         : persistedView;
     collection = replaceAgentSession(collection, reconciledView);

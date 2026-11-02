@@ -36,6 +36,7 @@ export const IssueImage = memo(function IssueImage({
     <LoadedIssueImage
       url={url}
       taskId={task.taskId}
+      workspaceId={task.workspaceId}
       issue={issue}
       alt={alt}
       onPress={onPress}
@@ -49,6 +50,7 @@ export const IssueImage = memo(function IssueImage({
 function LoadedIssueImage({
   url,
   taskId,
+  workspaceId,
   issue,
   alt,
   onPress,
@@ -56,6 +58,7 @@ function LoadedIssueImage({
 }: {
   url: string;
   taskId: string;
+  workspaceId: string;
   issue: TaskIssueImageContext;
   alt: string;
   onPress: (file: HostImageFile) => void;
@@ -68,13 +71,13 @@ function LoadedIssueImage({
     () =>
       base64ResourceFileQueryOptions(
         files,
-        ["issue-image", providerId, repoPath, taskId, url],
+        ["issue-image", providerId, workspaceId, repoPath, taskId, url],
         async () => {
-          const image = await host.issueImageGet({ repoPath, taskId, url });
+          const image = await host.issueImageGet({ workspaceId, repoPath, taskId, url });
           return { base64: image.bytesBase64, mediaType: image.mediaType };
         },
       ),
-    [files, host, providerId, repoPath, taskId, url],
+    [files, host, providerId, workspaceId, repoPath, taskId, url],
   );
   const query = useQuery(options);
   const file = query.data;

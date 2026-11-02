@@ -63,6 +63,7 @@ export const createWorkflowLaunchService = (
       if (model) attempt.setResultFields({ model });
       const sessionScope = {
         kind: "workflow" as const,
+        workspaceId: request.workspaceId,
         taskId: request.taskId,
         role: action.role,
       };
@@ -138,11 +139,13 @@ export const createWorkflowLaunchService = (
       if (publish) {
         yield* startupStep({ id: "publish", label: "Publish saved session" }, publish);
         const agentSessions = yield* deps.tasks.agentSessionsList({
+          workspaceId: request.workspaceId,
           repoPath,
           taskId: request.taskId,
         });
         // Readers bind the saved owner with its live activity before the first instruction.
         yield* deps.runtime.publishTaskSessionRecords(toControlSessionRef(repoPath, session), {
+          workspaceId: request.workspaceId,
           taskId: request.taskId,
           agentSessions,
         });

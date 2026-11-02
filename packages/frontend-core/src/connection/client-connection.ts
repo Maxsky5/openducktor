@@ -1,4 +1,5 @@
 import type { HostClient } from "@openducktor/host-client";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   type AgentChatDraftStore,
@@ -32,6 +33,7 @@ import {
 } from "../sessions/startup/startup-prepared-handoff";
 import { releaseStartupTerminalOutput } from "../terminals/use-startup-terminal-output";
 import { updateTerminalCommandResults } from "../queries/terminals";
+import { createTaskEditorDraftState } from "../tasks/create/task-editor-drafts";
 
 export type ClientConnectionOptions = {
   host: HostConnection;
@@ -55,6 +57,8 @@ export type ClientConnectionOptions = {
 
 /** Drafts that belong to one host connection. Repository paths alone never identify a host. */
 export type ClientDrafts = {
+  readonly taskEditors: ReturnType<typeof createTaskEditorDraftState>;
+  readonly settings: { retained: { baseline: SettingsSnapshot; draft: SettingsSnapshot } | null };
   readonly chat: AgentChatDraftStore;
   readonly inlineComments: InlineCommentDraftStoreApi;
   readonly queuedMessageEdits: QueuedMessageEditDrafts;
@@ -82,7 +86,8 @@ export type ClientConnection = {
   /**
    * Saves drafts unless `saveDraftsOnDispose` is false, cancels reads, clears the cache, and
    * releases the host transport. It rejects when a step failed, including a draft save. It sends no
-   * command that stops or changes host work, so host work that the host already admitted continues.
+   * command that stops admitted host work. It discards unsaved task image uploads before releasing
+   * the transport.
    */
   dispose(): Promise<void>;
 };
@@ -125,6 +130,10 @@ export const createClientConnection = ({
     throw new Error("This query client already belongs to another host connection.");
   }
   const drafts: ClientDrafts = {
+    taskEditors: createTaskEditorDraftState((workspaceId, assetIds) =>
+      host.client.taskAssetDiscardStaged({ workspaceId, assetIds }),
+    ),
+    settings: { retained: null },
     chat: createAgentChatDraftStore({
       storage,
       stageAttachment,
@@ -189,6 +198,8 @@ export const createClientConnection = ({
         releaseStartupTerminalOutput(connection);
         releaseStartupPreparations(queryClient);
         drafts.queuedMessageEdits.dispose();
+        drafts.settings.retained = null;
+        await attempt(() => drafts.taskEditors.dispose());
         await attempt(() => queryClient.cancelQueries());
         await draftsSaved;
         drafts.chat.dispose();

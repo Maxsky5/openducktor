@@ -88,7 +88,12 @@ describe("createTaskService build start worktree handling", () => {
         taskSessionLifecycleCoordinator: coordinator,
       });
       const fiber = Effect.runFork(
-        service.buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        service.buildStart({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       );
       try {
         await started.promise;
@@ -124,12 +129,13 @@ describe("createTaskService build start worktree handling", () => {
       ...deps,
       workspaceSettingsService: {
         ...deps.workspaceSettingsService,
-        getRepoConfigByRepoPath: () => Effect.fail(failure),
+        getRepoConfig: () => Effect.fail(failure),
       },
     });
     const result = await Effect.runPromise(
       Effect.result(
         service.buildStart({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -161,6 +167,7 @@ describe("createTaskService build start worktree handling", () => {
     });
     const fiber = Effect.runFork(
       service.buildStart({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         runtimeKind: "opencode",
@@ -223,6 +230,7 @@ describe("createTaskService build start worktree handling", () => {
     await expect(
       Effect.runPromise(
         service.buildStart({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -271,7 +279,12 @@ describe("createTaskService build start worktree handling", () => {
 
     await expect(
       Effect.runPromise(
-        service.buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        service.buildStart({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow("changed from ai_review to blocked while Builder startup was in progress");
     expect(calls).toContainEqual({
@@ -295,6 +308,7 @@ describe("createTaskService build start worktree handling", () => {
 
     const result = await Effect.runPromise(
       createTaskService(createDependencies(calls, taskStore)).buildStart({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         runtimeKind: "opencode",
@@ -314,7 +328,13 @@ describe("createTaskService build start worktree handling", () => {
     );
     expect(calls).toContainEqual({
       type: "transition",
-      input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
+      input: {
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskId: "task-1",
+        status: "in_progress",
+        cause: {},
+      },
     });
   });
 
@@ -335,6 +355,7 @@ describe("createTaskService build start worktree handling", () => {
 
       await Effect.runPromise(
         createTaskService(createDependencies(calls, taskStore)).buildStart({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -344,7 +365,13 @@ describe("createTaskService build start worktree handling", () => {
       expect(current.status).toBe("in_progress");
       expect(calls).toContainEqual({
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "in_progress",
+          cause: {},
+        },
       });
     },
   );
@@ -361,6 +388,7 @@ describe("createTaskService build start worktree handling", () => {
       await expect(
         Effect.runPromise(
           createTaskService(createDependencies(calls, taskStore)).buildStart({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             runtimeKind: "opencode",
@@ -394,6 +422,7 @@ describe("createTaskService build start worktree handling", () => {
           gitPort,
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         }).buildStart({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -435,6 +464,7 @@ describe("createTaskService build start worktree handling", () => {
           ...dependencies,
           runtimeRegistry,
         }).buildStart({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -487,6 +517,7 @@ describe("createTaskService build start worktree handling", () => {
         ...dependencies,
         taskSessionLifecycleCoordinator: coordinator,
       }).buildStart({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         runtimeKind: "opencode",
@@ -540,6 +571,7 @@ describe("createTaskService build start worktree handling", () => {
     await expect(
       Effect.runPromise(
         createTaskService(createDependencies(calls, taskStore)).buildStart({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",

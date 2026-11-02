@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
@@ -29,10 +30,10 @@ export const createTaskPullRequestDetectionUseCase = ({
           workspaceSettingsService,
         }),
       );
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       yield* requirePullRequestManagement(workflow, current);
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const metadata = yield* taskStore.getTaskDelivery(input);
       if (metadata.pullRequest !== undefined) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -49,8 +50,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         directMerge: metadata.directMerge,
       });
 
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = repoConfig.repoPath;
       const taskContext = yield* loadTaskBranchCleanup(
         dependencies,
@@ -59,6 +59,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         effectiveRepoPath,
         taskId,
         "Pull request detection",
+        input.workspaceId,
       );
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
@@ -72,6 +73,7 @@ export const createTaskPullRequestDetectionUseCase = ({
           linkedProviderId: openPullRequest.record.providerId,
         });
         yield* taskStore.setPullRequest({
+          workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
           taskId,
           pullRequest: openPullRequest.record,

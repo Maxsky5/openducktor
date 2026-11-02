@@ -23,7 +23,12 @@ const GIT: GitCheck = {
   error: null,
 };
 
-type HostCalls = { path: boolean[]; git: number; taskStore: string[]; runtime: number };
+type HostCalls = {
+  path: boolean[];
+  git: number;
+  taskStore: import("@openducktor/contracts").WorkspaceRef[];
+  runtime: number;
+};
 
 const setup = (activeWorkspace: ActiveWorkspace | null, client: Partial<HostClient> = {}) => {
   const calls: HostCalls = { path: [], git: 0, taskStore: [], runtime: 0 };
@@ -37,8 +42,10 @@ const setup = (activeWorkspace: ActiveWorkspace | null, client: Partial<HostClie
         calls.git += 1;
         return GIT;
       },
-      taskStoreCheck: async (repoPath: string): Promise<TaskStoreCheck> => {
-        calls.taskStore.push(repoPath);
+      taskStoreCheck: async (
+        scope: import("@openducktor/contracts").WorkspaceRef,
+      ): Promise<TaskStoreCheck> => {
+        calls.taskStore.push(scope);
         return createTaskStoreCheckFixture();
       },
       ...client,
@@ -83,7 +90,7 @@ describe("useDiagnosticsChecks", () => {
     expect(result.current.pathCheck.observedAt).not.toBeNull();
     expect(result.current.checksRepoPath).toBe("/repo-a");
     expect(calls.path).toEqual([false]);
-    expect(calls.taskStore).toEqual(["/repo-a"]);
+    expect(calls.taskStore).toEqual([{ workspaceId: "repo-a", repoPath: "/repo-a" }]);
   });
 
   test("without a workspace, the task store is not read", async () => {
@@ -135,7 +142,10 @@ describe("useDiagnosticsChecks", () => {
     expect(calls.runtime).toBe(1);
     expect(calls.path).toEqual([false, true]);
     expect(calls.git).toBe(2);
-    expect(calls.taskStore).toEqual(["/repo-a", "/repo-a"]);
+    expect(calls.taskStore).toEqual([
+      { workspaceId: "repo-a", repoPath: "/repo-a" },
+      { workspaceId: "repo-a", repoPath: "/repo-a" },
+    ]);
     expect(result.current.isRefreshingChecks).toBe(false);
   });
 });

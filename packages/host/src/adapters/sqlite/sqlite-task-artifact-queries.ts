@@ -1,23 +1,20 @@
-import { isUtf8 } from "node:buffer";
-import { createHash } from "node:crypto";
 import { type TaskArtifact, taskArtifactSchema } from "@openducktor/contracts";
-import { and, asc, desc, eq, gt, notExists, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { and, asc, desc, eq, max } from "drizzle-orm";
 import { Effect } from "effect";
 import type {
   ArtifactStoreReference,
   StoredArtifactContent,
 } from "../../ports/task-repository-ports";
-import { validateWithSchema } from "./sqlite-json-codecs";
+import { validateWithSchema } from "./sqlite-task-store-validation";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreReadError,
 } from "./sqlite-task-store-errors";
 import {
   type TaskArtifactRow,
-  type TaskStoreSession,
+  type HostDatabaseSession,
   taskArtifacts,
-} from "./sqlite-task-store-schema";
+} from "./sqlite-host-database-schema";
 
 export const artifactMetadataSelection = {
   artifactId: taskArtifacts.artifactId,
@@ -36,29 +33,30 @@ export const artifactMetadataSelection = {
 type ArtifactMetadataRow = Pick<TaskArtifactRow, keyof typeof artifactMetadataSelection>;
 
 export const listArtifactsInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
 ): Effect.Effect<TaskArtifact[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const rows = yield* session.execute((database) => {
-      const newer = alias(taskArtifacts, "newer_artifact");
+      const latest = database
+        .select({
+          artifactId: taskArtifacts.artifactId,
+          revision: max(taskArtifacts.revision).as("latest_revision"),
+        })
+        .from(taskArtifacts)
+        .where(and(eq(taskArtifacts.workspaceId, workspaceId), eq(taskArtifacts.taskId, taskId)))
+        .groupBy(taskArtifacts.artifactId)
+        .as("latest");
       return database
         .select(artifactMetadataSelection)
         .from(taskArtifacts)
-        .where(
+        .innerJoin(
+          latest,
           and(
-            eq(taskArtifacts.taskId, taskId),
-            notExists(
-              database
-                .select({ value: sql<number>`1` })
-                .from(newer)
-                .where(
-                  and(
-                    eq(newer.artifactId, taskArtifacts.artifactId),
-                    gt(newer.revision, taskArtifacts.revision),
-                  ),
-                ),
-            ),
+            eq(taskArtifacts.workspaceId, workspaceId),
+            eq(taskArtifacts.artifactId, latest.artifactId),
+            eq(taskArtifacts.revision, latest.revision),
           ),
         )
         .orderBy(
@@ -71,7 +69,8 @@ export const listArtifactsInDatabase = (
   });
 
 export const readArtifactInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreReference,
 ): Effect.Effect<StoredArtifactContent | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
@@ -86,6 +85,7 @@ export const readArtifactInDatabase = (
           .from(taskArtifacts)
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, input.taskId),
               eq(taskArtifacts.artifactId, input.artifactId),
             ),
@@ -109,11 +109,7 @@ export const readArtifactInDatabase = (
         details: { taskId: input.taskId },
       });
     }
-    const version = createHash("sha256")
-      .update(JSON.stringify([input.repoPath, artifact]))
-      .update(content)
-      .digest("hex");
-    return { artifact, content, version, isUtf8: isUtf8(content) };
+    return { artifact, content };
   });
 
 export const artifactMetadataFromRow = (

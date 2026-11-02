@@ -65,7 +65,12 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
   test("keeps build-tools context available while the selected transcript is loading", async () => {
     const selectedSessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         status: "running",
         workingDirectory: "/repo/worktree",
       }),
@@ -97,7 +102,12 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
 
   test("enables build-tools bootstrap once the selected build session context is stable", async () => {
     const loadedSession = createAgentSessionFixture({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       workingDirectory: "/repo/worktree",
     });
     const harness = createHookHarness(
@@ -129,7 +139,12 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
   test("keeps build-tools context from the selected session identity before summaries load", async () => {
     const selectedSessionIdentity = toAgentSessionIdentity(
       createAgentSessionFixture({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         workingDirectory: "/repo/worktree",
       }),
     );

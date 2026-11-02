@@ -5,6 +5,7 @@ import type {
   AgentSessionLiveRef,
   AgentMessageQueueSnapshot,
   SessionOperationObservation,
+  WorkspaceRef,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { replaceEqualDeep } from "@tanstack/react-query";
@@ -104,8 +105,8 @@ export type AgentSessionsStore = {
     updater: (current: AgentSessionState) => AgentSessionState,
   ) => AgentSessionState | null;
   /** The tasks that own workflow sessions in a workspace collection. */
-  listSessionTaskIds: (repoPath: string) => string[];
-  removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
+  listSessionTaskIds: (scope: WorkspaceRef) => string[];
+  removeTaskSessions: (scope: WorkspaceRef, taskIds: string[]) => void;
 };
 
 export const createAgentSessionsStore = (
@@ -346,18 +347,19 @@ export const createAgentSessionsStore = (
       const session = getAgentSession(sessionCollection, identity);
       return session ? { session, lifetime } : null;
     },
-    listSessionTaskIds: (repoPath) => {
-      if (repoPath !== workspaceRepoPath) return [];
+    listSessionTaskIds: (scope) => {
+      if (scope.repoPath !== workspaceRepoPath) return [];
       const taskIds = new Set<string>();
       for (const session of listAgentSessions(sessionCollection)) {
         const association = session.sessionAssociation;
-        if (association.kind === "workflow") taskIds.add(association.taskId);
+        if (association.kind === "workflow" && association.workspaceId === scope.workspaceId)
+          taskIds.add(association.taskId);
       }
       return [...taskIds];
     },
-    removeTaskSessions: (repoPath, taskIds) => {
-      if (repoPath !== workspaceRepoPath || taskIds.length === 0) return;
-      setSessionCollection((current) => withoutTasks(current, new Set(taskIds)));
+    removeTaskSessions: (scope, taskIds) => {
+      if (scope.repoPath !== workspaceRepoPath || taskIds.length === 0) return;
+      setSessionCollection((current) => withoutTasks(current, scope.workspaceId, new Set(taskIds)));
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -494,12 +496,14 @@ export const createAgentSessionsStore = (
 
 function withoutTasks(
   collection: AgentSessionCollection,
+  workspaceId: string,
   taskIds: Set<string>,
 ): AgentSessionCollection {
   let next = collection;
   for (const session of listAgentSessions(collection)) {
     if (
       session.sessionAssociation.kind === "workflow" &&
+      session.sessionAssociation.workspaceId === workspaceId &&
       taskIds.has(session.sessionAssociation.taskId)
     )
       next = removeAgentSession(next, session);

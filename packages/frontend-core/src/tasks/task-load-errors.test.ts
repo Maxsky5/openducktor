@@ -46,7 +46,7 @@ describe("summarizeTaskLoadError", () => {
 
     expect(message).toContain("Task store unavailable.");
     expect(message).toContain(
-      "OpenDucktor stores tasks under the active config directory at task-stores",
+      "OpenDucktor stores tasks in the host database at <config-root>/database.sqlite",
     );
   });
 });

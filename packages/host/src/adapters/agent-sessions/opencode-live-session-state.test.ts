@@ -21,7 +21,7 @@ const summary = (externalSessionId = "session-1"): AgentSessionSummary => ({
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
   title: "OpenDucktor session",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   startedAt: "2026-07-16T10:01:00.000Z",
   status: "running",
 });
@@ -357,7 +357,7 @@ describe("OpenCode host live-session state", () => {
     const state = createState();
     state.applyControlSummary(REPO, {
       ...summary("parent"),
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
     });
     const parentRef = state.listSnapshots()[0]!.ref;
     const readStart = state.readStart();
@@ -523,7 +523,7 @@ describe("OpenCode host live-session state", () => {
     const state = createState();
     state.applyControlSummary(REPO, {
       ...summary("parent"),
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
     });
     const parentRef = state.listSnapshots()[0]?.ref;
     if (!parentRef) {
@@ -537,7 +537,7 @@ describe("OpenCode host live-session state", () => {
       {
         ...summary("parent"),
         title: "Renamed",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
       },
       { keepActivity: true },
     );

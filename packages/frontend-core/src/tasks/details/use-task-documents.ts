@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { resolveLatestDocumentPayload } from "../../queries/document-utils";
@@ -55,7 +56,7 @@ const toTaskDocumentState = (
   });
 };
 
-export function useTaskDocuments(taskId: string | null, open: boolean, cacheScope = "") {
+export function useTaskDocuments(taskId: string | null, open: boolean, cacheScope: WorkspaceRef) {
   const queryClient = useQueryClient();
 
   const enabled = open && taskId !== null;

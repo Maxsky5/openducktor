@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
@@ -39,7 +40,7 @@ export const createTaskCloseUseCase = ({
   closeTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, removeWorktree } = input;
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const decision = yield* requireEffect(workflow, "task.close", current);
       if (decision.kind === "unchanged") {
@@ -49,8 +50,7 @@ export const createTaskCloseUseCase = ({
       const dependencies = yield* requireDependencies(() =>
         requireTaskCloseDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
         dependencies.settingsConfig,
@@ -59,7 +59,7 @@ export const createTaskCloseUseCase = ({
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const cleanupProgress = createTaskCleanupProgressState();
       const cleanup = Effect.gen(function* () {
-        const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+        const currentMetadata = yield* taskStore.getTaskMetadata(input);
         const currentSessions = currentMetadata.agentSessions;
         const hasWorkflowSessions = taskHasSessionsForRoles(
           currentSessions,
@@ -90,6 +90,7 @@ export const createTaskCloseUseCase = ({
             );
           }
           return yield* collectTaskCleanupTargets({
+            workspaceId: input.workspaceId,
             dependencies: taskWorktreeDependency
               ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
               : dependencies,
@@ -119,6 +120,7 @@ export const createTaskCloseUseCase = ({
           recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
         }
         yield* runTaskLocalCleanup({
+          workspaceId: input.workspaceId,
           branchNames,
           gitPort: dependencies.gitPort,
           managedWorktreeBasePath,
@@ -135,6 +137,7 @@ export const createTaskCloseUseCase = ({
 
       return yield* Effect.gen(function* () {
         const updated = yield* completeTaskClosure({
+          workspaceId: input.workspaceId,
           cleanup,
           gitPort: dependencies.gitPort,
           operation: "close task",
@@ -142,7 +145,8 @@ export const createTaskCloseUseCase = ({
           taskId,
           taskSessionLifecycleCoordinator,
           taskStore,
-          decision,
+          taskWorkflows,
+          effect: "task.close",
         });
         return enrichTask(workflow, updated);
       }).pipe(

@@ -78,6 +78,15 @@ export class HostInvariantError<Details extends object = never> extends Data.Tag
   readonly details?: HostErrorDetails<Details>;
 }> {}
 
+/** A settings file that the user must correct, back up, or restore before the host can start. */
+export class SettingsFileError extends Data.TaggedError("SettingsFileError")<{
+  readonly reason: "invalid" | "backupConflict" | "databaseMissing";
+  readonly path: string;
+  readonly message: string;
+  readonly backupPath?: string | undefined;
+  readonly cause?: unknown | undefined;
+}> {}
+
 export type HostCommandErrorAggregate = HostCommandError<object>;
 export type HostDependencyErrorAggregate = HostDependencyError<object>;
 export type HostInvariantErrorAggregate = HostInvariantError<object>;
@@ -95,7 +104,8 @@ export type HostError =
   | HostPathAccessErrorAggregate
   | HostPathNotFoundErrorAggregate
   | HostResourceErrorAggregate
-  | HostValidationErrorAggregate;
+  | HostValidationErrorAggregate
+  | SettingsFileError;
 
 export const isHostError = (cause: unknown): cause is HostError =>
   cause instanceof HostCommandError ||
@@ -105,7 +115,8 @@ export const isHostError = (cause: unknown): cause is HostError =>
   cause instanceof HostPathAccessError ||
   cause instanceof HostPathNotFoundError ||
   cause instanceof HostResourceError ||
-  cause instanceof HostValidationError;
+  cause instanceof HostValidationError ||
+  cause instanceof SettingsFileError;
 
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -129,28 +140,31 @@ const nodeErrorCode = (cause: unknown): string | null => {
   return parsed.success ? parsed.data.code : null;
 };
 
-const nestedNodeErrorSchema = z
-  .object({ code: z.unknown().optional(), cause: z.unknown().optional() })
-  .passthrough();
+const errorCauseSchema = z.looseObject({ cause: z.unknown().optional() });
 
-export const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean => {
+/** Returns the first error in the `cause` chain, from `cause` inward, that matches `predicate`. */
+export const findInCauseChain = <Match>(
+  cause: unknown,
+  predicate: (cause: unknown) => cause is Match,
+): Match | null => {
   const visited = new Set<unknown>();
-  let current: unknown = cause;
+  let current = cause;
   while (!visited.has(current)) {
     visited.add(current);
-    const parsed = nestedNodeErrorSchema.safeParse(current);
-    if (!parsed.success) {
-      return false;
-    }
-    if (parsed.data.code === code) {
-      return true;
-    }
+    if (predicate(current)) return current;
+    const parsed = errorCauseSchema.safeParse(current);
+    if (!parsed.success) return null;
     current = parsed.data.cause;
   }
-  return false;
+  return null;
 };
 
-const isPathNotFoundError = (cause: unknown): boolean =>
+export const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean =>
+  findInCauseChain(cause, (link): link is { code: string } => nodeErrorCode(link) === code) !==
+  null;
+
+/** A Node error for a path that does not exist or has a file in place of a directory. */
+export const isPathNotFoundError = (cause: unknown): cause is { code: "ENOENT" | "ENOTDIR" } =>
   nodeErrorCode(cause) === "ENOENT" || nodeErrorCode(cause) === "ENOTDIR";
 
 const toHostPathAccessError = <Details extends object>(

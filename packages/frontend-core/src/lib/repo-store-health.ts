@@ -3,7 +3,7 @@ import type { RepoStoreHealth, TaskStoreCheck } from "@openducktor/contracts";
 const defaultRepoStoreDetail = (health: RepoStoreHealth): string => {
   switch (health.category) {
     case "healthy":
-      return "SQLite task store is ready.";
+      return "The host database is ready.";
     case "check_call_failed":
       return "OpenDucktor could not check the task store health.";
     case "database_unavailable":

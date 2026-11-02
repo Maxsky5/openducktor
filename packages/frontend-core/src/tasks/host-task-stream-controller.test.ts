@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskStreamFrame } from "../connection/host-connection";
@@ -29,15 +30,17 @@ describe("createHostTaskStreamController", () => {
       },
     });
     const { queryClient } = createTestClientConnection({ host });
-    queryClient.setQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"), { tasks: [saved] });
+    queryClient.setQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo")), {
+      tasks: [saved],
+    });
     const onDegraded = mock(() => {});
     const controller = createHostTaskStreamController(
       host,
       { listSessionTaskIds: () => [], removeTaskSessions: () => {} },
       {
         queryClient,
-        getOpenRepoPaths: () => ["/repo"],
-        getActiveRepoPath: () => "/repo",
+        getOpenRepoPaths: () => [workspaceRefFixture("/repo")],
+        getActiveRepoPath: () => workspaceRefFixture("/repo"),
         onDegraded,
         onWorkspaceFailures: () => {},
       },
@@ -50,6 +53,7 @@ describe("createHostTaskStreamController", () => {
       cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 },
       event: {
         kind: "tasks_updated",
+        workspaceId: "workspace-1",
         boardChanges: { artifactChanges: [], cards: [edited], doneVisibleDays: 1 },
         eventId: "event-1",
         repoPath: "/repo",
@@ -62,7 +66,9 @@ describe("createHostTaskStreamController", () => {
     });
     await flush();
 
-    const cached = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"));
+    const cached = queryClient.getQueryData<RepoTaskData>(
+      taskQueryKeys.repoData(workspaceRefFixture("/repo")),
+    );
     expect(cached?.tasks.map((task) => task.description)).toEqual(["New"]);
     expect(onDegraded).not.toHaveBeenCalled();
     await controller.stop();

@@ -182,6 +182,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
 }
 
 const toNotificationWorkspace = (workspace: WorkspaceRecord) => ({
+  workspaceId: workspace.workspaceId,
   repoPath: workspace.repoPath,
   repositoryLabel: workspace.workspaceName,
 });

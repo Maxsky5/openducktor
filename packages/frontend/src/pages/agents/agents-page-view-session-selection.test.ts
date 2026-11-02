@@ -11,17 +11,32 @@ describe("Agent Studio view session selection", () => {
   test("groups sessions by task with newest sessions first", () => {
     const firstTaskOneOld = createAgentSessionFixture({
       externalSessionId: "session-old",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       startedAt: "2026-02-22T10:00:00.000Z",
     });
     const firstTaskOneNew = createAgentSessionFixture({
       externalSessionId: "session-new",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
     });
     const firstTaskTwo = createAgentSessionFixture({
       externalSessionId: "session-2-old",
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "spec",
+      },
       startedAt: "2026-02-22T09:00:00.000Z",
     });
 
@@ -41,12 +56,22 @@ describe("Agent Studio view session selection", () => {
   test("keeps grouped session order stable when input order changes", () => {
     const sessionOld = createAgentSessionFixture({
       externalSessionId: "session-old",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       startedAt: "2026-02-22T10:00:00.000Z",
     });
     const sessionNew = createAgentSessionFixture({
       externalSessionId: "session-new",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
     });
 
@@ -68,7 +93,12 @@ describe("Agent Studio view session selection", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-reloaded",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
 
         status: "idle",
         startedAt: "2026-02-22T12:00:00.000Z",
@@ -139,7 +169,12 @@ describe("Agent Studio view session selection", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-summary",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
 
         status: "idle",
         startedAt: "2026-02-22T12:00:00.000Z",

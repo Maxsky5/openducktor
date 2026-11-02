@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { like, sql } from "drizzle-orm";
+import { and, gte, lt, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
-import { type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+import { type HostDatabaseSession, tasks } from "./sqlite-host-database-schema";
 
 const TASK_ID_PREFIX_MAX_LENGTH = 10;
 
@@ -92,17 +92,23 @@ const adaptiveHashLength = (taskCount: number): number => {
   return 7;
 };
 
+/** Counts IDs with this prefix in every workspace, because the ID space is shared. */
 export const firstTaskIdHashLength = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
   prefix: string,
 ): Effect.Effect<number, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
+    // "." follows "-" in code point order, so this range is the `${prefix}-` IDs and uses the index.
     const rows = yield* session.execute(
       (database) =>
-        database
-          .select({ taskCount: sql<number>`count(*)` })
-          .from(tasks)
-          .where(like(tasks.id, `${prefix}-%`)),
+        database.select({ taskCount: sql<number>`count(*)` }).from(
+          database
+            .select({ id: tasks.id })
+            .from(tasks)
+            .where(and(gte(tasks.id, `${prefix}-`), lt(tasks.id, `${prefix}.`)))
+            .limit(10000)
+            .as("matching_tasks"),
+        ),
       "sqliteTaskStore.nextTaskId.countTasksForPrefix",
       { prefix },
     );

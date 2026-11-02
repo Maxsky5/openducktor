@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceScopeKey } from "../queries/workspace-scope";
 import type { QueryClient } from "@tanstack/react-query";
 import type { HostConnection } from "../connection/host-connection";
 import { createAgentSessionViewSync } from "../queries/agent-session-view-sync";
@@ -7,12 +9,12 @@ import { createTaskStreamController, type TaskStreamController } from "./task-st
 
 export type HostTaskStreamInput = {
   queryClient: QueryClient;
-  getOpenRepoPaths: () => readonly string[];
-  getActiveRepoPath: () => string | null;
+  getOpenRepoPaths: () => readonly WorkspaceRef[];
+  getActiveRepoPath: () => WorkspaceRef | null;
   onDegraded: (cause: unknown) => void;
-  onSnapshotFinished?: (repoPath: string, succeeded: boolean) => void;
-  onSnapshotStarted?: (repoPath: string) => void;
-  onWorkspaceFailures: (failures: ReadonlyMap<string, unknown>) => void;
+  onSnapshotFinished?: (repoPath: WorkspaceRef, succeeded: boolean) => void;
+  onSnapshotStarted?: (repoPath: WorkspaceRef) => void;
+  onWorkspaceFailures: (failures: ReadonlyMap<WorkspaceRef, unknown>) => void;
 };
 
 /**
@@ -30,11 +32,17 @@ export const createHostTaskStreamController = (
     agentSessionViewSync: createAgentSessionViewSync({
       queryClient,
       readPort: host.client,
-      listSessionTaskIds: sessionStore.listSessionTaskIds,
-      removeTaskSessions: sessionStore.removeTaskSessions,
-      refreshLiveSessions: (repoPath) => host.client.agentSessionLiveRefresh({ repoPath }),
-      isWorkspaceOpen: (repoPath) => getOpenRepoPaths().includes(repoPath),
-      isWorkspaceActive: (repoPath) => getActiveRepoPath() === repoPath,
+      listSessionTaskIds: (scope) => sessionStore.listSessionTaskIds(scope),
+      removeTaskSessions: (scope, taskIds) => sessionStore.removeTaskSessions(scope, taskIds),
+      refreshLiveSessions: (repoPath) =>
+        host.client.agentSessionLiveRefresh({ repoPath: repoPath.repoPath }),
+      isWorkspaceOpen: (repoPath) =>
+        getOpenRepoPaths().some(
+          (scope) => workspaceScopeKey(scope) === workspaceScopeKey(repoPath),
+        ),
+      isWorkspaceActive: (repoPath) =>
+        getActiveRepoPath()?.workspaceId === repoPath.workspaceId &&
+        getActiveRepoPath()?.repoPath === repoPath.repoPath,
     }),
     getOpenRepoPaths,
     ...callbacks,

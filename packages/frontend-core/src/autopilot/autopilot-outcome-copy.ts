@@ -15,7 +15,9 @@ export const AUTOPILOT_RETRY_MESSAGE_LABEL = "Retry message";
 export const AUTOPILOT_FAILURE_TITLE = "Autopilot cannot evaluate task changes.";
 
 const actionLabel = (outcome: AutopilotOutcome): string =>
-  getAutopilotAction(outcome.actionId).label;
+  outcome.workflowId === "openducktor"
+    ? getAutopilotAction(outcome.actionId).label
+    : outcome.actionId;
 
 export const autopilotSkippedTitle = (outcome: AutopilotSkippedOutcome): string =>
   `Autopilot skipped ${actionLabel(outcome)} for ${outcome.task.id}.`;

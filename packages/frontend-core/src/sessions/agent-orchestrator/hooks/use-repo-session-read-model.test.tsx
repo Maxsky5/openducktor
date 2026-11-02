@@ -50,6 +50,8 @@ import { appendSendFailureNotice, createSendAgentMessage } from "../handlers/sen
 import type { AgentSessionLiveFrontendPort } from "./use-repo-session-read-model";
 import { useRepoSessionReadModel } from "./use-repo-session-read-model";
 
+const workspaceScope = { workspaceId: "workspace-1", repoPath: "/repo" };
+
 const record: AgentSessionRecord = {
   externalSessionId: "thread-1",
   role: "build",
@@ -60,7 +62,7 @@ const record: AgentSessionRecord = {
 };
 
 const createReadOnlyRepoConfig = (): RepoConfig => ({
-  workspaceId: "/repo",
+  workspaceId: "workspace-1",
   workspaceName: "Repo",
   repoPath: "/repo",
   branchPrefix: "odt/",
@@ -113,7 +115,12 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
 
 const queueTarget = () => ({
   ...snapshot().ref,
-  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build" as const,
+  },
 });
 
 const scopedFault = (ref = snapshot().ref) =>
@@ -136,7 +143,7 @@ const createState = (
     },
   },
   {
-    host = createTestHostConnection(),
+    host = createTestHostConnection({ client: { workspaceSessionListActive: async () => [] } }),
     feedback = createFeedbackFake(),
   }: { host?: HostConnection; feedback?: ClientFeedback } = {},
 ) => {
@@ -144,7 +151,7 @@ const createState = (
   // Workspace session reads and their update stream find the host through the query client.
   createTestClientConnection({ host, queryClient, feedback });
   const records = Array.isArray(taskRecords) ? taskRecords : [taskRecords];
-  queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), records);
+  queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), records);
   const sessionStore = createAgentSessionsStore("/repo");
   const messageQueues = createAgentMessageQueuesStore();
   if (records.length === 0) {
@@ -187,6 +194,7 @@ const createState = (
   };
   const props: Parameters<typeof useRepoSessionReadModel>[0] = {
     workspaceRepoPath: "/repo",
+    workspaceId: "workspace-1",
     taskIds: ["task-1"],
     isLoadingTasks: false,
     currentWorkspaceRepoPathRef: { current: "/repo" },
@@ -228,6 +236,13 @@ const createState = (
         .sort((left, right) => left.externalSessionId.localeCompare(right.externalSessionId)),
     harness: createHookHarness(useRepoSessionReadModel, props),
     props,
+    selectWorkspace: (workspaceId: string) => {
+      props.workspaceId = workspaceId;
+      queryClient.setQueryData(
+        agentSessionQueryKeys.list({ workspaceId, repoPath: "/repo" }, "task-1"),
+        records,
+      );
+    },
     observeAgentSessionLive,
     unsubscribe,
     agentSessionLiveReplyApproval,
@@ -304,6 +319,7 @@ describe("useRepoSessionReadModel", () => {
           state.emit({ type: "session_upsert", session: liveSession });
           const ownership = {
             type: "task_session_records_updated" as const,
+            workspaceId: "workspace-1",
             repoPath: "/repo",
             taskId: "task-1",
             agentSessions: [saved],
@@ -341,6 +357,7 @@ describe("useRepoSessionReadModel", () => {
         await state.harness.run(() => {
           state.emit({
             type: "task_session_records_updated",
+            workspaceId: "workspace-1",
             repoPath: "/repo",
             taskId: "task-1",
             agentSessions: [saved],
@@ -359,11 +376,14 @@ describe("useRepoSessionReadModel", () => {
               state: "read",
             },
           });
-          state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [saved]);
+          state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+            saved,
+          ]);
         });
         const session = state.getStoredSession(ref);
         expect(session?.sessionAssociation).toEqual({
           kind: "workflow",
+          workspaceId: "workspace-1",
           taskId: "task-1",
           role: "build",
         });
@@ -407,6 +427,7 @@ describe("useRepoSessionReadModel", () => {
   test("reconciles completion alerts with snapshots and preserves unrelated alerts", async () => {
     const suffix = crypto.randomUUID();
     const failed = (taskId: string): TaskCompletionObservation => ({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId,
       phase: "settled",
@@ -421,9 +442,9 @@ describe("useRepoSessionReadModel", () => {
     });
     const removed = failed(`reset-${suffix}`);
     const retained = failed(`pending-${suffix}`);
-    const removedId = `task-completion:/repo:${removed.taskId}`;
-    const retainedId = `task-completion:/repo:${retained.taskId}`;
-    const otherRepoId = `task-completion:/repo/other:${removed.taskId}`;
+    const removedId = `task-completion:["workspace-1","/repo"]:${removed.taskId}`;
+    const retainedId = `task-completion:["workspace-1","/repo"]:${retained.taskId}`;
+    const otherRepoId = `task-completion:["workspace-1","/repo/other"]:${removed.taskId}`;
     const unrelatedId = `unrelated-${suffix}`;
     // Like the app feedback, a message with an ID stays visible until something dismisses that ID.
     const activeMessages = new Map<string, string>();
@@ -481,6 +502,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("dismisses the completion alert of a reopened workspace that no longer reports it", async () => {
     const observation: TaskCompletionObservation = {
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: `closed-${crypto.randomUUID()}`,
       phase: "settled",
@@ -493,7 +515,7 @@ describe("useRepoSessionReadModel", () => {
         nextAction: "Inspect the worktree.",
       },
     };
-    const alertId = `task-completion:/repo:${observation.taskId}`;
+    const alertId = `task-completion:["workspace-1","/repo"]:${observation.taskId}`;
     const activeIds = new Set<string>();
     const feedback: ClientFeedback = {
       show: (_kind, message, options) => {
@@ -528,6 +550,84 @@ describe("useRepoSessionReadModel", () => {
       expect(activeIds.has(alertId)).toBe(false);
     } finally {
       await reopened.unmount();
+      state.queryClient.clear();
+    }
+  });
+  test("isolates completion alerts across workspaces at the same path and task ID", async () => {
+    const observation: TaskCompletionObservation = {
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskId: "shared-task",
+      phase: "settled",
+      confirmedDestinations: [],
+      uncertainDestinations: [],
+      failure: {
+        stage: "cleanup",
+        code: "task_completion_failed",
+        message: "First workspace failure",
+        nextAction: "Inspect the worktree.",
+      },
+    };
+    const foreign = {
+      ...observation,
+      workspaceId: "workspace-2",
+      failure: { ...observation.failure!, message: "Second workspace failure" },
+    };
+    const firstId = 'task-completion:["workspace-1","/repo"]:shared-task';
+    const secondId = 'task-completion:["workspace-2","/repo"]:shared-task';
+    const alerts = new Map<string, string>();
+    const feedback: ClientFeedback = {
+      show: (_kind, message, options) => {
+        alerts.set(options?.id ?? message, options?.description ?? message);
+      },
+      dismiss: (id) => {
+        alerts.delete(id);
+      },
+    };
+    const state = createState(
+      (emit) =>
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot()],
+            taskCompletions: [observation, foreign],
+          }),
+        ),
+      record,
+      undefined,
+      { feedback },
+    );
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(alerts.get(firstId)).toContain("First workspace failure");
+      expect(alerts.has(secondId)).toBe(false);
+      await state.harness.run(() =>
+        state.emit({ type: "task_completion_updated", observation: foreign }),
+      );
+      expect(alerts.has(secondId)).toBe(false);
+
+      state.selectWorkspace("workspace-2");
+      await state.harness.update({ ...state.props });
+      await state.harness.waitFor(() => alerts.has(secondId));
+      expect(alerts.get(secondId)).toContain("Second workspace failure");
+      expect(alerts.has(firstId)).toBe(true);
+      await state.harness.run(() =>
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+      );
+      expect(alerts.has(secondId)).toBe(false);
+      expect(alerts.has(firstId)).toBe(true);
+
+      state.selectWorkspace("workspace-1");
+      await state.harness.update({ ...state.props });
+      await state.harness.run(() =>
+        state.emit({
+          type: "task_completion_updated",
+          observation: { ...foreign, failure: undefined },
+        }),
+      );
+      expect(alerts.has(firstId)).toBe(true);
+    } finally {
+      await state.harness.unmount();
       state.queryClient.clear();
     }
   });
@@ -1078,7 +1178,12 @@ describe("useRepoSessionReadModel", () => {
     const ref = { ...snapshot().ref, runtimeKind: "claude" as const };
     const session = createAgentSessionFixture({
       ...ref,
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       status: "starting",
     });
     const policyNotice = {
@@ -1194,8 +1299,8 @@ describe("useRepoSessionReadModel", () => {
         },
         { host },
       );
-      state.props.workspaceId = "workspace-A";
-      const key = workspaceSessionQueryKeys.list("workspace-A", false);
+      state.selectWorkspace("workspace-a");
+      const key = workspaceSessionQueryKeys.list("workspace-a", false);
       if (cached) state.queryClient.setQueryData(key, []);
       try {
         await state.harness.mount();
@@ -1430,7 +1535,7 @@ describe("useRepoSessionReadModel", () => {
       undefined,
       { host },
     );
-    state.props.workspaceId = "workspace-A";
+    state.selectWorkspace("workspace-a");
     const targets = spyOn(workspaceRecords, "reconcileWorkspaceSessionTargetFaults");
     try {
       await state.harness.mount();
@@ -1495,7 +1600,7 @@ describe("useRepoSessionReadModel", () => {
       undefined,
       { host },
     );
-    state.props.workspaceId = "workspace-A";
+    state.selectWorkspace("workspace-a");
     // A cold store has no task record and no earlier native projection.
     state.clearSessions();
     try {
@@ -1546,7 +1651,7 @@ describe("useRepoSessionReadModel", () => {
       undefined,
       { host },
     );
-    state.props.workspaceId = "workspace-A";
+    state.selectWorkspace("workspace-a");
     try {
       await state.harness.mount();
       await state.harness.waitFor(
@@ -1607,6 +1712,7 @@ describe("useRepoSessionReadModel", () => {
       ]);
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -1629,6 +1735,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -1638,7 +1745,7 @@ describe("useRepoSessionReadModel", () => {
       const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-in" }];
       await state.harness.run(() => {
         state.queryClient.setQueryData(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
           refreshedRecords,
         );
       });
@@ -1651,12 +1758,14 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.getStoredSession(refreshedIdentity)?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
       expect(state.getSession()).not.toBeNull();
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -1682,7 +1791,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
 
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
           remoteRecord,
         ]);
         state.emit(createLiveSnapshotEnvelope({ sessions: [remoteSnapshot] }));
@@ -1695,6 +1804,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getStoredSession(remoteSnapshot.ref)?.status).toBe("running");
       expect(state.getStoredSession(remoteSnapshot.ref)?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -1756,6 +1866,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -1769,7 +1880,7 @@ describe("useRepoSessionReadModel", () => {
       const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-in-gap" }];
       await state.harness.run(() => {
         state.queryClient.setQueryData(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
           refreshedRecords,
         );
       });
@@ -1783,6 +1894,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()).not.toBeNull();
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -1818,7 +1930,7 @@ describe("useRepoSessionReadModel", () => {
       // A loaded task refresh empties the durable list: the historical row is
       // pruned immediately (proof the refresh applied) while the live session stays.
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), []);
       });
       await state.harness.waitFor(() => state.getStoredSession(historicalIdentity) === null);
       expect(state.getSession()).not.toBeNull();
@@ -1877,6 +1989,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor(() => state.getStoredSession(threadTwoIdentity) !== null);
       expect(state.getStoredSession(threadTwoIdentity)?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-2",
         role: "qa",
       });
@@ -1953,7 +2066,7 @@ describe("useRepoSessionReadModel", () => {
       // Task 2's durable read fails for its exact list query.
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
           queryFn: async () => {
             throw new Error("task 2 read failed");
           },
@@ -1980,12 +2093,13 @@ describe("useRepoSessionReadModel", () => {
 
       expect(threadThree.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-3",
         role: "qa",
       });
       expect(state.getSession()).not.toBeNull();
       expect(batchList).toHaveBeenCalledTimes(1);
-      expect(batchList).toHaveBeenCalledWith("/repo", ["task-3"]);
+      expect(batchList).toHaveBeenCalledWith(workspaceScope, ["task-3"]);
     } finally {
       await state.harness.unmount();
     }
@@ -2023,7 +2137,7 @@ describe("useRepoSessionReadModel", () => {
       const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed" }];
       await state.harness.run(() => {
         state.queryClient.setQueryData(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
           refreshedRecords,
         );
       });
@@ -2061,7 +2175,7 @@ describe("useRepoSessionReadModel", () => {
       // Task 2's durable read fails for its exact list query.
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
           queryFn: async () => {
             throw new Error("task 2 read failed");
           },
@@ -2126,7 +2240,7 @@ describe("useRepoSessionReadModel", () => {
       // A task-record read failure then overwrites the public slot.
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
           queryFn: async () => {
             throw new Error("record read failed");
           },
@@ -2144,7 +2258,7 @@ describe("useRepoSessionReadModel", () => {
       const refreshedRecords = [{ ...record, externalSessionId: "thread-after-recovery" }];
       await state.harness.run(() => {
         state.queryClient.setQueryData(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
           refreshedRecords,
         );
       });
@@ -2229,7 +2343,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
           queryFn: async () => {
             throw new Error("record read failed before snapshot");
           },
@@ -2240,7 +2354,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
           recoveredRecord,
         ]);
       });
@@ -2291,7 +2405,7 @@ describe("useRepoSessionReadModel", () => {
       // A task-record read failure then overwrites the public slot.
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
           queryFn: async () => {
             throw new Error("task 2 read failed");
           },
@@ -2345,7 +2459,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()).not.toBeNull();
 
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), []);
       });
       await state.harness.waitFor(() => state.getSession() === null);
     } finally {
@@ -2387,7 +2501,9 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
 
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2434,7 +2550,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2475,7 +2593,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2483,12 +2603,12 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
       expect(batchList).toHaveBeenCalledTimes(1);
-      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(batchList).toHaveBeenCalledWith(workspaceScope, ["task-1"]);
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
         ),
       ).toEqual([]);
     } finally {
@@ -2509,7 +2629,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2527,7 +2649,7 @@ describe("useRepoSessionReadModel", () => {
       expect(batchList).toHaveBeenCalledTimes(2);
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
         ),
       ).toEqual([]);
     } finally {
@@ -2544,7 +2666,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2555,7 +2679,7 @@ describe("useRepoSessionReadModel", () => {
       retry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
-      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(batchList).toHaveBeenCalledWith(workspaceScope, ["task-1"]);
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
     } finally {
@@ -2572,7 +2696,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2615,7 +2741,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(() => {
-        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
@@ -2662,6 +2790,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -2677,6 +2806,7 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -2715,6 +2845,7 @@ describe("useRepoSessionReadModel", () => {
 
       expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -3425,7 +3556,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
           queryFn: async () => {
             throw new Error("initial retry trigger");
           },
@@ -3478,7 +3609,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
           queryFn: async () => {
             throw new Error("temporary exact refresh failure");
           },
@@ -3494,10 +3625,10 @@ describe("useRepoSessionReadModel", () => {
 
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       expect(batchList).toHaveBeenCalledTimes(1);
-      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(batchList).toHaveBeenCalledWith(workspaceScope, ["task-1"]);
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
         ),
       ).toEqual([recoveredRecord]);
     } finally {
@@ -3524,7 +3655,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await expect(
         state.queryClient.fetchQuery({
-          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
           queryFn: async () => {
             throw new Error("initial refresh failed");
           },
@@ -3545,7 +3676,7 @@ describe("useRepoSessionReadModel", () => {
       );
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
-          agentSessionQueryKeys.list("/repo", "task-1"),
+          agentSessionQueryKeys.list(workspaceScope, "task-1"),
         ),
       ).toEqual([record]);
       await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -23,7 +23,7 @@ import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-ser
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createBrowserEngineTestDouble } from "../../test-support/browser-engine-test-double";
-import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { removeTestDirectory } from "../../test-support/temp-directory";
@@ -217,6 +217,14 @@ const createRouter = async (
     }),
     close: () => Effect.succeed({ baseUrl: null, closed: false }),
   } satisfies McpHostBridgeServer;
+  const config = createDefaultGlobalConfig();
+  config.agentRuntimes.codex = {
+    ...config.agentRuntimes.codex,
+    enabled: true,
+    executablePath: binary,
+  };
+  await mkdir(join(root, "config"));
+  await writeFile(join(root, "config", "config.json"), JSON.stringify(config));
   return Effect.runPromise(
     createNodeEffectHostCommandRouter({
       codexAppServer,
@@ -237,7 +245,6 @@ const createRouter = async (
         getRuntimeHealth: () =>
           Effect.fail(new HostOperationError({ operation: "test.health", message: "not probed" })),
       },
-      settingsConfig: createFixedRuntimeSettingsConfig("codex", binary),
       systemCommands: stubCommands(),
       taskEventPublicationReporter: { report: () => Effect.void },
       taskStore: createTaskStoreTestDouble({}),

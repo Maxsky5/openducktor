@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
@@ -41,7 +42,10 @@ if (globalThis.document === undefined) {
 }
 
 const taskWorktreeGetMock = mock(
-  async (_repoPath: string, _taskId: string): Promise<{ workingDirectory: string } | null> => ({
+  async (
+    _repoPath: WorkspaceRef,
+    _taskId: string,
+  ): Promise<{ workingDirectory: string } | null> => ({
     workingDirectory: "/repo/.worktrees/task-24",
   }),
 );
@@ -93,7 +97,12 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
     ...viewOverrides
   } = overrides;
   const defaultSession = createAgentSessionFixture({
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
     status: "running",
     workingDirectory: "/repo",
   });
@@ -128,6 +137,7 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  workspaceId: "workspace-1",
   workspaceRepoPath: "/repo",
   activeBranch: { name: "main", detached: false },
   selectedView: createSelectedView(),
@@ -189,6 +199,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
             loadedSession: createAgentSessionFixture({
               sessionAssociation: {
                 kind: "workflow",
+                workspaceId: "workspace-1",
                 taskId: "task-1",
                 role: mode === "repository" ? "spec" : "build",
               },
@@ -480,7 +491,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           loadedSession: createAgentSessionFixture({
             externalSessionId: sessionId,
             workingDirectory: "/repo/.worktrees/task-24",
-            sessionAssociation: { kind: "workflow", taskId: "task-24", role: "build" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-24",
+              role: "build",
+            },
           }),
           selectedTask: createTaskCardFixture({
             id: "task-24",
@@ -748,6 +764,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const queryClient = createClientQueryClient();
     queryClient.setQueryData(
       taskWorktreeQueryKeys.taskWorktree({
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-25",
         taskVersion: "2026-02-22T12:00:00.000Z",
@@ -793,7 +810,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
 
-      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-24",
+      );
       expect(harness.getLatest().worktree).toMatchObject({
         path: "/repo/.worktrees/task-24",
         status: "resolved",
@@ -809,7 +829,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         selectedView: createSelectedView({
           loadedSession: createAgentSessionFixture({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "build",
+            },
             status: "running",
             workingDirectory: "/repo/.worktrees/task-24",
           }),
@@ -841,7 +866,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "qa",
           loadedSession: createAgentSessionFixture({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "qa",
+            },
             status: "running",
             workingDirectory: "/repo/.worktrees/task-24",
           }),
@@ -877,7 +907,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "qa",
           loadedSession: createAgentSessionFixture({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "qa",
+            },
             status: "running",
             workingDirectory: "/repo/",
           }),
@@ -889,7 +924,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
 
-      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-24",
+      );
       expect(harness.getLatest().worktree).toMatchObject({
         path: "/repo/.worktrees/task-24",
         status: "resolved",
@@ -911,7 +949,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "qa",
           loadedSession: createAgentSessionFixture({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "qa",
+            },
             status: "running",
             workingDirectory: "/repo/",
           }),
@@ -923,7 +966,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.worktree.status === "failed");
 
-      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-24",
+      );
       expect(harness.getLatest().worktree).toMatchObject({
         path: null,
         status: "failed",
@@ -940,7 +986,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("uses the selected session summary while the full session is still loading", async () => {
     const selectedSessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         status: "running",
         workingDirectory: "/repo/.worktrees/task-24",
       }),
@@ -979,7 +1030,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
 
-      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-24",
+      );
       expect(harness.getLatest().worktree).toMatchObject({
         path: "/repo/.worktrees/task-24",
         status: "resolved",
@@ -997,6 +1051,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     let didResolveTaskWorktreeFetch = false;
     queryClient.setQueryData(
       taskWorktreeQueryKeys.taskWorktree({
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-25",
         taskVersion: "2026-02-22T12:00:00.000Z",
@@ -1019,7 +1074,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-25");
 
-      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-25");
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-25",
+      );
       expect(harness.getLatest().worktree).toMatchObject({
         path: "/repo/.worktrees/task-25",
         status: "resolved",
@@ -1086,7 +1144,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     "uses a fresh %s session worktree for Git context and Open In",
     async (role) => {
       const specSession = createAgentSessionFixture({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: role,
+        },
         workingDirectory: "/repo/.worktrees/task-24",
       });
       const harness = createHookHarness(
@@ -1122,7 +1185,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
   test("keeps a legacy root-backed Spec session in repository context", async () => {
     const specSession = createAgentSessionFixture({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       workingDirectory: "/repo",
     });
     const harness = createHookHarness(
@@ -1165,7 +1233,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       selectedView: createSelectedView({
         role: "spec",
         loadedSession: createAgentSessionFixture({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "spec",
+          },
           workingDirectory: "/repo",
         }),
       }),
@@ -1191,7 +1264,12 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "spec",
           loadedSession: createAgentSessionFixture({
-            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            sessionAssociation: {
+              kind: "workflow",
+              workspaceId: "workspace-1",
+              taskId: "task-1",
+              role: "spec",
+            },
             status: "running",
             workingDirectory: "/repo",
           }),
@@ -1229,7 +1307,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
 
-      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-24",
+      );
       expect(harness.getLatest().context.taskId).toBe("task-24");
     } finally {
       await harness.unmount();

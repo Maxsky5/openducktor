@@ -83,10 +83,13 @@ export const createManagedCallerResolver = ({
     resolve: ({ workspaceId, caller }) =>
       Effect.gen(function* () {
         const { repoPath } = yield* workspaceSettings.getRepoConfig(workspaceId);
-        const owners = (yield* workspaceSessions.listRuntimeOwners({
-          workspaceId,
-          repoPath,
-        })).filter((owner) => owner.runtimeKind === caller.runtime);
+        const readOwners = (externalSessionIds: readonly string[]) =>
+          workspaceSessions.listRuntimeOwners({
+            workspaceId,
+            repoPath,
+            filter: { runtimeKind: caller.runtime, externalSessionIds },
+          });
+        let owners = yield* readOwners([caller.runtimeSessionId]);
         // A subagent session calls with its own ID. Its live parent links lead to the root.
         let parents: Map<string, string | null> | undefined;
         let sessionId = caller.runtimeSessionId;
@@ -107,7 +110,18 @@ export const createManagedCallerResolver = ({
             }
             return owner;
           }
-          parents ??= yield* readParentLinks(caller, repoPath);
+          if (parents === undefined) {
+            parents = yield* readParentLinks(caller, repoPath);
+            const ancestors: string[] = [];
+            const seen = new Set([sessionId]);
+            let ancestor = parents.get(sessionId);
+            while (ancestor !== undefined && ancestor !== null && !seen.has(ancestor)) {
+              ancestors.push(ancestor);
+              seen.add(ancestor);
+              ancestor = parents.get(ancestor);
+            }
+            owners = ancestors.length === 0 ? [] : yield* readOwners(ancestors);
+          }
           const parentId = parents.get(sessionId);
           if (parentId === undefined) {
             return yield* unmanagedCaller(

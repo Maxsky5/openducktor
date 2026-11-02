@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot, WorkspaceRef } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
@@ -17,14 +17,14 @@ export const useOnboardingWorkspaceCompletion = ({
   const [completionRepoPath, setCompletionRepoPath] = useState<string | null>(null);
 
   const completeWorkspace = useCallback(
-    async (repoPath: string): Promise<void> => {
+    async (scope: WorkspaceRef): Promise<void> => {
       if (!settingsSnapshot) {
         throw new Error("Settings must be loaded before opening the first workspace.");
       }
-      setCompletionRepoPath(repoPath);
+      setCompletionRepoPath(scope.repoPath);
 
       const destinationQueries: Promise<unknown>[] = [
-        queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath)),
+        queryClient.fetchQuery(repoTaskDataQueryOptions(scope)),
       ];
       if (settingsSnapshot.appearance.horizontalScrollbarVisibility === "system") {
         destinationQueries.push(queryClient.fetchQuery(platformQueryOptions()));

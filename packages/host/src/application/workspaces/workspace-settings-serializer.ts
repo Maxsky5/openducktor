@@ -1,14 +1,5 @@
-import { type AgentModelFavorite, isSameAgentModelFavorite } from "@openducktor/contracts";
-
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createSerialLane } from "../../effect/serial-gate";
-
-export const areAgentModelFavoritesEqual = (
-  left: readonly AgentModelFavorite[],
-  right: readonly AgentModelFavorite[],
-): boolean =>
-  left.length === right.length &&
-  left.every((favorite, index) => isSameAgentModelFavorite(favorite, right[index] ?? null));
 
 export const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
@@ -36,13 +27,10 @@ export const withSerializedConfigWrites = (
       serialize(service.replaceAgentStudioState(workspaceId, state)),
     applyAgentStudioStateAction: (workspaceId, action) =>
       serialize(service.applyAgentStudioStateAction(workspaceId, action)),
-    updateRepoConfig: (workspaceId, update) =>
-      serialize(service.updateRepoConfig(workspaceId, update)),
-    saveRepoSettings: (workspaceId, settings) =>
-      serialize(service.saveRepoSettings(workspaceId, settings)),
-    updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
-    saveSettingsSnapshotWith: (snapshot, commit) =>
-      serialize(service.saveSettingsSnapshotWith(snapshot, commit)),
+    updateRepoGitConfig: (workspaceId, git) =>
+      serialize(service.updateRepoGitConfig(workspaceId, git)),
+    saveSettingsSnapshotWith: (prepared, commit) =>
+      serialize(service.saveSettingsSnapshotWith(prepared, commit)),
     updateAgentModelFavorites: (favorites) =>
       serialize(service.updateAgentModelFavorites(favorites)),
     updateKanbanTaskCardView: (taskCardView) =>
@@ -52,6 +40,5 @@ export const withSerializedConfigWrites = (
     setTheme: (theme) => serialize(service.setTheme(theme)),
     readHostId: () => serialize(service.readHostId()),
     saveRemoteAccessSettings: (settings) => serialize(service.saveRemoteAccessSettings(settings)),
-    updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
   };
 };

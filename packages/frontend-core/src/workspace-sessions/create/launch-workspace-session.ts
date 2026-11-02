@@ -77,7 +77,7 @@ export const projectWorkspaceSessionResult = (
   const boundRecord = record;
   workspaceStore.setSessionCollection((collection) => {
     const current = getAgentSession(collection, session);
-    let next = applyWorkspaceSessionRecords(collection, [boundRecord]);
+    let next = applyWorkspaceSessionRecords(collection, [boundRecord], outcome.workspaceId);
     if (outcome.acceptedMessage?.type === "user_message") {
       const withRecords = getAgentSession(next, session);
       if (withRecords)

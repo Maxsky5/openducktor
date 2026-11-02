@@ -66,22 +66,17 @@ describe("workspace Agent Studio state schemas", () => {
       globalPromptOverrides: {},
     });
     const saveInput = settingsSnapshotSaveInputSchema.parse({
-      system: snapshot.system,
-      git: snapshot.git,
-      general: snapshot.general,
-      appearance: snapshot.appearance,
-      chat: snapshot.chat,
-      reusablePrompts: snapshot.reusablePrompts,
-      kanban: snapshot.kanban,
-      autopilot: snapshot.autopilot,
-      notifications: snapshot.notifications,
-      agentRuntimes: snapshot.agentRuntimes,
-      agentModelFavorites: snapshot.agentModelFavorites,
-      workspaces: { repo: repoConfig },
-      globalPromptOverrides: snapshot.globalPromptOverrides,
+      workspaces: { repo: { expectedRepoPath: "/repo", branchPrefix: "new" } },
     });
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({
+        workspaces: {
+          repo: { expectedRepoPath: "/repo", agentStudioState: repoConfig.agentStudioState },
+        },
+      }).success,
+    ).toBe(false);
 
     expect(snapshot.workspaces.repo).not.toHaveProperty("agentStudioState");
-    expect(saveInput.workspaces.repo).not.toHaveProperty("agentStudioState");
+    expect(saveInput.workspaces?.repo).not.toHaveProperty("agentStudioState");
   });
 });

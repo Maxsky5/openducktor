@@ -17,23 +17,31 @@ export type NewTaskAssetRecord = Omit<TaskAssetRecord, "taskId" | "mediaType"> &
 };
 
 export type TaskAssetRegistryPort = {
-  taskExists(input: { repoPath: string; taskId: string }): Effect.Effect<boolean, TaskStoreError>;
+  taskExists(input: {
+    workspaceId: string;
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<boolean, TaskStoreError>;
   assetIdExists(input: {
+    workspaceId: string;
     repoPath: string;
     assetId: string;
   }): Effect.Effect<boolean, TaskStoreError>;
   getAsset(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     scope: TaskAssetScope;
     assetId: string;
   }): Effect.Effect<TaskAssetRecord | null, TaskStoreError>;
   listAssets(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     scope: TaskAssetScope;
   }): Effect.Effect<TaskAssetRecord[], TaskStoreError>;
   registerAssets(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     assets: NewTaskAssetRecord[];

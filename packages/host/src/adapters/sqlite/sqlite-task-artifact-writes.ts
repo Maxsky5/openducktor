@@ -19,21 +19,23 @@ import { requireTaskRow } from "./sqlite-task-queries";
 import type { SqliteTaskStoreWriteError } from "./sqlite-task-store-errors";
 import {
   type TaskArtifactRow,
-  type TaskStoreSession,
+  type HostDatabaseSession,
   taskArtifacts,
-} from "./sqlite-task-store-schema";
+} from "./sqlite-host-database-schema";
 
 export const createArtifactInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreScope & ArtifactStoreContent & { name: string; code?: string | undefined },
   updatedAt: Date,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const workflow = yield* requireMutableTask(session, input, taskWorkflows);
+    const workflow = yield* requireMutableTask(session, workspaceId, input, taskWorkflows);
     yield* validateContentSize(input.content);
-    const code = yield* pickCode(session, input, workflow);
+    const code = yield* pickCode(session, workspaceId, input, workflow);
     const row = {
+      workspaceId,
       artifactId: randomUUID(),
       taskId: input.taskId,
       classification: "free" as const,
@@ -56,13 +58,14 @@ export const createArtifactInDatabase = (
   });
 
 export const renameArtifactInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreReference & { name: string },
   updatedAt: Date,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const previous = yield* requireFreeArtifact(session, input, taskWorkflows);
+    const previous = yield* requireFreeArtifact(session, workspaceId, input, taskWorkflows);
     const changes = { name: input.name, revision: previous.revision + 1, updatedAt };
     const artifact = yield* artifactMetadataFromRow({ ...previous, ...changes });
     yield* session.execute(
@@ -72,6 +75,7 @@ export const renameArtifactInDatabase = (
           .set(changes)
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, input.taskId),
               eq(taskArtifacts.artifactId, input.artifactId),
             ),
@@ -82,13 +86,14 @@ export const renameArtifactInDatabase = (
   });
 
 export const replaceArtifactInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreReference & ArtifactStoreContent & { name?: string | undefined },
   updatedAt: Date,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const previous = yield* requireFreeArtifact(session, input, taskWorkflows);
+    const previous = yield* requireFreeArtifact(session, workspaceId, input, taskWorkflows);
     yield* validateContentSize(input.content);
     const changes = {
       name: input.name ?? previous.name,
@@ -106,6 +111,7 @@ export const replaceArtifactInDatabase = (
           .set({ ...changes, content: Buffer.from(input.content) })
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, input.taskId),
               eq(taskArtifacts.artifactId, input.artifactId),
             ),
@@ -116,18 +122,20 @@ export const replaceArtifactInDatabase = (
   });
 
 export const deleteArtifactInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreReference,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireFreeArtifact(session, input, taskWorkflows);
+    yield* requireFreeArtifact(session, workspaceId, input, taskWorkflows);
     yield* session.execute(
       (database) =>
         database
           .delete(taskArtifacts)
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, input.taskId),
               eq(taskArtifacts.artifactId, input.artifactId),
             ),
@@ -138,7 +146,8 @@ export const deleteArtifactInDatabase = (
   });
 
 const pickCode = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreScope & { name: string; code?: string | undefined },
   workflow: TaskWorkflow,
 ): Effect.Effect<string, SqliteTaskStoreWriteError> =>
@@ -164,7 +173,11 @@ const pickCode = (
           .select({ code: taskArtifacts.code })
           .from(taskArtifacts)
           .where(
-            and(eq(taskArtifacts.taskId, input.taskId), eq(taskArtifacts.classification, "free")),
+            and(
+              eq(taskArtifacts.workspaceId, workspaceId),
+              eq(taskArtifacts.taskId, input.taskId),
+              eq(taskArtifacts.classification, "free"),
+            ),
           ),
       "sqliteTaskRepository.createArtifact.selectCodes",
     );
@@ -199,12 +212,13 @@ const pickCode = (
 
 /** A task in a terminal state of its workflow is read-only. Gives the workflow of the task. */
 const requireMutableTask = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreScope,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskWorkflow, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const task = yield* requireTaskRow(session, input.taskId, input.repoPath);
+    const task = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
     const workflow = taskWorkflows.forTask(task);
     if (workflow.isTerminalState(task.status)) {
       return yield* new HostValidationError({
@@ -227,7 +241,8 @@ const validateContentSize = (content: Uint8Array): Effect.Effect<void, HostValid
     : Effect.void;
 
 const requireFreeArtifact = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: ArtifactStoreReference,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<
@@ -235,7 +250,7 @@ const requireFreeArtifact = (
   SqliteTaskStoreWriteError
 > =>
   Effect.gen(function* () {
-    yield* requireMutableTask(session, input, taskWorkflows);
+    yield* requireMutableTask(session, workspaceId, input, taskWorkflows);
     if (input.artifactId.startsWith(`workflow:${input.taskId}:`)) {
       return yield* new HostValidationError({
         message: "Use the workflow control of the artifact to change a workflow artifact.",
@@ -249,6 +264,7 @@ const requireFreeArtifact = (
           .from(taskArtifacts)
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, input.taskId),
               eq(taskArtifacts.artifactId, input.artifactId),
               eq(taskArtifacts.classification, "free"),

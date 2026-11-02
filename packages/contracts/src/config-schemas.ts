@@ -1,3 +1,8 @@
+import {
+  keyedSettingsEditsSchema,
+  setOrClearSchema,
+  settingsFieldsPatchSchema,
+} from "./settings-patch-schema";
 import { claudePolicyFieldsSchema } from "./claude-policy-schemas";
 import { z } from "zod";
 import { workspaceIdSchema } from "./workspace-id-schemas";
@@ -553,29 +558,6 @@ export const settingsRepoConfigSchema = repoConfigSchema.omit({
 });
 export type SettingsRepoConfig = z.infer<typeof settingsRepoConfigSchema>;
 
-export const workspaceRepoHooksInputSchema = repoHooksSchema.partial();
-export type WorkspaceRepoHooksInput = z.output<typeof workspaceRepoHooksInputSchema>;
-
-export const workspaceRepoConfigInputSchema = repoConfigSchema
-  .pick({
-    defaultModel: true,
-    worktreeBasePath: true,
-    branchPrefix: true,
-    defaultTargetBranch: true,
-    git: true,
-    actions: true,
-    worktreeCopyPaths: true,
-    agentDefaults: true,
-    promptOverrides: true,
-  })
-  .partial();
-export type WorkspaceRepoConfigInput = z.output<typeof workspaceRepoConfigInputSchema>;
-
-export const workspaceRepoSettingsInputSchema = workspaceRepoConfigInputSchema.extend({
-  hooks: workspaceRepoHooksInputSchema.optional(),
-});
-export type WorkspaceRepoSettingsInput = z.output<typeof workspaceRepoSettingsInputSchema>;
-
 export const chatSettingsSchema = z.object({
   steerMessagesByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.steerMessagesByDefault),
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
@@ -663,10 +645,15 @@ export const autopilotEventIdSchema = workflowIdSchema;
 export const autopilotActionIdSchema = workflowIdSchema;
 
 export const autopilotRuleSchema = z.object({
+  workflowId: workflowIdSchema,
   eventId: autopilotEventIdSchema,
   actionIds: z.array(autopilotActionIdSchema).default([]).transform(dedupeValues),
 });
 export type AutopilotRule = z.infer<typeof autopilotRuleSchema>;
+
+/** The identity of an Autopilot rule: one workflow event has at most one rule. */
+export const autopilotRuleKey = (workflowId: string, eventId: string): string =>
+  JSON.stringify([workflowId, eventId]);
 
 /** Merges the rules of one event. The host orders and completes the rules from the workflow. */
 const normalizeAutopilotSettings = (value: {
@@ -675,8 +662,10 @@ const normalizeAutopilotSettings = (value: {
 }) => {
   const rulesByEvent = new Map<string, AutopilotRule>();
   for (const rule of value.rules) {
-    const existing = rulesByEvent.get(rule.eventId);
-    rulesByEvent.set(rule.eventId, {
+    const key = autopilotRuleKey(rule.workflowId, rule.eventId);
+    const existing = rulesByEvent.get(key);
+    rulesByEvent.set(key, {
+      workflowId: rule.workflowId,
       eventId: rule.eventId,
       actionIds: dedupeValues([...(existing?.actionIds ?? []), ...rule.actionIds]),
     });
@@ -868,6 +857,25 @@ export const persistedGlobalConfigV4Schema = globalConfigSchema
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
 export type GlobalConfig = ParsedGlobalConfig;
 
+/**
+ * The global settings that each host keeps as personal preferences in its own `config.json`.
+ * The host database keeps all other settings, which all hosts share.
+ */
+export const HOST_PREFERENCE_FIELDS = {
+  theme: true,
+  system: true,
+  general: true,
+  appearance: true,
+  chat: true,
+  kanban: true,
+  reusablePrompts: true,
+  agentModelFavorites: true,
+  notifications: true,
+  activeWorkspace: true,
+  workspaceOrder: true,
+  recentWorkspaces: true,
+} as const satisfies Partial<Record<keyof GlobalConfig, true>>;
+
 export const settingsSnapshotSchema = z.object({
   system: systemSettingsSchema.default({}),
   customAgentRoles: globalConfigSharedFields.customAgentRoles,
@@ -888,35 +896,125 @@ export const settingsSnapshotSchema = z.object({
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
 
-const settingsSnapshotSaveAgentModelFavoritesSchema = agentModelFavoritesSchema
-  .removeDefault()
-  .describe(
-    "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
-  );
-
-export const settingsSnapshotSaveInputSchema = z.object({
-  system: systemSettingsSchema,
-  customAgentRoles: globalConfigSharedFields.customAgentRoles
-    .removeDefault()
-    .optional()
-    .describe(
-      "Replace custom roles only when this section was edited. Omit to leave saved roles unchanged.",
-    ),
-  git: globalGitConfigSchema,
-  general: generalSettingsSchema,
-  appearance: appearanceSettingsSchema,
-  chat: chatSettingsSchema,
-  reusablePrompts: reusablePromptsSchema.removeDefault(),
-  kanban: kanbanSettingsSchema,
-  autopilot: autopilotSettingsSchema
-    .optional()
-    .describe(
-      "Replace Autopilot rules only when this section was edited. Omit to keep the saved rules, which another client can have changed.",
-    ),
-  notifications: notificationSettingsSchema.removeDefault(),
-  agentRuntimes: agentRuntimesSchema.removeDefault(),
-  agentModelFavorites: settingsSnapshotSaveAgentModelFavoritesSchema,
-  workspaces: z.record(workspaceIdSchema, settingsRepoConfigSchema),
-  globalPromptOverrides: repoPromptOverridesSchema,
+// The patch schema below defines these fields with keyed edits or a nested model patch.
+const workspaceEditableFieldsSchema = settingsRepoConfigSchema.omit({
+  workspaceId: true,
+  defaultModel: true,
+  promptOverrides: true,
+  agentDefaults: true,
 });
-export type SettingsSnapshotSaveInput = z.infer<typeof settingsSnapshotSaveInputSchema>;
+export const promptOverridePatchSchema = settingsFieldsPatchSchema(agentPromptOverrideSchema);
+export const promptOverrideEditsSchema = keyedSettingsEditsSchema(
+  agentPromptOverrideSchema.strict(),
+  promptOverridePatchSchema,
+);
+export const codexRolePatchSchema = settingsFieldsPatchSchema(codexRoleOverrideSchema);
+export const claudePolicyPatchSchema = settingsFieldsPatchSchema(claudePolicyFieldsSchema);
+export const openCodePolicyPatchSchema = settingsFieldsPatchSchema(openCodePermissionRulesSchema);
+const agentRuntimeFieldsPatchSchema = settingsFieldsPatchSchema(agentRuntimeEnabledConfigSchema);
+const agentRuntimesPatchSchema = z
+  .object({
+    opencode: z
+      .strictObject({
+        ...agentRuntimeFieldsPatchSchema.shape,
+        defaults: openCodePolicyPatchSchema.optional(),
+        roleOverrides: keyedSettingsEditsSchema(
+          openCodePermissionRulesSchema,
+          openCodePolicyPatchSchema,
+        ).optional(),
+      })
+      .optional(),
+    codex: z
+      .strictObject({
+        ...agentRuntimeFieldsPatchSchema.shape,
+        defaults: settingsFieldsPatchSchema(codexPolicyFieldsSchema).optional(),
+        roleOverrides: keyedSettingsEditsSchema(
+          codexRoleOverrideSchema,
+          codexRolePatchSchema,
+        ).optional(),
+      })
+      .optional(),
+    claude: z
+      .strictObject({
+        ...agentRuntimeFieldsPatchSchema.shape,
+        defaults: claudePolicyPatchSchema.optional(),
+        roleOverrides: keyedSettingsEditsSchema(
+          claudePolicyFieldsSchema,
+          claudePolicyPatchSchema,
+        ).optional(),
+      })
+      .optional(),
+  })
+  .catchall(agentRuntimeFieldsPatchSchema);
+
+export const modelDefaultPatchSchema = z.strictObject({
+  ...settingsFieldsPatchSchema(agentModelDefaultSchema.omit({ variant: true, profileId: true }))
+    .shape,
+  variant: setOrClearSchema(z.string().min(1)).optional(),
+  profileId: setOrClearSchema(z.string().min(1)).optional(),
+});
+export const workspaceSettingsPatchSchema = z.strictObject({
+  expectedRepoPath: trimmedRequiredString("Expected repository path"),
+  ...settingsFieldsPatchSchema(workspaceEditableFieldsSchema).shape,
+  actions: repoActionsSchema.optional(),
+  defaultModel: setOrClearSchema(modelDefaultPatchSchema).optional(),
+  promptOverrides: promptOverrideEditsSchema.optional(),
+  agentDefaults: keyedSettingsEditsSchema(
+    agentModelDefaultSchema,
+    modelDefaultPatchSchema,
+  ).optional(),
+});
+export type WorkspaceSettingsPatch = z.infer<typeof workspaceSettingsPatchSchema>;
+
+export const globalSettingsPatchSchema = z.strictObject({
+  system: settingsFieldsPatchSchema(systemSettingsSchema).optional(),
+  git: settingsFieldsPatchSchema(globalGitConfigSchema).optional(),
+  general: settingsFieldsPatchSchema(generalSettingsSchema).optional(),
+  appearance: settingsFieldsPatchSchema(appearanceSettingsSchema).optional(),
+  chat: settingsFieldsPatchSchema(chatSettingsSchema).optional(),
+  reusablePrompts: reusablePromptsSchema.removeDefault().optional(),
+  kanban: settingsFieldsPatchSchema(kanbanSettingsSchema).optional(),
+  notifications: settingsFieldsPatchSchema(notificationSettingsSchema.removeDefault()).optional(),
+  agentRuntimes: agentRuntimesPatchSchema.optional(),
+  globalPromptOverrides: promptOverrideEditsSchema.optional(),
+});
+type KnownRuntimePatches = Pick<
+  z.infer<typeof agentRuntimesPatchSchema>,
+  "opencode" | "codex" | "claude"
+>;
+export type AgentRuntimesPatch = KnownRuntimePatches &
+  Record<
+    string,
+    z.infer<typeof agentRuntimeFieldsPatchSchema> | KnownRuntimePatches[keyof KnownRuntimePatches]
+  >;
+export type GlobalSettingsPatch = Omit<
+  z.infer<typeof globalSettingsPatchSchema>,
+  "agentRuntimes"
+> & {
+  agentRuntimes?: AgentRuntimesPatch | undefined;
+};
+
+export const autopilotSettingsPatchSchema = z.strictObject({
+  alwaysStartQaReviewsFresh: z.boolean().optional(),
+  rules: z.array(autopilotRuleSchema.strict()).optional(),
+});
+export type AutopilotSettingsPatch = z.infer<typeof autopilotSettingsPatchSchema>;
+export const customAgentRoleEditsSchema = z.strictObject({
+  create: z.array(customAgentRoleSchema).optional(),
+  update: z
+    .record(z.string().min(1), settingsFieldsPatchSchema(customAgentRoleSchema.omit({ id: true })))
+    .optional(),
+  remove: z.array(z.string().min(1)).optional(),
+});
+export const settingsSnapshotSaveInputSchema = z.strictObject({
+  global: globalSettingsPatchSchema.optional(),
+  workspaces: z.record(workspaceIdSchema, workspaceSettingsPatchSchema).optional(),
+  autopilot: autopilotSettingsPatchSchema.optional(),
+  customAgentRoles: customAgentRoleEditsSchema.optional(),
+});
+export type SettingsSnapshotSaveInput = Omit<
+  z.infer<typeof settingsSnapshotSaveInputSchema>,
+  "global"
+> & {
+  global?: GlobalSettingsPatch | undefined;
+};

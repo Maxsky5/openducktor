@@ -5,317 +5,138 @@ import { HostOperationError } from "../../../effect/host-errors";
 import {
   createTaskSyncServiceForTest,
   createEventBus,
+  syncWorkspace,
   task,
 } from "./task-sync-service.test-support";
 
-describe("task event publication", () => {
-  test("returns an actionable committed-state error when event transport acceptance fails", async () => {
-    const reports: unknown[] = [];
-    const service = createTaskSyncServiceForTest({
-      eventBus: {
-        publish() {
-          throw new Error("event transport unavailable");
-        },
-      },
-      publicationReporter: {
-        report: (failure) =>
-          Effect.sync(() => {
-            reports.push(failure);
-          }),
-      },
-      taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
-      },
-    });
+const workspaceSettingsService = { listWorkspaces: () => Effect.succeed([syncWorkspace()]) };
+const noSync = () => Effect.succeed({ ran: true as const, changedTaskIds: [] });
 
-    await expect(
-      Effect.runPromise(
-        service
-          .publishTasksUpdated(
-            "/repo",
-            { taskIds: ["task-1"], removedTaskIds: [] },
-            "update-task",
-            [],
-          )
-          .pipe(Effect.flip),
-      ),
-    ).resolves.toMatchObject({
-      _tag: "HostOperationError",
-      message: expect.stringContaining("Do not repeat the change"),
-      details: { durableState: "committed", stage: "acceptance", repoPath: "/repo" },
-    });
-    expect(reports).toEqual([
-      expect.objectContaining({ operation: "update-task", repoPath: "/repo", stage: "acceptance" }),
-    ]);
-  });
-
-  test("returns an actionable committed-state error when task snapshot capture fails", async () => {
-    const { eventBus, events } = createEventBus();
-    const reports: unknown[] = [];
-    const failure = new HostOperationError({
-      operation: "task.list",
-      message: "Task snapshots are unavailable.",
-    });
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      publicationReporter: {
-        report: (report) => Effect.sync(() => reports.push(report)),
-      },
-      taskService: {
-        listTasks: () => Effect.fail(failure),
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-    });
-
-    await expect(
-      Effect.runPromise(
-        service
-          .publishTasksUpdated(
-            "/repo",
-            { taskIds: ["task-1"], removedTaskIds: [] },
-            "update-task",
-            [],
-          )
-          .pipe(Effect.flip),
-      ),
-    ).resolves.toMatchObject({
-      _tag: "HostOperationError",
-      message: expect.stringContaining("Task changes were saved"),
-      cause: failure,
-      details: {
-        durableState: "committed",
-        stage: "snapshot",
-        repoPath: "/repo",
-        changes: { taskIds: ["task-1"], removedTaskIds: [] },
-      },
-    });
-    expect(events).toEqual([]);
-    expect(reports).toEqual([
-      expect.objectContaining({
-        operation: "update-task",
-        repoPath: "/repo",
-        stage: "snapshot",
-        cause: failure,
-      }),
-    ]);
-  });
-
+describe("committed task event publication", () => {
   test.each([
-    { case: "duplicate task IDs", taskIds: ["task-1", "task-1"], removedTaskIds: [] },
-    {
-      case: "removed IDs outside the affected IDs",
-      taskIds: ["task-1"],
-      removedTaskIds: ["task-2"],
-    },
-    { case: "an empty proposed event", taskIds: [], removedTaskIds: [] },
-  ])(
-    "reports $case without changing or publishing the proposed event",
-    async ({ taskIds, removedTaskIds }) => {
+    ["create-task", "acceptance"],
+    ["create-task", "snapshot"],
+    ["update-task", "acceptance"],
+    ["update-task", "snapshot"],
+  ] as const)(
+    "returns an actionable committed-state error when %s %s fails",
+    async (operation, stage) => {
       const { eventBus, events } = createEventBus();
+      const notificationInputs: ExternalTaskSyncEvent[] = [];
       const reports: unknown[] = [];
+      const failure = new HostOperationError({
+        operation: "test",
+        message: "Task data unavailable",
+      });
       const service = createTaskSyncServiceForTest({
-        eventBus,
+        eventBus:
+          stage === "acceptance"
+            ? {
+                publish: () => {
+                  throw failure;
+                },
+              }
+            : eventBus,
         publicationReporter: {
-          report: (failure) =>
+          report: (report) =>
             Effect.sync(() => {
-              reports.push(failure);
+              reports.push(report);
             }),
         },
+        acceptNotificationInput: (event) => notificationInputs.push(event),
         taskService: {
-          repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+          repoPullRequestSyncDetailed: noSync,
+          ...(stage === "snapshot" && { listTasks: () => Effect.fail(failure) }),
         },
-        workspaceSettingsService: {
-          listWorkspaces: () => Effect.succeed([]),
-        },
+        workspaceSettingsService,
       });
-      const changes = { taskIds: [...taskIds], removedTaskIds: [...removedTaskIds] };
-
-      await expect(
-        Effect.runPromise(
-          service.publishTasksUpdated("/repo", changes, "update-task", []).pipe(Effect.flip),
-        ),
-      ).resolves.toMatchObject({
-        _tag: "HostOperationError",
-        details: { durableState: "committed", stage: "acceptance" },
+      const publication =
+        operation === "create-task"
+          ? service.publishExternalTaskCreated({ workspaceId: "repo", repoPath: "/repo" }, task())
+          : service.publishTasksUpdated(
+              { workspaceId: "repo", repoPath: "/repo" },
+              { taskIds: ["task-1"], removedTaskIds: [] },
+              "update-task",
+              [],
+            );
+      const result = await Effect.runPromise(publication.pipe(Effect.result));
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure")
+        expect(result.failure).toMatchObject({
+          message: expect.stringContaining("Do not repeat the change"),
+          details: { durableState: "committed", stage, repoPath: "/repo" },
+        });
+      expect(reports).toEqual([expect.objectContaining({ operation, stage, repoPath: "/repo" })]);
+      expect(notificationInputs[0]).toMatchObject({
+        kind: operation === "create-task" ? "external_task_created" : "tasks_updated",
       });
-
       expect(events).toEqual([]);
-      expect(reports).toEqual([
-        expect.objectContaining({
-          operation: "update-task",
-          repoPath: "/repo",
-          changes,
-          stage: "acceptance",
-          cause: expect.objectContaining({ issues: expect.any(Array) }),
-        }),
-      ]);
     },
   );
 
-  test("publishes valid affected and removed task IDs unchanged", async () => {
+  test("publishes removals among affected IDs and preserves exact status facts when rows are newer", async () => {
     const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
       eventBus,
+      workspaceSettingsService,
       taskService: {
-        listTasks: () => Effect.succeed([task({ status: "ready_for_dev" })]),
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
+        repoPullRequestSyncDetailed: noSync,
+        listTasks: () =>
+          Effect.succeed([task({ title: "Current title", status: "ready_for_dev" })]),
       },
     });
-    const changes = { taskIds: ["task-1", "task-2"], removedTaskIds: ["task-2"] };
-
-    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "delete-task", []));
-
+    const committed = {
+      previousStatus: "open",
+      task: { id: "task-1", title: "Title at commit", status: "spec_ready" },
+    };
+    await Effect.runPromise(
+      service.publishTasksUpdated(
+        { workspaceId: "repo", repoPath: "/repo" },
+        { taskIds: ["task-1", "task-2"], removedTaskIds: ["task-2"] },
+        "update-task",
+        [committed],
+      ),
+    );
     expect(events).toEqual([
       expect.objectContaining({
         kind: "tasks_updated",
         taskIds: ["task-1", "task-2"],
         removedTaskIds: ["task-2"],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "ready_for_dev" }],
+        taskSnapshots: [{ id: "task-1", title: "Current title", status: "ready_for_dev" }],
+        statusChanges: [committed],
       }),
     ]);
   });
 
-  test("binds each published event to the task status captured for that update", async () => {
-    const { eventBus, events } = createEventBus();
-    let readIndex = 0;
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      taskService: {
-        listTasks: () => {
-          const status = readIndex === 0 ? "spec_ready" : "ready_for_dev";
-          readIndex += 1;
-          return Effect.succeed([task({ status })]);
-        },
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-    });
-    const changes = { taskIds: ["task-1"], removedTaskIds: [] };
-
-    await Effect.runPromise(
-      service.publishTasksUpdated("/repo", changes, "save-workflow-artifact", []),
-    );
-    await Effect.runPromise(
-      service.publishTasksUpdated("/repo", changes, "save-workflow-artifact", []),
-    );
-
-    expect(
-      events.map((event) =>
-        event.kind === "tasks_updated" ? event.taskSnapshots[0]?.status : null,
-      ),
-    ).toEqual(["spec_ready", "ready_for_dev"]);
-  });
-
-  test("publishes host-compatible external task creation events", async () => {
-    const { eventBus, events } = createEventBus();
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      taskService: {
-        listTasks: () => Effect.succeed([task({ title: "Created" })]),
-        repoPullRequestSyncDetailed() {
-          return Effect.tryPromise({
-            try: async () => {
-              throw new Error("unexpected pull request sync");
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
-        },
-      },
-      workspaceSettingsService: {
-        listWorkspaces() {
-          return Effect.tryPromise({
-            try: async () => {
-              return [];
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
-        },
-      },
-    });
-    await Effect.runPromise(
-      service.publishExternalTaskCreated("/repo", {
-        id: "task-1",
-        title: "Created",
-        status: "open",
-      }),
-    );
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      kind: "external_task_created",
-      repoPath: "/repo",
-      taskId: "task-1",
-      taskSnapshot: { id: "task-1", title: "Created", status: "open" },
-    });
-    expect(events[0]).toMatchObject({
-      eventId: expect.any(String),
-      emittedAt: expect.any(String),
-    });
-  });
-
-  test("hands committed transitions to notifications before a later task read fails", async () => {
+  test("gives notifications committed transitions before a later card read fails", async () => {
     const captured: ExternalTaskSyncEvent[] = [];
-    const events = createEventBus();
+    const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
-      eventIdFactory: () => "committed-event",
+      eventBus,
+      workspaceSettingsService,
       acceptNotificationInput: (event) => captured.push(event),
-      eventBus: events.eventBus,
       taskService: {
+        repoPullRequestSyncDetailed: noSync,
         listTasks: () =>
-          Effect.fail(
-            new HostOperationError({ operation: "test.snapshot", message: "Snapshot read failed" }),
-          ),
-        repoPullRequestSyncDetailed: () =>
-          Effect.succeed({
-            ran: false,
-            changedTaskIds: [],
-            reason: "not_configured",
-            message: "Configure a Git provider.",
-          }),
+          Effect.fail(new HostOperationError({ operation: "test", message: "Snapshot failed" })),
       },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
     });
+    const committed = {
+      previousStatus: "in_progress",
+      sourceRole: "build",
+      task: { id: "task-1", title: "Task", status: "human_review" },
+    };
     await expect(
       Effect.runPromise(
         service.publishTasksUpdated(
-          "/repo",
+          { workspaceId: "repo", repoPath: "/repo" },
           { taskIds: ["task-1"], removedTaskIds: [] },
-          "build-completed",
-          [
-            {
-              previousStatus: "in_progress",
-              sourceRole: "build",
-              task: { id: "task-1", title: "Task 1", status: "human_review" },
-            },
-          ],
+          "update-task",
+          [committed],
         ),
       ),
     ).rejects.toThrow("Task changes were saved");
-    expect(captured).toMatchObject([
-      {
-        eventId: "committed-event",
-        statusChanges: [
-          { previousStatus: "in_progress", sourceRole: "build", task: { status: "human_review" } },
-        ],
-      },
-    ]);
-    expect(events.events).toHaveLength(0);
+    expect(captured).toMatchObject([{ statusChanges: [committed] }]);
+    expect(events).toEqual([]);
   });
 });

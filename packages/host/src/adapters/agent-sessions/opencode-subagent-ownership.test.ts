@@ -21,7 +21,12 @@ describe("OpenCode subagent ownership", () => {
     "keeps an unrelated %s root out of the task and keeps observing",
     async (registration) => {
       const other = { ...ref, externalSessionId: "ses_other_root" };
-      const scope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+      const scope = {
+        kind: "workflow",
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build",
+      } as const;
       const model = { providerID: "test", id: "test-model" };
       const snapshot = {
         id: "msg_continue",

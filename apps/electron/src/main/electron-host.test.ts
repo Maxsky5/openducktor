@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -12,6 +13,7 @@ import {
   type RuntimeRoute,
   runtimeLifecycleImpactSchema,
   type TaskCard,
+  taskCardSchema,
   type TaskMetadataPayload,
 } from "@openducktor/contracts";
 import {
@@ -26,7 +28,6 @@ import {
   ProcessEnvironmentError,
   type RuntimeHealthPort,
   type RuntimeStarterPort,
-  type SettingsConfigPort,
   type SystemCommandPort,
   type TaskStorePort,
   type WorktreeFilePort,
@@ -36,6 +37,7 @@ import {
   createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
 } from "./electron-host";
 import { HostOperationError } from "../../../../packages/host/src/effect/host-errors";
+import { createTaskStoreTestDouble } from "../../../../packages/host/src/test-support/task-store-test-double";
 import { createFakeOpenCodeV2 } from "../../../../packages/host/src/test-support/opencode-v2-standalone";
 import { createBrowserEngineTestDouble } from "../../../../packages/host/src/test-support/browser-engine-test-double";
 
@@ -50,34 +52,107 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
   },
 });
 
-const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) => {
-  const defaultEnvironment = input.processEnvironmentInput
-    ? {}
-    : {
-        processEnv: {
-          // The test preload gives each worker its own config directory. Without it, the host
-          // would use the real development config directory of the user.
-          OPENDUCKTOR_CONFIG_DIR: process.env.OPENDUCKTOR_CONFIG_DIR,
-          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
-          PATH: "/usr/bin:/bin",
+const routers: Awaited<ReturnType<typeof createProductionElectronHostCommandRouter>>[] = [];
+const configDirectories: string[] = [];
+let repoPath: string;
+let worktreeBasePath: string;
+beforeEach(async () => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "odt-electron-repo-")));
+  configDirectories.push(root);
+  repoPath = path.join(root, "repo");
+  worktreeBasePath = path.join(root, "worktrees");
+  await mkdir(repoPath);
+});
+afterEach(async () => {
+  await Promise.all(routers.splice(0).map((router) => router.dispose()));
+  await Promise.all(
+    configDirectories.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+  );
+});
+
+const createElectronHostCommandRouter = async ({
+  config,
+  ...ports
+}: Partial<ElectronHostCommandRouterInput> & { config?: GlobalConfig } = {}) => {
+  let input = ports;
+  const configRoot = await mkdtemp(path.join(tmpdir(), "odt-electron-router-"));
+  configDirectories.push(configRoot);
+  const selectedRoot = (value: string | undefined) =>
+    value && value !== process.env.OPENDUCKTOR_CONFIG_DIR ? value : configRoot;
+  const root = selectedRoot(
+    input.processEnvironmentInput
+      ? input.processEnvironmentInput.baseEnv?.OPENDUCKTOR_CONFIG_DIR
+      : input.processEnv?.OPENDUCKTOR_CONFIG_DIR,
+  );
+  if (input.processEnvironmentInput) {
+    input = {
+      ...input,
+      processEnvironmentInput: {
+        ...input.processEnvironmentInput,
+        baseEnv: {
+          ...input.processEnvironmentInput.baseEnv,
+          OPENDUCKTOR_CONFIG_DIR: root,
         },
-      };
-  return createProductionElectronHostCommandRouter({
+      },
+    };
+  } else {
+    input = {
+      ...input,
+      processEnv: {
+        OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+        PATH: "/usr/bin:/bin",
+        ...input.processEnv,
+        OPENDUCKTOR_CONFIG_DIR: root,
+      },
+    };
+  }
+  if (config) {
+    await writeFile(path.join(root, "config.json"), JSON.stringify(config));
+  }
+  if (input.taskStore) {
+    const store = input.taskStore;
+    // Evaluate decisions against the final fixture row, including per-test overrides.
+    const taskStore: TaskStorePort = {
+      ...store,
+      transitionTask: (request) =>
+        store.getTask(request).pipe(
+          Effect.flatMap((current) => {
+            const decision = request.decide(current);
+            return Effect.fromResult(decision).pipe(
+              Effect.andThen(store.transitionTask({ ...request, decide: () => decision })),
+            );
+          }),
+        ),
+      saveWorkflowArtifact: (request) =>
+        store.getTask(request).pipe(
+          Effect.flatMap((current) => {
+            const decision = request.decide(current);
+            return Effect.fromResult(decision).pipe(
+              Effect.andThen(store.saveWorkflowArtifact({ ...request, decide: () => decision })),
+            );
+          }),
+        ),
+    };
+    input = { ...input, taskStore };
+  }
+  const router = await createProductionElectronHostCommandRouter({
     isPackaged: false,
     eventBus: createHostEventBus({ report: () => {} }),
     onBackgroundFailure: () => Effect.void,
-    ...defaultEnvironment,
+    lifecycleLogger: { info: () => Effect.void, error: () => Effect.void },
     runtimeDistribution: testRuntimeDistribution,
     browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
     ...input,
   });
+  routers.push(router);
+  return router;
 };
 
 /** Reads one task from the listed tasks, as the real store does. */
 const withGetTaskFromList = (store: TaskStorePort): TaskStorePort => ({
   ...store,
-  getTask: ({ repoPath, taskId }) =>
-    store.listTasks({ repoPath }).pipe(
+  getTask: ({ workspaceId, repoPath, taskId }) =>
+    store.listTasks({ workspaceId, repoPath }).pipe(
       Effect.flatMap((tasks) => {
         const task = tasks.find((entry) => entry.id === taskId);
         return task ? Effect.succeed(task) : Effect.die(new Error(`Missing test task ${taskId}`));
@@ -126,7 +201,8 @@ const createFilesystem = (): FilesystemPort => ({
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
-  repoPath: "/repo",
+  repoPath,
+  worktreeBasePath,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
@@ -154,7 +230,7 @@ const agentRuntimes = (
 });
 
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
-  version: 2,
+  version: 4,
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -164,11 +240,11 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
-      { eventId: "taskProgressedToSpecReady", actionIds: [] },
-      { eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { eventId: "taskProgressedToAiReview", actionIds: [] },
-      { eventId: "taskRejectedByQa", actionIds: [] },
-      { eventId: "taskProgressedToHumanReview", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToSpecReady", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
     ],
   },
   agentRuntimes: agentRuntimes({ opencode: true }),
@@ -180,28 +256,12 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   ...overrides,
 });
 
-const createSettingsConfig = (config: GlobalConfig | null = null): SettingsConfigPort => ({
-  readConfig: () => Effect.succeed(config),
-  writeConfig: () => Effect.succeed(undefined),
-  defaultWorktreeBasePath(workspaceId) {
-    return `/home/dev/.openducktor/worktrees/${workspaceId}`;
-  },
-  defaultRepoWorktreeBasePath(repoPath) {
-    return `/home/dev/.openducktor/worktrees/${repoPath.split("/").at(-1) ?? "repo"}-legacy`;
-  },
-  resolveConfiguredPath(rawPath) {
-    return rawPath;
-  },
-  canonicalizePath: (rawPath) => Effect.succeed(rawPath),
-  pathExists: () => Effect.succeed(true),
-  join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
-});
-
 const createGit = (): GitPort => ({
   releaseReadCaptures: () => Effect.void,
   canonicalizePath: (path) => Effect.succeed(path),
   isGitRepository: () => Effect.succeed(true),
-  readCheckout: (directory) => Effect.succeed({ root: directory, commonDirectory: "/repo/.git" }),
+  readCheckout: (directory) =>
+    Effect.succeed({ root: directory, commonDirectory: path.join(repoPath, ".git") }),
   isRegisteredWorktree: () => Effect.succeed(true),
   referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
   configureBranchUpstream: () =>
@@ -362,312 +422,313 @@ const createRuntimeHealth = (): RuntimeHealthPort => ({
     }),
 });
 
-const createTaskStore = (): TaskStorePort => ({
-  listArtifacts: () => Effect.succeed([]),
-  listAgentSessionsForTasks: ({ taskIds }) =>
-    Effect.succeed(taskIds.map((taskId) => ({ taskId, agentSessions: [] }))),
-  getTask: () =>
-    Effect.succeed({
-      id: "task-1",
-      title: "Task 1",
-      description: "",
-      status: "blocked",
-      priority: 2,
-      issueType: "task",
-      removeWorktreeOnClose: null,
-      availableActions: [],
-      labels: [],
-      artifactSummary: {
-        spec: { present: false },
-        plan: { present: false },
-        qaReport: { present: false },
-      },
-      agentWorkflows: {
-        spec: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        planner: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        build: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-        qa: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-      },
-      updatedAt: "2026-01-02T00:00:00Z",
-      createdAt: "2026-01-01T00:00:00Z",
-    }),
-  getTaskMetadata: () =>
-    Effect.succeed({
-      artifacts: {
-        spec: {
-          markdown: "# Spec",
-          updatedAt: "2026-01-02T00:00:00Z",
-          revision: 1,
-        },
-        plan: {
-          markdown: "# Plan",
-          updatedAt: "2026-01-02T00:00:00Z",
-          revision: 1,
-        },
-      },
-      agentSessions: [],
-    }),
-  createTask: () =>
-    Effect.succeed({
-      id: "task-2",
-      title: "Task 2",
-      description: "",
-      status: "open",
-      priority: 2,
-      issueType: "task",
-      removeWorktreeOnClose: null,
-      availableActions: [],
-      labels: [],
-      artifactSummary: {
-        spec: { present: false },
-        plan: { present: false },
-        qaReport: { present: false },
-      },
-      agentWorkflows: {
-        spec: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        planner: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        build: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-        qa: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-      },
-      updatedAt: "2026-01-02T00:00:00Z",
-      createdAt: "2026-01-01T00:00:00Z",
-    }),
-  listTasks: (input) =>
-    Effect.succeed(
-      [
-        {
-          id: "task-1",
-          title: "Task 1",
-          description: "",
-          status: "open",
-          priority: 2,
-          issueType: "task",
-          removeWorktreeOnClose: null,
-          availableActions: [],
-          labels: [],
-          artifactSummary: {
-            spec: { present: false },
-            plan: { present: false },
-            qaReport: { present: false },
-          },
-          agentWorkflows: {
-            spec: {
-              required: false,
-              canSkip: true,
-              available: false,
-              completed: false,
-            },
-            planner: {
-              required: false,
-              canSkip: true,
-              available: false,
-              completed: false,
-            },
-            build: {
-              required: true,
-              canSkip: false,
-              available: false,
-              completed: false,
-            },
-            qa: {
-              required: true,
-              canSkip: false,
-              available: false,
-              completed: false,
-            },
-          },
-          updatedAt: "2026-01-02T00:00:00Z",
-          createdAt: "2026-01-01T00:00:00Z",
-        },
-      ].flatMap((task) =>
-        input.taskIds === undefined
-          ? [task]
-          : input.taskIds.map((id) => ({
-              ...task,
-              id,
-              title: id === "task-2" ? "Task 2" : task.title,
-            })),
-      ),
-    ),
-  updateTask: () =>
-    Effect.succeed({
-      id: "task-1",
-      title: "Updated task",
-      description: "",
-      status: "ready_for_dev",
-      priority: 2,
-      issueType: "task",
-      removeWorktreeOnClose: null,
-      availableActions: [],
-      labels: [],
-      artifactSummary: {
-        spec: { present: false },
-        plan: { present: false },
-        qaReport: { present: false },
-      },
-      agentWorkflows: {
-        spec: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        planner: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        build: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-        qa: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-      },
-      updatedAt: "2026-01-02T00:00:00Z",
-      createdAt: "2026-01-01T00:00:00Z",
-    }),
-  saveWorkflowArtifact: (input) =>
-    Effect.succeed({
-      task: {
-        id: input.taskId,
+const createTaskStore = (): TaskStorePort =>
+  createTaskStoreTestDouble({
+    listArtifacts: () => Effect.succeed([]),
+    listAgentSessionsForTasks: ({ taskIds }) =>
+      Effect.succeed(taskIds.map((taskId) => ({ taskId, agentSessions: [] }))),
+    getTask: () =>
+      Effect.succeed({
+        id: "task-1",
         title: "Task 1",
         description: "",
-        status: input.status ?? "open",
+        status: "blocked",
         priority: 2,
         issueType: "task",
         removeWorktreeOnClose: null,
         availableActions: [],
         labels: [],
         artifactSummary: {
-          spec: { present: input.code === "spec" },
-          plan: { present: input.code === "plan" },
+          spec: { present: false },
+          plan: { present: false },
           qaReport: { present: false },
         },
         agentWorkflows: {
-          spec: { required: false, canSkip: true, available: false, completed: false },
-          planner: { required: false, canSkip: true, available: false, completed: false },
-          build: { required: true, canSkip: false, available: false, completed: false },
-          qa: { required: true, canSkip: false, available: false, completed: false },
+          spec: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          planner: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          build: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
         },
         updatedAt: "2026-01-02T00:00:00Z",
         createdAt: "2026-01-01T00:00:00Z",
-      },
-      artifact: {
-        markdown: input.markdown,
+      }),
+    getTaskMetadata: () =>
+      Effect.succeed({
+        artifacts: {
+          spec: {
+            markdown: "# Spec",
+            updatedAt: "2026-01-02T00:00:00Z",
+            revision: 1,
+          },
+          plan: {
+            markdown: "# Plan",
+            updatedAt: "2026-01-02T00:00:00Z",
+            revision: 1,
+          },
+        },
+        agentSessions: [],
+      }),
+    createTask: () =>
+      Effect.succeed({
+        id: "task-2",
+        title: "Task 2",
+        description: "",
+        status: "open",
+        priority: 2,
+        issueType: "task",
+        removeWorktreeOnClose: null,
+        availableActions: [],
+        labels: [],
+        artifactSummary: {
+          spec: { present: false },
+          plan: { present: false },
+          qaReport: { present: false },
+        },
+        agentWorkflows: {
+          spec: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          planner: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          build: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+        },
         updatedAt: "2026-01-02T00:00:00Z",
-        revision: 1,
-      },
-    }),
-  upsertAgentSession: () => Effect.succeed(true),
-  setPullRequest: () => Effect.succeed(true),
-  setDirectMerge: () => Effect.succeed(true),
-  clearAgentSessionsByRoles: () => Effect.succeed(true),
-  clearTaskArtifacts: () => Effect.succeed(true),
-  clearWorkflowArtifacts: () => Effect.succeed(true),
-  transitionTask: (input) =>
-    Effect.succeed({
-      id: input.taskId,
-      title: "Task 1",
-      description: "",
-      status: input.status,
-      priority: 2,
-      issueType: "task",
-      removeWorktreeOnClose: null,
-      availableActions: [],
-      labels: [],
-      artifactSummary: {
-        spec: { present: false },
-        plan: { present: false },
-        qaReport: { present: false },
-      },
-      agentWorkflows: {
-        spec: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
+        createdAt: "2026-01-01T00:00:00Z",
+      }),
+    listTasks: (input) =>
+      Effect.succeed(
+        [
+          {
+            id: "task-1",
+            title: "Task 1",
+            description: "",
+            status: "open",
+            priority: 2,
+            issueType: "task",
+            removeWorktreeOnClose: null,
+            availableActions: [],
+            labels: [],
+            artifactSummary: {
+              spec: { present: false },
+              plan: { present: false },
+              qaReport: { present: false },
+            },
+            agentWorkflows: {
+              spec: {
+                required: false,
+                canSkip: true,
+                available: false,
+                completed: false,
+              },
+              planner: {
+                required: false,
+                canSkip: true,
+                available: false,
+                completed: false,
+              },
+              build: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+              qa: {
+                required: true,
+                canSkip: false,
+                available: false,
+                completed: false,
+              },
+            },
+            updatedAt: "2026-01-02T00:00:00Z",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ].flatMap((task) =>
+          input.taskIds === undefined
+            ? [task]
+            : input.taskIds.map((id) => ({
+                ...task,
+                id,
+                title: id === "task-2" ? "Task 2" : task.title,
+              })),
+        ),
+      ),
+    updateTask: () =>
+      Effect.succeed({
+        id: "task-1",
+        title: "Updated task",
+        description: "",
+        status: "ready_for_dev",
+        priority: 2,
+        issueType: "task",
+        removeWorktreeOnClose: null,
+        availableActions: [],
+        labels: [],
+        artifactSummary: {
+          spec: { present: false },
+          plan: { present: false },
+          qaReport: { present: false },
         },
-        planner: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
+        agentWorkflows: {
+          spec: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          planner: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          build: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
         },
-        build: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
+        updatedAt: "2026-01-02T00:00:00Z",
+        createdAt: "2026-01-01T00:00:00Z",
+      }),
+    saveWorkflowArtifact: (input) =>
+      Effect.succeed({
+        task: {
+          id: input.taskId,
+          title: "Task 1",
+          description: "",
+          status: input.status ?? "open",
+          priority: 2,
+          issueType: "task",
+          removeWorktreeOnClose: null,
+          availableActions: [],
+          labels: [],
+          artifactSummary: {
+            spec: { present: input.code === "spec" },
+            plan: { present: input.code === "plan" },
+            qaReport: { present: false },
+          },
+          agentWorkflows: {
+            spec: { required: false, canSkip: true, available: false, completed: false },
+            planner: { required: false, canSkip: true, available: false, completed: false },
+            build: { required: true, canSkip: false, available: false, completed: false },
+            qa: { required: true, canSkip: false, available: false, completed: false },
+          },
+          updatedAt: "2026-01-02T00:00:00Z",
+          createdAt: "2026-01-01T00:00:00Z",
         },
-        qa: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
+        artifact: {
+          markdown: input.markdown,
+          updatedAt: "2026-01-02T00:00:00Z",
+          revision: 1,
         },
-      },
-      updatedAt: "2026-01-02T00:00:00Z",
-      createdAt: "2026-01-01T00:00:00Z",
-    }),
-  deleteTask: () => Effect.succeed(true),
-  listPullRequestSyncCandidates: () => Effect.succeed([]),
-  diagnoseRepoStore: () =>
-    Effect.succeed({
-      category: "database_unavailable",
-      status: "blocking",
-      isReady: false,
-      detail: "SQLite task store database is unavailable.",
-      databasePath: null,
-    }),
-});
+      }),
+    upsertAgentSession: () => Effect.succeed(true),
+    setPullRequest: () => Effect.succeed(true),
+    setDirectMerge: () => Effect.succeed(true),
+    clearAgentSessionsByRoles: () => Effect.succeed(true),
+    clearTaskArtifacts: () => Effect.succeed(true),
+    clearWorkflowArtifacts: () => Effect.succeed(true),
+    transitionTask: (input) =>
+      Effect.succeed({
+        id: input.taskId,
+        title: "Task 1",
+        description: "",
+        status: input.status,
+        priority: 2,
+        issueType: "task",
+        removeWorktreeOnClose: null,
+        availableActions: [],
+        labels: [],
+        artifactSummary: {
+          spec: { present: false },
+          plan: { present: false },
+          qaReport: { present: false },
+        },
+        agentWorkflows: {
+          spec: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          planner: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          build: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+        },
+        updatedAt: "2026-01-02T00:00:00Z",
+        createdAt: "2026-01-01T00:00:00Z",
+      }),
+    deleteTask: () => Effect.succeed(true),
+    listPullRequestSyncCandidates: () => Effect.succeed([]),
+    diagnoseRepoStore: () =>
+      Effect.succeed({
+        category: "database_unavailable",
+        status: "blocking",
+        isReady: false,
+        detail: "SQLite task store database is unavailable.",
+        databasePath: null,
+      }),
+  });
 
 type RuntimeStartInput = Parameters<RuntimeStarterPort["startRuntime"]>[0];
 type FakeRuntimeStarter = RuntimeStarterPort & {
@@ -752,9 +813,7 @@ describe("createElectronHostCommandRouter", () => {
         },
         runtimeHealth: createRuntimeHealth(),
         runtimeStarter,
-        settingsConfig: createSettingsConfig(
-          globalConfig({ agentRuntimes: agentRuntimes({ opencode: true, codex: true }) }),
-        ),
+        config: globalConfig({ agentRuntimes: agentRuntimes({ opencode: true, codex: true }) }),
       });
       await router.initialize();
       await waitForRuntimeState(router, ["opencode", "codex"], "ready");
@@ -783,7 +842,6 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
     });
 
     expect(await router.invoke("filesystem_list_directory", { path: "/workspace" })).toMatchObject({
@@ -802,7 +860,6 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
     });
 
     expect(await router.invoke("workspace_list")).toEqual([]);
@@ -822,15 +879,14 @@ describe("createElectronHostCommandRouter", () => {
       shell: "/bin/zsh",
     });
     try {
-      const router = await createElectronHostCommandRouter({
-        processEnvironmentInput: pathFailure(diagnostic, {
-          OPENDUCKTOR_CONFIG_DIR: configDirectory,
-        }),
-      });
+      const start = () =>
+        createElectronHostCommandRouter({
+          processEnvironmentInput: pathFailure(diagnostic, {
+            OPENDUCKTOR_CONFIG_DIR: configDirectory,
+          }),
+        });
 
-      await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
-        diagnostic.message,
-      );
+      await expect(start()).rejects.toThrow(diagnostic.message);
       await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
       const legacyConfig = JSON.stringify({
@@ -843,15 +899,18 @@ describe("createElectronHostCommandRouter", () => {
       });
       await writeFile(configPath, legacyConfig);
 
-      await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
-        diagnostic.message,
-      );
+      await expect(start()).rejects.toThrow(diagnostic.message);
       expect(await readFile(configPath, "utf8")).toBe(legacyConfig);
 
       await writeFile(configPath, JSON.stringify({ version: 3 }));
-      expect(await router.invoke("workspace_get_settings_snapshot")).toMatchObject({
-        theme: "system",
-      });
+      const router = await start();
+      try {
+        expect(await router.invoke("workspace_get_settings_snapshot")).toMatchObject({
+          theme: "system",
+        });
+      } finally {
+        await router.dispose();
+      }
     } finally {
       await rm(configDirectory, { force: true, recursive: true });
     }
@@ -863,7 +922,6 @@ describe("createElectronHostCommandRouter", () => {
       git: createGit(),
       localAttachments: createLocalAttachments(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
     });
 
     expect(
@@ -897,7 +955,7 @@ describe("createElectronHostCommandRouter", () => {
       openInTools: createOpenInTools(),
       runtimeHealth: createRuntimeHealth(),
       runtimeStarter,
-      settingsConfig: createSettingsConfig(globalConfig()),
+      config: globalConfig(),
     });
 
     try {
@@ -974,9 +1032,7 @@ describe("createElectronHostCommandRouter", () => {
           }),
       },
       runtimeHealth: createRuntimeHealth(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({ workspaces: { repo: repoConfig() }, workspaceOrder: ["repo"] }),
-      ),
+      config: globalConfig({ workspaces: { repo: repoConfig() }, workspaceOrder: ["repo"] }),
       systemCommands: createSystemCommands(),
     });
 
@@ -1005,13 +1061,11 @@ describe("createElectronHostCommandRouter", () => {
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
       runtimeHealth: createRuntimeHealth(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          agentRuntimes: agentRuntimes({ opencode: true, codex: true, claude: true }),
-          workspaces: { repo: repoConfig() },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        agentRuntimes: agentRuntimes({ opencode: true, codex: true, claude: true }),
+        workspaces: { repo: repoConfig() },
+        workspaceOrder: ["repo"],
+      }),
     });
 
     try {
@@ -1050,12 +1104,10 @@ describe("createElectronHostCommandRouter", () => {
       processEnvironmentInput: pathFailure(diagnostic),
       runtimeHealth: createRuntimeHealth(),
       runtimeStarter,
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: { repo: repoConfig() },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        workspaces: { repo: repoConfig() },
+        workspaceOrder: ["repo"],
+      }),
     });
 
     try {
@@ -1079,21 +1131,22 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
     });
 
-    expect(await router.invoke("git_get_branches", { repoPath: "/repo" })).toEqual([
+    expect(await router.invoke("git_get_branches", { workspaceId: "repo", repoPath })).toEqual([
       { name: "main", isCurrent: true, isRemote: false },
     ]);
-    expect(await router.invoke("git_get_current_branch", { repoPath: "/repo" })).toEqual({
+    expect(
+      await router.invoke("git_get_current_branch", { workspaceId: "repo", repoPath }),
+    ).toEqual({
       name: "main",
       detached: false,
       revision: "abc123",
     });
-    expect(await router.invoke("git_get_status", { repoPath: "/repo" })).toEqual([
+    expect(await router.invoke("git_get_status", { workspaceId: "repo", repoPath })).toEqual([
       { path: "src/main.ts", status: "modified", staged: false },
     ]);
-    expect(await router.invoke("git_get_diff", { repoPath: "/repo" })).toEqual([
+    expect(await router.invoke("git_get_diff", { workspaceId: "repo", repoPath })).toEqual([
       {
         file: "src/main.ts",
         type: "modified",
@@ -1104,7 +1157,8 @@ describe("createElectronHostCommandRouter", () => {
     ]);
     expect(
       await router.invoke("git_get_worktree_status", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         targetBranch: "origin/main",
         diffScope: "uncommitted",
       }),
@@ -1115,13 +1169,15 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await router.invoke("git_commits_ahead_behind", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         targetBranch: "origin/main",
       }),
     ).toEqual({ ahead: 3, behind: 2 });
     expect(
       await router.invoke("git_switch_branch", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         branch: "feature/electron",
       }),
     ).toEqual({
@@ -1131,19 +1187,22 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await router.invoke("git_fetch_remote", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         targetBranch: "origin/main",
         force: true,
       }),
     ).toEqual({ outcome: "fetched", output: "Fetched origin" });
     expect(
       await router.invoke("git_pull_branch", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
       }),
     ).toEqual({ outcome: "pulled", output: "Fast-forward" });
     expect(
       await router.invoke("git_commit_all", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         message: "Ship Electron host",
       }),
     ).toEqual({
@@ -1153,7 +1212,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await router.invoke("git_push_branch", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         branch: "feature/electron",
       }),
     ).toEqual({
@@ -1164,20 +1224,22 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await router.invoke("git_rebase_branch", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         targetBranch: "origin/main",
       }),
     ).toEqual({
       outcome: "rebased",
       output: "Successfully rebased",
     });
-    expect(await router.invoke("git_rebase_abort", { repoPath: "/repo" })).toEqual({
+    expect(await router.invoke("git_rebase_abort", { workspaceId: "repo", repoPath })).toEqual({
       outcome: "aborted",
       output: "Successfully aborted rebase",
     });
     expect(
       await router.invoke("git_abort_conflict", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         operation: "direct_merge_merge_commit",
       }),
     ).toEqual({
@@ -1190,7 +1252,6 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
     });
 
     expect(await router.invoke("system_list_open_in_tools", {})).toEqual([
@@ -1198,7 +1259,7 @@ describe("createElectronHostCommandRouter", () => {
     ]);
     expect(
       await router.invoke("system_open_directory_in_tool", {
-        directoryPath: "/repo",
+        directoryPath: repoPath,
         toolId: "finder",
       }),
     ).toEqual({ ok: true });
@@ -1224,19 +1285,18 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: { repo: configuredRepo },
-          workspaceOrder: ["repo"],
-          recentWorkspaces: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        workspaces: { repo: configuredRepo },
+        workspaceOrder: ["repo"],
+        recentWorkspaces: ["repo"],
+      }),
       systemCommands: createSystemCommands(),
     });
 
     expect(
       await router.invoke("workspace_detect_github_repository", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
       }),
     ).toEqual({
       host: "github.com",
@@ -1244,7 +1304,10 @@ describe("createElectronHostCommandRouter", () => {
       name: "openducktor",
     });
     expect(
-      await router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
+      await router.invoke("workspace_get_git_provider_context", {
+        workspaceId: "repo",
+        repoPath,
+      }),
     ).toMatchObject({
       descriptor: {
         id: "github",
@@ -1271,7 +1334,9 @@ describe("createElectronHostCommandRouter", () => {
   test.each(["runtime failure", "runtime hang", "settings failure"] as const)(
     "PATH and Git diagnostics do not depend on %s",
     async (failure) => {
-      let settingsReads = 0;
+      const configRoot = await mkdtemp(path.join(tmpdir(), "odt-electron-diagnostics-"));
+      configDirectories.push(configRoot);
+      await writeFile(path.join(configRoot, "config.json"), JSON.stringify(globalConfig()));
       let runtimeProbes = 0;
       const unrelatedError = new HostOperationError({
         operation: "test.runtime",
@@ -1283,6 +1348,7 @@ describe("createElectronHostCommandRouter", () => {
           onBackgroundFailure: () => Effect.void,
           browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
           processEnv: {
+            OPENDUCKTOR_CONFIG_DIR: configRoot,
             OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
             PATH: "/usr/bin:/bin",
           },
@@ -1290,15 +1356,6 @@ describe("createElectronHostCommandRouter", () => {
           filesystem: createFilesystem(),
           git: createGit(),
           openInTools: createOpenInTools(),
-          settingsConfig: {
-            ...createSettingsConfig(globalConfig()),
-            readConfig: () => {
-              settingsReads += 1;
-              return failure === "settings failure"
-                ? Effect.fail(unrelatedError)
-                : Effect.succeed(globalConfig());
-            },
-          },
           runtimeHealth: {
             ...createRuntimeHealth(),
             getRuntimeHealth: () => {
@@ -1309,8 +1366,17 @@ describe("createElectronHostCommandRouter", () => {
           systemCommands: createSystemCommands(),
         }),
       );
-      const settingsReadsBeforeCheck = settingsReads;
       try {
+        if (failure === "settings failure") {
+          await writeFile(path.join(configRoot, "config.json"), "{");
+          const settings = await Effect.runPromise(
+            router.invoke("workspace_get_settings_snapshot", {}).pipe(Effect.result),
+          );
+          expect(settings).toMatchObject({
+            _tag: "Failure",
+            failure: { message: expect.stringContaining("Invalid JSON") },
+          });
+        }
         const check = await Effect.runPromise(
           router.invoke("git_check", {}).pipe(Effect.timeout("250 millis")),
         );
@@ -1321,7 +1387,6 @@ describe("createElectronHostCommandRouter", () => {
           ),
         ).toEqual({ ok: true, error: null });
         expect(runtimeProbes).toBe(0);
-        expect(settingsReads).toBe(settingsReadsBeforeCheck);
       } finally {
         await Effect.runPromise(router.dispose());
       }
@@ -1341,7 +1406,7 @@ describe("createElectronHostCommandRouter", () => {
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(processEnvironmentError),
       runtimeHealth: createRuntimeHealth(),
-      settingsConfig: createSettingsConfig(),
+      config: globalConfig(),
       systemCommands: createSystemCommands(),
     });
 
@@ -1349,9 +1414,12 @@ describe("createElectronHostCommandRouter", () => {
       ok: false,
       error: processEnvironmentError.message,
     });
-    expect(await router.invoke("task_store_check", { repoPath: "/repo" })).toMatchObject({
+    expect(
+      await router.invoke("task_store_check", { workspaceId: "repo", repoPath }),
+    ).toMatchObject({
       taskStoreOk: false,
-      taskStoreError: "Workspace is not configured for repository: /repo",
+      taskStoreError:
+        "The workspace no longer matches this repository. Reload the workspace before retrying.",
       repoStoreHealth: { status: "blocking" },
     });
   });
@@ -1385,21 +1453,18 @@ describe("createElectronHostCommandRouter", () => {
         if (fixture.config) {
           await writeFile(configPath, JSON.stringify(fixture.config));
         }
-        const router = await createElectronHostCommandRouter({
-          filesystem: createFilesystem(),
-          git: createGit(),
-          openInTools: createOpenInTools(),
-          processEnvironmentInput: pathFailure(processEnvironmentError, {
-            OPENDUCKTOR_CONFIG_DIR: root,
+        await expect(
+          createElectronHostCommandRouter({
+            filesystem: createFilesystem(),
+            git: createGit(),
+            openInTools: createOpenInTools(),
+            processEnvironmentInput: pathFailure(processEnvironmentError, {
+              OPENDUCKTOR_CONFIG_DIR: root,
+            }),
+            runtimeHealth: createRuntimeHealth(),
+            systemCommands: createSystemCommands(),
           }),
-          runtimeHealth: createRuntimeHealth(),
-          systemCommands: createSystemCommands(),
-        });
-
-        expect(await router.invoke("path_check", { force: true })).toMatchObject({
-          ok: false,
-          error: processEnvironmentError.message,
-        });
+        ).rejects.toThrow(processEnvironmentError.message);
         if (fixture.config) {
           expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ version: 2 });
         } else {
@@ -1438,41 +1503,30 @@ describe("createElectronHostCommandRouter", () => {
       git: createGit(),
       openInTools: createOpenInTools(),
       runtimeHealth: createRuntimeHealth(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          agentRuntimes: {
-            ...agentRuntimes({ opencode: true }),
-            opencode: { enabled: true, executablePath: opencode.executablePath },
-          },
-        }),
-      ),
+      config: globalConfig({
+        agentRuntimes: {
+          ...agentRuntimes({ opencode: true }),
+          opencode: { enabled: true, executablePath: opencode.executablePath },
+        },
+      }),
       taskStore: {
         ...sessionTaskStore,
-        getTaskMetadata: () =>
-          Effect.succeed({
-            artifacts: {
-              spec: {
-                markdown: "# Spec",
-                updatedAt: "2026-01-02T00:00:00Z",
-                revision: 1,
-              },
-              plan: {
-                markdown: "# Plan",
-                updatedAt: "2026-01-02T00:00:00Z",
-                revision: 1,
-              },
-            },
-            agentSessions: [
-              {
-                externalSessionId: "external-session-1",
-                role: "build",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                runtimeKind: "opencode",
-                workingDirectory: "/repo/worktree",
-                selectedModel: null,
-              },
-            ],
-          } satisfies TaskMetadataPayload),
+        listAgentSessionsForTasks: ({ taskIds }) =>
+          Effect.succeed(
+            taskIds.map((taskId) => ({
+              taskId,
+              agentSessions: [
+                {
+                  externalSessionId: "external-session-1",
+                  role: "build",
+                  startedAt: "2026-05-10T10:00:00.000Z",
+                  runtimeKind: "opencode",
+                  workingDirectory: "/repo/worktree",
+                  selectedModel: null,
+                },
+              ],
+            })),
+          ),
       },
     });
     try {
@@ -1481,7 +1535,8 @@ describe("createElectronHostCommandRouter", () => {
       expect(
         await sessionStopRouter.invoke("agent_session_stop", {
           request: {
-            repoPath: "/repo",
+            workspaceId: "repo",
+            repoPath,
             taskId: "task-1",
             externalSessionId: "external-session-1",
             runtimeKind: "opencode",
@@ -1501,111 +1556,52 @@ describe("createElectronHostCommandRouter", () => {
     }
   }, 10_000);
 
-  test("registers migrated task list host command", async () => {
+  test("routes task reads and writes through the shared database", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
-      taskStore: createTaskStore(),
+      config: globalConfig({ workspaces: { repo: repoConfig() }, workspaceOrder: ["repo"] }),
     });
-
-    expect(await router.invoke("tasks_list", { repoPath: "/repo" })).toEqual([
-      expect.objectContaining({
-        id: "task-1",
-        availableActions: [
-          "view_details",
-          "set_spec",
-          "set_plan",
-          "build_start",
-          "reset_task",
-          "close_task",
-        ],
+    const workspace = { workspaceId: "repo", repoPath };
+    const task = taskCardSchema.parse(
+      await router.invoke("task_create", {
+        ...workspace,
+        input: { title: "Task 1", issueType: "task", priority: 2 },
       }),
+    );
+    const taskRef = { ...workspace, taskId: task.id };
+    expect(await router.invoke("tasks_list", workspace)).toEqual([
+      expect.objectContaining({ id: task.id, title: "Task 1" }),
     ]);
     expect(
-      await router.invoke("task_create", {
-        repoPath: "/repo",
-        input: { title: "Task 2", issueType: "task", priority: 2 },
-      }),
+      await router.invoke("task_transition", { ...taskRef, status: "in_progress" }),
     ).toMatchObject({
-      id: "task-2",
-      availableActions: [
-        "view_details",
-        "set_spec",
-        "set_plan",
-        "build_start",
-        "reset_task",
-        "close_task",
-      ],
-    });
-    expect(
-      await router.invoke("task_transition", {
-        repoPath: "/repo",
-        taskId: "task-1",
-        status: "in_progress",
-      }),
-    ).toMatchObject({
-      id: "task-1",
+      id: task.id,
       status: "in_progress",
       availableActions: expect.arrayContaining(["open_builder"]),
     });
-    expect(
-      await router.invoke("task_metadata_get", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
-    ).toEqual({
-      artifacts: {
-        spec: {
-          markdown: "# Spec",
-          updatedAt: "2026-01-02T00:00:00Z",
-          revision: 1,
-        },
-        plan: {
-          markdown: "# Plan",
-          updatedAt: "2026-01-02T00:00:00Z",
-          revision: 1,
-        },
-      },
+    expect(await router.invoke("task_metadata_get", taskRef)).toMatchObject({
+      artifacts: {},
       agentSessions: [],
     });
-    for (const [code, markdown] of [
-      ["spec", "# Spec"],
-      ["plan", "# Plan"],
-    ] as const) {
-      expect(
-        await router.invoke("workflow_artifact_get", { repoPath: "/repo", taskId: "task-1", code }),
-      ).toEqual({ markdown, updatedAt: "2026-01-02T00:00:00Z", revision: 1 });
-    }
-    expect(
-      await router.invoke("workflow_artifact_get", {
-        repoPath: "/repo",
-        taskId: "task-1",
-        code: "qaReport",
-      }),
-    ).toEqual({ markdown: "" });
-    expect(
-      await router.invoke("agent_sessions_list", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
-    ).toEqual([]);
-
+    expect(await router.invoke("agent_sessions_list", taskRef)).toEqual([]);
     for (const code of ["spec", "plan"] as const) {
       expect(
         await router.invoke("workflow_artifact_save", {
-          repoPath: "/repo",
-          taskId: "task-1",
+          ...taskRef,
           code,
-          markdown: `# ${code} v2`,
+          markdown: `# ${code}`,
           submit: false,
         }),
-      ).toEqual({
-        markdown: `# ${code} v2`,
-        updatedAt: "2026-01-02T00:00:00Z",
+      ).toMatchObject({
+        markdown: `# ${code}`,
         revision: 1,
         cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
+      });
+      expect(await router.invoke("workflow_artifact_get", { ...taskRef, code })).toMatchObject({
+        markdown: `# ${code}`,
+        revision: 1,
       });
     }
   });
@@ -1615,26 +1611,23 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: {
-        ...createSettingsConfig(
-          globalConfig({
-            workspaces: { repo: repoConfig() },
-            workspaceOrder: ["repo"],
-          }),
-        ),
-        pathExists: () => Effect.succeed(false),
-      },
+      config: globalConfig({
+        workspaces: { repo: repoConfig() },
+        workspaceOrder: ["repo"],
+      }),
       taskStore: createTaskStore(),
     });
     expect(
       await deleteRouter.invoke("task_delete", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
       }),
     ).toEqual({ ok: true });
     expect(
       await deleteRouter.invoke("task_reset", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
       }),
     ).toMatchObject({ id: "task-1", status: "open" });
@@ -1646,15 +1639,10 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: {
-        ...createSettingsConfig(
-          globalConfig({
-            workspaces: { repo: repoConfig() },
-            workspaceOrder: ["repo"],
-          }),
-        ),
-        pathExists: () => Effect.succeed(false),
-      },
+      config: globalConfig({
+        workspaces: { repo: repoConfig() },
+        workspaceOrder: ["repo"],
+      }),
       taskStore: {
         ...resetImplementationTaskStore,
         getTask: (input) =>
@@ -1672,7 +1660,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await resetImplementationRouter.invoke("task_reset_implementation", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
       }),
     ).toMatchObject({ id: "task-1", status: "ready_for_dev" });
@@ -1684,62 +1673,59 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
       taskStore: {
         ...pullRequestTaskStore,
         getTask: (input) =>
-          pullRequestTaskStore
-            .getTask(input)
-            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
-        getTaskMetadata: () =>
-          Effect.succeed({
-            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-            pullRequest: {
-              providerId: "github",
-              number: 42,
-              url: "https://github.com/openai/openducktor/pull/42",
-              state: "open",
-              createdAt: "2026-05-01T00:00:00.000Z",
-              updatedAt: "2026-05-02T00:00:00.000Z",
-            },
-            agentSessions: [],
-          } satisfies TaskMetadataPayload),
+          pullRequestTaskStore.getTask(input).pipe(
+            Effect.map((task) => ({
+              ...task,
+              status: "human_review",
+              pullRequest: {
+                providerId: "github",
+                number: 42,
+                url: "https://github.com/openai/openducktor/pull/42",
+                state: "open",
+                createdAt: "2026-05-01T00:00:00.000Z",
+                updatedAt: "2026-05-02T00:00:00.000Z",
+              },
+            })),
+          ),
       },
     });
     expect(
       await pullRequestRouter.invoke("task_pull_request_unlink", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
       }),
     ).toBe(true);
   });
 
   test("reads the approval context through the host router", async () => {
+    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
     const approvalRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              git: {
-                provider: {
-                  id: "github",
-                  enabled: true,
-                  repository: {
-                    host: "github.com",
-                    owner: "openai",
-                    name: "openducktor",
-                  },
-                  autoDetected: false,
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig({
+            git: {
+              provider: {
+                id: "github",
+                enabled: true,
+                repository: {
+                  host: "github.com",
+                  owner: "openai",
+                  name: "openducktor",
                 },
+                autoDetected: false,
               },
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+            },
+          }),
+        },
+        workspaceOrder: ["repo"],
+      }),
       systemCommands: createSystemCommands(),
       taskStore: {
         ...createTaskStore(),
@@ -1750,7 +1736,8 @@ describe("createElectronHostCommandRouter", () => {
       },
     });
     const approvalContext = await approvalRouter.invoke("task_approval_context_get", {
-      repoPath: "/repo",
+      workspaceId: "repo",
+      repoPath,
       taskId: "task-1",
     });
     expect(approvalContext).toMatchObject({
@@ -1767,31 +1754,30 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("detects a task pull request through the host router", async () => {
+    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
     const detectPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              git: {
-                provider: {
-                  id: "github",
-                  enabled: true,
-                  repository: {
-                    host: "github.com",
-                    owner: "openai",
-                    name: "openducktor",
-                  },
-                  autoDetected: false,
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig({
+            git: {
+              provider: {
+                id: "github",
+                enabled: true,
+                repository: {
+                  host: "github.com",
+                  owner: "openai",
+                  name: "openducktor",
                 },
+                autoDetected: false,
               },
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+            },
+          }),
+        },
+        workspaceOrder: ["repo"],
+      }),
       systemCommands: {
         ...createSystemCommands(),
         runCommandAllowFailure: (_command, args) => {
@@ -1832,7 +1818,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await detectPullRequestRouter.invoke("task_pull_request_detect", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
       }),
     ).toMatchObject({
@@ -1846,6 +1833,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("creates or updates a task pull request through the host router", async () => {
+    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
     const upsertPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: {
@@ -1864,27 +1852,25 @@ describe("createElectronHostCommandRouter", () => {
           }),
       },
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              git: {
-                provider: {
-                  id: "github",
-                  enabled: true,
-                  repository: {
-                    host: "github.com",
-                    owner: "openai",
-                    name: "openducktor",
-                  },
-                  autoDetected: false,
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig({
+            git: {
+              provider: {
+                id: "github",
+                enabled: true,
+                repository: {
+                  host: "github.com",
+                  owner: "openai",
+                  name: "openducktor",
                 },
+                autoDetected: false,
               },
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+            },
+          }),
+        },
+        workspaceOrder: ["repo"],
+      }),
       systemCommands: {
         ...createSystemCommands(),
         runCommandAllowFailure: (_command, args) => {
@@ -1923,7 +1909,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await upsertPullRequestRouter.invoke("task_pull_request_upsert", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         input: { title: "Create PR", body: "Body" },
       }),
@@ -1939,27 +1926,25 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              git: {
-                provider: {
-                  id: "github",
-                  enabled: true,
-                  repository: {
-                    host: "github.com",
-                    owner: "openai",
-                    name: "openducktor",
-                  },
-                  autoDetected: false,
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig({
+            git: {
+              provider: {
+                id: "github",
+                enabled: true,
+                repository: {
+                  host: "github.com",
+                  owner: "openai",
+                  name: "openducktor",
                 },
+                autoDetected: false,
               },
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+            },
+          }),
+        },
+        workspaceOrder: ["repo"],
+      }),
       systemCommands: {
         ...createSystemCommands(),
         runCommandAllowFailure: () =>
@@ -2041,7 +2026,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await pullRequestSyncRouter.invoke("repo_pull_request_sync", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
       }),
     ).toEqual({ ok: true });
   });
@@ -2051,12 +2037,10 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: { repo: repoConfig() },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        workspaces: { repo: repoConfig() },
+        workspaceOrder: ["repo"],
+      }),
       taskStore: {
         ...createTaskStore(),
         getTaskMetadata: () =>
@@ -2164,7 +2148,8 @@ describe("createElectronHostCommandRouter", () => {
     ] as const) {
       expect(
         await reviewRouter.invoke("workflow_artifact_save", {
-          repoPath: "/repo",
+          workspaceId: "repo",
+          repoPath,
           taskId: "task-1",
           code: "qaReport",
           markdown,
@@ -2175,7 +2160,8 @@ describe("createElectronHostCommandRouter", () => {
     }
     expect(
       await reviewRouter.invoke("human_request_changes", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         note: "Please adjust",
       }),
@@ -2185,7 +2171,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await reviewRouter.invoke("task_close", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         removeWorktree: false,
       }),
@@ -2196,12 +2183,12 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("runs a direct merge through the host router", async () => {
+    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
     // The default router runs the commands that need no special fakes.
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
       taskStore: createTaskStore(),
     });
     const directMergeStartRouter = await createElectronHostCommandRouter({
@@ -2224,12 +2211,10 @@ describe("createElectronHostCommandRouter", () => {
           }),
       },
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: { repo: repoConfig() },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        workspaces: { repo: repoConfig() },
+        workspaceOrder: ["repo"],
+      }),
       taskStore: withGetTaskFromList({
         ...createTaskStore(),
         listTasks: () =>
@@ -2283,7 +2268,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await directMergeStartRouter.invoke("task_direct_merge", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         input: {
           mergeMethod: "merge_commit",
@@ -2302,7 +2288,8 @@ describe("createElectronHostCommandRouter", () => {
 
     expect(
       await router.invoke("build_resumed", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
       }),
     ).toMatchObject({
@@ -2317,16 +2304,14 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              hooks: { postComplete: [] },
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig({
+            hooks: { postComplete: [] },
+          }),
+        },
+        workspaceOrder: ["repo"],
+      }),
       systemCommands: createSystemCommands(),
       taskStore: withGetTaskFromList({
         ...createTaskStore(),
@@ -2381,7 +2366,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await completionRouter.invoke("build_completed", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         input: { summary: "Done" },
       }),
@@ -2397,14 +2383,12 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig(),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig(),
+        },
+        workspaceOrder: ["repo"],
+      }),
       taskStore: withGetTaskFromList({
         ...createTaskStore(),
         listTasks: () =>
@@ -2469,7 +2453,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await directMergeRouter.invoke("task_direct_merge_complete", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         removeWorktree: true,
       }),
@@ -2480,6 +2465,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("links a merged pull request through the host router", async () => {
+    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
     const removedMergedWorktreePaths: string[] = [];
     const mergedPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -2502,27 +2488,25 @@ describe("createElectronHostCommandRouter", () => {
           }),
         pathIsWithinRoot: () => Effect.succeed(false),
       },
-      settingsConfig: createSettingsConfig(
-        globalConfig({
-          workspaces: {
-            repo: repoConfig({
-              git: {
-                provider: {
-                  id: "github",
-                  enabled: true,
-                  repository: {
-                    host: "github.com",
-                    owner: "acme",
-                    name: "repo",
-                  },
-                  autoDetected: false,
+      config: globalConfig({
+        workspaces: {
+          repo: repoConfig({
+            git: {
+              provider: {
+                id: "github",
+                enabled: true,
+                repository: {
+                  host: "github.com",
+                  owner: "acme",
+                  name: "repo",
                 },
+                autoDetected: false,
               },
-            }),
-          },
-          workspaceOrder: ["repo"],
-        }),
-      ),
+            },
+          }),
+        },
+        workspaceOrder: ["repo"],
+      }),
       systemCommands: createSystemCommands(),
       taskStore: withGetTaskFromList({
         ...createTaskStore(),
@@ -2577,7 +2561,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await mergedPullRequestRouter.invoke("task_pull_request_link_merged", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         pullRequest: {
           providerId: "github",
@@ -2594,7 +2579,7 @@ describe("createElectronHostCommandRouter", () => {
       id: "task-1",
       status: "closed",
     });
-    expect(removedMergedWorktreePaths).toEqual(["/home/dev/.openducktor/worktrees/repo/task-1"]);
+    expect(removedMergedWorktreePaths).toEqual([path.join(worktreeBasePath, "task-1")]);
   });
 
   test("blocks a build and updates a task through the host router", async () => {
@@ -2603,14 +2588,12 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
       taskStore: createTaskStore(),
     });
     const blockRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
       taskStore: withGetTaskFromList({
         ...createTaskStore(),
         listTasks: () =>
@@ -2664,7 +2647,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await blockRouter.invoke("build_blocked", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         reason: "Blocked by dependency",
       }),
@@ -2675,7 +2659,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     expect(
       await router.invoke("task_update", {
-        repoPath: "/repo",
+        workspaceId: "repo",
+        repoPath,
         taskId: "task-1",
         patch: { title: "Updated task" },
       }),
@@ -2698,10 +2683,6 @@ describe("createElectronHostCommandRouter", () => {
       workspaces: { repo: repoConfig() },
       workspaceOrder: ["repo"],
     });
-    const settingsConfig: SettingsConfigPort = {
-      ...createSettingsConfig(config),
-      pathExists: (path) => Effect.succeed(path === "/repo"),
-    };
     const runtimeStarter = createRuntimeStarter();
     const worktreeFiles: WorktreeFilePort = {
       ensureDirectory: () => Effect.succeed(undefined),
@@ -2718,7 +2699,7 @@ describe("createElectronHostCommandRouter", () => {
       openInTools: createOpenInTools(),
       runtimeHealth: createRuntimeHealth(),
       runtimeStarter,
-      settingsConfig,
+      config,
       taskStore: createTaskStore(),
       worktreeFiles,
     });
@@ -2728,13 +2709,14 @@ describe("createElectronHostCommandRouter", () => {
       await waitForRuntimeState(router, ["opencode"], "ready");
       expect(
         await router.invoke("build_start", {
-          repoPath: "/repo",
+          workspaceId: "repo",
+          repoPath,
           taskId: "task-1",
           runtimeKind: "opencode",
         }),
       ).toEqual({
         runtimeKind: "opencode",
-        workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
+        workingDirectory: path.join(worktreeBasePath, "task-1"),
       });
       expect(runtimeStarter.starts.map((start) => start.runtimeKind)).toEqual(["opencode"]);
     } finally {

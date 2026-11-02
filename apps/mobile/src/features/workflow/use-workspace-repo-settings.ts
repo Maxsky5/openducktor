@@ -28,7 +28,7 @@ export function useWorkspaceRepoSettings(workspace: WorkspaceRecord) {
   const { workspaceId, repoPath } = workspace;
   const config = useQuery({ ...repoConfigQueryOptions(workspaceId), refetchOnMount: "always" });
   const branches = useQuery(repoBranchesQueryOptions(repoPath));
-  const provider = useQuery(repositoryGitProviderContextQueryOptions(repoPath));
+  const provider = useQuery(repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }));
   const repoSettings = useMemo<RepoSettingsInput | null>(
     () => (config.data ? toRepoSettingsInput(config.data) : null),
     [config.data],
@@ -36,10 +36,10 @@ export function useWorkspaceRepoSettings(workspace: WorkspaceRecord) {
   const loadGitProviderContext = useCallback(
     (): Promise<RepositoryGitProviderContext> =>
       queryClient.fetchQuery({
-        ...repositoryGitProviderContextQueryOptions(repoPath),
+        ...repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }),
         staleTime: 0,
       }),
-    [queryClient, repoPath],
+    [queryClient, repoPath, workspaceId],
   );
   const { refetch } = config;
   const retryRepoSettings = useCallback(async () => {

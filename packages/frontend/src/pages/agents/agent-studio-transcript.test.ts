@@ -22,6 +22,7 @@ describe("agent studio transcript", () => {
     expect(
       toAgentStudioTranscriptTarget({
         identity,
+        workspaceId: "workspace-1",
         taskId: "openducktor-1234",
         role: "build",
       }),
@@ -29,6 +30,7 @@ describe("agent studio transcript", () => {
       ...identity,
       sessionScope: {
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "openducktor-1234",
         role: "build",
       },

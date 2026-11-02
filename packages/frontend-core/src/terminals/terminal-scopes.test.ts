@@ -61,6 +61,7 @@ describe("useTaskTerminalScope", () => {
     const view = renderHook(
       () =>
         useTaskTerminalScope({
+          workspaceId: "repo",
           key: "task",
           repoPath: "/repo",
           taskId: "task-1",
@@ -72,7 +73,7 @@ describe("useTaskTerminalScope", () => {
     await waitFor(() =>
       expect(view.result.current.scope).toEqual({
         key: "task",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
         workingDirectory: "/worktrees/task-1",
         workingDirectoryError: "Task task-1 has no available worktree.",
       }),
@@ -86,7 +87,14 @@ describe("useTaskTerminalScope", () => {
     const wrapper = ({ children }: PropsWithChildren) =>
       createElement(ClientConnectionProvider, { connection }, children);
     const view = renderHook(
-      () => useTaskTerminalScope({ key: null, repoPath: "/repo", taskId: null, taskVersion: null }),
+      () =>
+        useTaskTerminalScope({
+          workspaceId: "repo",
+          key: null,
+          repoPath: "/repo",
+          taskId: null,
+          taskVersion: null,
+        }),
       { wrapper },
     );
     expect(view.result.current.scope).toBeNull();
@@ -112,6 +120,7 @@ describe("useTaskTerminalScope", () => {
     const view = renderHook(
       () =>
         useTaskTerminalScope({
+          workspaceId: "repo",
           key: "task",
           repoPath: "/repo",
           taskId: "task-1",

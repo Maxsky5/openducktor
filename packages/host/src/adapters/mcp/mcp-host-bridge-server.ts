@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../../application/tasks/support/scoped-repo-config";
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
@@ -35,6 +36,7 @@ import { bridgeErrorPayload, bridgeMessagePayload } from "./mcp-host-bridge-erro
 export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
 
 export type McpHostBridgeConnectionInput = {
+  workspaceId?: string;
   repoPath: string;
 };
 
@@ -439,13 +441,18 @@ export const createMcpHostBridgeServer = ({
   return {
     ensureConnection(input) {
       return Effect.gen(function* () {
-        const repoConfig = yield* workspaceSettingsService
-          .getRepoConfigByRepoPath(input.repoPath)
-          .pipe(
-            Effect.mapError((cause) =>
-              toMcpHostBridgeError(cause, "mcpHostBridge.getRepoConfigByRepoPath"),
-            ),
-          );
+        const repoConfig = yield* (
+          input.workspaceId === undefined
+            ? workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath)
+            : getScopedRepoConfig(workspaceSettingsService, {
+                workspaceId: input.workspaceId,
+                repoPath: input.repoPath,
+              })
+        ).pipe(
+          Effect.mapError((cause) =>
+            toMcpHostBridgeError(cause, "mcpHostBridge.getRepoConfigByRepoPath"),
+          ),
+        );
         const connection = yield* ensureStarted();
         return {
           workspaceId: repoConfig.workspaceId,

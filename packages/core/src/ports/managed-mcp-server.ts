@@ -5,4 +5,7 @@ export type ManagedMcpServer = {
 };
 
 /** Resolves the managed MCP server for the workspace that owns `repoPath`. */
-export type ManagedMcpServerResolver = (repoPath: string) => Promise<ManagedMcpServer>;
+export type ManagedMcpServerResolver = (
+  repoPath: string,
+  workspaceId?: string,
+) => Promise<ManagedMcpServer>;

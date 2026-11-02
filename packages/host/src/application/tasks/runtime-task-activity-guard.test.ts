@@ -28,7 +28,12 @@ const createRuntimeTaskActivityGuard = (
             runtimeKind: "opencode",
             workingDirectory: "/repo/worktree",
             externalSessionId: "external-build-session",
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
           },
         ])),
     settingsConfig: {
@@ -156,8 +161,24 @@ describe("createRuntimeTaskActivityGuard", () => {
       }),
       readSessionRootRefs: () =>
         Effect.succeed([
-          { ...root.ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
-          { ...otherTask.ref, sessionScope: { kind: "workflow", taskId: "task-2", role: "build" } },
+          {
+            ...root.ref,
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
+          },
+          {
+            ...otherTask.ref,
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-2",
+              role: "build",
+            },
+          },
           { ...workspace.ref, sessionScope: { kind: "repository" } },
         ]),
       sessionService: {
@@ -477,9 +498,17 @@ describe("createRuntimeTaskActivityGuard", () => {
         Effect.succeed([
           {
             ...buildSnapshot.ref,
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
           },
-          { ...qaSnapshot.ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" } },
+          {
+            ...qaSnapshot.ref,
+            sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
+          },
         ]),
     });
 

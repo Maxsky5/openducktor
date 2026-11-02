@@ -112,6 +112,7 @@ export const toWorkflowSessionRef = (
   return {
     ...toRuntimeSessionRef(repoPath, session),
     sessionScope: workflowAgentSessionScope(
+      session.sessionAssociation.workspaceId,
       session.sessionAssociation.taskId,
       session.sessionAssociation.role,
     ),

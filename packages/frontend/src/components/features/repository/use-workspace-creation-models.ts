@@ -1,9 +1,4 @@
-import type {
-  AgentModelFavorite,
-  RuntimeDescriptor,
-  RuntimeKind,
-  SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { AgentModelFavorite, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo, useState } from "react";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
@@ -37,7 +32,7 @@ export function useWorkspaceCreationModels({
 }: {
   repoPath: string;
   active: boolean;
-  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<AgentModelFavorite[]>;
 }): WorkspaceCreationModelSurface {
   const runtime = useRuntimeAvailabilityContext();
   const host = useHostClient();

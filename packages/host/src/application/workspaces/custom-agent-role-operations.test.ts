@@ -4,17 +4,23 @@ import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 
 const setup = () => {
   let config = globalConfigSchema.parse({ version: 4 });
   const service = createWorkspaceSettingsService(
     createSettingsConfigTestDouble({
       readConfig: () => Effect.sync(() => structuredClone(config)),
-      writeConfig: (next) =>
+      updateConfig: (change) =>
         Effect.sync(() => {
-          config = structuredClone(next);
+          config = change(
+            structuredClone(config),
+            Object.values(structuredClone(config).workspaces),
+          );
+          return config;
         }),
     }),
+    builtinTaskWorkflows,
   );
   return { service, config: () => config };
 };
@@ -83,17 +89,14 @@ describe("global Custom Agent Roles", () => {
 
   test("serializes role and settings writes without losing either change", async () => {
     const { service, config } = setup();
-    const { customAgentRoles, ...snapshot } = await Effect.runPromise(
-      service.getSettingsSnapshot(),
-    );
+    const { customAgentRoles } = await Effect.runPromise(service.getSettingsSnapshot());
     expect(customAgentRoles).toEqual([]);
     await Effect.runPromise(
       Effect.all(
         [
           service.createCustomAgentRole({ name: "One", systemPrompt: "One" }),
           saveSettingsSnapshot(service, {
-            ...snapshot,
-            chat: { ...snapshot.chat, showThinkingMessages: true },
+            global: { chat: { showThinkingMessages: true } },
           }),
           service.createCustomAgentRole({ name: "Two", systemPrompt: "Two" }),
         ],

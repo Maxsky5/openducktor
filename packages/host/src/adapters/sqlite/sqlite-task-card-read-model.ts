@@ -1,63 +1,68 @@
+import { sqliteValues } from "./sqlite-parameters";
 import {
   gitTargetBranchSchema,
-  pullRequestSchema,
-  sourceIssueReferenceSchema,
   type TaskArtifactSummary,
   taskCardSchema,
 } from "@openducktor/contracts";
-import { type SQL, inArray, gte, or, notInArray } from "drizzle-orm";
-import type { TaskWorkflow } from "@openducktor/workflows";
+import { type SQL, eq, inArray, gte, or, notInArray } from "drizzle-orm";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Effect } from "effect";
+import { HostResourceError } from "../../effect/host-errors";
+import { normalizeLabels } from "../../domain/task/task-labels";
 import type { TaskRecord, TaskStoreListTasksInput } from "../../ports/task-repository-ports";
-import {
-  decodeWithSchema,
-  labelsFromRow,
-  optionalJsonFromRow,
-  validateWithSchema,
-} from "./sqlite-json-codecs";
-import {
-  artifactSummariesByTaskId,
-  artifactSummary,
-} from "./sqlite-task-workflow-artifact-queries";
-import { getTaskRow, requireTaskRow, taskRows } from "./sqlite-task-queries";
+import { validateWithSchema } from "./sqlite-task-store-validation";
+import { artifactSummariesByTaskId } from "./sqlite-task-workflow-artifact-queries";
+import { taskCardRows, type TaskCardRow } from "./sqlite-task-queries";
 import { hostTerminalStates } from "./sqlite-task-repository-context";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
-import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+import { type HostDatabaseSession, tasks } from "./sqlite-host-database-schema";
+import { pullRequestFromRow } from "./sqlite-task-delivery-rows";
 
 const taskRecordSchema = taskCardSchema.omit({ availableActions: true, agentWorkflows: true });
 
 export const getTaskRecord = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
   repoPath: string,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const row = yield* requireTaskRow(session, taskId, repoPath);
-    return yield* rowToTaskRecord(session, row, taskWorkflows.forTask(row));
+    const task = yield* findTaskRecord(session, workspaceId, taskId, taskWorkflows);
+    if (task === null) {
+      return yield* new HostResourceError({
+        resource: "task",
+        operation: "sqliteTaskRepository.getTask",
+        message: `Task not found: ${taskId}`,
+        details: { repoPath, taskId },
+      });
+    }
+    return task;
   });
 
 export const findTaskRecord = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const row = yield* getTaskRow(session, taskId);
-    return row === null ? null : yield* rowToTaskRecord(session, row, taskWorkflows.forTask(row));
+    const rows = yield* taskCardRows(session, workspaceId, eq(tasks.id, taskId));
+    const cards = yield* rowsToTaskRecords(session, workspaceId, rows, taskWorkflows);
+    return cards[0] ?? null;
   });
 
 /** A Kanban list hides tasks in terminal states after the done visible days. */
 export const listTasksInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: TaskStoreListTasksInput,
   now: () => Date,
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (input.taskIds !== undefined) {
-      return yield* readChangedCards(session, input.taskIds, taskWorkflows);
+      return yield* readChangedCards(session, workspaceId, input.taskIds, taskWorkflows);
     }
     let where: SQL | undefined;
     if (input.doneVisibleDays !== undefined) {
@@ -65,74 +70,75 @@ export const listTasksInDatabase = (
       const open = notInArray(tasks.status, hostTerminalStates(taskWorkflows));
       where = input.doneVisibleDays > 0 ? or(open, gte(tasks.updatedAt, cutoff)) : open;
     }
-    return yield* rowsToTaskRecords(session, yield* taskRows(session, where), taskWorkflows);
+    return yield* rowsToTaskRecords(
+      session,
+      workspaceId,
+      yield* taskCardRows(session, workspaceId, where),
+      taskWorkflows,
+    );
   });
 
-/** Read full cards for changed tasks. */
 const readChangedCards = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskIds: readonly string[],
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (taskIds.length === 0) return [];
-    const rows = yield* taskRows(session, inArray(tasks.id, [...taskIds]));
-    return yield* rowsToTaskRecords(session, rows, taskWorkflows);
+    const rows = yield* taskCardRows(
+      session,
+      workspaceId,
+      inArray(tasks.id, sqliteValues([...taskIds])),
+    );
+    return yield* rowsToTaskRecords(session, workspaceId, rows, taskWorkflows);
   });
 
 const rowsToTaskRecords = (
-  session: TaskStoreSession,
-  rows: readonly TaskRow[],
+  session: HostDatabaseSession,
+  workspaceId: string,
+  rows: readonly TaskCardRow[],
   taskWorkflows: TaskWorkflowResolver,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const workflows = new Map(rows.map((row) => [row.id, taskWorkflows.forTask(row)]));
-    const summaries = yield* artifactSummariesByTaskId(session, workflows);
-    return yield* Effect.forEach(rows, (row) =>
-      rowToTaskRecord(session, row, taskWorkflows.forTask(row), summaries.get(row.id)),
-    );
+    const workflows = new Map(rows.map(({ task }) => [task.id, taskWorkflows.forTask(task)]));
+    const summaries = yield* artifactSummariesByTaskId(session, workspaceId, workflows);
+    return yield* Effect.forEach(rows, (row) => rowToTaskRecord(row, summaries.get(row.task.id)));
   });
 
 const rowToTaskRecord = (
-  session: TaskStoreSession,
-  row: TaskRow,
-  workflow: TaskWorkflow,
-  savedSummary?: TaskArtifactSummary,
+  { task: row, labels, pullRequest, sourceIssue }: TaskCardRow,
+  artifactSummary: TaskArtifactSummary | undefined,
 ): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const targetBranch = yield* optionalJsonFromRow(row, "targetBranchJson", (value) =>
-      decodeWithSchema(gitTargetBranchSchema, value, "target_branch_json", { taskId: row.id }),
-    );
-    const pullRequest = yield* optionalJsonFromRow(row, "pullRequestJson", (value) =>
-      decodeWithSchema(pullRequestSchema, value, "pull_request_json", { taskId: row.id }),
-    );
-    const sourceIssue =
-      row.sourceProviderId === null
+    const targetBranch =
+      row.targetBranch === null
         ? undefined
         : yield* validateWithSchema(
-            sourceIssueReferenceSchema,
-            {
-              providerId: row.sourceProviderId,
-              scope: row.sourceScope,
-              sourceId: row.sourceId,
-              number: row.sourceNumber,
-              url: row.sourceUrl,
-            },
-            "source issue reference",
-            { taskId: row.id },
+            gitTargetBranchSchema,
+            { branch: row.targetBranch, remote: row.targetRemote ?? undefined },
+            "target branch",
+            { workspaceId: row.workspaceId, taskId: row.id },
           );
-    const labels = yield* labelsFromRow(row);
-    const summary = savedSummary ?? (yield* artifactSummary(session, row.id, workflow));
-    const taskCard: TaskRecord = {
+    const taskCard = {
       createdAt: row.createdAt.toISOString(),
       description: row.description ?? "",
-      artifactSummary: summary,
+      artifactSummary,
       id: row.id,
       issueType: row.issueType,
-      labels,
+      labels: normalizeLabels(labels),
       priority: row.priority,
-      pullRequest,
-      sourceIssue,
+      pullRequest: pullRequest === null ? undefined : pullRequestFromRow(pullRequest),
+      sourceIssue:
+        sourceIssue === null
+          ? undefined
+          : {
+              providerId: sourceIssue.providerId,
+              scope: sourceIssue.providerScope,
+              sourceId: sourceIssue.externalId,
+              number: sourceIssue.displayNumber,
+              url: sourceIssue.url,
+            },
       status: row.status,
       targetBranch,
       title: row.title,

@@ -116,6 +116,7 @@ export function createDefaultNotificationSettings(
 }
 
 const notificationRepoTargetFields = {
+  workspaceId: z.string().trim().min(1).optional(),
   repoPath: agentSessionLiveRefSchema.shape.repoPath,
 } as const;
 
@@ -169,6 +170,7 @@ export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [
 export type NotificationNavigationTarget = z.infer<typeof notificationNavigationTargetSchema>;
 
 export const notificationOccurrenceSchema = z.strictObject({
+  workspaceId: z.string().trim().min(1).optional(),
   occurrenceId: withMaxUtf16Length(z.string().trim().min(1), 1024),
   kind: notificationKindSchema,
   repoPath: agentSessionLiveRefSchema.shape.repoPath,

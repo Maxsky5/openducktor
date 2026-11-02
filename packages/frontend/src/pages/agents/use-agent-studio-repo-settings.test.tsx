@@ -31,8 +31,9 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 
 const createRepoConfigHost = (
   loadRepoConfig: (workspaceId: string) => Promise<RepoConfig> = async () => createRepoConfig(),
-  loadProviderContext: (repoPath: string) => Promise<RepositoryGitProviderContext> = async () =>
-    null,
+  loadProviderContext: (
+    scope: import("@openducktor/contracts").WorkspaceRef,
+  ) => Promise<RepositoryGitProviderContext> = async () => null,
 ) => ({
   workspaceGetRepoConfig: mock(loadRepoConfig),
   workspaceGetGitProviderContext: mock(loadProviderContext),
@@ -124,7 +125,10 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.mount();
     await harness.waitFor((state) => state.gitProvider.context !== undefined);
 
-    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledWith("/repo");
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledWith({
+      workspaceId: "workspace-repo",
+      repoPath: "/repo",
+    });
     expect(harness.getLatest().gitProvider.context).toEqual(context);
 
     await harness.unmount();

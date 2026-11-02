@@ -327,7 +327,8 @@ function ChatPreviewHarness(): ReactElement {
   useEffect(() => {
     for (const id of ["a", "b"])
       client.setQueryData(
-        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: id }).queryKey,
+        taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: id })
+          .queryKey,
         () => ({ workingDirectory: `/repo/${id}` }),
       );
   }, [client]);
@@ -337,7 +338,13 @@ function ChatPreviewHarness(): ReactElement {
         Select Task B
       </button>
       <ChatFileLinkProvider
-        owner={{ repoPath: "/repo", taskId, ownerKey: taskId, onSelectFile: preview.onSelectFile }}
+        owner={{
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId,
+          ownerKey: taskId,
+          onSelectFile: preview.onSelectFile,
+        }}
       >
         <div data-testid="chat-transcript" hidden={preview.model.selectedFile !== null}>
           <AgentChatMarkdownRenderer markdown="[first file](src/first.ts:42) and [second file](src/second.ts)" />
@@ -361,6 +368,7 @@ function WindowsTranscriptPreview({
 }): ReactElement {
   const preview = useTaskExecutionFilePreviewController();
   const common = {
+    workspaceId: "workspace-1",
     repoPath: "C:/repo",
     workingDirectory: "C:/repo/task",
     ownerKey: "main",
@@ -1532,6 +1540,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
           <ChatFileLinkProvider
             owner={{
               kind: "workspace",
+              workspaceId: "workspace-1",
               repoPath: "/repo",
               workingDirectory: "/repo-alias",
               ownerKey: "session",

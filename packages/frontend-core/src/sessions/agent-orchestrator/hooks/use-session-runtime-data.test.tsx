@@ -65,7 +65,12 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   const identity = sessionIdentity(overrides);
   return {
     ...identity,
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
     status: "idle",
     runtimeStatusMessage: null,
     startedAt: "2026-06-12T08:00:00.000Z",
@@ -344,7 +349,12 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         workingDirectory: "/repo",
       });
       expect(harness.getLatest().todos).toEqual([todoFixture]);

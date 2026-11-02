@@ -3,7 +3,6 @@ import {
   notificationSettingsSchema,
   type AgentSessionLiveEnvelope,
   type ExternalTaskSyncEvent,
-  type GlobalConfig,
   type NotificationActionOccurrence,
   type NotificationOccurrence,
   type NotificationSettings,
@@ -17,9 +16,8 @@ import { HostOperationError, type HostError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { SettingsConfigView, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import { loadGlobalConfig } from "../workspaces/workspace-settings-model";
 import { openWorkspaceRecordsInEffectiveOrder } from "../workspaces/workspace-catalog-model";
 import { createNotificationStream } from "./notification-stream";
 import {
@@ -52,7 +50,7 @@ export const createNotificationService = ({
   let preferences: NotificationSettings | null = null;
   let preferenceRevision = 0;
   let stopped = false;
-  let committedConfig: GlobalConfig | null = null;
+  let committedConfig: SettingsConfigView | null = null;
   let startup: "pending" | "starting" | "ready" = "pending";
   let startupInputs: Array<{ repoPath: string; input: WorkspaceNotificationInput }> = [];
 
@@ -119,18 +117,22 @@ export const createNotificationService = ({
     });
   const updateWorkspaces = (records: WorkspaceRecord[]) =>
     Effect.gen(function* () {
-      const paths = new Set(records.map(({ repoPath }) => repoPath));
-      const removed = [...workspaces.values()].filter(({ record }) => !paths.has(record.repoPath));
+      const removed = [...workspaces.values()].filter(
+        ({ record }) =>
+          !records.some(
+            (next) => next.workspaceId === record.workspaceId && next.repoPath === record.repoPath,
+          ),
+      );
       // Stop all removed observers before interrupting a worker, which can yield.
       for (const { record, observer } of removed) {
         observer.deactivate();
-        workspaces.delete(record.repoPath);
+        workspaces.delete(record.workspaceId);
         for (const source of ["initialization", "task", "session"] as const)
           stream.publishHealth({ scope: record.repoPath, source, message: null });
       }
       for (const { observer } of removed) yield* observer.dispose();
       for (const record of records) {
-        const existing = workspaces.get(record.repoPath);
+        const existing = workspaces.get(record.workspaceId);
         if (existing?.observer.isActive()) {
           existing.record = record;
           existing.observer.updateRecord(record);
@@ -148,20 +150,26 @@ export const createNotificationService = ({
           recovered: (scope) =>
             stream.publishHealth({ scope, source: "initialization", message: null }),
         });
-        workspaces.set(record.repoPath, { record, observer });
+        workspaces.set(record.workspaceId, { record, observer });
         // Queue earlier inputs before starting the baseline read or accepting later live inputs.
         const pending = startupInputs;
-        startupInputs = pending.filter((entry) => entry.repoPath !== record.repoPath);
         for (const entry of pending)
-          if (entry.repoPath === record.repoPath) observer.accept(entry.input);
+          if (
+            entry.repoPath === record.repoPath &&
+            (entry.input.type !== "task" || entry.input.event.workspaceId === record.workspaceId) &&
+            (entry.input.type !== "live" ||
+              !("workspaceId" in entry.input.envelope) ||
+              entry.input.envelope.workspaceId === record.workspaceId)
+          )
+            observer.accept(entry.input);
         yield* observer.start();
       }
     });
-  const acceptConfig = (config: GlobalConfig) =>
+  const acceptPreferences = (next: NotificationSettings) =>
     Effect.gen(function* () {
       if (stopped) return;
       const settings = yield* Effect.try({
-        try: () => notificationSettingsSchema.removeDefault().parse(config.notifications),
+        try: () => notificationSettingsSchema.removeDefault().parse(next),
         catch: (cause) =>
           new HostOperationError({
             operation: "notifications.preferences",
@@ -174,6 +182,11 @@ export const createNotificationService = ({
         preferences = structuredClone(settings);
         preferenceRevision += 1;
       }
+    });
+  const acceptConfig = (config: SettingsConfigView) =>
+    Effect.gen(function* () {
+      if (stopped) return;
+      yield* acceptPreferences(config.notifications);
       if (startup !== "pending")
         yield* updateWorkspaces(openWorkspaceRecordsInEffectiveOrder(settingsConfig, config));
     });
@@ -181,7 +194,7 @@ export const createNotificationService = ({
     stream,
     initialize: () =>
       Effect.gen(function* () {
-        const config = yield* loadGlobalConfig(settingsConfig);
+        const config = yield* settingsConfig.readConfig();
         startup = "starting";
         yield* acceptConfig(committedConfig ?? config);
         startupInputs.length = 0;
@@ -189,17 +202,24 @@ export const createNotificationService = ({
       }).pipe(
         Effect.catch((cause) => Effect.sync(() => failure("application", "settings", cause))),
       ),
-    configCommitted: (config: GlobalConfig): Effect.Effect<void> =>
+    configCommitted: (config: SettingsConfigView): Effect.Effect<void> =>
       Effect.gen(function* () {
         committedConfig = structuredClone(config);
         yield* acceptConfig(config).pipe(
           Effect.catch((cause) => Effect.sync(() => failure("application", "settings", cause))),
         );
       }),
+    preferencesCommitted: (next: NotificationSettings): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (committedConfig) committedConfig = { ...committedConfig, notifications: next };
+        yield* acceptPreferences(next).pipe(
+          Effect.catch((cause) => Effect.sync(() => failure("application", "settings", cause))),
+        );
+      }),
     acceptTask(event: ExternalTaskSyncEvent) {
       if (stopped) return;
-      const state = workspaces.get(event.repoPath);
-      if (state) state.observer.accept({ type: "task", event });
+      const state = workspaces.get(event.workspaceId);
+      if (state?.record.repoPath === event.repoPath) state.observer.accept({ type: "task", event });
       else if (startup !== "ready") captureStartup(event.repoPath, { type: "task", event });
     },
     acceptLive(envelope: AgentSessionLiveEnvelope, provenance: "baseline" | "live") {
@@ -210,12 +230,16 @@ export const createNotificationService = ({
       else if (envelope.type === "transcript_event") path = envelope.event.sessionRef.repoPath;
       else path = "repoPath" in envelope ? envelope.repoPath : null;
       if (!path) return;
-      const state = workspaces.get(path);
-      if (!state) {
+      const matches = [...workspaces.values()].filter(
+        (state) =>
+          state.record.repoPath === path &&
+          (!("workspaceId" in envelope) || envelope.workspaceId === state.record.workspaceId),
+      );
+      if (matches.length === 0) {
         if (startup !== "ready") captureStartup(path, { type: "live", envelope, provenance });
         return;
       }
-      state.observer.accept({ type: "live", envelope, provenance });
+      for (const state of matches) state.observer.accept({ type: "live", envelope, provenance });
     },
     acceptWorkspaceSession(workspaceId: string, session: WorkspaceSession) {
       for (const state of workspaces.values())
@@ -224,9 +248,35 @@ export const createNotificationService = ({
     },
     publishAction(
       occurrence: NotificationActionOccurrence,
+      workspaceId?: string,
     ): Effect.Effect<SelectedNotification, HostError> {
       return Effect.gen(function* () {
-        const state = workspaces.get(occurrence.repoPath);
+        if (
+          workspaceId !== undefined &&
+          occurrence.workspaceId !== undefined &&
+          workspaceId !== occurrence.workspaceId
+        )
+          return yield* new HostOperationError({
+            operation: "notifications.action",
+            message: "Notification workspace identities do not match. Reload the application.",
+          });
+        workspaceId ??=
+          occurrence.workspaceId ??
+          ("workspaceId" in occurrence.navigationTarget
+            ? occurrence.navigationTarget.workspaceId
+            : undefined);
+        const candidates = [...workspaces.values()].filter(
+          (state) =>
+            state.record.repoPath === occurrence.repoPath &&
+            (workspaceId === undefined || state.record.workspaceId === workspaceId),
+        );
+        if (candidates.length > 1)
+          return yield* new HostOperationError({
+            operation: "notifications.action",
+            message:
+              "Several workspaces use this repository. Publish the notification with its workspace identity.",
+          });
+        const state = candidates[0];
         if (!state?.observer.isActive())
           return yield* new HostOperationError({
             operation: "notifications.action",
@@ -234,7 +284,9 @@ export const createNotificationService = ({
           });
         if (
           "repoPath" in occurrence.navigationTarget &&
-          occurrence.navigationTarget.repoPath !== occurrence.repoPath
+          (occurrence.navigationTarget.repoPath !== occurrence.repoPath ||
+            (occurrence.navigationTarget.workspaceId !== undefined &&
+              occurrence.navigationTarget.workspaceId !== state.record.workspaceId))
         )
           return yield* new HostOperationError({
             operation: "notifications.action",
@@ -255,6 +307,11 @@ export const createNotificationService = ({
         const previous = selections.get(boundIdentity(occurrence.occurrenceId));
         return yield* select({
           ...occurrence,
+          workspaceId: state.record.workspaceId,
+          navigationTarget:
+            occurrence.navigationTarget.type === "notification_settings"
+              ? occurrence.navigationTarget
+              : { ...occurrence.navigationTarget, workspaceId: state.record.workspaceId },
           repositoryLabel: previous?.occurrence.repositoryLabel ?? state.record.workspaceName,
         });
       });

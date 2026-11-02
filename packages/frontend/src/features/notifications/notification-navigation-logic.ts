@@ -2,6 +2,7 @@ import type {
   AgentSessionRecord,
   NotificationNavigationTarget,
   WorkspaceSession,
+  WorkspaceRef,
 } from "@openducktor/contracts";
 import {
   resolveAgentStudioDefaultRoleForTask,
@@ -48,8 +49,8 @@ type NotificationNavigationDependencies = {
   activeWorkspaceId: string | null;
   workspaces: Array<{ workspaceId: string; repoPath: string }>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
-  loadTasks: (repoPath: string) => Promise<TaskCard[]>;
-  loadTaskSessions: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
+  loadTasks: (workspace: WorkspaceRef) => Promise<TaskCard[]>;
+  loadTaskSessions: (workspace: WorkspaceRef, taskId: string) => Promise<AgentSessionRecord[]>;
   loadWorkspaceSessions: (workspaceId: string) => Promise<WorkspaceSession[]>;
   navigate: (href: string, options?: { state?: unknown }) => void;
   reportStale: (message: string) => void;
@@ -65,7 +66,18 @@ export const navigateToNotificationTarget = async (
     dependencies.openSettings();
     return;
   }
-  const workspace = dependencies.workspaces.find((entry) => entry.repoPath === target.repoPath);
+  const matches = dependencies.workspaces.filter(
+    (entry) =>
+      entry.repoPath === target.repoPath &&
+      (target.workspaceId === undefined || entry.workspaceId === target.workspaceId),
+  );
+  if (matches.length > 1) {
+    dependencies.reportStale(
+      "Several workspaces use this repository. Open this task from its workspace.",
+    );
+    return;
+  }
+  const workspace = matches[0];
   if (!workspace) {
     dependencies.reportStale("The repository is not loaded in OpenDucktor.");
     return;
@@ -112,7 +124,7 @@ export const navigateToNotificationTarget = async (
     return;
   }
 
-  const [tasks] = await Promise.all([dependencies.loadTasks(target.repoPath), workspaceSelection]);
+  const [tasks] = await Promise.all([dependencies.loadTasks(workspace), workspaceSelection]);
   const task = tasks.find((entry) => entry.id === taskId);
   if (!task) {
     dependencies.reportStale(`Task ${taskId} no longer exists in this repository.`);
@@ -138,7 +150,7 @@ export const navigateToNotificationTarget = async (
     return;
   }
 
-  const sessions = await dependencies.loadTaskSessions(target.repoPath, taskId);
+  const sessions = await dependencies.loadTaskSessions(workspace, taskId);
   const session = sessions.find((entry) => matchesNotificationSession(entry, target));
   if (!session) {
     dependencies.reportStale("The exact Agent Session is no longer available.");

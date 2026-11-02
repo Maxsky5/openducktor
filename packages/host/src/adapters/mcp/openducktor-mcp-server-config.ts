@@ -19,6 +19,7 @@ type OpenDucktorMcpServerConfig = {
 /** Resolves the managed MCP server for the workspace that owns `repoPath`. */
 export type OpenDucktorMcpServerConfigResolver = (
   repoPath: string,
+  workspaceId?: string,
 ) => Effect.Effect<OpenDucktorMcpServerConfig, HostError>;
 
 export const createOpenDucktorMcpServerConfigResolver = ({
@@ -33,7 +34,7 @@ export const createOpenDucktorMcpServerConfigResolver = ({
   toolDiscovery: ToolDiscoveryPort;
 }): OpenDucktorMcpServerConfigResolver => {
   const runtimeName = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label;
-  return (repoPath) =>
+  return (repoPath, workspaceId) =>
     Effect.gen(function* () {
       const bridge = resolveBridge();
       if (!bridge) {
@@ -43,7 +44,10 @@ export const createOpenDucktorMcpServerConfigResolver = ({
           message: `${runtimeName} workflow tools require the OpenDucktor MCP host bridge. Check the MCP bridge in Diagnostics.`,
         });
       }
-      const connection = yield* bridge.ensureConnection({ repoPath });
+      const connection = yield* bridge.ensureConnection({
+        repoPath,
+        ...(workspaceId !== undefined && { workspaceId }),
+      });
       const [binary, ...args] = yield* resolveOpenDucktorMcpCommand({
         runtimeDistribution,
         toolDiscovery,

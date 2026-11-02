@@ -49,7 +49,7 @@ export const codexSessionRef = (
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
-  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  sessionScope: workflowAgentSessionScope("repo", "task-1", "build"),
   runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
 });
 
@@ -61,7 +61,7 @@ export const codexSessionRuntimeRef = (
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
-  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  sessionScope: workflowAgentSessionScope("repo", "task-1", "build"),
   runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
   systemPrompt: "Use the repo rules.",
   model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -74,7 +74,7 @@ export const codexStartSessionInput = (
   repoPath: "/repo",
   runtimeKind: "codex",
   workingDirectory: "/repo",
-  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  sessionScope: workflowAgentSessionScope("repo", "task-1", "build"),
   runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
   systemPrompt: "Use the repo rules.",
   model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },

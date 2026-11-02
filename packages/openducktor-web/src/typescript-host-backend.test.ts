@@ -182,6 +182,8 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
     subscribe: () => Stream.empty,
   },
   taskEventStream: {
+    cursor: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 }),
+    reset: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 }),
     acknowledge: () => {},
     publish: () => ({ epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 }),
     subscribe: () => ({
@@ -1457,6 +1459,8 @@ describe("TypeScript web host backend", () => {
     const eventBus = new BufferedHostEventBus({
       report: ({ cause }) => reported.push(cause),
     });
+    const observed: unknown[] = [];
+    const stopFailures = eventBus.subscribeDeliveryFailures((value) => observed.push(value));
     const received = mock(() => {});
     const unsubscribeReceived = eventBus.subscribe("openducktor://run-event", received);
     eventBus.subscribe("openducktor://run-event", () => {
@@ -1477,6 +1481,8 @@ describe("TypeScript web host backend", () => {
       payload: { type: "autopilot_failure", failure: null },
     });
     expect(reported).toEqual([failure]);
+    expect(observed).toEqual([{ channel: "openducktor://run-event", cause: failure }]);
+    stopFailures();
     expect(eventBus.stream().replayAfter(0).events).toHaveLength(1);
   });
 

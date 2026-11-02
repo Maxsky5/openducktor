@@ -1,9 +1,12 @@
 import type { TaskChangeSet, TaskMetadataArtifact } from "@openducktor/contracts";
 import type { TaskWorkflow, TaskWorkflowArtifact } from "@openducktor/workflows";
-import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
-import { requireTaskEventInput } from "../support/task-workflow-events";
-import type { WorkflowArtifactWrite } from "../../../ports/task-repository-ports";
+import { Effect, Result } from "effect";
+import {
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
+import { decideTaskEventInput, decisionTransition } from "../support/task-workflow-events";
+import type { AtomicWorkflowArtifactWrite, TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorkflowArtifactInput, WorkflowArtifactSaveInput } from "../task-inputs";
 import type { CreateTaskServiceInput, TaskServiceError } from "../task-service";
 
@@ -33,8 +36,8 @@ const requireVerdict = (
 ) => {
   if (artifact.kind !== "review") {
     return verdict === undefined
-      ? Effect.succeed(undefined)
-      : Effect.fail(
+      ? Result.succeed(undefined)
+      : Result.fail(
           new HostValidationError({
             field: "verdict",
             message: `${artifact.label} has no verdicts. Save it without a verdict.`,
@@ -43,8 +46,8 @@ const requireVerdict = (
   }
   const declared = artifact.verdicts.find((candidate) => candidate.id === verdict);
   return declared && submit
-    ? Effect.succeed(declared)
-    : Effect.fail(
+    ? Result.succeed(declared)
+    : Result.fail(
         new HostValidationError({
           field: "verdict",
           message: `Submit the ${artifact.label} with one verdict: ${artifact.verdicts.map(({ id }) => id).join(" or ")}.`,
@@ -71,13 +74,7 @@ export const createWorkflowArtifactUseCases = ({
   workflowArtifactGet(
     input: WorkflowArtifactInput,
   ): Effect.Effect<TaskMetadataArtifact, TaskServiceError> {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, code } = input;
-      const task = yield* taskStore.getTask({ repoPath, taskId });
-      yield* requireWorkflowArtifact(taskWorkflows.forTask(task), code);
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      return metadata.artifacts[code] ?? { markdown: "" };
-    });
+    return taskStore.getWorkflowArtifact(input);
   },
 
   /** An artifact and the transition of its event commit together. A draft sends no event. */
@@ -86,35 +83,58 @@ export const createWorkflowArtifactUseCases = ({
   ): Effect.Effect<WorkflowArtifactSaveResult, TaskServiceError> {
     return Effect.gen(function* () {
       const { repoPath, taskId, code, markdown, submit, sourceTool, updatedBy } = input;
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const artifact = yield* requireWorkflowArtifact(workflow, code);
       yield* requireRoleWrites(workflow, code, updatedBy);
-      const verdict = yield* requireVerdict(artifact, input.verdict, submit);
-      const save: WorkflowArtifactWrite = {
+      const verdict = yield* Effect.fromResult(requireVerdict(artifact, input.verdict, submit));
+      const save: AtomicWorkflowArtifactWrite<HostValidationErrorAggregate> = {
+        workspaceId: input.workspaceId,
         repoPath,
         taskId,
         code,
         markdown,
         sourceTool,
         updatedBy,
+        decide: (current: TaskRecord) => {
+          const workflow = taskWorkflows.forTask(current);
+          const artifact = workflow.artifact(code);
+          if (
+            !artifact ||
+            (updatedBy !== "user" &&
+              (!workflow.hasRole(updatedBy) || !workflow.role(updatedBy).writes.includes(code)))
+          ) {
+            return Result.fail(
+              new HostValidationError({
+                field: "code",
+                message: `The ${updatedBy} role cannot write the ${code} workflow artifact.`,
+              }),
+            );
+          }
+          const checkedVerdict = requireVerdict(artifact, input.verdict, submit);
+          if (checkedVerdict._tag === "Failure") return Result.fail(checkedVerdict.failure);
+          const eventId = submit
+            ? workflow.artifactSubmitEvent(code, checkedVerdict.success?.id)
+            : undefined;
+          return eventId === undefined
+            ? Result.succeed({ status: current.status, workflowId: workflow.definition.id })
+            : Result.map(
+                decideTaskEventInput(
+                  `Saving the ${artifact.label} is`,
+                  workflow,
+                  eventId,
+                  current,
+                  { repoPath, taskId, code, issueType: current.issueType, status: current.status },
+                ),
+                (decision) => ({
+                  ...decisionTransition(decision),
+                  workflowId: workflow.definition.id,
+                }),
+              );
+        },
       };
-      const eventId = submit ? workflow.artifactSubmitEvent(code, verdict?.id) : undefined;
-      if (eventId !== undefined) {
-        const decision = yield* requireTaskEventInput(
-          `Saving the ${artifact.label} is`,
-          workflow,
-          eventId,
-          current,
-          { repoPath, taskId, code, issueType: current.issueType, status: current.status },
-        );
-        if (verdict) save.verdict = verdict.id;
-        if (decision.kind === "transition") {
-          save.status = decision.to;
-          save.cause = decision.cause;
-        }
-      }
-      const saved = yield* taskStore.saveWorkflowArtifact(save);
+      if (verdict) save.verdict = verdict.id;
+      const saved = yield* taskStore.saveWorkflowArtifact<HostValidationErrorAggregate>(save);
       return { artifact: saved.artifact, changes: { taskIds: [taskId], removedTaskIds: [] } };
     });
   },

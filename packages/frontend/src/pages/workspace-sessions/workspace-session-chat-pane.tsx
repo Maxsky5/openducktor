@@ -77,12 +77,20 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
   const owner = useMemo<ChatFileLinkOwner>(
     () => ({
       kind: "workspace",
+      workspaceId: workspace.workspaceId,
       repoPath: workspace.repoPath,
       workingDirectory,
       ownerKey: `${record.id}:${branchKey}`,
       onSelectFile,
     }),
-    [branchKey, onSelectFile, record.id, workingDirectory, workspace.repoPath],
+    [
+      branchKey,
+      onSelectFile,
+      record.id,
+      workingDirectory,
+      workspace.repoPath,
+      workspace.workspaceId,
+    ],
   );
   const settings = useQuery(settingsSnapshotQueryOptions());
   const { chatSettings, chatSettingsError, retryChatSettingsLoad } = useWorkspaceChatSettings({

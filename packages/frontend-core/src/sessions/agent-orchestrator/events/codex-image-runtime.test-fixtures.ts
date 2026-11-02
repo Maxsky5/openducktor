@@ -10,7 +10,7 @@ export const imageSessionRef = (
   workingDirectory: "/repo",
   runtimeKind: "codex",
   externalSessionId: `thread-${runtimeId}`,
-  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  sessionScope: workflowAgentSessionScope("workspace-1", "task-1", "build"),
   runtimePolicy: {
     kind: "codex",
     policy: { ...DEFAULT_CODEX_RUNTIME_POLICY, approvalsReviewerApplies: true },
@@ -18,7 +18,7 @@ export const imageSessionRef = (
 });
 export const imageSessionInput = (runtimeId: string): StartAgentSessionInput => ({
   ...imageSessionRef(runtimeId),
-  sessionScope: workflowAgentSessionScope("task-1", "build"),
+  sessionScope: workflowAgentSessionScope("workspace-1", "task-1", "build"),
   systemPrompt: "Use the repo rules.",
   model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
 });

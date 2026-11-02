@@ -1,20 +1,10 @@
 import {
-  type AgentRuntimes,
-  knownRuntimeKindValues,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeLifecycleImpact,
   type RuntimeSettingsApplication,
 } from "@openducktor/contracts";
 import type { RuntimeImpactPathChange } from "@/components/features/runtimes/runtime-impact-dialog";
 import type { SettingsSaveOutcome } from "@/types/state-slices";
-
-/** A save changes a runtime lifecycle only through `enabled` or `executablePath`. */
-export const hasRuntimeLifecycleChange = (before: AgentRuntimes, after: AgentRuntimes): boolean =>
-  knownRuntimeKindValues.some(
-    (kind) =>
-      before[kind].enabled !== after[kind].enabled ||
-      before[kind].executablePath !== after[kind].executablePath,
-  );
 
 export const runtimeImpactPathChanges = (
   impact: RuntimeLifecycleImpact,
@@ -36,6 +26,10 @@ export const requireSavedSettings = (
   result: SettingsSaveOutcome,
 ): Extract<SettingsSaveOutcome, { type: "saved" }> => {
   if (result.type === "saved") return result;
+  if (result.type === "partial")
+    throw new Error(
+      `Shared settings saved, but preferences did not save. ${result.preferences.message} Retry the preference changes.`,
+    );
   throw new Error(
     "This change stops live agent sessions. Open Settings to review the sessions, then save again.",
   );
@@ -43,9 +37,11 @@ export const requireSavedSettings = (
 
 /** Reports what a written save could not finish, apart from the save itself. */
 export const reportSettingsSaveFollowUps = (
-  result: Extract<SettingsSaveOutcome, { type: "saved" }>,
+  result: Extract<SettingsSaveOutcome, { type: "saved" | "partial" }>,
   warn: (title: string, description: string) => void,
 ): void => {
+  if (result.type === "partial")
+    warn("Shared settings saved, but preferences did not save", result.preferences.message);
   const failures = describeRuntimeApplicationFailures(result.runtimeApplications);
   if (failures) warn("Settings saved, but a runtime change failed", failures);
   if (result.refreshError) {

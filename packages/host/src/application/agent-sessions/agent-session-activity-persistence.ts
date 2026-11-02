@@ -2,6 +2,7 @@ import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
   TaskAgentSessions,
+  WorkspaceRef,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Clock, Effect } from "effect";
@@ -30,11 +31,16 @@ type WorkspacePersistence = AgentSessionPersistencePort & {
 export const createAgentSessionActivityPersistence = ({
   tasks,
   workspace,
+  readTaskWorkspaces,
   publishTaskRecords,
 }: {
   tasks: Pick<AgentSessionRepository, "recordAgentSessionActivity">;
   workspace: WorkspacePersistence;
-  publishTaskRecords(repoPath: string, records: TaskAgentSessions): Effect.Effect<void, HostError>;
+  readTaskWorkspaces(ref: AgentSessionLiveRef): Effect.Effect<WorkspaceRef[], HostError>;
+  publishTaskRecords(
+    scope: WorkspaceRef,
+    records: TaskAgentSessions,
+  ): Effect.Effect<void, HostError>;
 }): AgentSessionPersistencePort => {
   const sessions = new Map<string, ObservedSession>();
   const record = (ref: AgentSessionLiveRef, at: number): Effect.Effect<void, HostError> =>
@@ -53,13 +59,17 @@ export const createAgentSessionActivityPersistence = ({
         if (!parent) break;
         root = { ...root, externalSessionId: parent };
       }
-      if (yield* workspace.recordActivity(root, at)) return;
-      const saved = yield* tasks
-        .recordAgentSessionActivity({ repoPath: root.repoPath, identity: root, occurredAt: at })
-        .pipe(
-          Effect.mapError((cause) => toHostOperationError(cause, "agent-session.persist-activity")),
-        );
-      if (saved) yield* publishTaskRecords(root.repoPath, saved);
+      yield* workspace.recordActivity(root, at);
+      for (const scope of yield* readTaskWorkspaces(root)) {
+        const saved = yield* tasks
+          .recordAgentSessionActivity({ ...scope, identity: root, occurredAt: at })
+          .pipe(
+            Effect.mapError((cause) =>
+              toHostOperationError(cause, "agent-session.persist-activity"),
+            ),
+          );
+        if (saved) yield* publishTaskRecords(scope, saved);
+      }
     });
   const flush = (ref: AgentSessionLiveRef, current: ObservedSession) =>
     Effect.gen(function* () {

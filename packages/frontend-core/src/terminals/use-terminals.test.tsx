@@ -527,7 +527,7 @@ describe("useTerminals", () => {
       {
         terminalId: "task-terminal",
         label: "Task",
-        context: { repoPath: "/repo", taskId: "task" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
         initialWorkingDir: "/repo",
         createdAt: "2026-07-19T00:00:00.000Z",
         lifecycle: "running",
@@ -740,7 +740,7 @@ describe("useTerminals", () => {
       expect(view.result.current.startBlockedReason).toBe("A terminal is starting.");
       expect(view.terminalRunAction).toHaveBeenCalledWith({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
         actionId: "action-test",
       });
       expect(view.terminalCreate).not.toHaveBeenCalled();
@@ -919,7 +919,7 @@ describe("useTerminals", () => {
         {
           scope: {
             key: scopeKey,
-            context: { repoPath: "/repo", taskId: scopeKey },
+            context: { workspaceId: "repo", repoPath: "/repo", taskId: scopeKey },
             workingDirectory: "/repo",
             workingDirectoryError: "The working directory is unavailable.",
           },
@@ -967,7 +967,7 @@ function existingTerminal(): TerminalSummary {
   return {
     terminalId: "existing-terminal",
     label: "Existing shell",
-    context: { repoPath: "/repo", taskId: "task-1" },
+    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
     initialWorkingDir: "/repo",
     createdAt: "2026-07-19T00:00:00.000Z",
     lifecycle: "running",
@@ -1021,7 +1021,7 @@ function renderModel(
       initialProps: {
         scope: {
           key: "/repo:task-1",
-          context: { repoPath: "/repo", taskId: "task-1" },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
           workingDirectory,
           workingDirectoryError: "Task task-1 has no available worktree.",
         },
@@ -1039,7 +1039,7 @@ function renderModel(
           {
             scope: {
               key: "/repo:task-1",
-              context: { repoPath: "/repo", taskId: "task-1" },
+              context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
               workingDirectory,
               workingDirectoryError: "Task task-1 has no available worktree.",
             },

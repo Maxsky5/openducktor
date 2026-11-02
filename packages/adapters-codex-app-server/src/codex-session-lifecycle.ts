@@ -90,6 +90,11 @@ export const assertRuntimeContextCompatibleWithSession = (
   action = "apply runtime context",
   toConflictError?: (message: string) => Error,
 ): void => {
+  if (
+    session.summary.sessionAssociation.kind === "repository" &&
+    input.sessionScope?.kind === "repository"
+  )
+    return;
   const transition = resolveAgentSessionAssociationTransition(
     session.summary.sessionAssociation,
     input.sessionScope ?? { kind: "unbound" },

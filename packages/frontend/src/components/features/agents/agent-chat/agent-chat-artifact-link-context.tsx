@@ -3,6 +3,7 @@ import { createContext, use } from "react";
 export type ChatArtifactLinkTarget = { taskId: string; code: string };
 
 export type ChatArtifactLinkOwner = {
+  workspaceId: string;
   repoPath: string;
   taskId: string;
   ownerKey: string;

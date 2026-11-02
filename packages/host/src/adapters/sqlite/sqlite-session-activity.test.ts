@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { replaceTaskSessions } from "./sqlite-task-relations";
+import { asc, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import {
   createAgentSessionRecord,
   expectFailureTag,
 } from "../../ports/task-store-port-contract.test-support";
 import { createSqliteWorkspaceSessionStore } from "./sqlite-workspace-session-store";
+import { workspaces } from "./sqlite-host-settings-schema";
+import { tasks, taskSessions } from "./sqlite-host-database-schema";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
@@ -56,10 +60,9 @@ test("the activity migration keeps old workspace records and leaves their activi
 });
 
 test("task activity survives stale upserts and does not edit the task", async () => {
-  const repoPath = harness.repoPath;
   const task = await Effect.runPromise(
     harness.store.createTask({
-      repoPath,
+      ...harness.scope,
       status: "open",
       task: { title: "Activity", issueType: "task", priority: 2 },
     }),
@@ -68,11 +71,21 @@ test("task activity survives stale upserts and does not edit the task", async ()
     externalSessionId: "activity",
     runtimeKind: "claude",
   });
-  await Effect.runPromise(harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }));
-  const before = await Effect.runPromise(harness.store.getTask({ repoPath, taskId: task.id }));
+  await Effect.runPromise(
+    harness.store.upsertAgentSession({
+      ownershipScope: { catalogRevision: 0, workspaces: [harness.scope] },
+      ...harness.scope,
+      taskId: task.id,
+      session,
+    }),
+  );
+  const before = await Effect.runPromise(
+    harness.store.getTask({ ...harness.scope, taskId: task.id }),
+  );
   const occurredAt = Date.parse(session.startedAt) + 60_000;
-  const input = { repoPath, identity: session, occurredAt };
+  const input = { ...harness.scope, identity: session, occurredAt };
   expect(await Effect.runPromise(harness.store.recordAgentSessionActivity(input))).toEqual({
+    workspaceId: "fairnest",
     taskId: task.id,
     agentSessions: [{ ...session, lastActivityAt: occurredAt }],
   });
@@ -89,18 +102,27 @@ test("task activity survives stale upserts and does not edit the task", async ()
       }),
     ),
   ).toBeNull();
-  const after = await Effect.runPromise(harness.store.getTask({ repoPath, taskId: task.id }));
+  const after = await Effect.runPromise(
+    harness.store.getTask({ ...harness.scope, taskId: task.id }),
+  );
   expect(after.updatedAt).toEqual(before.updatedAt);
-  await Effect.runPromise(harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }));
+  await Effect.runPromise(
+    harness.store.upsertAgentSession({
+      ownershipScope: { catalogRevision: 0, workspaces: [harness.scope] },
+      ...harness.scope,
+      taskId: task.id,
+      session,
+    }),
+  );
   const stored = await Effect.runPromise(
-    harness.store.listAgentSessionsForTasks({ repoPath, taskIds: [task.id] }),
+    harness.store.listAgentSessionsForTasks({ ...harness.scope, taskIds: [task.id] }),
   );
   expect(stored[0]?.agentSessions[0]?.lastActivityAt).toBe(occurredAt);
   const database = new Database(harness.databasePath, { readonly: true });
   try {
     const row = database
       .query<{ activity: number }, [string]>(
-        "select json_extract(agent_sessions_json, '$[0].lastActivityAt') as activity from tasks where id = ?",
+        "select last_activity_at_ms as activity from task_sessions where task_id = ?",
       )
       .get(task.id);
     expect(row?.activity).toBe(occurredAt);
@@ -109,51 +131,194 @@ test("task activity survives stale upserts and does not edit the task", async ()
   }
 });
 
+test("task activity changes only its stored row among 100 sessions and colliding owners", async () => {
+  const task = await Effect.runPromise(
+    harness.store.createTask({
+      ...harness.scope,
+      status: "open",
+      task: { title: "Activity rows", issueType: "task", priority: 2 },
+    }),
+  );
+  const sibling = await Effect.runPromise(
+    harness.store.createTask({
+      ...harness.scope,
+      status: "open",
+      task: { title: "Other owner", issueType: "task", priority: 2 },
+    }),
+  );
+  const startedAt = Date.parse("2026-06-10T10:00:00.000Z");
+  const records = Array.from({ length: 100 }, (_, position) =>
+    createAgentSessionRecord({
+      externalSessionId: `activity-${position}`,
+      startedAt: new Date(startedAt + position * 1000).toISOString(),
+    }),
+  );
+  const identity = records[37]!;
+  records[80] = { ...identity, startedAt: records[80]!.startedAt };
+  const otherWorkspaceId = "other-workspace";
+  await Effect.runPromise(
+    harness.withHostDatabase("test.seedActivityRows", (session) =>
+      session.transaction("test.seedActivityRows", (transaction) =>
+        Effect.gen(function* () {
+          yield* transaction.execute(
+            (database) =>
+              database.insert(workspaces).values({
+                workspaceId: otherWorkspaceId,
+                workspaceName: "Other workspace",
+                repoPath: "/repos/other",
+                branchPrefix: "task",
+                defaultTargetBranch: "main",
+                closed: false,
+              }),
+            "test.seedOtherWorkspace",
+          );
+          yield* transaction.execute(
+            (database) =>
+              database.insert(tasks).values({
+                workspaceId: otherWorkspaceId,
+                id: task.id,
+                title: "Same task ID",
+                status: "open",
+                issueType: "task",
+                priority: 2,
+                createdAt: new Date(startedAt),
+                updatedAt: new Date(startedAt),
+              }),
+            "test.seedOtherTask",
+          );
+          yield* replaceTaskSessions(transaction, harness.workspaceId, task.id, records);
+          yield* replaceTaskSessions(transaction, harness.workspaceId, sibling.id, [
+            { ...identity, workingDirectory: "/repos/another-owner" },
+          ]);
+          yield* replaceTaskSessions(transaction, otherWorkspaceId, task.id, [identity]);
+        }),
+      ),
+    ),
+  );
+  const snapshot = () =>
+    Effect.runPromise(
+      harness.withHostDatabase("test.activitySnapshot", (session) =>
+        Effect.gen(function* () {
+          const rows = yield* session.execute(
+            (database) =>
+              database
+                .select()
+                .from(taskSessions)
+                .orderBy(
+                  asc(taskSessions.workspaceId),
+                  asc(taskSessions.taskId),
+                  asc(taskSessions.position),
+                ),
+            "test.activityRows",
+          );
+          const taskRows = yield* session.execute(
+            (database) =>
+              database.select().from(tasks).orderBy(asc(tasks.workspaceId), asc(tasks.id)),
+            "test.activityTasks",
+          );
+          const changes = yield* session.execute(
+            (database) => database.values<[number]>(sql`select total_changes()`),
+            "test.activityChanges",
+          );
+          return { rows, taskRows, changes: changes[0]![0] };
+        }),
+      ),
+    );
+  const before = await snapshot();
+  const occurredAt = startedAt + 120_000;
+  const input = {
+    ...harness.scope,
+    identity: { ...identity, workingDirectory: `${identity.workingDirectory}/` },
+    occurredAt,
+  };
+  expect(await Effect.runPromise(harness.store.recordAgentSessionActivity(input))).toEqual({
+    workspaceId: harness.workspaceId,
+    taskId: task.id,
+    agentSessions: records
+      .toReversed()
+      .map((record) =>
+        record === records[80] ? { ...record, lastActivityAt: occurredAt } : record,
+      ),
+  });
+  const after = await snapshot();
+  expect(after.changes - before.changes).toBe(1);
+  expect(after.rows).toEqual(
+    before.rows.map((row) =>
+      row.workspaceId === harness.workspaceId && row.taskId === task.id && row.position === 80
+        ? { ...row, lastActivityAt: occurredAt }
+        : row,
+    ),
+  );
+  expect(after.taskRows).toEqual(before.taskRows);
+  for (const time of [occurredAt, occurredAt - 1]) {
+    expect(
+      await Effect.runPromise(
+        harness.store.recordAgentSessionActivity({ ...input, occurredAt: time }),
+      ),
+    ).toBeNull();
+  }
+  expect(await snapshot()).toEqual(after);
+});
+
 test.each([
   ["/repos/project", "/repos/project/"],
   [String.raw`C:\Repos\Project`, "c:/repos/project/"],
 ])("task activity matches saved path %s with event path %s", async (savedPath, eventPath) => {
-  const repoPath = harness.repoPath;
   const task = await Effect.runPromise(
     harness.store.createTask({
-      repoPath,
+      ...harness.scope,
       status: "open",
       task: { title: "Path activity", issueType: "task", priority: 2 },
     }),
   );
   const session = createAgentSessionRecord({ workingDirectory: savedPath });
-  await Effect.runPromise(harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }));
+  await Effect.runPromise(
+    harness.store.upsertAgentSession({
+      ownershipScope: { catalogRevision: 0, workspaces: [harness.scope] },
+      ...harness.scope,
+      taskId: task.id,
+      session,
+    }),
+  );
   const occurredAt = Date.parse(session.startedAt) + 60_000;
 
   expect(
     await Effect.runPromise(
       harness.store.recordAgentSessionActivity({
-        repoPath,
+        ...harness.scope,
         identity: { ...session, workingDirectory: eventPath },
         occurredAt,
       }),
     ),
-  ).toEqual({ taskId: task.id, agentSessions: [{ ...session, lastActivityAt: occurredAt }] });
+  ).toEqual({
+    workspaceId: "fairnest",
+    taskId: task.id,
+    agentSessions: [{ ...session, lastActivityAt: occurredAt }],
+  });
   const saved = await Effect.runPromise(
-    harness.store.listAgentSessionsForTasks({ repoPath, taskIds: [task.id] }),
+    harness.store.listAgentSessionsForTasks({ ...harness.scope, taskIds: [task.id] }),
   );
   expect(saved[0]?.agentSessions[0]?.lastActivityAt).toBe(occurredAt);
 });
 
 test("task activity picks the full identity among tasks sharing a runtime session ID", async () => {
-  const repoPath = harness.repoPath;
   const saved = [];
   for (const workingDirectory of ["/repos/other-one", "/repos/other-two", "/repos/owner"]) {
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: workingDirectory, issueType: "task", priority: 2 },
       }),
     );
     const session = createAgentSessionRecord({ workingDirectory });
     await Effect.runPromise(
-      harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }),
+      harness.contextProvider(
+        harness.scope,
+        "test.seedLegacyOwner",
+        ({ session: database, workspaceId }) =>
+          replaceTaskSessions(database, workspaceId, task.id, [session]),
+      ),
     );
     saved.push({ task, session });
   }
@@ -163,18 +328,19 @@ test("task activity picks the full identity among tasks sharing a runtime sessio
   expect(
     await Effect.runPromise(
       harness.store.recordAgentSessionActivity({
-        repoPath,
+        ...harness.scope,
         identity: { ...owner.session, workingDirectory: "/repos/owner/" },
         occurredAt,
       }),
     ),
   ).toEqual({
+    workspaceId: "fairnest",
     taskId: owner.task.id,
     agentSessions: [{ ...owner.session, lastActivityAt: occurredAt }],
   });
   const records = await Effect.runPromise(
     harness.store.listAgentSessionsForTasks({
-      repoPath,
+      ...harness.scope,
       taskIds: saved.map(({ task }) => task.id),
     }),
   );
@@ -186,26 +352,30 @@ test("task activity picks the full identity among tasks sharing a runtime sessio
 });
 
 test("task activity rejects duplicate owners after matching their paths", async () => {
-  const repoPath = harness.repoPath;
   const taskIds = [];
   for (const workingDirectory of ["/repos/shared", "/repos/shared/"]) {
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: workingDirectory, issueType: "task", priority: 2 },
       }),
     );
     const session = createAgentSessionRecord({ workingDirectory });
     await Effect.runPromise(
-      harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }),
+      harness.contextProvider(
+        harness.scope,
+        "test.seedLegacyOwner",
+        ({ session: database, workspaceId }) =>
+          replaceTaskSessions(database, workspaceId, task.id, [session]),
+      ),
     );
     taskIds.push(task.id);
   }
   const session = createAgentSessionRecord({ workingDirectory: "/repos/shared/" });
   const failure = await expectFailureTag(
     harness.store.recordAgentSessionActivity({
-      repoPath,
+      ...harness.scope,
       identity: session,
       occurredAt: Date.parse(session.startedAt) + 60_000,
     }),
@@ -213,7 +383,7 @@ test("task activity rejects duplicate owners after matching their paths", async 
   );
   expect(failure.message).toContain("More than one task owns session 'session-1'.");
   const records = await Effect.runPromise(
-    harness.store.listAgentSessionsForTasks({ repoPath, taskIds }),
+    harness.store.listAgentSessionsForTasks({ ...harness.scope, taskIds }),
   );
   expect(records.map((row) => row.agentSessions[0]?.lastActivityAt)).toEqual([
     undefined,
@@ -223,7 +393,7 @@ test("task activity rejects duplicate owners after matching their paths", async 
 
 test("workspace activity has its own saved time and keeps legacy records", async () => {
   const store = createSqliteWorkspaceSessionStore(harness);
-  const scope = { repoPath: harness.repoPath, workspaceId: "fairnest" };
+  const scope = harness.scope;
   const ref = { ...scope, sessionId: "activity" };
   const session = {
     id: ref.sessionId,
@@ -239,7 +409,13 @@ test("workspace activity has its own saved time and keeps legacy records", async
     updatedAt: 100,
     archivedAt: null,
   };
-  await Effect.runPromise(store.create({ ...scope, session }));
+  await Effect.runPromise(
+    store.create({
+      ...scope,
+      session,
+      ownershipScope: { catalogRevision: 0, workspaces: [scope] },
+    }),
+  );
   expect((await Effect.runPromise(store.get(ref))).lastActivityAt).toBeUndefined();
   await Effect.runPromise(
     store.recordActivity({ ...ref, activity: { type: "session_activity", occurredAt: 30 } }),

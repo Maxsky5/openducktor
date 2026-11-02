@@ -30,7 +30,11 @@ const createDeferred = (): Deferred => {
 const createController = () => {
   const loadingStates: boolean[] = [];
   const feedback = createFeedbackFake();
-  const lastTaskRefreshToastRef = createRef<{ repoPath: string; description: string }>();
+  const lastTaskRefreshToastRef = createRef<{
+    workspaceId: string;
+    repoPath: string;
+    description: string;
+  }>();
   const lastTaskLoadErrorToastRef: Parameters<
     typeof createTaskRefreshController
   >[0]["lastTaskLoadErrorToastRef"] = {
@@ -62,11 +66,17 @@ describe("task refresh flow", () => {
     };
 
     const scheduled = controller.refresh({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       trigger: "scheduled",
       refreshTaskData,
     });
-    const manual = controller.refresh({ repoPath: "/repo", trigger: "manual", refreshTaskData });
+    const manual = controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      trigger: "manual",
+      refreshTaskData,
+    });
     expect(readCount).toBe(1);
 
     deferred.resolve();
@@ -79,11 +89,17 @@ describe("task refresh flow", () => {
     const refreshTaskData = async () => deferred.promise;
 
     const scheduled = controller.refresh({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       trigger: "scheduled",
       refreshTaskData,
     });
-    const manual = controller.refresh({ repoPath: "/repo", trigger: "manual", refreshTaskData });
+    const manual = controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      trigger: "manual",
+      refreshTaskData,
+    });
     deferred.reject(new Error("task read failed"));
     await Promise.all([scheduled, manual]);
 
@@ -100,8 +116,18 @@ describe("task refresh flow", () => {
     let readIndex = 0;
     const refreshTaskData = async () => reads[readIndex++]?.promise;
 
-    const earlier = controller.refresh({ repoPath: "/repo-a", trigger: "manual", refreshTaskData });
-    const later = controller.refresh({ repoPath: "/repo-b", trigger: "manual", refreshTaskData });
+    const earlier = controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo-a",
+      trigger: "manual",
+      refreshTaskData,
+    });
+    const later = controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo-b",
+      trigger: "manual",
+      refreshTaskData,
+    });
     first.resolve();
     await earlier;
     expect(loadingStates).toEqual([true, true]);
@@ -115,14 +141,30 @@ describe("task refresh flow", () => {
     const { controller, errors } = createController();
     const fail = async () => Promise.reject(new Error("task read failed"));
 
-    await controller.refresh({ repoPath: "/repo", trigger: "scheduled", refreshTaskData: fail });
-    await controller.refresh({ repoPath: "/repo", trigger: "scheduled", refreshTaskData: fail });
     await controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      trigger: "scheduled",
+      refreshTaskData: fail,
+    });
+    await controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      trigger: "scheduled",
+      refreshTaskData: fail,
+    });
+    await controller.refresh({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       trigger: "scheduled",
       refreshTaskData: async () => {},
     });
-    await controller.refresh({ repoPath: "/repo", trigger: "scheduled", refreshTaskData: fail });
+    await controller.refresh({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      trigger: "scheduled",
+      refreshTaskData: fail,
+    });
 
     expect(errors()).toEqual([
       { title: "Failed to refresh tasks", description: "task read failed" },
@@ -134,12 +176,14 @@ describe("task refresh flow", () => {
     const { controller, errors, lastTaskLoadErrorToastRef } = createController();
 
     await controller.refresh({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       trigger: "manual",
       refreshTaskData: async () => Promise.reject(new Error("task read failed")),
     });
 
     expect(lastTaskLoadErrorToastRef.current).toEqual({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       description: "task read failed",
     });
@@ -153,6 +197,7 @@ describe("task refresh flow", () => {
     let refreshCount = 0;
 
     await controller.refresh({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       trigger: "manual",
       refreshTaskData: async () => {
@@ -168,6 +213,7 @@ describe("task refresh flow", () => {
     const harness = createHookHarness(
       useTaskRefreshFlow,
       {
+        activeWorkspaceId: null,
         activeRepoPath: null,
         refreshTaskData: async () => {
           refreshCount += 1;

@@ -12,9 +12,14 @@ export const agentSessionScopesEqual = (
     return false;
   }
   if (left.kind === "repository") {
-    return true;
+    return right.kind === "repository" && left.workspaceId === right.workspaceId;
   }
-  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
+  return (
+    right.kind === "workflow" &&
+    left.workspaceId === right.workspaceId &&
+    left.taskId === right.taskId &&
+    left.role === right.role
+  );
 };
 
 export const describeAgentSessionScope = (scope: AgentSessionScope): string => {
@@ -33,6 +38,10 @@ export const resolveAgentSessionAssociationTransition = (
   }
   if (incoming.kind === "unbound") {
     return { kind: "accepted", association: previous };
+  }
+  if (previous.kind === "repository" && incoming.kind === "repository") {
+    if (!incoming.workspaceId) return { kind: "accepted", association: previous };
+    if (!previous.workspaceId) return { kind: "accepted", association: incoming };
   }
   if (agentSessionScopesEqual(previous, incoming)) {
     return { kind: "accepted", association: incoming };

@@ -20,6 +20,7 @@ export type TaskExecutionCiChecksPanelModel = {
 };
 
 const INACTIVE_QUERY_INPUT: PullRequestReviewContextQueryInput = {
+  workspaceId: "__inactive__",
   repoPath: "__inactive_pr_review__",
   taskId: "__inactive__",
 };

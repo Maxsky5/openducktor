@@ -32,15 +32,19 @@ export function useSessionGrouping(): SessionGrouping {
   const { feedback } = useClientConnection();
   const options = settingsSnapshotQueryOptions();
   const settings = useQuery(options);
-  const mutation = useMutation<SettingsSnapshot, Error, SidebarSessionGrouping>({
+  const mutation = useMutation<SidebarSessionGrouping, Error, SidebarSessionGrouping>({
     mutationKey: SESSION_GROUPING_MUTATION_KEY,
     scope: { id: SESSION_GROUPING_MUTATION_KEY[1] },
     mutationFn: (grouping) => host.workspaceUpdateSidebarSessionGrouping(grouping),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
     },
-    onSuccess: (snapshot) => {
-      queryClient.setQueryData(options.queryKey, snapshot);
+    onSuccess: (sidebarSessionGrouping) => {
+      queryClient.setQueryData<SettingsSnapshot>(options.queryKey, (current) =>
+        current
+          ? { ...current, appearance: { ...current.appearance, sidebarSessionGrouping } }
+          : current,
+      );
     },
     onError: (cause) => {
       feedback.show("error", "The session grouping was not saved.", {

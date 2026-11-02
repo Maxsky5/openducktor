@@ -69,6 +69,7 @@ describe("createAgentTurnGitSync", () => {
     sync({ type: "session_upsert", session: session("running") });
     sync({
       type: "task_session_records_updated",
+      workspaceId: "workspace-1",
       repoPath: REPO,
       taskId: "task-1",
       agentSessions: [],

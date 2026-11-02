@@ -1,13 +1,13 @@
-import type {
-  AutopilotOutcome,
-  AutopilotRecoveryClaimInput,
-  AutopilotRecoveryClaimResult,
-  AutopilotRunEvent,
-  AutopilotState,
-  AutopilotStateReadInput,
-  GlobalConfig,
-  NotificationActionOccurrence,
-  WorkflowLaunchResult,
+import {
+  type AutopilotOutcome,
+  type AutopilotRecoveryClaimInput,
+  type AutopilotRecoveryClaimResult,
+  type AutopilotRunEvent,
+  type AutopilotState,
+  type AutopilotStateReadInput,
+  jsonValuesEqual,
+  type NotificationActionOccurrence,
+  type WorkflowLaunchResult,
 } from "@openducktor/contracts";
 import {
   buildSessionStartErrorOccurrence,
@@ -15,7 +15,6 @@ import {
   sessionLaunchFailureMessage,
 } from "@openducktor/core";
 import { Cause, Effect, Exit, FiberSet, type Result, Scope } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   causeMessages,
   errorMessage,
@@ -24,8 +23,9 @@ import {
   type HostOperationErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { StoredTask, TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { SettingsConfigView, SettingsConfigPort } from "../../ports/settings-config-port";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskService } from "../tasks/task-service";
 import type {
   AutomaticWorkflowLaunchStartCheck,
   WorkflowLaunchService,
@@ -33,28 +33,20 @@ import type {
 import type { NotificationService } from "../notifications/notification-service";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
 import type { CommittedTaskStatusChange } from "../tasks/task-mutation-operation";
-import type { TaskService } from "../tasks/task-service";
-import { loadGlobalConfig } from "../workspaces/workspace-settings-model";
-
-type WorkspaceView = {
-  workspaceId: string;
-  repoPath: string;
-  workspaceName: string;
-  state: "open" | "closed" | "removing";
-  /** Changes each time the workspace opens, so an attempt from before a close never starts. */
-  generation: number;
-};
+import { createAutopilotWorkspaceViews } from "./autopilot-workspace-views";
 
 /** One automatic action for one qualifying committed change. */
 type Attempt = {
   outcomeId: string;
   workspaceId: string;
   repoPath: string;
+  /** The workspace path and name that the committed change read, for its notification. */
+  notificationTarget: { workspaceId: string; repoPath: string; repositoryLabel: string };
   generation: number;
+  sequence: number;
+  workflowId: string;
   /** The mutation gate key of the mutation that committed the change. */
   gateKey: string;
-  /** Identifies the committed change. Duplicate prevention uses it, not the task or session. */
-  sequence: number;
   task: { id: string; title: string };
   eventId: string;
   actionId: string;
@@ -76,30 +68,17 @@ export type AutopilotServiceDependencies = {
 
 const skip = (reason: string) => ({ start: false as const, reason });
 
-const workspaceState = (repo: GlobalConfig["workspaces"][string]): WorkspaceView["state"] => {
-  if (repo.removal) return "removing";
-  if (repo.closed) return "closed";
-  return "open";
-};
-
 /**
  * Runs Autopilot for every open workspace. It reacts to committed task status changes, uses the
  * saved rules, and starts each qualifying action at most once through the workflow launch
  * service. All state stays in memory, so a host restart loses waiting attempts and outcomes.
  */
 export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
-  const stateTitle = (task: StoredTask, status: string): string => {
-    const state = deps.taskWorkflows.forTask(task).state(status);
-    return state.title ?? state.label;
-  };
   let phase: "pending" | "ready" | "stopped" = "pending";
-  /** The latest saved settings. Before the first save, the settings that initialize read. */
-  let config: GlobalConfig | null = null;
+  /** The settings read at initialization or the latest save from this host. */
+  let config: SettingsConfigView | null = null;
   let failure: string | null = null;
   let lastSequence = 0;
-  let lastGeneration = 0;
-  const workspaces = new Map<string, WorkspaceView>();
-  /** The latest committed status change of each task, by workspace and task. */
   const latestChanges = new Map<string, Map<string, { sequence: number; status: string }>>();
   /** The latest outcome of each task and action, by workspace. */
   const outcomes = new Map<string, Map<string, HeldOutcome>>();
@@ -112,43 +91,13 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
     deps.publish({ type: "autopilot_failure", failure: message });
   };
 
-  const ruleActions = (eventId: string): string[] =>
-    config?.autopilot.rules.find((rule) => rule.eventId === eventId)?.actionIds ?? [];
-
   // A waiting attempt of a removed workspace skips at its start check, and settle drops it.
   const forgetWorkspace = (workspaceId: string): void => {
     latestChanges.delete(workspaceId);
     outcomes.delete(workspaceId);
   };
 
-  const applyWorkspaces = (next: GlobalConfig): void => {
-    const previous = new Map(workspaces);
-    workspaces.clear();
-    for (const [workspaceId, repo] of Object.entries(next.workspaces)) {
-      const known = previous.get(workspaceId);
-      const state = workspaceState(repo);
-      if (state === "removing" && known?.state !== "removing") forgetWorkspace(workspaceId);
-      workspaces.set(workspaceId, {
-        workspaceId,
-        repoPath: repo.repoPath,
-        workspaceName: repo.workspaceName,
-        state,
-        generation:
-          state === "open" && known?.state !== "open"
-            ? ++lastGeneration
-            : (known?.generation ?? lastGeneration),
-      });
-    }
-    for (const workspaceId of previous.keys())
-      if (!workspaces.has(workspaceId)) forgetWorkspace(workspaceId);
-  };
-
-  const findWorkspace = (repoPath: string): WorkspaceView | undefined => {
-    const path = normalizePathForComparison(repoPath);
-    for (const workspace of workspaces.values())
-      if (normalizePathForComparison(workspace.repoPath) === path) return workspace;
-    return undefined;
-  };
+  const workspaces = createAutopilotWorkspaceViews(forgetWorkspace);
 
   const workspaceSkip = (attempt: Attempt) => {
     const workspace = workspaces.get(attempt.workspaceId);
@@ -164,20 +113,36 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       const closed = workspaceSkip(attempt);
       if (closed) return closed;
       const taskIds = yield* deps.tasks
-        .listTaskIds({ repoPath: attempt.repoPath })
+        .listTaskIds({ workspaceId: attempt.workspaceId, repoPath: attempt.repoPath })
         .pipe(Effect.mapError((cause) => toHostOperationError(cause, "autopilot.start-check")));
-      // The workspace can close, reopen, or go away while the read waits.
       const closedDuringRead = workspaceSkip(attempt);
       if (closedDuringRead) return closedDuringRead;
       if (!taskIds.includes(attempt.task.id))
         return skip("The task was deleted before the action started.");
-      if (!ruleActions(attempt.eventId).includes(attempt.actionId))
+      // The rules are read last, so a save that commits during the earlier reads disables them.
+      const settings = yield* deps.settingsConfig.readAutopilotSettings().pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({
+              operation: "autopilot.start-check",
+              message: `Autopilot could not read the application settings: ${errorMessage(cause)} Correct the application settings, then start the action manually.`,
+              cause,
+            }),
+        ),
+      );
+      const closedDuringSettingsRead = workspaceSkip(attempt);
+      if (closedDuringSettingsRead) return closedDuringSettingsRead;
+      const rule = settings.rules.find(
+        (rule) => rule.workflowId === attempt.workflowId && rule.eventId === attempt.eventId,
+      );
+      if (!rule?.actionIds.includes(attempt.actionId))
         return skip("The Autopilot rule was disabled before the action started.");
       const latest = latestChanges.get(attempt.workspaceId)?.get(attempt.task.id);
-      if (latest && latest.sequence !== attempt.sequence)
-        return skip(
-          `The task moved to ${stateTitle(attempt.task, latest.status)} before the action started.`,
-        );
+      if (latest && latest.sequence !== attempt.sequence) {
+        const workflow = yield* deps.taskWorkflows.forWorkflowId(attempt.workflowId);
+        const state = workflow.state(latest.status);
+        return skip(`The task moved to ${state.title ?? state.label} before the action started.`);
+      }
       return { start: true as const };
     });
 
@@ -190,6 +155,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       workspaceId: attempt.workspaceId,
       repoPath: attempt.repoPath,
       task: attempt.task,
+      workflowId: attempt.workflowId,
       eventId: attempt.eventId,
       actionId: attempt.actionId,
       occurredAt: new Date().toISOString(),
@@ -216,71 +182,66 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
   };
 
   /** Returns the id of a published error notification, so clients can skip its in-app toast. */
-  const notify = (
-    outcome: AutopilotOutcome,
-    workspace: WorkspaceView,
-  ): Effect.Effect<string | null> => {
-    const target = { repoPath: workspace.repoPath, repositoryLabel: workspace.workspaceName };
-    const workflow = deps.taskWorkflows.forTask(outcome.task);
-    const { role } = workflow.automation(outcome.actionId);
-    const input = {
-      launchAttemptId: outcome.outcomeId,
-      taskId: outcome.task.id,
-      taskTitle: outcome.task.title,
-      role,
-      roleLabel: workflow.role(role).label,
-    };
-    let occurrence: NotificationActionOccurrence | null = null;
-    if (outcome.kind === "started") {
-      const { session, startMode } = outcome.launch;
-      // A reused session already exists, so only a new session notifies its start.
-      if (session && (startMode === "fresh" || startMode === "fork"))
-        occurrence = buildSessionStartedOccurrence(target, { ...input, session });
-    } else if (outcome.kind === "failed" && outcome.launch?.failure?.noticeId === undefined) {
-      // A failure with a notice id already notified from its session.
-      const session = outcome.launch?.session;
-      occurrence = buildSessionStartErrorOccurrence(
-        target,
-        session ? { ...input, session } : input,
-        outcome.message,
-      );
-    }
-    if (!occurrence) return Effect.succeed(null);
-    return deps.notifications.publishAction(occurrence).pipe(
-      Effect.map((selected) =>
-        selected.occurrence.kind === "agent.session_error"
-          ? selected.occurrence.occurrenceId
-          : null,
-      ),
+  const notify = (attempt: Attempt, outcome: AutopilotOutcome): Effect.Effect<string | null> =>
+    Effect.gen(function* () {
+      const target = attempt.notificationTarget;
+      const workflow = yield* deps.taskWorkflows.forWorkflowId(outcome.workflowId);
+      const { role } = workflow.automation(outcome.actionId);
+      const input = {
+        launchAttemptId: outcome.outcomeId,
+        taskId: outcome.task.id,
+        taskTitle: outcome.task.title,
+        role,
+        roleLabel: workflow.role(role).label,
+      };
+      let occurrence: NotificationActionOccurrence | null = null;
+      if (outcome.kind === "started") {
+        const { session, startMode } = outcome.launch;
+        // A reused session already exists, so only a new session notifies its start.
+        if (session && (startMode === "fresh" || startMode === "fork"))
+          occurrence = buildSessionStartedOccurrence(target, { ...input, session });
+      } else if (outcome.kind === "failed" && outcome.launch?.failure?.noticeId === undefined) {
+        // A failure with a notice id already notified from its session.
+        const session = outcome.launch?.session;
+        occurrence = buildSessionStartErrorOccurrence(
+          target,
+          session ? { ...input, session } : input,
+          outcome.message,
+        );
+      }
+      if (!occurrence) return null;
+      const selected = yield* deps.notifications.publishAction(occurrence, outcome.workspaceId);
+      return selected.occurrence.kind === "agent.session_error"
+        ? selected.occurrence.occurrenceId
+        : null;
+    }).pipe(
       Effect.catch((cause) =>
         deps
           .onBackgroundFailure(toHostOperationError(cause, "autopilot.notify"))
           .pipe(Effect.as(null)),
       ),
     );
-  };
 
   const settle = (attempt: Attempt, result: Result.Result<WorkflowLaunchResult, HostError>) =>
     Effect.gen(function* () {
       // Host shutdown and workspace removal drop outcomes.
-      const heldWorkspace = () => {
+      const holdsWorkspace = () => {
         const workspace = workspaces.get(attempt.workspaceId);
-        return phase === "ready" && workspace?.state !== "removing" ? workspace : undefined;
+        return phase === "ready" && workspace !== undefined && workspace.state !== "removing";
       };
-      const workspace = heldWorkspace();
-      if (!workspace) return;
+      if (!holdsWorkspace()) return;
       const outcome = toOutcome(attempt, result);
-      const notificationId = yield* notify(outcome, workspace);
+      const notificationId = yield* notify(attempt, outcome);
       if (notificationId !== null && outcome.kind === "failed")
         outcome.notificationId = notificationId;
       // The notification can yield, so a removal can happen before the outcome is held.
-      if (!heldWorkspace()) return;
+      if (!holdsWorkspace()) return;
       let held = outcomes.get(attempt.workspaceId);
       if (!held) {
         held = new Map();
         outcomes.set(attempt.workspaceId, held);
       }
-      held.set(JSON.stringify([attempt.task.id, attempt.actionId]), {
+      held.set(JSON.stringify([attempt.task.id, attempt.workflowId, attempt.actionId]), {
         outcome,
         recoveryClaimed: false,
       });
@@ -321,49 +282,78 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
           }),
         );
 
-  const dispatch = (attempt: Attempt): void => {
-    // A root fiber forks the attempt, so it does not inherit the services or references of the
-    // mutation.
-    Effect.runFork(
-      FiberSet.run(attempts, runAttempt(attempt).pipe(Effect.catchCause(reportAttemptFailure))),
-    );
+  const runInBackground = (effect: Effect.Effect<void>): void => {
+    // A root fiber runs the effect, so it does not inherit the services or references of the
+    // mutation. Dispose interrupts it.
+    Effect.runFork(FiberSet.run(attempts, effect.pipe(Effect.catchCause(reportAttemptFailure))));
   };
 
-  /** Evaluates one change at its commit, with the rules saved at that moment. */
-  const observe = ({ repoPath, statusChange, signal }: CommittedTaskStatusChange): void => {
-    if (phase !== "ready") return;
-    // The mutation already committed, so an error here must not fail it.
-    try {
-      const workspace = findWorkspace(repoPath);
-      if (!workspace) {
-        reportFailure(
-          `Autopilot cannot match task changes in ${repoPath} to a workspace. Restart the host.`,
-        );
-        return;
-      }
-      if (workspace.state !== "open") return;
-      let tasks = latestChanges.get(workspace.workspaceId);
-      if (!tasks) {
-        tasks = new Map();
-        latestChanges.set(workspace.workspaceId, tasks);
-      }
-      lastSequence += 1;
-      const { task } = statusChange;
-      tasks.set(task.id, { sequence: lastSequence, status: task.status });
-      const eventId = signal;
-      if (!eventId) return;
-      for (const actionId of ruleActions(eventId))
-        dispatch({
+  const recordChange = ({ workspaceId, statusChange: { task } }: CommittedTaskStatusChange) => {
+    let tasks = latestChanges.get(workspaceId);
+    if (!tasks) {
+      tasks = new Map();
+      latestChanges.set(workspaceId, tasks);
+    }
+    lastSequence += 1;
+    tasks.set(task.id, { sequence: lastSequence, status: task.status });
+    return lastSequence;
+  };
+
+  const dispatchRules = (
+    {
+      workspaceId,
+      repoPath,
+      statusChange,
+      signal,
+      workflowId,
+      autopilotSettings,
+    }: CommittedTaskStatusChange,
+    notificationTarget: Attempt["notificationTarget"],
+    generation: number,
+    sequence: number,
+  ): void => {
+    const eventId = signal;
+    if (!eventId) return;
+    const rule = autopilotSettings.rules.find(
+      (value) => value.workflowId === workflowId && value.eventId === eventId,
+    );
+    for (const actionId of rule?.actionIds ?? [])
+      runInBackground(
+        runAttempt({
           outcomeId: crypto.randomUUID(),
-          workspaceId: workspace.workspaceId,
-          repoPath: workspace.repoPath,
-          generation: workspace.generation,
+          workspaceId,
+          repoPath,
+          notificationTarget,
+          workflowId,
+          generation,
+          sequence,
           gateKey: repoPath,
-          sequence: lastSequence,
-          task: { id: task.id, title: task.title },
+          task: { id: statusChange.task.id, title: statusChange.task.title },
           eventId,
           actionId,
-        });
+        }),
+      );
+  };
+
+  /**
+   * Evaluates one change at its commit, with the rules and workspace that its transaction read.
+   * The change committed in an open workspace, so the view opens a workspace that another host
+   * opened.
+   */
+  const observe = (change: CommittedTaskStatusChange): void => {
+    if (phase !== "ready") return;
+    try {
+      const workspace = workspaces.open(change.workspaceId);
+      dispatchRules(
+        change,
+        {
+          workspaceId: change.workspaceId,
+          repoPath: change.workspace.repoPath,
+          repositoryLabel: change.workspace.workspaceName,
+        },
+        workspace.generation,
+        recordChange(change),
+      );
     } catch (cause) {
       reportFailure(
         `Autopilot could not evaluate a task change: ${errorMessage(cause)} Restart the host.`,
@@ -376,7 +366,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
     initialize: (): Effect.Effect<void> =>
       Effect.gen(function* () {
         if (phase !== "pending") return;
-        const loaded = yield* Effect.result(loadGlobalConfig(deps.settingsConfig));
+        const loaded = yield* Effect.result(deps.settingsConfig.readConfig());
         if (loaded._tag === "Failure") {
           reportFailure(
             `Autopilot could not read the application settings: ${loaded.failure.message} Correct the application settings, then restart the host.`,
@@ -385,18 +375,17 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
         }
         phase = "ready";
         config ??= loaded.success;
-        applyWorkspaces(config);
+        workspaces.applyAll(config);
         if (failure !== null) reportFailure(null);
       }),
-    /** Applies saved settings and workspace changes to later task changes and start checks. */
-    configCommitted: (next: GlobalConfig): Effect.Effect<void> =>
+    /** Applies this host's saved settings and workspace changes. */
+    configCommitted: (next: SettingsConfigView): Effect.Effect<void> =>
       Effect.sync(() => {
         if (phase === "stopped") return;
         const previous = config?.autopilot;
         config = structuredClone(next);
-        if (phase === "ready") applyWorkspaces(config);
-        // Clients read the saved rules again, also when another client saved them.
-        if (JSON.stringify(previous) !== JSON.stringify(config.autopilot))
+        if (phase === "ready") workspaces.applyAll(config);
+        if (!jsonValuesEqual(previous, config.autopilot))
           deps.publish({ type: "autopilot_settings_saved" });
       }),
     observe,

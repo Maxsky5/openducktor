@@ -37,6 +37,7 @@ const PRIORITY_COMBOBOX_OPTIONS = toPrioritySelectOptions();
 const LABEL_COMMIT_KEYS = ["Enter"] as const;
 
 type IssueReviewStepProps = {
+  workspaceId: string;
   repoPath: string;
   selectedItems: SourceIssue[];
   reviews: Map<string, IssueReview>;
@@ -50,6 +51,7 @@ type IssueReviewStepProps = {
 };
 
 export function IssueReviewStep({
+  workspaceId,
   repoPath,
   selectedItems,
   reviews,
@@ -65,6 +67,7 @@ export function IssueReviewStep({
     <div className="flex flex-col gap-4">
       {selectedItems.map((item) => (
         <IssueReviewCard
+          workspaceId={workspaceId}
           repoPath={repoPath}
           key={item.sourceId}
           item={item}
@@ -87,6 +90,7 @@ export function IssueReviewStep({
 }
 
 function IssueReviewCard({
+  workspaceId,
   repoPath,
   item,
   review,
@@ -97,6 +101,7 @@ function IssueReviewCard({
   onChange,
   onRefresh,
 }: {
+  workspaceId: string;
   repoPath: string;
   item: SourceIssue;
   review: IssueReview;
@@ -147,7 +152,12 @@ function IssueReviewCard({
           {item.description ? (
             <IssueMarkdownRenderer
               markdown={item.description}
-              issueImageContext={{ repoPath, sourceId: item.sourceId, providerId: item.providerId }}
+              issueImageContext={{
+                workspaceId,
+                repoPath,
+                sourceId: item.sourceId,
+                providerId: item.providerId,
+              }}
               variant="compact"
               lightweight
               className="break-words prose-code:text-rose-700 dark:prose-code:text-rose-300 [&_img]:max-h-48 [&_img]:rounded-md [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap [&_pre]:break-all"

@@ -67,7 +67,12 @@ const taskOwner = (
       status: "ready",
       owner: { kind: "task", taskId: association.taskId, role: builtinRoleId(association.role) },
       sessionAssociation: association,
-      sessionScope: { kind: "workflow", taskId: association.taskId, role: association.role },
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: association.workspaceId,
+        taskId: association.taskId,
+        role: association.role,
+      },
     };
     taskResolutions.set(association, resolution);
   }

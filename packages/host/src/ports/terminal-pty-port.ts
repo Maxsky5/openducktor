@@ -1,4 +1,4 @@
-import { Context, Data, type Effect } from "effect";
+import { Data, type Effect } from "effect";
 
 export type TerminalGrid = {
   columns: number;
@@ -60,7 +60,3 @@ export type TerminalPtyPort = {
     handlers: TerminalPtyHandlers,
   ): Effect.Effect<TerminalPtyHandle, TerminalPtyError>;
 };
-
-export class TerminalPtyPortTag extends Context.Service<TerminalPtyPortTag, TerminalPtyPort>()(
-  "@openducktor/host/TerminalPtyPort",
-) {}

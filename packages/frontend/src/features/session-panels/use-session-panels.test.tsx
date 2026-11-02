@@ -72,7 +72,7 @@ const terminalTab = (terminalId: string, startedBy: TerminalSummary["startedBy"]
   const summary: TerminalSummary = {
     terminalId,
     label: `Shell ${terminalId}`,
-    context: { repoPath: "/repo", taskId: "task-1" },
+    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
     initialWorkingDir: "/repo",
     createdAt: "2026-10-09T00:00:00.000Z",
     lifecycle: "running",

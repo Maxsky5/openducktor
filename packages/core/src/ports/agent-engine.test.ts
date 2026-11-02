@@ -7,9 +7,14 @@ import {
 
 describe("agent session scope helpers", () => {
   test("constructs and narrows workflow scope", () => {
-    const scope = workflowAgentSessionScope("task-1", "build");
+    const scope = workflowAgentSessionScope("repo", "task-1", "build");
 
-    expect(scope).toEqual({ kind: "workflow", taskId: "task-1", role: "build" });
+    expect(scope).toEqual({
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build",
+    });
     expect(isWorkflowAgentSessionScope(scope)).toBe(true);
     expect(requireWorkflowAgentSessionScope(scope, "resolve runtime policy")).toBe(scope);
   });

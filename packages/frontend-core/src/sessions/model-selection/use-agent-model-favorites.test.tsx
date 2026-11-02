@@ -1,6 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentModelFavorite, SettingsSnapshot } from "@openducktor/contracts";
+import type { AgentModelFavorite } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { HostClient } from "@openducktor/host-client";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
@@ -32,7 +32,7 @@ const concurrentFavorite: AgentModelFavorite = {
 };
 
 const useTwoAgentModelFavorites = (args: {
-  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<AgentModelFavorite[]>;
 }) => ({
   first: useAgentModelFavorites(args),
   second: useAgentModelFavorites(args),
@@ -47,9 +47,7 @@ describe("useAgentModelFavorites", () => {
     const workspaceGetSettingsSnapshot = mock(async () =>
       createSettingsSnapshotFixture({ agentModelFavorites: [...savedAliases, concurrentFavorite] }),
     );
-    const saveAgentModelFavorites = mock(async (favorites: AgentModelFavorite[]) =>
-      createSettingsSnapshotFixture({ agentModelFavorites: favorites }),
-    );
+    const saveAgentModelFavorites = mock(async (favorites: AgentModelFavorite[]) => favorites);
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites },
@@ -71,8 +69,7 @@ describe("useAgentModelFavorites", () => {
   test("keeps its result stable between changes and updates it after saving", async () => {
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
     const args = {
-      saveAgentModelFavorites: async (favorites: AgentModelFavorite[]) =>
-        createSettingsSnapshotFixture({ agentModelFavorites: favorites }),
+      saveAgentModelFavorites: async (favorites: AgentModelFavorite[]) => favorites,
     };
     const harness = createHookHarness(useAgentModelFavorites, args, {
       wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }),
@@ -103,16 +100,16 @@ describe("useAgentModelFavorites", () => {
     const firstSavedSnapshot = createSettingsSnapshotFixture({
       agentModelFavorites: [favorite],
     });
-    const firstWrite = createDeferred<SettingsSnapshot>();
+    const firstWrite = createDeferred<AgentModelFavorite[]>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     let saveAttempt = 0;
     const saveAgentModelFavorites = mock(
-      async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
+      async (favorites: AgentModelFavorite[]): Promise<AgentModelFavorite[]> => {
         saveAttempt += 1;
         if (saveAttempt === 1) {
           return firstWrite.promise;
         }
-        return createSettingsSnapshotFixture({ agentModelFavorites: favorites });
+        return favorites;
       },
     );
     const harness = createHookHarness(
@@ -133,7 +130,7 @@ describe("useAgentModelFavorites", () => {
 
       expect(saveAgentModelFavorites).toHaveBeenCalledTimes(1);
 
-      firstWrite.resolve(firstSavedSnapshot);
+      firstWrite.resolve(firstSavedSnapshot.agentModelFavorites);
       await harness.waitFor(() => saveAgentModelFavorites.mock.calls.length === 2, 2000);
       await harness.waitFor((state) => state.first.favorites?.length === 2, 2000);
 
@@ -157,7 +154,7 @@ describe("useAgentModelFavorites", () => {
     });
     const harness = createHookHarness(
       useAgentModelFavorites,
-      { saveAgentModelFavorites: mock(async () => createSettingsSnapshotFixture()) },
+      { saveAgentModelFavorites: mock(async () => []) },
       { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
 
@@ -185,7 +182,7 @@ describe("useAgentModelFavorites", () => {
       }
       return initialSnapshot;
     });
-    const saveAgentModelFavorites = mock(async () => initialSnapshot);
+    const saveAgentModelFavorites = mock(async () => initialSnapshot.agentModelFavorites);
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites },
@@ -225,13 +222,13 @@ describe("useAgentModelFavorites", () => {
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     let attempts = 0;
     const saveAgentModelFavorites = mock(
-      async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
+      async (favorites: AgentModelFavorite[]): Promise<AgentModelFavorite[]> => {
         attempts += 1;
         if (attempts === 1) {
           throw new Error("Favorite write failed");
         }
         expect(favorites).toEqual([favorite]);
-        return savedSnapshot;
+        return savedSnapshot.agentModelFavorites;
       },
     );
     const harness = createHookHarness(
@@ -274,13 +271,13 @@ describe("useAgentModelFavorites", () => {
     });
     let saveAttempts = 0;
     const saveAgentModelFavorites = mock(
-      async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
+      async (favorites: AgentModelFavorite[]): Promise<AgentModelFavorite[]> => {
         saveAttempts += 1;
         if (saveAttempts === 1) {
           throw new Error("Favorite write failed");
         }
         expect(favorites).toEqual([concurrentFavorite, favorite]);
-        return savedSnapshot;
+        return savedSnapshot.agentModelFavorites;
       },
     );
     const harness = createHookHarness(

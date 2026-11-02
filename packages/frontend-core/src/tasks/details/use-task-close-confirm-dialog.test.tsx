@@ -1,7 +1,11 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { waitFor } from "@testing-library/react";
-import { createActiveWorkspaceWrapper } from "../../test-support/active-workspace-wrapper";
+import {
+  createActiveWorkspaceWrapper,
+  TEST_ACTIVE_WORKSPACE,
+} from "../../test-support/active-workspace-wrapper";
 import { enableReactActEnvironment } from "../../test-support/react-act-environment";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import {
@@ -27,7 +31,7 @@ describe("useTaskCloseConfirmDialog", () => {
     { choice: false, mergePending: true },
   ])("only waits for required close data: %j", async ({ choice, mergePending }) => {
     const settings = createDeferred<ReturnType<typeof createSettingsSnapshotFixture>>();
-    const mergeStatus = createDeferred<{ repoPath: string; tasks: [] }>();
+    const mergeStatus = createDeferred<WorkspaceRef & { tasks: [] }>();
     const connection = createTestClientConnection({
       client: {
         taskWorktreeCleanupImpactGet: async () => ({
@@ -39,8 +43,8 @@ describe("useTaskCloseConfirmDialog", () => {
         }),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (repoPath: string) =>
-          mergePending ? mergeStatus.promise : { repoPath, tasks: [] },
+        taskMergeStatusGet: async (scope: WorkspaceRef) =>
+          mergePending ? mergeStatus.promise : { ...scope, tasks: [] },
         workspaceGetSettingsSnapshot: () => settings.promise,
       },
     });
@@ -68,7 +72,11 @@ describe("useTaskCloseConfirmDialog", () => {
       if (choice !== null) expect(harness.getLatest().dialog.removeWorktree).toBe(choice);
     } finally {
       settings.resolve(createSettingsSnapshotFixture());
-      mergeStatus.resolve({ repoPath: "/repo", tasks: [] });
+      mergeStatus.resolve({
+        workspaceId: TEST_ACTIVE_WORKSPACE.workspaceId,
+        repoPath: TEST_ACTIVE_WORKSPACE.repoPath,
+        tasks: [],
+      });
       await harness.unmount();
       await connection.dispose();
     }
@@ -91,7 +99,7 @@ describe("useTaskCloseConfirmDialog", () => {
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 1 }),
-        taskMergeStatusGet: async (repoPath: string) => ({ repoPath, tasks: [] }),
+        taskMergeStatusGet: async (scope: WorkspaceRef) => ({ ...scope, tasks: [] }),
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       },
     });

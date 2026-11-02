@@ -1,3 +1,4 @@
+const workspace = { workspaceId: "workspace-1", repoPath: "/repo" };
 import {
   workspaceProviderSetupSetSchema,
   workspaceProviderSetupCommitSchema,
@@ -69,7 +70,7 @@ const makeRepoStoreHealthPayload = (overrides: Partial<RepoStoreHealth> = {}) =>
   category: "healthy",
   status: "ready",
   isReady: true,
-  detail: "SQLite task store is ready.",
+  detail: "The host database is ready.",
   databasePath: "/config/task-stores/workspace-1/database.sqlite",
   ...overrides,
 });
@@ -182,7 +183,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const input = { repoPath: "/repo", taskId: "task-1", ...save };
+    const input = { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1", ...save };
     const output = await client.workflowArtifactSave(input);
 
     expect(output.updatedAt).toBe("2026-02-20T10:00:00Z");
@@ -198,8 +199,11 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.tasksList("/repo")).resolves.toEqual([]);
-    expect(calls).toEqual([{ command: "tasks_list", args: { repoPath: "/repo" } }]);
+    const selectedWorkspace = { ...workspace, workspaceName: "Selected" };
+    await expect(client.tasksList(selectedWorkspace)).resolves.toEqual([]);
+    expect(calls).toEqual([
+      { command: "tasks_list", args: { workspaceId: "workspace-1", repoPath: "/repo" } },
+    ]);
   });
 
   test("reads all task cards through the command without Kanban retention", async () => {
@@ -207,8 +211,10 @@ describe("HostClient", () => {
       if (command === "tasks_list_all") return [];
       throw new Error(`Unexpected command: ${command}`);
     });
-    expect(await client.tasksListAll("/repo")).toEqual([]);
-    expect(calls).toEqual([{ command: "tasks_list_all", args: { repoPath: "/repo" } }]);
+    expect(await client.tasksListAll(workspace)).toEqual([]);
+    expect(calls).toEqual([
+      { command: "tasks_list_all", args: { workspaceId: "workspace-1", repoPath: "/repo" } },
+    ]);
   });
 
   test("lists the IDs of all tasks of a repository", async () => {
@@ -219,13 +225,16 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskIdsList("/repo")).resolves.toEqual(["task-1", "task-2"]);
-    expect(calls).toEqual([{ command: "task_ids_list", args: { repoPath: "/repo" } }]);
+    await expect(client.taskIdsList(workspace)).resolves.toEqual(["task-1", "task-2"]);
+    expect(calls).toEqual([
+      { command: "task_ids_list", args: { workspaceId: "workspace-1", repoPath: "/repo" } },
+    ]);
   });
 
   test("reads held Autopilot outcomes and claims one first-message recovery", async () => {
     const outcome = {
       outcomeId: "outcome-1",
+      workflowId: "openducktor",
       workspaceId: "alpha",
       repoPath: "/repo",
       task: { id: "task-1", title: "Task" },
@@ -260,7 +269,7 @@ describe("HostClient", () => {
   test("rejects a task ID list that is not a list of strings", async () => {
     const { client } = createClient(() => [{ id: "task-1" }]);
 
-    await expect(client.taskIdsList("/repo")).rejects.toThrow();
+    await expect(client.taskIdsList(workspace)).rejects.toThrow();
   });
 
   test("parses filesystem directory listings from the host", async () => {
@@ -373,7 +382,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const output = await client.taskStoreCheck("/repo");
+    const output = await client.taskStoreCheck(workspace);
 
     expect(output.repoStoreHealth?.category).toBe("database_unavailable");
     expect(output.repoStoreHealth?.status).toBe("blocking");
@@ -396,7 +405,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const tasks = await client.tasksList("/repo");
+    const tasks = await client.tasksList(workspace);
 
     expect(tasks[0]?.targetBranch).toBeUndefined();
     expect(tasks[0]?.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
@@ -505,7 +514,12 @@ describe("HostClient", () => {
       client.agentSessionWorkflowStart({
         repoPath: "/repo",
         runtimeKind: "opencode",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         systemPrompt: "Build the feature",
         model: { providerId: "openai", modelId: "gpt-5" },
       }),
@@ -552,7 +566,12 @@ describe("HostClient", () => {
         args: {
           repoPath: "/repo",
           runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           systemPrompt: "Build the feature",
           model: { providerId: "openai", modelId: "gpt-5" },
         },
@@ -692,7 +711,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const task = await client.taskUpdate("/repo", "task-1", {
+    const task = await client.taskUpdate(workspace, "task-1", {
       targetBranch: {
         remote: "origin",
         branch: "release/2026.04",
@@ -706,6 +725,7 @@ describe("HostClient", () => {
     expect(calls).toContainEqual({
       command: "task_update",
       args: {
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-1",
         patch: {
@@ -728,12 +748,12 @@ describe("HostClient", () => {
     });
 
     await client.taskCreate(
-      "/repo",
+      workspace,
       { title: "Task", issueType: "task", description: `![x](odt-asset:${assetId})` },
       { stagedAssetIds: [assetId] },
     );
     await client.taskUpdate(
-      "/repo",
+      workspace,
       "task-1",
       { description: `![x](odt-asset:${assetId})` },
       { stagedAssetIds: [assetId] },
@@ -743,6 +763,7 @@ describe("HostClient", () => {
       {
         command: "task_create",
         args: {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           input: {
             title: "Task",
@@ -756,6 +777,7 @@ describe("HostClient", () => {
       {
         command: "task_update",
         args: {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           patch: { description: `![x](odt-asset:${assetId})` },
@@ -773,7 +795,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.taskCreate("/repo", {
+    await client.taskCreate(workspace, {
       title: "Add GitHub login",
       issueType: "feature",
       description: undefined,
@@ -784,6 +806,7 @@ describe("HostClient", () => {
     expect(calls.at(-1)).toEqual({
       command: "task_create",
       args: {
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         input: {
           title: "Add GitHub login",
@@ -852,6 +875,7 @@ describe("HostClient", () => {
 
       await expect(
         client.workflowArtifactSave({
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           code: "spec",
@@ -872,6 +896,7 @@ describe("HostClient", () => {
 
     await expect(
       client.workflowArtifactSave({
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-1",
         code: "plan",
@@ -943,66 +968,9 @@ describe("HostClient", () => {
 
     await expect(
       // @ts-expect-error This negative test verifies runtime validation of a blank task status.
-      client.taskTransition("/repo", "task-1", " "),
+      client.taskTransition(workspace, "task-1", " "),
     ).rejects.toThrow();
     expect(calls).toHaveLength(0);
-  });
-
-  test("workspaceSaveRepoSettings uses atomic repo-settings IPC route", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "workspace_save_repo_settings") {
-        return {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          abbreviation: null,
-          tileColor: null,
-          repoPath: "/repo",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: "/tmp/worktrees",
-          defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-          effectiveWorktreeBasePath: "/tmp/worktrees",
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    const result = await client.workspaceSaveRepoSettings("repo", {
-      worktreeBasePath: "/tmp/worktrees",
-      branchPrefix: "codex",
-      hooks: {
-        postComplete: ["echo post"],
-      },
-      agentDefaults: {
-        build: {
-          providerId: "openai",
-          modelId: "gpt-5",
-        },
-      },
-    });
-
-    expect(result.hasConfig).toBe(true);
-    expect(calls).toEqual([
-      {
-        command: "workspace_save_repo_settings",
-        args: {
-          workspaceId: "repo",
-          settings: {
-            worktreeBasePath: "/tmp/worktrees",
-            branchPrefix: "codex",
-            hooks: {
-              postComplete: ["echo post"],
-            },
-            agentDefaults: {
-              build: {
-                providerId: "openai",
-                modelId: "gpt-5",
-              },
-            },
-          },
-        },
-      },
-    ]);
   });
 
   test("workspaceGetSettingsSnapshot uses snapshot IPC route", async () => {
@@ -1128,206 +1096,63 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("workspaceSaveSettingsSnapshot uses atomic snapshot IPC route", async () => {
+  test("workspaceSaveSettingsSnapshot sends edited fields and preserves owner results", async () => {
+    const response = {
+      type: "saved" as const,
+      shared: "saved" as const,
+      preferences: "saved" as const,
+      runtimeApplications: [],
+      workspaces: [],
+    };
     const { client, calls } = createClient((command) => {
-      if (command === "workspace_save_settings_snapshot") {
-        return {
-          type: "saved",
-          runtimeApplications: [],
-          workspaces: [
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: "/tmp/worktrees",
-              defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-              effectiveWorktreeBasePath: "/tmp/worktrees",
-            },
-          ],
-        };
-      }
+      if (command === "workspace_save_settings_snapshot") return response;
       throw new Error(`Unexpected command: ${command}`);
     });
-
-    const result = await client.workspaceSaveSettingsSnapshot({
-      system: { preferredOpenInToolId: "zed" },
-      git: {
-        defaultMergeMethod: "merge_commit",
+    const patch = {
+      global: {
+        git: { defaultMergeMethod: "squash" as const },
+        chat: { showThinkingMessages: false },
       },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        alwaysStartQaReviewsFresh: false,
-        rules: [],
-      },
-      workspaces: {
-        repo: {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          branchPrefix: "obp",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: {},
-          actions: { items: [], defaultActionId: null },
-          hooks: { postComplete: [] },
-          worktreeCopyPaths: [],
-          promptOverrides: {},
-          agentDefaults: {},
-        },
-      },
-      globalPromptOverrides: {},
-    });
-
-    if (result.type !== "saved") throw new Error("Expected a saved result.");
-    expect(result.workspaces).toHaveLength(1);
+    };
+    expect(await client.workspaceSaveSettingsSnapshot(patch)).toEqual(response);
     expect(calls).toEqual([
-      {
-        command: "workspace_save_settings_snapshot",
-        args: {
-          snapshot: {
-            system: { preferredOpenInToolId: "zed" },
-            git: {
-              defaultMergeMethod: "merge_commit",
-            },
-            chat: {
-              showThinkingMessages: false,
-            },
-            kanban: {
-              doneVisibleDays: 1,
-            },
-            autopilot: {
-              alwaysStartQaReviewsFresh: false,
-              rules: [],
-            },
-            workspaces: {
-              repo: {
-                workspaceId: "repo",
-                workspaceName: "Repo",
-                repoPath: "/repo",
-                branchPrefix: "obp",
-                defaultTargetBranch: { remote: "origin", branch: "main" },
-                git: {},
-                actions: { items: [], defaultActionId: null },
-                hooks: { postComplete: [] },
-                worktreeCopyPaths: [],
-                promptOverrides: {},
-                agentDefaults: {},
-              },
-            },
-            globalPromptOverrides: {},
-          },
-        },
-      },
+      { command: "workspace_save_settings_snapshot", args: { snapshot: patch } },
     ]);
   });
 
-  test("workspaceUpdateAgentModelFavorites returns the canonical settings snapshot", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "workspace_update_agent_model_favorites") {
-        return {
-          theme: "light",
-          git: { defaultMergeMethod: "merge_commit" },
-          workspaces: {},
-          globalPromptOverrides: {},
-          agentModelFavorites: [
-            { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-          ],
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
+  test("workspaceUpdateAgentModelFavorites returns the saved favorites", async () => {
     const favorites = [
       { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
     ];
-
-    const snapshot = await client.workspaceUpdateAgentModelFavorites(favorites);
-
-    expect(snapshot.agentModelFavorites).toEqual(favorites);
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_update_agent_model_favorites") return favorites;
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    expect(await client.workspaceUpdateAgentModelFavorites(favorites)).toEqual(favorites);
     expect(calls).toEqual([
-      {
-        command: "workspace_update_agent_model_favorites",
-        args: { favorites },
-      },
+      { command: "workspace_update_agent_model_favorites", args: { favorites } },
     ]);
   });
 
-  test("workspaceUpdateKanbanTaskCardView returns the canonical settings snapshot", async () => {
+  test("workspaceUpdateKanbanTaskCardView returns the saved view", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "workspace_update_kanban_task_card_view") {
-        return {
-          theme: "light",
-          git: { defaultMergeMethod: "merge_commit" },
-          kanban: { doneVisibleDays: 1, taskCardView: "compact" },
-          workspaces: {},
-          globalPromptOverrides: {},
-        };
-      }
+      if (command === "workspace_update_kanban_task_card_view") return "compact";
       throw new Error(`Unexpected command: ${command}`);
     });
-
-    const snapshot = await client.workspaceUpdateKanbanTaskCardView("compact");
-
-    expect(snapshot.kanban.taskCardView).toBe("compact");
+    expect(await client.workspaceUpdateKanbanTaskCardView("compact")).toBe("compact");
     expect(calls).toEqual([
-      {
-        command: "workspace_update_kanban_task_card_view",
-        args: { taskCardView: "compact" },
-      },
+      { command: "workspace_update_kanban_task_card_view", args: { taskCardView: "compact" } },
     ]);
   });
 
-  test("workspaceUpdateSidebarSessionGrouping returns the saved appearance through its own route", async () => {
+  test("workspaceUpdateSidebarSessionGrouping returns the saved mode through its own route", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "workspace_update_sidebar_session_grouping") {
-        return {
-          theme: "light",
-          git: { defaultMergeMethod: "merge_commit" },
-          appearance: { horizontalScrollbarVisibility: "hide", sidebarSessionGrouping: "none" },
-          workspaces: {},
-          globalPromptOverrides: {},
-        };
-      }
+      if (command === "workspace_update_sidebar_session_grouping") return "none";
       throw new Error(`Unexpected command: ${command}`);
     });
-    const snapshot = await client.workspaceUpdateSidebarSessionGrouping("none");
-    expect(snapshot.appearance).toEqual({
-      horizontalScrollbarVisibility: "hide",
-      sidebarSessionGrouping: "none",
-    });
+    expect(await client.workspaceUpdateSidebarSessionGrouping("none")).toBe("none");
     expect(calls).toEqual([
       { command: "workspace_update_sidebar_session_grouping", args: { grouping: "none" } },
-    ]);
-  });
-
-  test("workspaceUpdateGlobalGitConfig uses dedicated IPC route", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "workspace_update_global_git_config") {
-        return undefined;
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await client.workspaceUpdateGlobalGitConfig({
-      defaultMergeMethod: "squash",
-    });
-
-    expect(calls).toEqual([
-      {
-        command: "workspace_update_global_git_config",
-        args: {
-          git: {
-            defaultMergeMethod: "squash",
-          },
-        },
-      },
     ]);
   });
 
@@ -1343,7 +1168,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const result = await client.workspaceDetectGithubRepository("/repo");
+    const result = await client.workspaceDetectGithubRepository(workspace);
 
     expect(result).toEqual({
       host: "github.com",
@@ -1354,6 +1179,7 @@ describe("HostClient", () => {
       {
         command: "workspace_detect_github_repository",
         args: {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
         },
       },
@@ -1395,11 +1221,11 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.workspaceGetGitProviderContext("/repo")).resolves.toEqual(context);
+    await expect(client.workspaceGetGitProviderContext(workspace)).resolves.toEqual(context);
     expect(calls).toEqual([
       {
         command: "workspace_get_git_provider_context",
-        args: { repoPath: "/repo" },
+        args: { workspaceId: "workspace-1", repoPath: "/repo" },
       },
     ]);
   });
@@ -1412,15 +1238,12 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const result = await client.taskDelete("/repo", "task-1");
+    const result = await client.taskDelete(workspace, "task-1");
     expect(result.ok).toBe(true);
     expect(calls).toEqual([
       {
         command: "task_delete",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
       },
     ]);
   });
@@ -1433,7 +1256,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskDelete("/repo", "task-1")).rejects.toThrow(
+    await expect(client.taskDelete(workspace, "task-1")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command task_delete",
     );
   });
@@ -1446,16 +1269,13 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const task = await client.taskReset("/repo", "task-1");
+    const task = await client.taskReset(workspace, "task-1");
 
     expect(task.id).toBe("task-1");
     expect(calls).toEqual([
       {
         command: "task_reset",
-        args: {
-          repoPath: "/repo",
-          taskId: "task-1",
-        },
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
       },
     ]);
   });
@@ -1468,13 +1288,14 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const task = await client.taskClose("/repo", "task-1", false);
+    const task = await client.taskClose(workspace, "task-1", false);
 
     expect(task.status).toBe("closed");
     expect(calls).toEqual([
       {
         command: "task_close",
         args: {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: false,
@@ -1491,13 +1312,13 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const task = await client.taskApplyEvent("/repo", "task-1", "hold");
+    const task = await client.taskApplyEvent(workspace, "task-1", "hold");
 
     expect(task.id).toBe("task-1");
     expect(calls).toEqual([
       {
         command: "task_apply_event",
-        args: { repoPath: "/repo", taskId: "task-1", eventId: "hold" },
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1", eventId: "hold" },
       },
     ]);
   });
@@ -1516,20 +1337,24 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.taskWorktreeCleanupImpactGet("/repo", "task-1")).toEqual(impact);
-    await client.taskWorktreeRemove("/repo", "task-1");
+    expect(await client.taskWorktreeCleanupImpactGet(workspace, "task-1")).toEqual(impact);
+    await client.taskWorktreeRemove(workspace, "task-1");
 
     expect(calls).toEqual([
       {
         command: "task_worktree_cleanup_impact_get",
-        args: { repoPath: "/repo", taskId: "task-1" },
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
       },
-      { command: "task_worktree_remove", args: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        command: "task_worktree_remove",
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
+      },
     ]);
   });
 
   test("merge status commands parse the workspace snapshot", async () => {
     const snapshot = {
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       tasks: [
         {
@@ -1547,8 +1372,8 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.taskMergeStatusGet("/repo")).toEqual(snapshot);
-    expect(await client.taskMergeStatusCheck("/repo")).toEqual(snapshot);
+    expect(await client.taskMergeStatusGet(workspace)).toEqual(snapshot);
+    expect(await client.taskMergeStatusCheck(workspace)).toEqual(snapshot);
     expect(calls.map((call) => call.command)).toEqual([
       "task_merge_status_get",
       "task_merge_status_check",
@@ -1962,8 +1787,8 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.buildBlocked("/repo", "task-1", "Needs clarification");
-    await client.humanRequestChanges("/repo", "task-1", "Please rework API");
+    await client.buildBlocked(workspace, "task-1", "Needs clarification");
+    await client.humanRequestChanges(workspace, "task-1", "Please rework API");
 
     expect(calls.map((entry) => entry.command)).toEqual(["build_blocked", "human_request_changes"]);
     expect(calls[0].args?.reason).toBe("Needs clarification");
@@ -1972,7 +1797,7 @@ describe("HostClient", () => {
 
   test("tasksList rejects malformed host payloads", async () => {
     const { client } = createClient(() => ({ tasks: [] }));
-    await expect(client.tasksList("/repo")).rejects.toThrow(
+    await expect(client.tasksList(workspace)).rejects.toThrow(
       "Expected array payload from host command tasks_list",
     );
   });
@@ -2021,7 +1846,7 @@ describe("HostClient", () => {
     });
 
     const definitions = await client.runtimeDefinitionsList();
-    const qaTarget = await client.taskWorktreeGet("/repo", "task-1");
+    const qaTarget = await client.taskWorktreeGet(workspace, "task-1");
     const snapshot = await client.runtimeStatus();
     const reviewed = await client.runtimeRestartImpact("opencode");
     const restarted = await client.runtimeRestart("opencode", reviewed.confirmation);
@@ -2035,7 +1860,10 @@ describe("HostClient", () => {
     expect(snapshot.mcpBridge.state).toBe("ready");
     expect(calls).toEqual([
       { command: "runtime_definitions_list", args: {} },
-      { command: "task_worktree_get", args: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        command: "task_worktree_get",
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
+      },
       { command: "runtime_status", args: {} },
       { command: "runtime_restart_impact", args: { runtimeKind: "opencode" } },
       {
@@ -2064,7 +1892,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.taskWorktreeGet("/repo", "task-1")).toBe(null);
+    expect(await client.taskWorktreeGet(workspace, "task-1")).toBe(null);
   });
 
   test("task stop impact parses the previewed stoppable session count", async () => {
@@ -2075,13 +1903,18 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const impact = await client.taskStopImpactGet("/repo", ["task-1", "task-2"], "delete");
+    const impact = await client.taskStopImpactGet(workspace, ["task-1", "task-2"], "delete");
 
     expect(impact).toEqual({ stoppableSessionCount: 3 });
     expect(calls).toEqual([
       {
         command: "task_stop_impact_get",
-        args: { repoPath: "/repo", taskIds: ["task-1", "task-2"], operation: "delete" },
+        args: {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskIds: ["task-1", "task-2"],
+          operation: "delete",
+        },
       },
     ]);
   });
@@ -2098,6 +1931,7 @@ describe("HostClient", () => {
 
     await expect(
       client.agentSessionStop({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         runtimeKind: "opencode",
@@ -2116,6 +1950,7 @@ describe("HostClient", () => {
     });
 
     const result = await client.agentSessionStop({
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       runtimeKind: "opencode",
@@ -2129,6 +1964,7 @@ describe("HostClient", () => {
         command: "agent_session_stop",
         args: {
           request: {
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             runtimeKind: "opencode",
@@ -2151,12 +1987,12 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const history = await client.agentSessionsList("/repo", "task-1");
+    const history = await client.agentSessionsList(workspace, "task-1");
     const first = history[0];
     if (!first) {
       throw new Error("Expected persisted session history entry");
     }
-    await client.agentSessionDelete("/repo", "task-1", first);
+    await client.agentSessionDelete(workspace, "task-1", first);
 
     expect(history).toHaveLength(1);
     expect(calls.map((entry) => entry.command)).toEqual([
@@ -2164,6 +2000,7 @@ describe("HostClient", () => {
       "agent_session_delete",
     ]);
     expect(calls[0].args).toEqual({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: "task-1",
     });
@@ -2191,13 +2028,13 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const sessions = await client.agentSessionsListForTasks("/repo", ["task-2", "task-1"]);
+    const sessions = await client.agentSessionsListForTasks(workspace, ["task-2", "task-1"]);
 
     expect(sessions).toHaveLength(1);
     expect(calls).toEqual([
       {
         command: "agent_sessions_list_for_tasks",
-        args: { repoPath: "/repo", taskIds: ["task-2", "task-1"] },
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskIds: ["task-2", "task-1"] },
       },
     ]);
   });
@@ -2225,9 +2062,9 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.workflowArtifactGet("/repo", "task-1", "spec");
-    await client.agentSessionsListForTasks("/repo", ["task-1"]);
-    const sessions = await client.agentSessionsList("/repo", "task-1");
+    await client.workflowArtifactGet(workspace, "task-1", "spec");
+    await client.agentSessionsListForTasks(workspace, ["task-1"]);
+    const sessions = await client.agentSessionsList(workspace, "task-1");
 
     expect(sessions.map((session) => session.externalSessionId)).toEqual(["session-opencode-3"]);
     expect(calls.map((call) => call.command)).toEqual([
@@ -2259,7 +2096,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.agentSessionsListForTasks("/repo", ["task-1"])).rejects.toThrow("role");
+    await expect(client.agentSessionsListForTasks(workspace, ["task-1"])).rejects.toThrow("role");
   });
 
   test("agentSessionsList rejects invalid persisted agent session entries", async () => {
@@ -2279,7 +2116,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("role");
+    await expect(client.agentSessionsList(workspace, "task-1")).rejects.toThrow("role");
   });
 
   test("taskDirectMerge sends structured squash input", async () => {
@@ -2298,7 +2135,7 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.taskDirectMerge("/repo", "task-1", {
+    await client.taskDirectMerge(workspace, "task-1", {
       expected,
       mergeMethod: "squash",
       squashCommitMessage: "feat: add Microsoft login",
@@ -2309,6 +2146,7 @@ describe("HostClient", () => {
       {
         command: "task_direct_merge",
         args: {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -2330,17 +2168,18 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.repoPullRequestSync("/repo")).rejects.toThrow("ok");
+    await expect(client.repoPullRequestSync(workspace)).rejects.toThrow("ok");
   });
 
   test("repo pull request sync sends the captured identity and preserves typed skips", async () => {
     const skipped = { ok: false, reason: "workspace_closed", message: "Reopen the workspace." };
     const { client, calls } = createClient(() => skipped);
-    expect(await client.repoPullRequestSync("/repo", "workspace-1")).toEqual(skipped);
+    const capturedWorkspace = { ...workspace, workspaceName: "Captured" };
+    expect(await client.repoPullRequestSync(capturedWorkspace)).toEqual(skipped);
     expect(calls).toEqual([
       {
         command: "repo_pull_request_sync",
-        args: { repoPath: "/repo", expectedWorkspaceId: "workspace-1" },
+        args: { workspaceId: "workspace-1", repoPath: "/repo" },
       },
     ]);
   });
@@ -2351,7 +2190,7 @@ describe("HostClient", () => {
     { ok: false, reason: "disabled", message: " " },
   ])("rejects an incomplete sync skip response %j", async (response) => {
     const { client } = createClient(() => response);
-    await expect(client.repoPullRequestSync("/repo")).rejects.toThrow();
+    await expect(client.repoPullRequestSync(workspace)).rejects.toThrow();
   });
 
   test("taskPullRequestUnlink maps a validated boolean host response", async () => {
@@ -2362,9 +2201,12 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskPullRequestUnlink("/repo", "task-1")).resolves.toEqual({ ok: true });
+    await expect(client.taskPullRequestUnlink(workspace, "task-1")).resolves.toEqual({ ok: true });
     expect(calls).toEqual([
-      { command: "task_pull_request_unlink", args: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        command: "task_pull_request_unlink",
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
+      },
     ]);
   });
 
@@ -2377,6 +2219,6 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.taskPullRequestUnlink("/repo", "task-1")).rejects.toBe(hostFailure);
+    await expect(client.taskPullRequestUnlink(workspace, "task-1")).rejects.toBe(hostFailure);
   });
 });

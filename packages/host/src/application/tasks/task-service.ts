@@ -1,6 +1,8 @@
+import type { TaskSearchInput } from "../../ports/task-repository-ports";
+import { createTaskBuildStartUseCase } from "./use-cases/start-build";
 import {
   type AgentSessionRecord,
-  type ArtifactContentChunk,
+  type ArtifactReadResult,
   type ArtifactCreateRequest,
   type ArtifactDeleteRequest,
   type ArtifactDeleteResult,
@@ -10,7 +12,6 @@ import {
   type ArtifactSaveResult,
   type ArtifactScope,
   type BuildSessionBootstrap,
-  buildSessionBootstrapSchema,
   type PullRequest,
   type RepoPullRequestSyncRequest,
   type RepoPullRequestSyncResponse,
@@ -28,11 +29,9 @@ import {
   type TaskStopImpactRequest,
   type TaskWorktreeCleanupImpact,
 } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
 import {
-  HostOperationError,
   type HostCommandErrorAggregate,
   type HostDependencyErrorAggregate,
   type HostInvariantErrorAggregate,
@@ -68,9 +67,6 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { failOperationAfterRollback } from "./support/task-worktree-rollback";
-import { requireEffectEvent } from "./support/task-workflow-events";
-import { applyTaskEvent } from "./support/task-workflow-helpers";
 import {
   mapTaskServiceErrors,
   mapTaskCreationProgressErrors,
@@ -134,10 +130,6 @@ import {
   type TaskSessionLifecycleCoordinator,
 } from "./worktrees/task-session-lifecycle-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
-import {
-  createTaskSessionStartPreparationService,
-  type TaskSessionStartPreparationInput,
-} from "./worktrees/task-session-start-preparation-service";
 
 export type TaskServiceError =
   | GitProviderRepositoryError
@@ -162,9 +154,7 @@ export type TaskServiceError =
 
 export type TaskService = {
   listTaskArtifacts(input: ArtifactScope): Effect.Effect<TaskArtifactCollection, TaskServiceError>;
-  readTaskArtifact(
-    input: ArtifactReadRequest,
-  ): Effect.Effect<ArtifactContentChunk, TaskServiceError>;
+  readTaskArtifact(input: ArtifactReadRequest): Effect.Effect<ArtifactReadResult, TaskServiceError>;
   createTaskArtifact(
     input: ArtifactCreateRequest,
   ): Effect.Effect<Omit<ArtifactSaveResult, "cursor">, TaskServiceError>;
@@ -179,6 +169,9 @@ export type TaskService = {
   ): Effect.Effect<Omit<ArtifactDeleteResult, "cursor">, TaskServiceError>;
   findTask(input: TaskIdInput): Effect.Effect<TaskCard | null, TaskServiceError>;
   listTaskReferences(input: RepoPathInput): Effect.Effect<TaskReference[], TaskServiceError>;
+  searchTasks(
+    input: TaskSearchInput,
+  ): Effect.Effect<{ tasks: TaskCard[]; totalCount: number }, TaskServiceError>;
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
   listKanbanTasks(input: RepoPathInput): Effect.Effect<TaskCard[], TaskServiceError>;
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
@@ -331,21 +324,6 @@ export type TaskServiceUseCaseInput = Omit<
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   completionState: ReturnType<typeof createTaskCompletionState>;
 };
-/** The role of the step that the build.start event starts. */
-const requireBuildStartRole = (workflow: TaskWorkflow) =>
-  requireEffectEvent(workflow, "build.start").pipe(
-    Effect.flatMap((eventId) => {
-      const role = workflow.startEventRole(eventId);
-      return role === undefined
-        ? Effect.fail(
-            TaskPolicyError.policy(
-              `Task workflow "${workflow.definition.id}" starts no step with its build.start event. Name it as the startEventId of a step.`,
-            ),
-          )
-        : Effect.succeed(role);
-    }),
-  );
-
 export const createTaskServiceWithMutationProgress = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => createTaskServiceImplementation(input);
@@ -358,13 +336,11 @@ const createTaskServiceImplementation = (
 ): TaskServiceWithMutationProgress => {
   const taskSessionLifecycleCoordinator =
     input.taskSessionLifecycleCoordinator ?? createTaskSessionLifecycleCoordinator();
-  const gitPort = input.gitPort;
   const useCaseInput: TaskServiceUseCaseInput = {
     ...input,
     taskSessionLifecycleCoordinator,
     completionState: createTaskCompletionState(input.publishCompletion),
   };
-  const taskSessionStart = createTaskSessionStartPreparationService(useCaseInput);
   const service = {
     ...createArtifactUseCases(useCaseInput),
     ...createTaskQueryUseCases(useCaseInput),
@@ -382,60 +358,7 @@ const createTaskServiceImplementation = (
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
     ...createWorkflowArtifactUseCases(useCaseInput),
-    buildStart: (startInput: BuildStartInput) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          if (!gitPort) {
-            return yield* Effect.fail(
-              new HostOperationError({
-                operation: "task.build_start",
-                message: "Git port is required for build_start.",
-              }),
-            );
-          }
-          const canonicalRepoPath = yield* gitPort.canonicalizePath(startInput.repoPath);
-          yield* taskSessionLifecycleCoordinator.acquireLifecycle(
-            canonicalRepoPath,
-            [startInput.taskId],
-            "start build",
-          );
-          const task = yield* input.taskStore.getTask({
-            repoPath: canonicalRepoPath,
-            taskId: startInput.taskId,
-          });
-          const role = yield* requireBuildStartRole(input.taskWorkflows.forTask(task));
-          const preparationInput: TaskSessionStartPreparationInput = {
-            canonicalRepoPath,
-            taskId: startInput.taskId,
-            role,
-            runtimeKind: startInput.runtimeKind,
-          };
-          const prepared = yield* taskSessionStart.prepare(preparationInput);
-          let rollback = prepared.rollback;
-          const completion = yield* Effect.gen(function* () {
-            yield* taskSessionStart.complete(prepared, ({ repoPath, taskId, eventId }) =>
-              applyTaskEvent(input.taskStore, input.taskWorkflows, { repoPath, taskId }, eventId),
-            );
-            // A committed build retains its worktree when cancellation arrives.
-            rollback = () => Effect.void;
-            return buildSessionBootstrapSchema.parse({
-              runtimeKind: prepared.runtimeKind,
-              workingDirectory: prepared.workingDirectory,
-            });
-          }).pipe(
-            Effect.result,
-            Effect.uninterruptible,
-            Effect.onInterrupt(() => rollback().pipe(Effect.orDie)),
-          );
-          if (completion._tag === "Success") {
-            return completion.success;
-          }
-          return yield* failOperationAfterRollback(rollback(), completion.failure, {
-            operation: "task.build_start.finalize",
-            details: { repoPath: canonicalRepoPath, taskId: startInput.taskId },
-          });
-        }),
-      ),
+    ...createTaskBuildStartUseCase(useCaseInput),
     ...createTaskBuildStateUseCases(useCaseInput),
     ...createTaskReviewUseCases(useCaseInput),
     ...createTaskPullRequestSyncUseCases(useCaseInput),
@@ -475,6 +398,7 @@ const createTaskServiceImplementation = (
     linkPullRequest: (input) => mapTaskServiceErrors(service.linkPullRequest(input)),
     listKanbanTasks: (input) => mapTaskServiceErrors(service.listKanbanTasks(input)),
     listTaskIds: (input) => mapTaskServiceErrors(service.listTaskIds(input)),
+    searchTasks: (input) => mapTaskServiceErrors(service.searchTasks(input)),
     listTasks: (input) => mapTaskServiceErrors(service.listTasks(input)),
     getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
     getTaskWorktreeCleanupImpact: (input) =>

@@ -22,6 +22,7 @@ import { type TaskWorktreeState, useTaskWorktree } from "./use-task-worktree";
 export type TaskGitRepoSettings = { defaultTargetBranch?: GitTargetBranch | null | undefined };
 
 export type TaskGitPanelInput = {
+  workspaceId: string | null;
   /** The repository of the task, or null while the task or workspace is unknown. */
   repoPath: string | null;
   taskId: string | null;
@@ -70,7 +71,7 @@ export type TaskGitPanel = {
  * repository default, the local and branch changes, and their refresh.
  */
 export function useTaskGitPanel(input: TaskGitPanelInput): TaskGitPanel {
-  const { repoPath, taskId, contextMode, viewKey, savedTarget } = input;
+  const { workspaceId, repoPath, taskId, contextMode, viewKey, savedTarget } = input;
   const targetBranchState = useMemo(
     () =>
       resolveTaskTargetBranchState({
@@ -81,6 +82,7 @@ export function useTaskGitPanel(input: TaskGitPanelInput): TaskGitPanel {
     [input.repoSettings?.defaultTargetBranch, input.savedTargetError, savedTarget],
   );
   const { worktree, queriedPath } = useTaskWorktree({
+    workspaceId,
     repoPath,
     taskId,
     contextMode,

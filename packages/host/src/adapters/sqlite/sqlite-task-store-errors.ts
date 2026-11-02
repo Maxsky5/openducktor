@@ -22,13 +22,16 @@ type SqliteTaskStoreAdapterErrorDetails = {
   field?: string;
 };
 
-export type SqliteTaskStoreDataErrorDetails =
-  | { readonly taskId: string }
-  | {
-      readonly code: string;
-      readonly taskId: string;
-      readonly value: number;
-    };
+export type SqliteTaskStoreDataErrorDetails = {
+  readonly workspaceId?: string;
+  readonly taskId?: string;
+  readonly sessionId?: string;
+  readonly externalSessionId?: string;
+  readonly sourcePath?: string;
+  readonly position?: number;
+  readonly code?: string;
+  readonly value?: number;
+};
 
 export class SqliteTaskStoreDataError extends Data.TaggedError("SqliteTaskStoreDataError")<{
   readonly message: string;

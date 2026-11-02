@@ -45,14 +45,11 @@ export const compareActiveSessionForPrimary = (
     return activityPriority;
   }
 
-  if (left.startedAt !== right.startedAt) {
-    if (!left.startedAt) {
-      return 1;
-    }
-    if (!right.startedAt) {
-      return -1;
-    }
-    return left.startedAt > right.startedAt ? -1 : 1;
+  if (left.startedAt === undefined && right.startedAt !== undefined) return 1;
+  if (right.startedAt === undefined && left.startedAt !== undefined) return -1;
+  if (left.startedAt !== undefined && right.startedAt !== undefined) {
+    const startedAtOrder = Date.parse(right.startedAt) - Date.parse(left.startedAt);
+    if (startedAtOrder !== 0) return startedAtOrder;
   }
 
   const leftIdentityKey = agentSessionIdentityKey(left);
@@ -83,15 +80,15 @@ const resolveLatestHistoricalSessionByRole = (
 ): AgentSessionRecord | null => {
   const matchingTaskAgentSessions = historicalSessions
     .filter((session) => session.role === role)
-    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
   return matchingTaskAgentSessions[0] ?? null;
 };
 
 export const resolveHistoricalSessionRoles = (
   historicalSessions: readonly AgentSessionRecord[],
 ): AgentRole[] => {
-  const sortedTaskAgentSessions = historicalSessions.toSorted((left, right) =>
-    right.startedAt.localeCompare(left.startedAt),
+  const sortedTaskAgentSessions = historicalSessions.toSorted(
+    (left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt),
   );
   const roles: AgentRole[] = [];
   const seenRoles = new Set<AgentRole>();

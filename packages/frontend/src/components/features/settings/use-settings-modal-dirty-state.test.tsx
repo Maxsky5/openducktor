@@ -1,105 +1,42 @@
-import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { expect, test } from "bun:test";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 
-enableReactActEnvironment();
-
-type HookArgs = Parameters<typeof useSettingsModalDirtyState>[0];
-
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useSettingsModalDirtyState, initialProps);
-
-const createSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
-
-describe("useSettingsModalDirtyState", () => {
-  test("marks sections dirty and resets when the modal closes", async () => {
-    const harness = createHookHarness({
-      open: true,
-      loadedSnapshot: createSnapshot(),
-    });
-
-    await harness.mount();
-
-    await harness.run((state) => {
-      state.markDirty("repoSettings");
-      state.markDirty("repoSettings");
-      state.markDirty("chat");
-      state.markDirty("appearance");
-    });
-
-    expect(harness.getLatest().dirtySections).toEqual({
-      general: false,
-      appearance: true,
-      chat: true,
-      notifications: false,
-      customAgentRoles: false,
-      reusablePrompts: false,
-      globalGit: false,
-      agentRuntimes: false,
-      kanban: false,
-      autopilot: false,
-      globalPromptOverrides: false,
-      repoSettings: true,
-    });
-
-    await harness.update({
-      open: false,
-      loadedSnapshot: createSnapshot(),
-    });
-
-    expect(harness.getLatest().dirtySections).toEqual({
-      general: false,
-      appearance: false,
-      chat: false,
-      notifications: false,
-      customAgentRoles: false,
-      reusablePrompts: false,
-      globalGit: false,
-      agentRuntimes: false,
-      kanban: false,
-      autopilot: false,
-      globalPromptOverrides: false,
-      repoSettings: false,
-    });
-
-    await harness.unmount();
+test("a partial save baseline leaves failed preference edits dirty", () => {
+  const baseline = createSettingsSnapshotFixture();
+  const draft = {
+    ...baseline,
+    git: { ...baseline.git, removeWorktreeOnClose: !baseline.git.removeWorktreeOnClose },
+    chat: { ...baseline.chat, showThinkingMessages: !baseline.chat.showThinkingMessages },
+  };
+  const sharedSaved = { ...baseline, git: draft.git };
+  const state = useSettingsModalDirtyState({
+    open: true,
+    baseline: sharedSaved,
+    draft,
   });
-
-  test("resets dirty sections when a fresh snapshot loads while open", async () => {
-    const harness = createHookHarness({
+  expect(state.dirtySections.globalGit).toBe(false);
+  expect(state.dirtySections.chat).toBe(true);
+  expect(
+    useSettingsModalDirtyState({
       open: true,
-      loadedSnapshot: createSnapshot(),
-    });
+      baseline: sharedSaved,
+      draft: sharedSaved,
+    }).dirtySections.chat,
+  ).toBe(false);
+});
 
-    await harness.mount();
-
-    await harness.run((state) => {
-      state.markDirty("globalGit");
-    });
-
-    expect(harness.getLatest().dirtySections.globalGit).toBe(true);
-
-    const defaultSnapshot = createSnapshot();
-    await harness.update({
-      open: true,
-      loadedSnapshot: {
-        ...defaultSnapshot,
-        chat: {
-          ...defaultSnapshot.chat,
-          showThinkingMessages: true,
-          expandFileDiffsByDefault: true,
-        },
-        reusablePrompts: [],
-      },
-    });
-
-    expect(harness.getLatest().dirtySections.globalGit).toBe(false);
-
-    await harness.unmount();
+test("reordered object keys do not mark a section dirty", () => {
+  const baseline = createSettingsSnapshotFixture();
+  const reorderedGit: typeof baseline.git = {
+    removeWorktreeOnClose: baseline.git.removeWorktreeOnClose,
+    defaultMergeMethod: baseline.git.defaultMergeMethod,
+  };
+  expect(JSON.stringify(reorderedGit)).not.toBe(JSON.stringify(baseline.git));
+  const state = useSettingsModalDirtyState({
+    open: true,
+    baseline,
+    draft: { ...baseline, git: reorderedGit },
   });
+  expect(state.dirtySections.globalGit).toBe(false);
 });

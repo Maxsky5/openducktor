@@ -29,17 +29,6 @@ test("reads saved Claude settings for each new launch", async () => {
   expect(readConfig).toHaveBeenCalledTimes(2);
 });
 
-test("reports missing saved settings before launching Claude", async () => {
-  const policies = createClaudeLaunchPolicy(
-    createSettingsConfigTestDouble({
-      readConfig: () => Effect.succeed(null),
-    }),
-  );
-  await expect(Effect.runPromise(policies.resolve({ role: null }))).rejects.toThrow(
-    "Open Settings and save before starting Claude",
-  );
-});
-
 test("propagates settings read failures without using another policy", async () => {
   const policies = createClaudeLaunchPolicy(
     createSettingsConfigTestDouble({

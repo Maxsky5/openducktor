@@ -106,6 +106,7 @@ export const externalTaskCreatedEventSchema = z
   .object({
     eventId: strictTaskEventValueSchema,
     kind: z.literal("external_task_created"),
+    workspaceId: strictTaskEventValueSchema,
     repoPath: strictTaskEventValueSchema,
     taskId: strictTaskEventValueSchema,
     taskSnapshot: taskEventTaskSnapshotSchema,
@@ -138,6 +139,7 @@ export const tasksUpdatedEventSchema = taskChangeSetSchema
   .extend({
     eventId: strictTaskEventValueSchema,
     kind: z.literal("tasks_updated"),
+    workspaceId: strictTaskEventValueSchema,
     repoPath: strictTaskEventValueSchema,
     taskSnapshots: taskEventTaskSnapshotsSchema,
     statusChanges: z.array(taskEventStatusChangeSchema),

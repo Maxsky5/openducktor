@@ -1,5 +1,6 @@
-import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { workspaceScopeValue } from "./workspace-scope";
+import type { GitCheck, PathCheck, TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
+import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "../lib/errors";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
 import type { DiagnosticsFailureKind } from "../types/diagnostics";
@@ -9,7 +10,7 @@ import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query"
 export type ChecksQueryDependencies = {
   pathCheck: (force?: boolean) => Promise<PathCheck>;
   gitCheck: () => Promise<GitCheck>;
-  taskStoreCheck: (repoPath: string) => Promise<TaskStoreCheck>;
+  taskStoreCheck: (scope: WorkspaceRef) => Promise<TaskStoreCheck>;
 };
 
 const HOST_CHECK_STALE_TIME_MS = 5 * 60_000;
@@ -42,9 +43,10 @@ export const checksQueryKeys = {
   all: ["checks"] as const,
   path: () => [...checksQueryKeys.all, "path"] as const,
   git: () => [...checksQueryKeys.all, "git"] as const,
-  taskStore: (repoPath: string) => [...checksQueryKeys.all, "task-store", repoPath] as const,
-  // A repo path is absolute, so a live key never equals the skipped key.
-  taskStoreSkipped: () => checksQueryKeys.taskStore(SKIPPED_QUERY_KEY_SEGMENT),
+  taskStore: (scope: WorkspaceRef) =>
+    [...checksQueryKeys.all, "task-store", workspaceScopeValue(scope)] as const,
+  taskStoreSkipped: () =>
+    [...checksQueryKeys.all, SKIPPED_QUERY_KEY_SEGMENT, "task-store"] as const,
 };
 
 export const pathCheckQueryOptions = (
@@ -75,11 +77,11 @@ export const gitCheckQueryOptions = (
   });
 
 export const taskStoreCheckQueryOptions = (
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"],
   scheduler: ScheduleTask = scheduleTask,
 ) =>
-  queryOptions({
+  queryOptions<TaskStoreCheck, Error, TaskStoreCheck, QueryKey>({
     queryKey: checksQueryKeys.taskStore(repoPath),
     queryFn: ({ client }): Promise<TaskStoreCheck> =>
       withDiagnosticsQueryTimeout(
@@ -89,9 +91,9 @@ export const taskStoreCheckQueryOptions = (
     staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
   });
 
-export const taskStoreCheckQueryOptionsOrSkip = (repoPath: string | null) =>
+export const taskStoreCheckQueryOptionsOrSkip = (repoPath: WorkspaceRef | null) =>
   repoPath === null
-    ? skippedQueryOptions<TaskStoreCheck, ReturnType<typeof checksQueryKeys.taskStore>>({
+    ? skippedQueryOptions<TaskStoreCheck, QueryKey>({
         queryKey: checksQueryKeys.taskStoreSkipped(),
         staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
       })
@@ -132,7 +134,7 @@ export const refreshPathAndGitChecks = async (
 
 export const loadTaskStoreCheck = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"],
   scheduler: ScheduleTask = scheduleTask,
   force = false,

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { resolveCodexEffectivePolicy, type RuntimeKind } from "@openducktor/contracts";
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
@@ -26,10 +25,7 @@ import {
 import { createHostRuntimeService } from "../../application/runtimes/host-runtime-service";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
-import {
-  loadGlobalConfig,
-  type WorkspaceSettingsService,
-} from "../../application/workspaces/workspace-settings-model";
+import { type WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { toHostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
@@ -45,6 +41,7 @@ import { guardRuntimeStart } from "./user-path-guards";
 /** Composes the shared runtime of each kind, its registry, and its lifecycle service. */
 export const createNodeHostRuntimeComposition = ({
   clientVersion,
+  hostInstanceId,
   configuredRuntimeStarter,
   defaultPorts,
   eventBus,
@@ -61,6 +58,7 @@ export const createNodeHostRuntimeComposition = ({
   workspaceSettingsService,
 }: {
   clientVersion: string | undefined;
+  hostInstanceId: string;
   configuredRuntimeStarter: RuntimeStarterPort | undefined;
   defaultPorts: NodeHostDefaultPorts;
   eventBus: HostEventBusPort | undefined;
@@ -107,8 +105,8 @@ export const createNodeHostRuntimeComposition = ({
     runtimeDistribution,
     toolDiscovery,
     workingDirectoryDependencies,
-    resolveMcpBridgeConnection: (repoPath) =>
-      resolveClaudeMcpBridgeConnection(resolveBridge(), repoPath),
+    resolveMcpBridgeConnection: (repoPath, workspaceId) =>
+      resolveClaudeMcpBridgeConnection(resolveBridge(), repoPath, workspaceId),
     resolveWorkflowRolePolicy,
   });
   const codexStarterInput: Parameters<typeof createCodexRuntimeStarter>[0] = {
@@ -124,7 +122,7 @@ export const createNodeHostRuntimeComposition = ({
       onBackgroundFailure,
       resolveMcpServerConfig: mcpServerConfigFor("codex"),
       resolveRuntimePolicy: ({ sessionScope }) =>
-        loadGlobalConfig(settingsConfig).pipe(
+        settingsConfig.readGlobalConfig().pipe(
           Effect.flatMap(({ agentRuntimes: { codex } }) =>
             Effect.try({
               try: () =>
@@ -166,7 +164,6 @@ export const createNodeHostRuntimeComposition = ({
     if (!descriptor) throw new Error(`Runtime definition for ${kind} is missing.`);
     return descriptor;
   };
-  const hostInstanceId = randomUUID();
   const publishRuntimeStatus = eventBus
     ? createRuntimeStatusPublisher(eventBus, hostInstanceId)
     : () => {};

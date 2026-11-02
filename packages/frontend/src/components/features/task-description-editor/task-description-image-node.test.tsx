@@ -29,6 +29,7 @@ describe("TaskDescriptionImageNode", () => {
             previews: new Map(),
             renderContext: null,
             issueImageContext: {
+              workspaceId: "workspace-1",
               providerId: "github",
               repoPath: "/workspace/repo",
               sourceId: "132",
@@ -47,6 +48,7 @@ describe("TaskDescriptionImageNode", () => {
       const image = await view.findByRole("img", { name: "Issue image" });
       expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U=");
       expect(imageGet).toHaveBeenCalledWith({
+        workspaceId: "workspace-1",
         repoPath: "/workspace/repo",
         sourceId: "132",
         url,

@@ -14,11 +14,13 @@ export const notificationRouteSessionIdentity = (
   repoPath: string | null,
   taskId: string,
   externalSessionId: string | null,
+  workspaceId?: string | null,
 ): NotificationSessionIdentity | null => {
   if (
     !target ||
     !("session" in target) ||
     target.repoPath !== repoPath ||
+    (target.workspaceId !== undefined && target.workspaceId !== workspaceId) ||
     target.taskId !== taskId ||
     target.session.externalSessionId !== externalSessionId
   )

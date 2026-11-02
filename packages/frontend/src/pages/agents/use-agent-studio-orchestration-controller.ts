@@ -188,7 +188,12 @@ export function useAgentStudioOrchestrationController({
   const { saveAgentModelFavorites } = useWorkspaceStateContext();
   const agentModelFavoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const { view } = selection;
-  useAgentStudioArtifacts(workspaceRepoPath, view.selectedTask);
+  useAgentStudioArtifacts(
+    activeWorkspaceId && workspaceRepoPath
+      ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+      : null,
+    view.selectedTask,
+  );
   const { sessionReadModelLoadState } = useAgentSessionReadModelStateContext();
   const {
     scheduleQueryUpdate,
@@ -332,7 +337,12 @@ export function useAgentStudioOrchestrationController({
   });
 
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
-  const mergedTarget = useMergedTaskTarget(workspaceRepoPath, view.selectedTask);
+  const mergedTarget = useMergedTaskTarget(
+    activeWorkspaceId && workspaceRepoPath
+      ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+      : null,
+    view.selectedTask,
+  );
   const selectedSessionContext = useMemo(
     () =>
       buildAgentStudioSelectedSessionContext({
@@ -439,7 +449,9 @@ export function useAgentStudioOrchestrationController({
   });
 
   const artifactScope: Parameters<typeof useAgentStudioPageModels>[0]["artifactScope"] =
-    workspaceRepoPath && view.taskId ? { repoPath: workspaceRepoPath, taskId: view.taskId } : null;
+    activeWorkspaceId && workspaceRepoPath && view.taskId
+      ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath, taskId: view.taskId }
+      : null;
   if (artifactScope && activeWorkspaceId) artifactScope.workspaceId = activeWorkspaceId;
   if (artifactScope && view.selectedTask)
     artifactScope.artifactSummary = view.selectedTask.artifactSummary;

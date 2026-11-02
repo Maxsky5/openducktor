@@ -8,6 +8,7 @@ import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { createTaskWorkflowResolver } from "../../composition/node/task-workflow-composition";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { reviewTaskWorkflows } from "../../test-support/task-workflows";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
@@ -31,14 +32,13 @@ afterEach(async () => {
 
 const service = (taskWorkflows: TaskWorkflowResolver = reviewTaskWorkflows) =>
   createTaskService({
-    taskStore: harness.store,
+    atomicTaskStore: harness.store,
     taskWorkflows,
     gitPort: createBuildStartGitPort({ calls: [] }),
     settingsConfig: createBuildSettingsConfig(new Set([harness.repoPath])),
     systemCommands: createBuildSystemCommands([]),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
-      workspaceId: "fairnest",
-      repoPath: harness.repoPath,
+      ...harness.scope,
       hooks: { postComplete: [] },
     }),
   });
@@ -46,14 +46,14 @@ const service = (taskWorkflows: TaskWorkflowResolver = reviewTaskWorkflows) =>
 const createArticle = () =>
   Effect.runPromise(
     service().createTask({
-      repoPath: harness.repoPath,
+      ...harness.scope,
       task: { title: "Launch post", issueType: "article", priority: 2 },
     }),
   );
 
 const save = (taskId: string, code: string, updatedBy: string, verdict?: string) => {
   const input: WorkflowArtifactSaveInput = {
-    repoPath: harness.repoPath,
+    ...harness.scope,
     taskId,
     code,
     markdown: `# ${code} by ${updatedBy}`,
@@ -66,7 +66,7 @@ const save = (taskId: string, code: string, updatedBy: string, verdict?: string)
 };
 
 const status = async (taskId: string): Promise<string | undefined> => {
-  const card = await Effect.runPromise(service().findTask({ repoPath: harness.repoPath, taskId }));
+  const card = await Effect.runPromise(service().findTask({ ...harness.scope, taskId }));
   return card?.status;
 };
 
@@ -84,7 +84,7 @@ const artifactRowsSchema = z.array(
 const readArtifactRows = (taskId: string) => {
   const database = new Database(harness.databasePath, { readonly: true });
   const statement = database.prepare(
-    "select artifact_id, code, revision, verdict, source_tool, updated_by from tasks_artifacts where task_id = ? and classification = 'workflow' order by code, revision",
+    "select artifact_id, code, revision, verdict, source_tool, updated_by from task_artifacts where task_id = ? and classification = 'workflow' order by code, revision",
   );
   try {
     return artifactRowsSchema.parse(statement.all(taskId));
@@ -109,7 +109,7 @@ describe("task service with a custom task workflow", () => {
   test("rejects an issue type that the workflow does not declare", async () => {
     const result = await Effect.runPromiseExit(
       service().createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         task: { title: "Bug", issueType: "bug", priority: 2 },
       }),
     );
@@ -121,7 +121,11 @@ describe("task service with a custom task workflow", () => {
     const { id } = await createArticle();
 
     await Effect.runPromise(
-      service().transitionTask({ repoPath: harness.repoPath, taskId: id, status: "writing" }),
+      service().transitionTask({
+        ...harness.scope,
+        taskId: id,
+        status: "writing",
+      }),
     );
     expect(await status(id)).toBe("writing");
 
@@ -148,7 +152,10 @@ describe("task service with a custom task workflow", () => {
       row("review", 2, "editor", "accept"),
     ]);
     const card = await Effect.runPromise(
-      service().findTask({ repoPath: harness.repoPath, taskId: id }),
+      service().findTask({
+        ...harness.scope,
+        taskId: id,
+      }),
     );
     expect(card?.artifactSummary.review).toMatchObject({ present: true, verdict: "accept" });
   });
@@ -158,7 +165,7 @@ describe("task service with a custom task workflow", () => {
 
     const result = await Effect.runPromiseExit(
       service().workflowArtifactSave({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: id,
         code: "review",
         markdown: "# Review",
@@ -176,13 +183,21 @@ describe("task service with a custom task workflow", () => {
   test("applies an event action without a host effect", async () => {
     const { id } = await createArticle();
     await Effect.runPromise(
-      service().transitionTask({ repoPath: harness.repoPath, taskId: id, status: "writing" }),
+      service().transitionTask({
+        ...harness.scope,
+        taskId: id,
+        status: "writing",
+      }),
     );
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
 
     const card = await Effect.runPromise(
-      service().applyTaskEvent({ repoPath: harness.repoPath, taskId: id, eventId: "hold" }),
+      service().applyTaskEvent({
+        ...harness.scope,
+        taskId: id,
+        eventId: "hold",
+      }),
     );
 
     expect(card.status).toBe("paused");
@@ -191,12 +206,20 @@ describe("task service with a custom task workflow", () => {
   test("rejects an event whose action is not available for the task", async () => {
     const { id } = await createArticle();
     await Effect.runPromise(
-      service().transitionTask({ repoPath: harness.repoPath, taskId: id, status: "writing" }),
+      service().transitionTask({
+        ...harness.scope,
+        taskId: id,
+        status: "writing",
+      }),
     );
     await save(id, "draft", "writer");
 
     const result = await Effect.runPromiseExit(
-      service().applyTaskEvent({ repoPath: harness.repoPath, taskId: id, eventId: "hold" }),
+      service().applyTaskEvent({
+        ...harness.scope,
+        taskId: id,
+        eventId: "hold",
+      }),
     );
 
     expect(String(result)).toContain("No action that sends hold is available");
@@ -211,7 +234,11 @@ describe("task service with a custom task workflow", () => {
     const { id } = await createArticle();
 
     const result = await Effect.runPromiseExit(
-      service().applyTaskEvent({ repoPath: harness.repoPath, taskId: id, eventId }),
+      service().applyTaskEvent({
+        ...harness.scope,
+        taskId: id,
+        eventId,
+      }),
     );
 
     expect(String(result)).toContain(message);
@@ -220,7 +247,7 @@ describe("task service with a custom task workflow", () => {
 
   test("pauses, resumes, and completes a build with the effect events of the workflow", async () => {
     const { id } = await createArticle();
-    const input = { repoPath: harness.repoPath, taskId: id };
+    const input = { ...harness.scope, taskId: id };
     await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
 
     await Effect.runPromise(service().buildBlocked({ ...input, reason: "Waiting for data" }));
@@ -248,7 +275,7 @@ describe("task service with a custom task workflow", () => {
 
   test("requests changes on a reviewed task with the review effect event", async () => {
     const { id } = await createArticle();
-    const input = { repoPath: harness.repoPath, taskId: id };
+    const input = { ...harness.scope, taskId: id };
     await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
@@ -262,11 +289,18 @@ describe("task service with a custom task workflow", () => {
     const second = await createArticle();
 
     const closed = await Effect.runPromise(
-      service().closeTask({ repoPath: harness.repoPath, taskId: first.id, removeWorktree: true }),
+      service().closeTask({
+        ...harness.scope,
+        taskId: first.id,
+        removeWorktree: true,
+      }),
     );
     expect(closed.status).toBe("shelved");
 
-    const input = { repoPath: harness.repoPath, taskId: second.id };
+    const input = {
+      ...harness.scope,
+      taskId: second.id,
+    };
     await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
     await save(second.id, "draft", "writer");
     const reset = await Effect.runPromise(service().resetTask(input));
@@ -276,7 +310,7 @@ describe("task service with a custom task workflow", () => {
 
   test("commits the start event of a role step and rejects other events", async () => {
     const { id } = await createArticle();
-    const input = { repoPath: harness.repoPath, taskId: id };
+    const input = { ...harness.scope, taskId: id };
 
     const rejected = await Effect.runPromiseExit(
       service().applyStartEvent({ ...input, eventId: "move-writing" }),
@@ -295,19 +329,19 @@ describe("task service with a workflow for each task", () => {
   test("reads, moves, and hides each task with the workflow of that task", async () => {
     const review = createReviewTaskWorkflow();
     // The issue type stands for the stored workflow of a task.
-    const taskWorkflows: TaskWorkflowResolver = {
+    const taskWorkflows = createTaskWorkflowResolver({
       forTask: (task: { readonly id: string; readonly issueType?: string }) =>
         task.issueType === "article" ? review : builtinTaskWorkflow,
       forNewTask: () => builtinTaskWorkflow,
       workflows: [builtinTaskWorkflow, review],
-    };
+    });
     await harness.cleanup();
     harness = await createSqliteTaskStoreHarness({ taskWorkflows });
     const tasks = service(taskWorkflows);
     const insert = (issueType: string, status: string) =>
       Effect.runPromise(
         harness.store.createTask({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           task: { title: issueType, issueType, priority: 2 },
           status,
         }),
@@ -315,7 +349,9 @@ describe("task service with a workflow for each task", () => {
     const article = await insert("article", "backlog");
     const feature = await insert("feature", "open");
 
-    const cards = await Effect.runPromise(tasks.listTasks({ repoPath: harness.repoPath }));
+    const cards = await Effect.runPromise(
+      tasks.listTasks({ workspaceId: harness.workspaceId, repoPath: harness.repoPath }),
+    );
     const card = (id: string) => cards.find((entry) => entry.id === id);
     expect(Object.keys(card(article.id)?.agentWorkflows ?? {})).toEqual(["writer", "editor"]);
     expect(Object.keys(card(article.id)?.artifactSummary ?? {})).toEqual(["draft", "review"]);
@@ -325,7 +361,13 @@ describe("task service with a workflow for each task", () => {
       "qaReport",
     ]);
 
-    const input = (taskId: string) => ({ repoPath: harness.repoPath, taskId });
+    const search = () =>
+      Effect.runPromise(harness.store.searchTasks({ ...harness.scope, limit: 10 }));
+    expect((await search()).totalCount).toBe(2);
+    const input = (taskId: string) => ({
+      ...harness.scope,
+      taskId,
+    });
     const moved = await Effect.runPromise(
       tasks.transitionTask({ ...input(article.id), status: "writing" }),
     );
@@ -340,8 +382,9 @@ describe("task service with a workflow for each task", () => {
     expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("shelved");
     expect((await Effect.runPromise(tasks.findTask(input(feature.id))))?.status).toBe("closed");
     const visible = await Effect.runPromise(
-      harness.store.listTasks({ repoPath: harness.repoPath, doneVisibleDays: 0 }),
+      harness.store.listTasks({ ...harness.scope, doneVisibleDays: 0 }),
     );
     expect(visible).toEqual([]);
+    expect(await search()).toEqual({ tasks: [], totalCount: 0 });
   });
 });

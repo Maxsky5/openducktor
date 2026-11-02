@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { z } from "zod";
 import {
   HostOperationError,
@@ -37,6 +37,7 @@ export type SqliteStatement = {
 export type SqliteDatabase = {
   close(): Effect.Effect<void, HostOperationErrorAggregate>;
   exec(sql: string): Effect.Effect<void, HostOperationErrorAggregate>;
+  inTransaction(): Effect.Effect<boolean, HostOperationErrorAggregate>;
   prepare(sql: string): Effect.Effect<SqliteStatement, HostOperationErrorAggregate>;
 };
 
@@ -58,6 +59,15 @@ const sqliteValueRowsSchema = z.array(sqliteValueRowSchema);
 
 export const currentSqliteDriverRuntime = (): SqliteDriverRuntime =>
   "Bun" in globalThis ? "bun" : "node";
+
+export const openSqliteDatabase = (
+  databasePath: string,
+  runtime: SqliteDriverRuntime = currentSqliteDriverRuntime(),
+  options: { readonly?: boolean } = {},
+): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
+  runtime === "bun"
+    ? openBunSqliteDatabase(databasePath, options.readonly ?? false)
+    : openNodeSqliteDatabase(databasePath, options.readonly ?? false);
 
 const unsupportedSqliteResult = (operation: string, cause: z.ZodError): HostOperationError =>
   new HostOperationError({
@@ -116,13 +126,39 @@ const loadNodeSqliteModule = (): Effect.Effect<NodeSqliteModule, HostOperationEr
       }),
   });
 
+const busyErrorSchema = z.union([
+  z.object({ code: z.literal("SQLITE_BUSY") }),
+  z.object({ errcode: z.number().int() }),
+]);
+const isBusy = (cause: unknown): boolean => {
+  const parsed = busyErrorSchema.safeParse(cause);
+  return parsed.success && ("code" in parsed.data || (parsed.data.errcode & 0xff) === 5);
+};
+
 const runSqliteOperation = <A>(
   operation: string,
   run: () => A,
 ): Effect.Effect<A, HostOperationErrorAggregate> =>
-  Effect.try({
-    try: run,
-    catch: (cause) => toHostOperationError(cause, operation),
+  Effect.gen(function* () {
+    const startedAt = yield* Clock.currentTimeMillis;
+    let delay = 5;
+    while (true) {
+      const result = yield* Effect.result(Effect.try({ try: run, catch: (cause) => cause }));
+      if (result._tag === "Success") return result.success;
+      if (!isBusy(result.failure)) {
+        return yield* toHostOperationError(result.failure, operation);
+      }
+      if ((yield* Clock.currentTimeMillis) - startedAt >= 30_000) {
+        return yield* new HostOperationError({
+          operation,
+          message:
+            "The host database stayed locked for 30 seconds. Finish the other database operation, then retry.",
+          cause: result.failure,
+        });
+      }
+      yield* Effect.sleep(delay);
+      delay = Math.min(delay * 2, 100);
+    }
   });
 
 const adaptBunStatement = (statement: BunSqliteStatement): SqliteStatement => ({
@@ -200,6 +236,8 @@ const adaptNodeStatement = (statement: NodeSqliteStatement): SqliteStatement => 
 const adaptBunDatabase = (database: BunSqliteDatabase): SqliteDatabase => ({
   close: () => runSqliteOperation("sqlite.bunDatabase.close", () => database.close()),
   exec: (sql) => runSqliteOperation("sqlite.bunDatabase.exec", () => database.exec(sql)),
+  inTransaction: () =>
+    runSqliteOperation("sqlite.bunDatabase.inTransaction", () => database.inTransaction),
   prepare: (sql) =>
     runSqliteOperation("sqlite.bunDatabase.prepare", () =>
       adaptBunStatement(database.prepare(sql)),
@@ -209,6 +247,8 @@ const adaptBunDatabase = (database: BunSqliteDatabase): SqliteDatabase => ({
 const adaptNodeDatabase = (database: NodeSqliteDatabase): SqliteDatabase => ({
   close: () => runSqliteOperation("sqlite.nodeDatabase.close", () => database.close()),
   exec: (sql) => runSqliteOperation("sqlite.nodeDatabase.exec", () => database.exec(sql)),
+  inTransaction: () =>
+    runSqliteOperation("sqlite.nodeDatabase.inTransaction", () => database.isTransaction),
   prepare: (sql) =>
     runSqliteOperation("sqlite.nodeDatabase.prepare", () =>
       adaptNodeStatement(database.prepare(sql)),
@@ -217,30 +257,26 @@ const adaptNodeDatabase = (database: NodeSqliteDatabase): SqliteDatabase => ({
 
 const openBunSqliteDatabase = (
   databasePath: string,
+  readonly: boolean,
 ): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const { Database } = yield* loadBunSqliteModule();
     const database = yield* runSqliteOperation(
       "sqlite.openBunDatabase",
-      () => new Database(databasePath, { create: true }),
+      () => new Database(databasePath, { create: !readonly, readonly }),
     );
     return adaptBunDatabase(database);
   });
 
 const openNodeSqliteDatabase = (
   databasePath: string,
+  readonly: boolean,
 ): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
   Effect.gen(function* () {
     const { DatabaseSync } = yield* loadNodeSqliteModule();
     const database = yield* runSqliteOperation(
       "sqlite.openNodeDatabase",
-      () => new DatabaseSync(databasePath),
+      () => new DatabaseSync(databasePath, { readOnly: readonly }),
     );
     return adaptNodeDatabase(database);
   });
-
-export const openSqliteDatabase = (
-  databasePath: string,
-  runtime: SqliteDriverRuntime = currentSqliteDriverRuntime(),
-): Effect.Effect<SqliteDatabase, HostOperationErrorAggregate> =>
-  runtime === "bun" ? openBunSqliteDatabase(databasePath) : openNodeSqliteDatabase(databasePath);

@@ -92,9 +92,10 @@ export type WorkflowRolePolicyResolver = (
 ) => WorkflowRolePolicy;
 
 export const workflowAgentSessionScope = (
+  workspaceId: string,
   taskId: string,
   role: AgentRole,
-): AgentSessionWorkflowScope => ({ kind: "workflow", taskId, role });
+): AgentSessionWorkflowScope => ({ kind: "workflow", workspaceId, taskId, role });
 
 export const isWorkflowAgentSessionScope = (
   scope: AgentSessionAssociation | null | undefined,

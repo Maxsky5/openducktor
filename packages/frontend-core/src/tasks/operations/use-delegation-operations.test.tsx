@@ -118,8 +118,15 @@ describe("useDelegationOperations", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo",
       });
-      expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
+      expect(buildStart).toHaveBeenCalledWith(
+        { workspaceId: "repo", repoPath: "/repo" },
+        "task-1",
+        "opencode",
+      );
+      expect(refreshTaskData).toHaveBeenCalledWith(
+        { workspaceId: "repo", repoPath: "/repo" },
+        "task-1",
+      );
     } finally {
       await unmount();
     }
@@ -154,7 +161,11 @@ describe("useDelegationOperations", () => {
       await harness.run((operations) => operations.delegateTask("task-1"));
 
       expect(loadRepoRuntimeCatalog).not.toHaveBeenCalled();
-      expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
+      expect(buildStart).toHaveBeenCalledWith(
+        { workspaceId: "repo", repoPath: "/repo" },
+        "task-1",
+        "opencode",
+      );
     } finally {
       await unmount();
     }

@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
 import { isCancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +16,6 @@ import { useWorkspaceSelectionOperations } from "./use-workspace-selection-opera
 import {
   createDeferred,
   createWorkspaceHostClient,
-  flush,
   workspace,
 } from "./workspace-hook-test-fixtures";
 import { WorkspaceHostProvider } from "./workspace-hook-test-utils";
@@ -232,6 +232,7 @@ describe("use-workspace-selection-operations", () => {
       const record = workspace("/new-repo", true);
       let registered = false;
       workspaceHost.workspaceCatalogGet = mock(async () => ({
+        catalogRevision: 0,
         openWorkspaces: registered ? [record] : [],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -252,7 +253,7 @@ describe("use-workspace-selection-operations", () => {
       await harness.mount();
       await harness.waitFor((state) => state.hasLoadedWorkspaceList);
       const queryClient = harness.getQueryClient();
-      const providerKey = repositoryGitProviderContextQueryKeys.repo(record.repoPath);
+      const providerKey = repositoryGitProviderContextQueryKeys.repo(record);
       queryClient.setQueryData(providerKey, null);
       const invalidate = failRefresh
         ? spyOn(queryClient, "invalidateQueries").mockRejectedValue(
@@ -293,6 +294,7 @@ describe("use-workspace-selection-operations", () => {
       expect(harness.getLatest().hasLoadedWorkspaceList).toBe(false);
 
       catalogDeferred.resolve({
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -302,6 +304,7 @@ describe("use-workspace-selection-operations", () => {
       expect(harness.getLatest().isLoadingWorkspaces).toBe(false);
     } finally {
       catalogDeferred.resolve({
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -335,6 +338,7 @@ describe("use-workspace-selection-operations", () => {
         throw new Error("Catalog load failed");
       }
       return {
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -361,6 +365,7 @@ describe("use-workspace-selection-operations", () => {
     );
     const workspaceList = mock(async () => [workspace("/repo-old", true)]);
     const workspaceCatalogGet = mock(async () => ({
+      catalogRevision: 0,
       openWorkspaces: [workspace("/repo-old", true)],
       closedWorkspaces: [],
       incompleteRemovals: [],
@@ -375,7 +380,7 @@ describe("use-workspace-selection-operations", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.hasLoadedWorkspaceList);
-      expect(workspaceList).toHaveBeenCalledTimes(1);
+      expect(workspaceList).not.toHaveBeenCalled();
       expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
 
       await harness.run(async (value) => {
@@ -391,7 +396,7 @@ describe("use-workspace-selection-operations", () => {
         workspaceName: "Repo New",
         repoPath: "/repo-new",
       });
-      expect(workspaceList).toHaveBeenCalledTimes(1);
+      expect(workspaceList).not.toHaveBeenCalled();
       expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
       await harness.waitFor((state) => state.workspaces.length === 2);
       expect(harness.getLatest().workspaces).toEqual([
@@ -417,7 +422,12 @@ describe("use-workspace-selection-operations", () => {
     });
 
     workspaceHost.workspaceSelect = mock(async () => workspace("/repo-a", true));
-    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
+    workspaceHost.workspaceCatalogGet = mock(async () => ({
+      catalogRevision: 0,
+      openWorkspaces: [workspace("/repo-a", true)],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }));
 
     const harness = createSelectionHarness({
       activeRepo: "/repo-old",
@@ -446,6 +456,7 @@ describe("use-workspace-selection-operations", () => {
     const workspaceSelect = mock(async () => workspace("/repo-a", true));
     const workspaceList = mock(async () => [workspace("/repo-a"), workspace("/repo-b", true)]);
     const workspaceCatalogGet = mock(async () => ({
+      catalogRevision: 0,
       openWorkspaces: [workspace("/repo-a"), workspace("/repo-b", true)],
       closedWorkspaces: [],
       incompleteRemovals: [],
@@ -460,14 +471,14 @@ describe("use-workspace-selection-operations", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.hasLoadedWorkspaceList);
-      expect(workspaceList).toHaveBeenCalledTimes(1);
+      expect(workspaceList).not.toHaveBeenCalled();
       expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
 
       await harness.run((value) => value.selectWorkspace("repo-a"));
       await harness.waitFor((state) => state.workspaces.at(0)?.isActive === true);
 
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
-      expect(workspaceList).toHaveBeenCalledTimes(1);
+      expect(workspaceList).not.toHaveBeenCalled();
       expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(harness.getLatest().workspaces).toEqual([
@@ -674,10 +685,12 @@ describe("use-workspace-selection-operations", () => {
     let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-a");
     workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
     workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
-    workspaceHost.workspaceList = mock(async () => [
-      workspace("/repo-a"),
-      workspace("/repo-b", true),
-    ]);
+    workspaceHost.workspaceCatalogGet = mock(async () => ({
+      catalogRevision: 0,
+      openWorkspaces: [workspace("/repo-a"), workspace("/repo-b", true)],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }));
     const harness = createSelectionHarness({
       activeWorkspace: latestActiveWorkspace,
       setActiveWorkspace: (workspace) => {
@@ -765,16 +778,21 @@ describe("use-workspace-selection-operations", () => {
     const reorderStarted = createDeferred<void>();
     const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
     let listCalls = 0;
-    const workspaceList = mock(async () => {
+    const workspaceCatalogGet = mock(async () => {
       listCalls += 1;
-      return [workspace("/repo-a"), workspace("/repo-b", true)];
+      return {
+        catalogRevision: 0,
+        openWorkspaces: [workspace("/repo-a"), workspace("/repo-b", true)],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      };
     });
     workspaceHost.workspaceReorder = mock(async () => {
       reorderStarted.resolve();
       return reorderDeferred.promise;
     });
     workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
-    workspaceHost.workspaceList = workspaceList;
+    workspaceHost.workspaceCatalogGet = workspaceCatalogGet;
     const toastError = spyOn(toast, "error").mockImplementation(() => "");
     const harness = createRepoSelectionHarness("/repo-a");
 
@@ -824,10 +842,12 @@ describe("use-workspace-selection-operations", () => {
       secondReorderStarted.resolve();
       return secondReorder.promise;
     });
-    workspaceHost.workspaceList = mock(async () => [
-      workspace("/repo-a", true),
-      workspace("/repo-b"),
-    ]);
+    workspaceHost.workspaceCatalogGet = mock(async () => ({
+      catalogRevision: 0,
+      openWorkspaces: [workspace("/repo-a", true), workspace("/repo-b")],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }));
     const toastError = spyOn(toast, "error").mockImplementation(() => "");
     const harness = createRepoSelectionHarness("/repo-a");
 
@@ -870,35 +890,41 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
-  test("does not report a workspace load failure when a switch cancels the read", async () => {
-    const listStarted = createDeferred<void>();
-    const listDeferred = createDeferred<ReturnType<typeof workspace>[]>();
-    workspaceHost.workspaceList = mock(async () => {
-      listStarted.resolve();
-      return listDeferred.promise;
-    });
-    workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
-    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+  test("keeps a switch made while the first catalog read is pending", async () => {
+    const catalog = createDeferred<WorkspaceCatalog>();
+    workspaceHost.workspaceCatalogGet = mock(() => catalog.promise);
+    const select = mock(async () => workspace("/repo-b", true));
+    workspaceHost.workspaceSelect = select;
     const harness = createRepoSelectionHarness("/repo-a");
-
     try {
       await harness.mount();
-      await listStarted.promise;
-
-      await harness.run(async (value) => {
-        await value.selectWorkspace("repo-b");
+      let switching: Promise<void> | undefined;
+      await harness.run((value) => {
+        switching = value.selectWorkspace("repo-b");
       });
-      await flush();
-
-      const listState = harness.getQueryClient().getQueryState(workspaceQueryKeys.list());
-      expect(listState?.fetchStatus).toBe("idle");
-      expect(listState?.error).toBeTruthy();
+      expect(select).toHaveBeenCalledTimes(1);
+      await harness.run(async () => {
+        catalog.resolve({
+          catalogRevision: 0,
+          openWorkspaces: [workspace("/repo-a", true), workspace("/repo-b")],
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+        });
+        await switching;
+      });
+      await harness.waitFor((state) =>
+        state.workspaces.some((record) => record.workspaceId === "repo-b" && record.isActive),
+      );
+      expect(workspaceHost.workspaceCatalogGet).toHaveBeenCalledTimes(1);
       expect(harness.getLatest().workspaceLoadError).toBeNull();
-      expect(toastError).not.toHaveBeenCalled();
     } finally {
-      listDeferred.resolve([workspace("/repo-a"), workspace("/repo-b", true)]);
+      catalog.resolve({
+        catalogRevision: 0,
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      });
       await harness.unmount();
-      toastError.mockRestore();
     }
   });
 
@@ -906,8 +932,17 @@ describe("use-workspace-selection-operations", () => {
     "drops closed workspace caches after %s, including pending reads",
     async (action) => {
       const open = [workspace("/repo", true), workspace("/other")];
-      const catalog = { openWorkspaces: open, closedWorkspaces: [], incompleteRemovals: [] };
-      const closed = { ...catalog, openWorkspaces: [workspace("/other", true)] };
+      const catalog = {
+        catalogRevision: 0,
+        openWorkspaces: open,
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      };
+      const closed = {
+        ...catalog,
+        catalogRevision: 0,
+        openWorkspaces: [workspace("/other", true)],
+      };
       workspaceHost.workspaceList = mock(async () => open);
       workspaceHost.workspaceCatalogGet = mock(async () => catalog);
       workspaceHost.workspaceClose = mock(async () => closed);
@@ -918,7 +953,7 @@ describe("use-workspace-selection-operations", () => {
       try {
         await harness.mount();
         const queryClient = harness.getQueryClient();
-        queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        queryClient.setQueryData(taskQueryKeys.repoData(workspaceRefFixture("/repo")), {
           tasks: [{ id: "task-1" }],
         });
         queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), { workspaceId: "repo" });
@@ -945,9 +980,9 @@ describe("use-workspace-selection-operations", () => {
         });
 
         if (action === "refresh") {
-          workspaceHost.workspaceList = mock(async () => closed.openWorkspaces);
+          workspaceHost.workspaceCatalogGet = mock(async () => closed);
           await queryClient.invalidateQueries({
-            queryKey: workspaceQueryKeys.list(),
+            queryKey: workspaceQueryKeys.catalog(),
             refetchType: "none",
           });
         }
@@ -967,7 +1002,9 @@ describe("use-workspace-selection-operations", () => {
         for (const finish of release) finish();
         expect((await Promise.all(reads)).every((cancelled) => cancelled === true)).toBe(true);
         if (action === "remove")
-          expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+          expect(
+            queryClient.getQueryData(taskQueryKeys.repoData(workspaceRefFixture("/repo"))),
+          ).toBeUndefined();
         expect(queryClient.getQueryData(workspaceQueryKeys.repoConfig("repo"))).toBeUndefined();
         for (const key of catalogKeys) expect(queryClient.getQueryData(key)).toBeUndefined();
         expect(queryClient.getQueryData<unknown>(otherConfigKey)).toEqual({ workspaceId: "other" });
@@ -989,6 +1026,7 @@ describe("use-workspace-selection-operations", () => {
     workspaceHost.workspaceCatalogGet = mock(async () => {
       catalogCalls += 1;
       return {
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -996,6 +1034,7 @@ describe("use-workspace-selection-operations", () => {
     });
     workspaceHost.workspaceRemove = mock(async () => ({
       catalog: {
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -1006,9 +1045,7 @@ describe("use-workspace-selection-operations", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(
-        () => harness.getQueryClient().getQueryState(workspaceQueryKeys.list())?.data !== undefined,
-      );
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
       const queryClient = harness.getQueryClient();
 
       await harness.run((value) =>
@@ -1021,11 +1058,12 @@ describe("use-workspace-selection-operations", () => {
 
       expect(queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list())).toEqual([]);
       expect(queryClient.getQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog())).toEqual({
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
       });
-      expect(listCalls).toBe(1);
+      expect(listCalls).toBe(0);
       expect(catalogCalls).toBe(1);
     } finally {
       await harness.unmount();
@@ -1046,12 +1084,14 @@ describe("use-workspace-selection-operations", () => {
       name: "close",
       activeRepo: "/repo",
       loadedCatalog: {
+        catalogRevision: 0,
         openWorkspaces: [workspace("/repo", true)],
         closedWorkspaces: [],
         incompleteRemovals: [],
       },
       apply: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => {
         workspaceHost.workspaceClose = mock(async () => ({
+          catalogRevision: 0,
           openWorkspaces: [],
           closedWorkspaces: [workspace("/repo")],
           incompleteRemovals: [],
@@ -1065,12 +1105,14 @@ describe("use-workspace-selection-operations", () => {
       name: "reopen",
       activeRepo: null,
       loadedCatalog: {
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [workspace("/repo")],
         incompleteRemovals: [],
       },
       apply: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => {
         workspaceHost.workspaceReopen = mock(async () => ({
+          catalogRevision: 0,
           openWorkspaces: [workspace("/repo", true)],
           closedWorkspaces: [],
           incompleteRemovals: [],
@@ -1084,6 +1126,7 @@ describe("use-workspace-selection-operations", () => {
       name: "remove",
       activeRepo: "/repo",
       loadedCatalog: {
+        catalogRevision: 0,
         openWorkspaces: [workspace("/repo", true)],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -1091,6 +1134,7 @@ describe("use-workspace-selection-operations", () => {
       apply: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => {
         workspaceHost.workspaceRemove = mock(async () => ({
           catalog: {
+            catalogRevision: 0,
             openWorkspaces: [],
             closedWorkspaces: [workspace("/other")],
             incompleteRemovals: [],
@@ -1141,6 +1185,7 @@ describe("use-workspace-selection-operations", () => {
     workspaceHost.workspaceCatalogGet = mock(async () => {
       catalogCalls += 1;
       return {
+        catalogRevision: 0,
         openWorkspaces: [workspace("/repo", true)],
         closedWorkspaces: [],
         incompleteRemovals: [],
@@ -1165,7 +1210,7 @@ describe("use-workspace-selection-operations", () => {
         ),
       ).rejects.toThrow("Removal stopped after a durable change");
 
-      expect(listCalls).toBe(2);
+      expect(listCalls).toBe(0);
       expect(catalogCalls).toBe(2);
     } finally {
       await harness.unmount();
@@ -1223,6 +1268,7 @@ describe("use-workspace-selection-operations", () => {
       ).rejects.toThrow("A workspace action is already in progress");
 
       closeResult.resolve({
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [workspace("/repo")],
         incompleteRemovals: [],
@@ -1231,6 +1277,7 @@ describe("use-workspace-selection-operations", () => {
       expect(workspaceHost.workspaceClose).toHaveBeenCalledTimes(1);
     } finally {
       closeResult.resolve({
+        catalogRevision: 0,
         openWorkspaces: [],
         closedWorkspaces: [workspace("/repo")],
         incompleteRemovals: [],
@@ -1241,6 +1288,7 @@ describe("use-workspace-selection-operations", () => {
 
   test("keeps a committed lifecycle action successful when cache refresh fails", async () => {
     workspaceHost.workspaceClose = mock(async () => ({
+      catalogRevision: 0,
       openWorkspaces: [],
       closedWorkspaces: [workspace("/repo")],
       incompleteRemovals: [],

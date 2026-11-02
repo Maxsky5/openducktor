@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { KanbanTaskCardView, SettingsSnapshot } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -82,7 +82,7 @@ describe("useKanbanTaskCardView", () => {
     }
   });
 
-  test("replaces the optimistic value with the saved snapshot", async () => {
+  test("saves the view without replacing other settings", async () => {
     const initialSnapshot = createSettingsSnapshotFixture({
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
     });
@@ -90,7 +90,7 @@ describe("useKanbanTaskCardView", () => {
       theme: "dark",
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "compact" },
     });
-    const write = createDeferred<typeof savedSnapshot>();
+    const write = createDeferred<KanbanTaskCardView>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
     const harness = createKanbanTaskCardViewHarness({
@@ -110,7 +110,14 @@ describe("useKanbanTaskCardView", () => {
           .taskCardView,
       ).toBe("normal");
 
-      write.resolve(savedSnapshot);
+      await harness.run((state) => {
+        state.queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), {
+          ...initialSnapshot,
+          theme: "dark",
+        });
+      });
+
+      write.resolve(savedSnapshot.kanban.taskCardView);
       await harness.waitFor((state) => state.taskCardView === "compact" && !state.isPending, 2000);
       expect(
         harness
@@ -130,7 +137,7 @@ describe("useKanbanTaskCardView", () => {
     const savedSnapshot = createSettingsSnapshotFixture({
       kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "compact" },
     });
-    const write = createDeferred<typeof savedSnapshot>();
+    const write = createDeferred<KanbanTaskCardView>();
     let shouldFailSettingsRead = false;
     const workspaceGetSettingsSnapshot = mock(async () => {
       if (shouldFailSettingsRead) {
@@ -165,7 +172,7 @@ describe("useKanbanTaskCardView", () => {
       await harness.waitFor((state) => state.taskCardView === "compact" && state.isPending, 2000);
       expect(workspaceUpdateKanbanTaskCardView).toHaveBeenCalledWith("compact");
 
-      write.resolve(savedSnapshot);
+      write.resolve(savedSnapshot.kanban.taskCardView);
       await harness.waitFor((state) => !state.isPending, 2000);
     } finally {
       await harness.unmount();

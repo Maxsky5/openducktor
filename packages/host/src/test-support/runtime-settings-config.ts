@@ -1,3 +1,4 @@
+import { withSettingsConfigMutationTestMethods } from "./settings-config-mutations";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../config/global-config";
@@ -7,8 +8,8 @@ import type { SettingsConfigPort } from "../ports/settings-config-port";
 const createSettingsConfig = (
   resolveExecutablePath: () => Effect.Effect<string, HostValidationError>,
   kind: RuntimeKind,
-): SettingsConfigPort => ({
-  readConfig: () =>
+): SettingsConfigPort => {
+  const readConfig = () =>
     resolveExecutablePath().pipe(
       Effect.map((executablePath) => {
         const config = createDefaultGlobalConfig();
@@ -24,15 +25,21 @@ const createSettingsConfig = (
           },
         };
       }),
-    ),
-  writeConfig: () => Effect.void,
-  defaultWorktreeBasePath: (workspaceId) => `/tmp/${workspaceId}`,
-  defaultRepoWorktreeBasePath: () => "/tmp/repo",
-  resolveConfiguredPath: (path) => path,
-  canonicalizePath: (path) => Effect.succeed(path),
-  pathExists: () => Effect.succeed(true),
-  join: (...paths) => paths.join("/"),
-});
+    );
+  return withSettingsConfigMutationTestMethods({
+    readConfig,
+    updateConfig: (change) =>
+      readConfig().pipe(
+        Effect.map((current) => change(current, Object.values(current.workspaces))),
+      ),
+    defaultWorktreeBasePath: (workspaceId) => `/tmp/${workspaceId}`,
+    defaultRepoWorktreeBasePath: () => "/tmp/repo",
+    resolveConfiguredPath: (path) => path,
+    canonicalizePath: (path) => Effect.succeed(path),
+    pathExists: () => Effect.succeed(true),
+    join: (...paths) => paths.join("/"),
+  });
+};
 
 export const createFixedRuntimeSettingsConfig = (
   kind: RuntimeKind,

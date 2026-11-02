@@ -5,7 +5,6 @@ import {
   repoConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentRuntimeCatalog,
-  settingsSnapshotSchema,
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
@@ -23,13 +22,19 @@ import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { createAgentMessageDeliveryService } from "./agent-message-delivery-service";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 
 const target = {
   repoPath: "/repo",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo/tree",
   externalSessionId: "root",
-  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "repo",
+    taskId: "task-1",
+    role: "build" as const,
+  },
 };
 const selection = (modelId = "current"): AgentSessionModelSelection => ({
   runtimeKind: "opencode",
@@ -122,17 +127,24 @@ const setup = (
       taskWorkflows: builtinTaskWorkflows,
       taskReader,
       queries,
+      settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
       settings: {
-        getRepoConfigByRepoPath: () =>
+        getRepoConfig: () =>
           Effect.succeed(
             repoConfigSchema.parse({
-              workspaceId: "workspace",
+              workspaceId: "repo",
               workspaceName: "Workspace",
               repoPath: "/repo",
             }),
           ),
-        getSettingsSnapshot: () =>
-          Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
+        getRepoConfigByRepoPath: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "repo",
+              workspaceName: "Workspace",
+              repoPath: "/repo",
+            }),
+          ),
       },
     }),
     runtime: {

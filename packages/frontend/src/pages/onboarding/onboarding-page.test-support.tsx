@@ -164,14 +164,10 @@ export const createOnboardingTestHarness = () => {
       loadRepoSettings: mock(async () => {
         throw new Error("Not used");
       }),
-      saveRepoSettings: mock(async () => {}),
-      saveWorkspaceModelDefaults: mock(async () => {}),
-      loadSettingsSnapshot: mock(async () => createSettingsSnapshotFixture()),
       detectGithubRepository: mock(async () => null),
-      saveGlobalGitConfig: mock(async () => {}),
       previewSettingsSnapshotRuntime: async () => ({ impact: null }),
       saveSettingsSnapshot,
-      saveAgentModelFavorites: mock(async () => createSettingsSnapshotFixture()),
+      saveAgentModelFavorites: mock(async () => []),
     } satisfies WorkspaceStateContextValue;
 
     const runtimeContextValue = {

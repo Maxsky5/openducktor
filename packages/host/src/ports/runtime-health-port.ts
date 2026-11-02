@@ -1,5 +1,5 @@
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type { HostOperationErrorAggregate } from "../effect/host-errors";
 
 export type RuntimeHealthPort = {
@@ -14,8 +14,3 @@ export type RuntimeHealthPort = {
     executablePath: string,
   ): Effect.Effect<RuntimeHealth, HostOperationErrorAggregate>;
 };
-
-export class RuntimeHealthPortTag extends Context.Service<
-  RuntimeHealthPortTag,
-  RuntimeHealthPort
->()("@openducktor/host/RuntimeHealthPort") {}

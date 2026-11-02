@@ -7,6 +7,7 @@ import type { TerminalScope } from "./use-terminals";
 export type TaskTerminalScopeInput = {
   /** The key of the scope in the client, such as its panel owner key. */
   key: string | null;
+  workspaceId: string | null;
   repoPath: string | null;
   taskId: string | null;
   /** The task version, so a task change reads its worktree again. */
@@ -27,14 +28,19 @@ export type TaskTerminalScope = {
 /** The terminal scope of a task. Its terminals start in the task worktree. */
 export const useTaskTerminalScope = ({
   key,
+  workspaceId,
   repoPath,
   taskId,
   taskVersion,
 }: TaskTerminalScopeInput): TaskTerminalScope => {
-  const enabled = key !== null && repoPath !== null && taskId !== null;
+  const enabled = key !== null && workspaceId !== null && repoPath !== null && taskId !== null;
   const worktreeOptions = enabled
-    ? taskWorktreeQueryOptions({ repoPath, taskId, taskVersion })
-    : taskWorktreeQueryOptions({ repoPath: "disabled", taskId: "disabled" });
+    ? taskWorktreeQueryOptions({ workspaceId, repoPath, taskId, taskVersion })
+    : taskWorktreeQueryOptions({
+        workspaceId: "disabled",
+        repoPath: "disabled",
+        taskId: "disabled",
+      });
   const worktreeQuery = useQuery({ ...worktreeOptions, enabled });
   const workingDirectory = worktreeQuery.data?.workingDirectory ?? null;
   // A failed refresh keeps the worktree that the last read found.
@@ -43,14 +49,14 @@ export const useTaskTerminalScope = ({
       ? `Could not read the worktree of task ${taskId}: ${worktreeQuery.error.message}`
       : null;
   const scope = useMemo((): TerminalScope | null => {
-    if (key === null || repoPath === null || taskId === null) return null;
+    if (key === null || workspaceId === null || repoPath === null || taskId === null) return null;
     return {
       key,
-      context: { repoPath, taskId },
+      context: { workspaceId, repoPath, taskId },
       workingDirectory,
       workingDirectoryError: scopeError ?? `Task ${taskId} has no available worktree.`,
     };
-  }, [key, repoPath, scopeError, taskId, workingDirectory]);
+  }, [key, workspaceId, repoPath, scopeError, taskId, workingDirectory]);
   const { refetch } = worktreeQuery;
   const retryScope = useCallback((): void => {
     if (enabled) void refetch();

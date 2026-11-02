@@ -23,7 +23,12 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "spec",
+    },
 
     status: "idle",
     ...overrides,
@@ -120,12 +125,22 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   test("keeps selected-session identity authoritative when loaded session state is stale", () => {
     const selectedSession = createSession({
       externalSessionId: "shared-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
       workingDirectory: "/repo/selected-worktree",
     });
     const staleLoadedSession = createSession({
       externalSessionId: "shared-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       workingDirectory: "/repo/stale-worktree",
     });
     const context = buildAgentStudioSelectedSessionContext(
@@ -176,7 +191,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       },
     });
     const qaSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "qa",
+      },
     });
 
     const context = buildAgentStudioSelectedSessionContext(

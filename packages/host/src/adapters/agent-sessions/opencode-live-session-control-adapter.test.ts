@@ -280,7 +280,12 @@ describe("OpenCode live session controls", () => {
         prepareRuntime: harness.prepareRuntime,
       })(runtime, ignoreObservationLoss),
     );
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
 
     try {
       await expect(
@@ -336,7 +341,12 @@ describe("OpenCode live session controls", () => {
           prepared.adapter.sendUserMessage({
             delivery: "new_turn",
             ...ref,
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             parts: [{ kind: "text", text: "Hello" }],
           }),
         ),
@@ -406,7 +416,12 @@ describe("OpenCode live session controls", () => {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build" as const,
+      },
       systemPrompt: "Build it",
     };
 
@@ -533,7 +548,12 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );
@@ -667,7 +687,12 @@ describe("OpenCode live session controls", () => {
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );
@@ -752,7 +777,12 @@ describe("OpenCode live session controls", () => {
       })(runtime, ignoreObservationLoss),
     );
     const adapter = prepared.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );
@@ -838,7 +868,12 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );
@@ -901,6 +936,7 @@ describe("OpenCode live session controls", () => {
       const controlRef = { ...ref, externalSessionId: "controlled-session" };
       const sessionScope = {
         kind: "workflow" as const,
+        workspaceId: "repo",
         taskId: "task-1",
         role: "build" as const,
       };
@@ -998,7 +1034,12 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );
@@ -1072,7 +1113,7 @@ describe("OpenCode live session controls", () => {
       adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
 
@@ -1113,7 +1154,12 @@ describe("OpenCode live session controls", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );

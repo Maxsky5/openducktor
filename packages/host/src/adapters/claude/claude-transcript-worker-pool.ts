@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { Effect } from "effect";
+import { siblingWorkerUrl } from "../../infrastructure/sibling-worker-url";
 import { HostOperationError } from "../../effect/host-errors";
 import type {
   ClaudeTranscriptWorkerBatch,
@@ -8,12 +9,7 @@ import type {
   ClaudeTranscriptWorkerReply,
 } from "./claude-transcript-worker-protocol";
 
-const workerUrl = new URL(
-  import.meta.url.endsWith(".ts")
-    ? "./claude-transcript-worker.ts"
-    : "./claude-transcript-worker.js",
-  import.meta.url,
-);
+const workerUrl = siblingWorkerUrl(import.meta.url, "claude-transcript-worker");
 
 export class ClaudeTranscriptWorkerBatchError extends Error {
   constructor(

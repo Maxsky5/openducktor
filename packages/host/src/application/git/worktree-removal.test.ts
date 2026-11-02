@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ResolvedPathWithinRoot, WorktreeFilePort } from "../../ports/worktree-file-port";
+import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
 import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
 type CleanupResolution = ResolvedPathWithinRoot & { cleanupPath: string };
@@ -52,24 +52,9 @@ const createCleanupHarness = ({
       });
     },
   } satisfies Pick<GitPort, "isRegisteredWorktree" | "removeWorktree">;
-  const settingsConfig = {
-    canonicalizePath: () => Effect.die("canonicalizePath is not used with a managed root"),
-    defaultWorktreeBasePath: () => {
-      throw new Error("defaultWorktreeBasePath is not used with a managed root");
-    },
+  const settingsConfig = createSettingsConfigTestDouble({
     pathExists: () => Effect.sync(pathExists),
-    readConfig: () => Effect.die("readConfig is not used with a managed root"),
-    resolveConfiguredPath: () => {
-      throw new Error("resolveConfiguredPath is not used with a managed root");
-    },
-  } satisfies Pick<
-    SettingsConfigPort,
-    | "canonicalizePath"
-    | "defaultWorktreeBasePath"
-    | "pathExists"
-    | "readConfig"
-    | "resolveConfiguredPath"
-  >;
+  });
   const worktreeFiles: WorktreeFilePort = {
     prepareWorktreeAliasRemoval: () => Effect.die(new Error("Unexpected alias removal")),
     resolveWorktreeRemovalPath: () => Effect.die(new Error("Unexpected removal path resolution")),

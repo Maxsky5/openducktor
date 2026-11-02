@@ -1,4 +1,6 @@
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { workspaceScopeValue } from "./workspace-scope";
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
@@ -9,67 +11,70 @@ export type RepoTaskData = {
   tasks: TaskCard[];
 };
 
-export type ListTasks = (repoPath: string, queryClient: QueryClient) => Promise<TaskCard[]>;
+export type ListTasks = (scope: WorkspaceRef, queryClient: QueryClient) => Promise<TaskCard[]>;
 
 export const taskQueryKeys = {
   all: ["tasks"] as const,
-  repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
-  repoData: (repoPath: string) => taskQueryKeys.repoDataPrefix(repoPath),
-  kanbanData: (repoPath: string) => taskQueryKeys.repoData(repoPath),
-  unfilteredRepoData: (repoPath: string) =>
-    [...taskQueryKeys.repoDataPrefix(repoPath), "unfiltered"] as const,
+  skippedBoard: ["tasks", "skipped", "board"] as const,
+  skippedComplete: ["tasks", "skipped", "complete"] as const,
+  repoDataPrefix: (scope: WorkspaceRef) =>
+    [...taskQueryKeys.all, "repo-data", workspaceScopeValue(scope)] as const,
+  repoData: (scope: WorkspaceRef) => taskQueryKeys.repoDataPrefix(scope),
+  kanbanData: (scope: WorkspaceRef) => taskQueryKeys.repoData(scope),
+  unfilteredRepoData: (scope: WorkspaceRef) =>
+    [...taskQueryKeys.repoDataPrefix(scope), "unfiltered"] as const,
   /** Under the repository data prefix, so task events mark it stale with the task list. */
-  ids: (repoPath: string) => [...taskQueryKeys.repoDataPrefix(repoPath), "ids"] as const,
+  ids: (scope: WorkspaceRef) => [...taskQueryKeys.repoDataPrefix(scope), "ids"] as const,
 };
 
-export const createRepoTaskDataQueryOptions = (listTasks: ListTasks) => (repoPath: string) =>
-  queryOptions({
-    queryKey: taskQueryKeys.repoData(repoPath),
+export const createRepoTaskDataQueryOptions = (listTasks: ListTasks) => (scope: WorkspaceRef) =>
+  queryOptions<RepoTaskData, Error, RepoTaskData, QueryKey>({
+    queryKey: taskQueryKeys.repoData(scope),
     queryFn: async ({ client }): Promise<RepoTaskData> => ({
-      tasks: await listTasks(repoPath, client),
+      tasks: await listTasks(scope, client),
     }),
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
-export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath, queryClient) =>
-  connectionHost(queryClient).tasksList(repoPath),
+export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((scope, queryClient) =>
+  connectionHost(queryClient).tasksList(scope),
 );
 
-export const unfilteredRepoTaskDataQueryOptions = (repoPath: string) =>
-  queryOptions({
-    queryKey: taskQueryKeys.unfilteredRepoData(repoPath),
+export const unfilteredRepoTaskDataQueryOptions = (scope: WorkspaceRef) =>
+  queryOptions<RepoTaskData, Error, RepoTaskData, QueryKey>({
+    queryKey: taskQueryKeys.unfilteredRepoData(scope),
     queryFn: async ({ client }): Promise<RepoTaskData> => ({
-      tasks: await connectionHost(client).tasksListAll(repoPath),
+      tasks: await connectionHost(client).tasksListAll(scope),
     }),
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
 /** The IDs of all tasks of a repository, also closed tasks that the Kanban list hides. */
 export const repoTaskIdsQueryOptions = (
-  repoPath: string,
+  scope: WorkspaceRef,
   readPort?: Pick<HostClient, "taskIdsList">,
 ) =>
   queryOptions({
-    queryKey: taskQueryKeys.ids(repoPath),
+    queryKey: taskQueryKeys.ids(scope),
     queryFn: ({ client }): Promise<string[]> =>
-      (readPort ?? connectionHost(client)).taskIdsList(repoPath),
+      (readPort ?? connectionHost(client)).taskIdsList(scope),
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
-  repoPath: string,
-): Promise<RepoTaskData> => queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath));
+  scope: WorkspaceRef,
+): Promise<RepoTaskData> => queryClient.fetchQuery(repoTaskDataQueryOptions(scope));
 
 const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
-  repoPath: string,
+  scope: WorkspaceRef,
   options?: {
     refetchType?: "active" | "inactive" | "all" | "none";
   },
 ) => {
   const filters: Parameters<QueryClient["invalidateQueries"]>[0] = {
-    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+    queryKey: taskQueryKeys.repoDataPrefix(scope),
     exact: false,
   };
   if (options?.refetchType) {
@@ -80,15 +85,15 @@ const invalidateRepoTaskDataQueries = (
 
 const invalidateRepoTaskListQueries = (
   queryClient: QueryClient,
-  repoPath: string,
+  scope: WorkspaceRef,
   options?: {
     refetchType?: "active" | "inactive" | "all" | "none";
   },
 ) => {
-  return invalidateRepoTaskDataQueries(queryClient, repoPath, options);
+  return invalidateRepoTaskDataQueries(queryClient, scope, options);
 };
 
 export const invalidateRepoTaskQueries = (
   queryClient: QueryClient,
-  repoPath: string,
-): Promise<void> => invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" });
+  scope: WorkspaceRef,
+): Promise<void> => invalidateRepoTaskListQueries(queryClient, scope, { refetchType: "none" });

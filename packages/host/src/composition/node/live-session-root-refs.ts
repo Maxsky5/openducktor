@@ -1,56 +1,25 @@
 import { Effect } from "effect";
 import { toHostOperationError } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import { openWorkspacesAtRepoPath } from "../../application/workspaces/workspace-session-import-owners";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+
+/** Reads the saved session roots of every open workspace of the repository with one store read. */
 export const createLiveSessionRootRefsReader =
   ({
     store,
-    taskStore,
     settings,
   }: {
-    store: WorkspaceSessionStorePort;
-    taskStore: TaskStorePort;
-    settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+    store: Pick<WorkspaceSessionStorePort, "listLiveSessionRoots">;
+    settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
   }) =>
   (repoPath: string) =>
     Effect.gen(function* () {
-      const config = yield* settings.getRepoConfigByRepoPath(repoPath);
-      const chats = yield* store.listActive({
-        workspaceId: config.workspaceId,
-        repoPath,
+      const catalog = yield* settings.getWorkspaceCatalog();
+      const roots = yield* store.listLiveSessionRoots({
+        workspaces: openWorkspacesAtRepoPath(catalog, repoPath),
       });
-      const tasks = yield* taskStore.listTasks({ repoPath, doneVisibleDays: 0 });
-      const records = tasks.length
-        ? yield* taskStore.listAgentSessionsForTasks({
-            repoPath,
-            taskIds: tasks.map((task) => task.id),
-          })
-        : [];
-      return [
-        ...chats.flatMap((chat) =>
-          chat.externalSessionId === null
-            ? []
-            : [
-                {
-                  sessionScope: { kind: "repository" as const },
-                  repoPath,
-                  runtimeKind: chat.runtimeKind,
-                  externalSessionId: chat.externalSessionId,
-                  workingDirectory: chat.executionTarget.workingDirectory,
-                },
-              ],
-        ),
-        ...records.flatMap((task) =>
-          task.agentSessions.map((session) => ({
-            sessionScope: { kind: "workflow" as const, taskId: task.taskId, role: session.role },
-            repoPath,
-            runtimeKind: session.runtimeKind,
-            externalSessionId: session.externalSessionId,
-            workingDirectory: session.workingDirectory,
-          })),
-        ),
-      ];
+      return roots.map((root) => ({ ...root, repoPath }));
     }).pipe(
       Effect.mapError((cause) => toHostOperationError(cause, "workspaceSessions.readOwnedRoots")),
     );

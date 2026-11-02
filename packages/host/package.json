@@ -7,17 +7,18 @@
   "exports": {
     ".": "./src/index.ts",
     "./claude-transcript-worker": "./src/adapters/claude/claude-transcript-worker.ts",
+    "./host-database-import-worker": "./src/adapters/sqlite/host-database-import-worker.ts",
     "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts",
     "./node-pty": "./src/adapters/node/pty-process-adapter.ts",
     "./chrome-for-testing": "./src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.build.json",
-    "db:generate": "drizzle-kit generate --config drizzle.task-store.config.ts",
+    "db:generate": "drizzle-kit generate --config drizzle.host.config.ts",
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --preload ../../tools/bun-test-preload.ts --pass-with-no-tests --timeout 5000 --parallel=2 --no-isolate",
     "test:browser-conformance": "ODT_CHROME_FOR_TESTING_CONFIG_ROOT=../../node_modules/.cache/openducktor-chrome-for-testing bun test --timeout 120000 src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.live.test.ts",
-    "lint": "oxlint -c ../../.oxlintrc.json src drizzle.task-store.config.ts"
+    "lint": "oxlint -c ../../.oxlintrc.json src drizzle.host.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.306",

@@ -1,3 +1,7 @@
+import {
+  workspaceSessionCatalog,
+  workspaceSessionOwnership,
+} from "../../../test-support/workspace-session-ownership";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { commandPreparationFixture } from "../../agent-sessions/test-support/command-preparation-fixture";
 import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
@@ -78,6 +82,10 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
     workspaceId: "fairnest",
     sessionId: "session-1",
+    ownershipScope: workspaceSessionOwnership({
+      workspaceId: "fairnest",
+      repoPath: database.repoPath,
+    }),
   };
   const record: WorkspaceSession = {
     id: "session-1",
@@ -226,11 +234,10 @@ export const createPersistenceHarness = async (
       },
     },
     settings: {
-      getRepoConfigByRepoPath: () =>
+      getWorkspaceCatalog: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          workspaceSessionCatalog({
             workspaceId: "fairnest",
-            workspaceName: "Fairnest",
             repoPath: database.repoPath,
           }),
         ),
@@ -258,11 +265,13 @@ export const createPersistenceHarness = async (
   const persistence = {
     ...workspacePersistence,
     ...createAgentSessionActivityPersistence({
+      readTaskWorkspaces: () =>
+        Effect.succeed([{ workspaceId: database.workspaceId, repoPath: database.repoPath }]),
       workspace: workspacePersistence,
       tasks: database.store,
-      publishTaskRecords: (repoPath, records) =>
+      publishTaskRecords: (scope, records) =>
         Effect.sync(() => {
-          events.push({ type: "task_session_records_updated", repoPath, ...records });
+          events.push({ type: "task_session_records_updated", ...scope, ...records });
         }),
     }),
   };
@@ -409,7 +418,12 @@ export const createPersistenceHarness = async (
     taskWorkflows: builtinTaskWorkflows,
     turnPreparation: commandPreparationFixture,
     readSessionRootRefs: () =>
-      Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
+      Effect.succeed([
+        {
+          ...ref,
+          sessionScope: { kind: "repository" as const, workspaceId: storeRef.workspaceId },
+        },
+      ]),
     approvalPolicy: { reply: live.replyApproval },
     pauseForStop: () => Effect.void,
     runtime: live,
@@ -456,7 +470,7 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
-    taskOwnership: database,
+    taskOwnership: database.taskOwnership,
     claudeSessionMetadata: {
       readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
     },
@@ -478,6 +492,7 @@ export const createPersistenceHarness = async (
     },
     settings: {
       getRepoConfig: () => Effect.succeed(config),
+      getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(config)),
       listCustomAgentRoles: () => Effect.succeed([]),
     },
     runtime: {

@@ -1,4 +1,4 @@
-import type { RepoStoreHealth, TaskStoreCheck } from "@openducktor/contracts";
+import type { RepoStoreHealth, TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
 import { isCancelledError } from "@tanstack/react-query";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
@@ -23,17 +23,19 @@ export type LifecycleTimerPort<TimerHandle> = {
 };
 
 type RepositoryLoadInput<TimerHandle> = {
+  workspaceId: string;
   repoPath: string;
   isCurrent: () => boolean;
   refreshBranches: (force?: boolean) => Promise<void>;
-  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
+  refreshTaskStoreCheckForRepo: (scope: WorkspaceRef, force?: boolean) => Promise<TaskStoreCheck>;
+  loadWorkspaceTasks: (scope: WorkspaceRef) => Promise<void>;
   notifications: LifecycleNotificationPort;
   timers: LifecycleTimerPort<TimerHandle>;
   taskStorePreparationToastDelayMs?: number;
 };
 
 export const startRepositoryLoad = <TimerHandle>({
+  workspaceId,
   repoPath,
   isCurrent,
   refreshBranches,
@@ -43,6 +45,7 @@ export const startRepositoryLoad = <TimerHandle>({
   timers,
   taskStorePreparationToastDelayMs = TASK_STORE_PREPARATION_TOAST_DELAY_MS,
 }: RepositoryLoadInput<TimerHandle>): (() => void) => {
+  const scope = { workspaceId, repoPath };
   let disposed = false;
   let taskStorePreparationToastId: ToastId | null = null;
   let hadTaskStorePreparationToast = false;
@@ -77,7 +80,7 @@ export const startRepositoryLoad = <TimerHandle>({
 
   const taskLoadPromise = (async () => {
     try {
-      const taskStoreCheck = await refreshTaskStoreCheckForRepo(repoPath, false);
+      const taskStoreCheck = await refreshTaskStoreCheckForRepo(scope, false);
       repoStoreHealth = getBlockingRepoStoreHealth(taskStoreCheck);
       if (taskStoreCheck.repoStoreHealth.isReady) {
         clearTaskStorePreparationTimer();
@@ -87,7 +90,7 @@ export const startRepositoryLoad = <TimerHandle>({
       type TaskLoadFailure = { error: unknown };
       let taskLoadResult: TaskLoadFailure | null;
       try {
-        await loadWorkspaceTasks(repoPath);
+        await loadWorkspaceTasks(scope);
         taskLoadResult = null;
       } catch (error) {
         taskLoadResult = { error };
@@ -95,7 +98,7 @@ export const startRepositoryLoad = <TimerHandle>({
 
       if (!taskStoreCheck.repoStoreHealth.isReady) {
         try {
-          const refreshedTaskStoreCheck = await refreshTaskStoreCheckForRepo(repoPath, true);
+          const refreshedTaskStoreCheck = await refreshTaskStoreCheckForRepo(scope, true);
           repoStoreHealth = getBlockingRepoStoreHealth(refreshedTaskStoreCheck);
         } catch {
           // The task load is the primary operation; a follow-up diagnostic must not replace its error.

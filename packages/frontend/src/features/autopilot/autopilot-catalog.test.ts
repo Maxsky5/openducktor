@@ -6,22 +6,27 @@ const createAutopilotSettings = (): AutopilotSettings => ({
   alwaysStartQaReviewsFresh: false,
   rules: [
     {
+      workflowId: "openducktor",
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startPlanner", "startBuilder"],
     },
     {
+      workflowId: "openducktor",
       eventId: "taskProgressedToReadyForDev",
       actionIds: [],
     },
     {
+      workflowId: "openducktor",
       eventId: "taskProgressedToAiReview",
       actionIds: [],
     },
     {
+      workflowId: "openducktor",
       eventId: "taskRejectedByQa",
       actionIds: [],
     },
     {
+      workflowId: "openducktor",
       eventId: "taskProgressedToHumanReview",
       actionIds: [],
     },
@@ -29,6 +34,23 @@ const createAutopilotSettings = (): AutopilotSettings => ({
 });
 
 describe("autopilot-catalog", () => {
+  test("a built-in rule edit keeps another workflow's matching local IDs", () => {
+    const settings = createAutopilotSettings();
+    const foreign = {
+      workflowId: "other",
+      eventId: "taskProgressedToSpecReady",
+      actionIds: ["startQa"],
+    };
+    expect(getAutopilotSelectedValue(foreign)).toBe("disabled");
+    settings.rules.unshift(foreign);
+    const updated = setAutopilotRuleAction(settings, "taskProgressedToSpecReady", "startBuilder");
+    expect(updated.rules.find((rule) => rule.workflowId === "other")).toEqual(foreign);
+    expect(
+      updated.rules.find(
+        (rule) => rule.workflowId === "openducktor" && rule.eventId === foreign.eventId,
+      )?.actionIds,
+    ).toEqual(["startBuilder", "startPlanner"]);
+  });
   test("preserves secondary actions when updating the selected action", () => {
     const nextSettings = setAutopilotRuleAction(
       createAutopilotSettings(),
@@ -37,6 +59,7 @@ describe("autopilot-catalog", () => {
     );
 
     expect(nextSettings.rules[0]).toEqual({
+      workflowId: "openducktor",
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startBuilder", "startPlanner"],
     });
@@ -62,6 +85,7 @@ describe("autopilot-catalog", () => {
         alwaysStartQaReviewsFresh: false,
         rules: [
           {
+            workflowId: "openducktor",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startPlanner"],
           },
@@ -73,6 +97,7 @@ describe("autopilot-catalog", () => {
 
     expect(nextSettings.rules).toHaveLength(5);
     expect(nextSettings.rules[1]).toEqual({
+      workflowId: "openducktor",
       eventId: "taskProgressedToReadyForDev",
       actionIds: [],
     });

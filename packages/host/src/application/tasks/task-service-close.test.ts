@@ -138,7 +138,7 @@ const createSettingsConfig = (existingPaths = new Set<string>()): SettingsConfig
 
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
   createWorkspaceSettingsServiceTestDouble({
-    getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+    getRepoConfig: () => Effect.succeed(repoConfig),
   });
 
 const createTaskWorktreeService = (workingDirectory: string | null): TaskWorktreeService => ({
@@ -210,7 +210,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -232,7 +237,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -251,7 +261,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("Task worktree service is required for task_close.");
     expect(calls).toEqual([]);
   });
@@ -268,7 +285,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -282,7 +304,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -309,7 +336,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("task_close requires runtime session activity checks");
   });
 
@@ -335,7 +369,14 @@ describe("TaskService.closeTask", () => {
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }));
+    await run(
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
+    );
 
     expect(calls).toEqual([
       "remove-worktree:/worktrees/repo/task-1",
@@ -375,7 +416,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: false }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: false,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -397,7 +443,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("Worktree file port is required for task_close.");
     expect(calls).toEqual([]);
   });
@@ -415,7 +468,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("resolves to the repository root");
     expect(calls).toEqual([]);
   });
@@ -446,7 +506,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -471,7 +536,14 @@ describe("TaskService.closeTask", () => {
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }));
+    await run(
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
+    );
 
     expect(calls).toEqual([
       "remove-worktree:/worktrees/repo/task-1",
@@ -497,7 +569,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow(
       "Cannot close task task-1 because branch odt/task-1 is checked out in worktree /repo.",
     );
@@ -517,7 +596,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("is not a registered worktree");
     expect(calls).toEqual([]);
   });
@@ -550,7 +636,14 @@ describe("TaskService.closeTask", () => {
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }));
+    await run(
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
+    );
 
     expect(calls).toEqual([
       "remove-worktree:/worktrees/repo/task-1",
@@ -577,7 +670,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("Close cleanup already removed worktrees: /worktrees/repo/task-1.");
     expect(calls).not.toContain("transition:task-1:closed");
   });
@@ -613,7 +713,12 @@ describe("TaskService.closeTask", () => {
     });
 
     await run(
-      service.closeTask({ repoPath: "/repo-alias", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(calls[0]).toBe("close task:/repo:1 sessions");
@@ -645,7 +750,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("terminal-1");
     expect(calls).toContain("terminals:/repo:task-1");
     expect(calls).not.toContain("transition:task-1:closed");
@@ -670,7 +782,14 @@ describe("TaskService.closeTask", () => {
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }));
+    await run(
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
+    );
 
     expect(calls.indexOf("terminals:acquire:/repo:task-1")).toBeLessThan(
       calls.indexOf("transition:task-1:closed"),
@@ -712,7 +831,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closing = run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
     await metadataRead;
     const lifecycle = await run(
@@ -775,7 +899,12 @@ describe("TaskService.closeTask", () => {
     });
 
     const closed = await run(
-      service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
     );
 
     expect(closed.status).toBe("closed");
@@ -826,7 +955,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow(/Stopped 2 live agent sessions\./);
     expect(calls).toContain("terminals:/repo:task-1");
   });
@@ -863,7 +999,14 @@ describe("TaskService.closeTask", () => {
     });
 
     await expect(
-      run(service.closeTask({ repoPath: "/repo", taskId: "task-1", removeWorktree: true })),
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
     ).rejects.toThrow("Failed stopping live build session session-1.");
     expect(calls.some((entry) => entry.startsWith("remove-worktree"))).toBe(false);
     expect(calls.some((entry) => entry.startsWith("terminals:"))).toBe(false);

@@ -7,6 +7,7 @@ describe("task description asset command inputs", () => {
   test("keeps staged intent beside durable create input", () => {
     expect(
       parseCreateTaskInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         input: { title: "Task", issueType: "task", description: `![x](odt-asset:${assetId})` },
         descriptionAssets: { stagedAssetIds: [assetId] },
@@ -20,6 +21,7 @@ describe("task description asset command inputs", () => {
   test("rejects asset intent when update omits description", () => {
     expect(() =>
       parseUpdateTaskInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         patch: { title: "Rename only" },

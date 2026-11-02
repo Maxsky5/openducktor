@@ -65,7 +65,6 @@ export function useWorkspaceOperations({
     resolveWorkspacePath,
     reorderWorkspaces,
     applyWorkspaceRecords,
-    applyWorkspaceRecord,
   } = useWorkspaceSelectionOperations({
     activeWorkspace,
     setActiveWorkspace,
@@ -111,6 +110,5 @@ export function useWorkspaceOperations({
     switchBranch,
     clearBranchData,
     applyWorkspaceRecords,
-    applyWorkspaceRecord,
   };
 }

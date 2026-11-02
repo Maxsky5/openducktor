@@ -74,7 +74,11 @@ describe("session command activity", () => {
       workspaceSessionEntry("chat"),
       workspaceSessionEntry("other-chat"),
     ];
-    const taskOwner = { repoPath: alphaWorkspace.repoPath, taskId: "task" };
+    const taskOwner = {
+      workspaceId: alphaWorkspace.workspaceId,
+      repoPath: alphaWorkspace.repoPath,
+      taskId: "task",
+    };
     const chatOwner = {
       kind: "workspace_session" as const,
       repoPath: alphaWorkspace.repoPath,

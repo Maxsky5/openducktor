@@ -63,7 +63,7 @@ export function useSessionNavigationModel(
   const { feedback } = useClientConnection();
 
   const taskReads = useQueries({
-    queries: workspaces.map((workspace) => repoTaskDataQueryOptions(workspace.repoPath)),
+    queries: workspaces.map((workspace) => repoTaskDataQueryOptions(workspace)),
     combine: combineTaskReads,
   });
 
@@ -78,6 +78,7 @@ export function useSessionNavigationModel(
         const read = taskReads[index];
         if (read?.status !== "ready") return [];
         return normalizeAgentSessionTaskIds(read.data.map((task) => task.id)).map((taskId) => ({
+          workspaceId: workspace.workspaceId,
           repoPath: workspace.repoPath,
           taskId,
         }));
@@ -106,7 +107,11 @@ export function useSessionNavigationModel(
               ? tasks.data.map((task) => [
                   task.id,
                   listReadByKey.get(
-                    agentSessionListTargetKey({ repoPath: workspace.repoPath, taskId: task.id }),
+                    agentSessionListTargetKey({
+                      workspaceId: workspace.workspaceId,
+                      repoPath: workspace.repoPath,
+                      taskId: task.id,
+                    }),
                   ) ?? { status: "loading" },
                 ])
               : [],
@@ -142,7 +147,7 @@ export function useSessionNavigationModel(
       const { repoPath, workspaceId, workspaceName } = issue.workspace;
       if (issue.source === "tasks") {
         void queryClient.refetchQueries({
-          queryKey: taskQueryKeys.repoData(repoPath),
+          queryKey: taskQueryKeys.repoData({ workspaceId, repoPath }),
           exact: true,
         });
         return;
@@ -156,9 +161,9 @@ export function useSessionNavigationModel(
       }
       if (issue.source === "task_sessions") {
         const taskIds = listTargets
-          .filter((target) => target.repoPath === repoPath)
+          .filter((target) => target.workspaceId === workspaceId && target.repoPath === repoPath)
           .map((target) => target.taskId);
-        void retryAgentSessionListQueries(queryClient, repoPath, taskIds).catch(
+        void retryAgentSessionListQueries(queryClient, { workspaceId, repoPath }, taskIds).catch(
           (cause: unknown) => {
             feedback.show("error", `Task sessions of ${workspaceName} could not load again.`, {
               description: errorMessage(cause),
@@ -178,7 +183,7 @@ export function useSessionNavigationModel(
       await Promise.all(
         refreshed.flatMap((workspace) => [
           queryClient.refetchQueries({
-            queryKey: taskQueryKeys.repoData(workspace.repoPath),
+            queryKey: taskQueryKeys.repoData(workspace),
             exact: true,
           }),
           queryClient.refetchQueries({
@@ -187,9 +192,13 @@ export function useSessionNavigationModel(
           }),
           loadAgentSessionListsFromQuery(
             queryClient,
-            workspace.repoPath,
+            workspace,
             listTargets
-              .filter((target) => target.repoPath === workspace.repoPath)
+              .filter(
+                (target) =>
+                  target.workspaceId === workspace.workspaceId &&
+                  target.repoPath === workspace.repoPath,
+              )
               .map((target) => target.taskId),
             { forceFresh: true },
           ),

@@ -85,8 +85,11 @@ export const createOpenCodeRuntimeComposition = ({
         }),
       ),
     );
-  const resolveOpencodeMcpServerConfig: ManagedMcpServerResolver = async (repoPath) => {
-    const exit = await Effect.runPromiseExit(resolveMcpServerConfig(repoPath));
+  const resolveOpencodeMcpServerConfig: ManagedMcpServerResolver = async (
+    repoPath,
+    workspaceId,
+  ) => {
+    const exit = await Effect.runPromiseExit(resolveMcpServerConfig(repoPath, workspaceId));
     if (Exit.isSuccess(exit)) return exit.value;
     throw causeToHostBoundaryError(exit.cause);
   };

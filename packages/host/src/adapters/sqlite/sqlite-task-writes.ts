@@ -4,51 +4,73 @@ import {
   gitTargetBranchSchema,
   pullRequestSchema,
 } from "@openducktor/contracts";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
-import { z } from "zod";
+import { sqliteValues } from "./sqlite-parameters";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import { encodeJson, validateWithSchema } from "./sqlite-json-codecs";
+import { validateWithSchema } from "./sqlite-task-store-validation";
+import { readTaskLabels, replaceTaskLabels, taskRelationScope } from "./sqlite-task-relations";
+import { HostValidationError } from "../../effect/host-errors";
+import { requireTaskRow } from "./sqlite-task-queries";
 import { getTaskRecord } from "./sqlite-task-card-read-model";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreWriteError,
 } from "./sqlite-task-store-errors";
-import { type TaskInsert, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
+import {
+  type TaskInsert,
+  type HostDatabaseSession,
+  taskDirectMerges,
+  taskPullRequests,
+  tasks,
+} from "./sqlite-host-database-schema";
+import { directMergeRowValues, pullRequestRowValues } from "./sqlite-task-delivery-rows";
 
 type SetDirectMergeInput = Parameters<TaskStorePort["setDirectMerge"]>[0];
 type SetPullRequestInput = Parameters<TaskStorePort["setPullRequest"]>[0];
 
+/** Runs inside the caller's `BEGIN IMMEDIATE` transaction, so no write can land between the steps. */
 export const insertTaskIfAbsent = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   task: TaskInsert,
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    const rows = yield* session.execute(
+    // New IDs are unique across workspaces, so cross-workspace views and links can name one task.
+    const existing = yield* session.execute(
       (database) =>
-        database
-          .insert(tasks)
-          .values(task)
-          .onConflictDoNothing({ target: tasks.id })
-          .returning({ id: tasks.id }),
-      "sqliteTaskRepository.createTask.insertTaskIfAbsent",
+        database.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, task.id)).limit(1),
+      "sqliteTaskRepository.createTask.selectTaskId",
       { taskId: task.id },
     );
-    return rows.length > 0;
+    if (existing.length > 0) return false;
+    yield* session.execute(
+      (database) => database.insert(tasks).values({ ...task, workspaceId }),
+      "sqliteTaskRepository.createTask.insertTask",
+      { taskId: task.id },
+    );
+    return true;
   });
 
 export const deleteTasks = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskIds: Iterable<string>,
 ): Effect.Effect<void, SqliteTaskStoreWriteError> =>
   session.execute(
-    (database) => database.delete(tasks).where(inArray(tasks.id, Array.from(taskIds))),
+    (database) =>
+      database
+        .delete(tasks)
+        .where(
+          and(eq(tasks.workspaceId, workspaceId), inArray(tasks.id, sqliteValues([...taskIds]))),
+        ),
     "sqliteTaskRepository.deleteTask.deleteTasks",
   );
 
 export const updateTaskStatus = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: {
     status: TaskInsert["status"];
     taskId: string;
@@ -59,13 +81,17 @@ export const updateTaskStatus = (
     (database) =>
       database
         .update(tasks)
-        .set({ status: input.status, updatedAt: input.updatedAt })
-        .where(eq(tasks.id, input.taskId)),
+        .set({
+          status: input.status,
+          updatedAt: input.updatedAt,
+        })
+        .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
     "sqliteTaskRepository.updateTaskStatus.updateTask",
   );
 
 export const setDirectMergeRecord = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Pick<SetDirectMergeInput, "directMerge" | "taskId"> & { updatedAt: Date },
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
@@ -77,32 +103,47 @@ export const setDirectMergeRecord = (
           });
     if (directMerge === null) {
       yield* session.execute(
-        (database) =>
-          database
-            .update(tasks)
-            .set({ directMergeJson: null, updatedAt: input.updatedAt })
-            .where(eq(tasks.id, input.taskId)),
-        "sqliteTaskRepository.setDirectMerge.clearDirectMerge",
+        (db) =>
+          db
+            .delete(taskDirectMerges)
+            .where(taskRelationScope(taskDirectMerges, workspaceId, input.taskId)),
+        "sqliteTaskRepository.setDirectMerge.clear",
       );
-      return true;
+    } else {
+      yield* session.execute(
+        (db) =>
+          db
+            .delete(taskPullRequests)
+            .where(taskRelationScope(taskPullRequests, workspaceId, input.taskId)),
+        "sqliteTaskRepository.setDirectMerge.clearPullRequest",
+      );
+      const values = yield* directMergeRowValues(directMerge);
+      yield* session.execute(
+        (db) =>
+          db
+            .insert(taskDirectMerges)
+            .values({ workspaceId, taskId: input.taskId, ...values })
+            .onConflictDoUpdate({
+              target: [taskDirectMerges.workspaceId, taskDirectMerges.taskId],
+              set: values,
+            }),
+        "sqliteTaskRepository.setDirectMerge.upsert",
+      );
     }
     yield* session.execute(
-      (database) =>
-        database
+      (db) =>
+        db
           .update(tasks)
-          .set({
-            directMergeJson: encodeJson(z.json().parse(directMerge)),
-            pullRequestJson: null,
-            updatedAt: input.updatedAt,
-          })
-          .where(eq(tasks.id, input.taskId)),
+          .set({ updatedAt: input.updatedAt })
+          .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
       "sqliteTaskRepository.setDirectMerge.updateTask",
     );
     return true;
   });
 
 export const setPullRequestRecord = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Pick<SetPullRequestInput, "pullRequest" | "taskId"> & { updatedAt: Date },
 ): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
@@ -114,55 +155,87 @@ export const setPullRequestRecord = (
           });
     if (pullRequest === null) {
       yield* session.execute(
-        (database) =>
-          database
-            .update(tasks)
-            .set({ pullRequestJson: null, updatedAt: input.updatedAt })
-            .where(eq(tasks.id, input.taskId)),
-        "sqliteTaskRepository.setPullRequest.clearPullRequest",
+        (db) =>
+          db
+            .delete(taskPullRequests)
+            .where(taskRelationScope(taskPullRequests, workspaceId, input.taskId)),
+        "sqliteTaskRepository.setPullRequest.clear",
       );
-      return true;
+    } else {
+      yield* session.execute(
+        (db) =>
+          db
+            .delete(taskDirectMerges)
+            .where(taskRelationScope(taskDirectMerges, workspaceId, input.taskId)),
+        "sqliteTaskRepository.setPullRequest.clearDirectMerge",
+      );
+      const values = yield* pullRequestRowValues(pullRequest);
+      yield* session.execute(
+        (db) =>
+          db
+            .insert(taskPullRequests)
+            .values({ workspaceId, taskId: input.taskId, ...values })
+            .onConflictDoUpdate({
+              target: [taskPullRequests.workspaceId, taskPullRequests.taskId],
+              set: values,
+            }),
+        "sqliteTaskRepository.setPullRequest.upsert",
+      );
     }
     yield* session.execute(
-      (database) =>
-        database
+      (db) =>
+        db
           .update(tasks)
-          .set({
-            directMergeJson: null,
-            pullRequestJson: encodeJson(z.json().parse(pullRequest)),
-            updatedAt: input.updatedAt,
-          })
-          .where(eq(tasks.id, input.taskId)),
+          .set({ updatedAt: input.updatedAt })
+          .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
       "sqliteTaskRepository.setPullRequest.updateTask",
     );
     return true;
   });
 
 export const applyTaskPatch = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: Parameters<TaskStorePort["updateTask"]>[0],
   updatedAt: Date,
   taskWorkflows: TaskWorkflowResolver,
 ) =>
   Effect.gen(function* () {
+    const current = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+    if (
+      input.patch.issueType !== undefined &&
+      !taskWorkflows.forTask(current).issueTypes.includes(input.patch.issueType)
+    )
+      return yield* new HostValidationError({
+        field: "issueType",
+        message: `Issue type ${input.patch.issueType} is not in the current task workflow. Reload the task and choose one of its issue types.`,
+      });
     const updates: Partial<TaskInsert> = {};
-    if (input.patch.title !== undefined) {
+    if (input.patch.title !== undefined && input.patch.title !== current.title) {
       updates.title = input.patch.title;
     }
-    if (input.patch.description !== undefined) {
+    if (input.patch.description !== undefined && input.patch.description !== current.description) {
       updates.description = input.patch.description;
     }
-    if (input.patch.priority !== undefined) {
+    if (input.patch.priority !== undefined && input.patch.priority !== current.priority) {
       updates.priority = input.patch.priority;
     }
-    if (input.patch.issueType !== undefined) {
+    if (input.patch.issueType !== undefined && input.patch.issueType !== current.issueType) {
       updates.issueType = input.patch.issueType;
     }
-    if (input.patch.removeWorktreeOnClose !== undefined) {
+    if (
+      input.patch.removeWorktreeOnClose !== undefined &&
+      input.patch.removeWorktreeOnClose !== current.removeWorktreeOnClose
+    ) {
       updates.removeWorktreeOnClose = input.patch.removeWorktreeOnClose;
     }
     if (input.patch.labels !== undefined) {
-      updates.labelsJson = encodeJson(normalizeLabels(input.patch.labels));
+      const nextLabels = normalizeLabels(input.patch.labels);
+      const currentLabels = yield* readTaskLabels(session, workspaceId, input.taskId);
+      if (JSON.stringify(nextLabels) !== JSON.stringify(currentLabels)) {
+        yield* replaceTaskLabels(session, workspaceId, input.taskId, nextLabels);
+        updates.updatedAt = updatedAt;
+      }
     }
     if (input.patch.targetBranch !== undefined) {
       const parsed = gitTargetBranchSchema.safeParse(input.patch.targetBranch);
@@ -174,7 +247,13 @@ export const applyTaskPatch = (
         });
       }
       const targetBranch = parsed.data;
-      updates.targetBranchJson = encodeJson(z.json().parse(targetBranch));
+      if (
+        current.targetBranch !== targetBranch.branch ||
+        current.targetRemote !== (targetBranch.remote ?? null)
+      ) {
+        updates.targetBranch = targetBranch.branch;
+        updates.targetRemote = targetBranch.remote ?? null;
+      }
     }
     if (Object.keys(updates).length > 0) {
       yield* session.execute(
@@ -182,10 +261,17 @@ export const applyTaskPatch = (
           database
             .update(tasks)
             .set({ ...updates, updatedAt })
-            .where(eq(tasks.id, input.taskId)),
+            .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId))),
         "sqliteTaskStore.applyTaskPatch.updateTask",
         { taskId: input.taskId },
       );
     }
-    return yield* getTaskRecord(session, input.taskId, input.repoPath, taskWorkflows);
+    const task = yield* getTaskRecord(
+      session,
+      workspaceId,
+      input.taskId,
+      input.repoPath,
+      taskWorkflows,
+    );
+    return { task, changed: Object.keys(updates).length > 0 };
   });

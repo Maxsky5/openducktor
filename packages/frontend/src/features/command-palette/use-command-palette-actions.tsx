@@ -134,8 +134,8 @@ export function useCommandPaletteActions({
   const { openDiagnostics } = useDiagnosticsPanel();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
   const repoPath = target?.repoPath ?? null;
-  const taskStoreCheck = useQuery(taskStoreCheckQueryOptionsOrSkip(repoPath));
-  const gitProvider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(repoPath));
+  const taskStoreCheck = useQuery(taskStoreCheckQueryOptionsOrSkip(target));
+  const gitProvider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(target));
   const mergeCheckDisabledReason = useMergeCheckDisabledReason(workspaces.length);
 
   const appAction = (

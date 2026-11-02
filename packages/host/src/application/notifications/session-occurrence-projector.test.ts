@@ -37,7 +37,12 @@ const transcript = (event: TranscriptEventFixture): AgentSessionTranscriptEvent 
 const createProjector = () =>
   createSessionOccurrenceProjector({
     repositoryLabel: "Repo",
-    resolveAssociation: () => ({ kind: "workflow", taskId: "task-1", role: "build" }),
+    resolveAssociation: () => ({
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build",
+    }),
     resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
   });
 
@@ -46,7 +51,7 @@ const createRootOwnedProjector = () =>
     repositoryLabel: "Repo",
     resolveAssociation: (candidate) =>
       candidate.externalSessionId === ref.externalSessionId
-        ? { kind: "workflow", taskId: "task-1", role: "build" }
+        ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" }
         : null,
     resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
   });
@@ -367,7 +372,7 @@ describe("session occurrence projector", () => {
       const projector = createSessionOccurrenceProjector({
         repositoryLabel: "Repo",
         resolveAssociation: () =>
-          owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+          owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
         resolveTask: () => ({ id: "task-1" }),
       });
       const pending = snapshot({
@@ -432,7 +437,7 @@ describe("session occurrence projector", () => {
       const projector = createSessionOccurrenceProjector({
         repositoryLabel: "Repo",
         resolveAssociation: () =>
-          owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+          owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
         resolveTask: () => ({ id: "task-1" }),
       });
       const pending = snapshot({
@@ -830,7 +835,7 @@ describe("session occurrence projector", () => {
       repositoryLabel: "Repo",
       resolveAssociation: (candidate) =>
         candidate.externalSessionId === ref.externalSessionId && parentOwned
-          ? { kind: "workflow", taskId: "task-1", role: "build" }
+          ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" }
           : null,
       resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
     });
@@ -983,7 +988,7 @@ describe("session occurrence projector", () => {
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
       resolveAssociation: () =>
-        owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+        owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
       resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
     });
     projector.accept({
@@ -1383,7 +1388,7 @@ for (const ownership of ["snapshot", "session_upsert"] as const) {
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
       resolveAssociation: () =>
-        owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+        owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
       resolveTask: (id) => ({ id, title: "Owned task" }),
     });
     projector.accept({ type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] });
@@ -1421,7 +1426,7 @@ test("keeps separate unowned episodes and lets an error replace deferred idle", 
   const projector = createSessionOccurrenceProjector({
     repositoryLabel: "Repo",
     resolveAssociation: () =>
-      owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+      owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
     resolveTask: () => ({ id: "task-1" }),
   });
   projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
@@ -1448,7 +1453,7 @@ test.each(["hydration", "reconnect", "removed", "subagent"] as const)(
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
       resolveAssociation: () =>
-        owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+        owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
       resolveTask: () => ({ id: "task-1" }),
     });
     const session = snapshot({ activity: "running" });
@@ -1545,7 +1550,7 @@ test("retains a request that first arrives with the ownership-resolving upsert",
   const projector = createSessionOccurrenceProjector({
     repositoryLabel: "Repo",
     resolveAssociation: () =>
-      owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+      owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
     resolveTask: () => ({ id: "task-1" }),
   });
   projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
@@ -1568,7 +1573,7 @@ test.each([false, true])(
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
       resolveAssociation: () =>
-        owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+        owned ? { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" } : null,
       resolveTask: () => ({ id: "task-1" }),
     });
     projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });

@@ -27,9 +27,9 @@ describe("Agent Session scope presentation", () => {
   test("reads the repository title from the scope and formats a workflow title", () => {
     expect(agentSessionTitle({ kind: "repository", title: "My session" })).toBe("My session");
     expect(agentSessionTitle({ kind: "repository" })).toBeUndefined();
-    expect(agentSessionTitle({ kind: "workflow", taskId: "task-1", role: "build" })).toBe(
-      "BUILD task-1",
-    );
+    expect(
+      agentSessionTitle({ kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" }),
+    ).toBe("BUILD task-1");
   });
 
   test("adds the scope title to a value and leaves the value unchanged without one", () => {
@@ -65,12 +65,18 @@ describe("withoutSummaryTitle", () => {
     const cleared = withoutSummaryTitle({
       ...repositorySummary,
       title: "BUILD task-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build",
+      },
     });
 
     expect(cleared.title).toBeUndefined();
     expect(cleared.sessionAssociation).toEqual({
       kind: "workflow",
+      workspaceId: "repo",
       taskId: "task-1",
       role: "build",
     });

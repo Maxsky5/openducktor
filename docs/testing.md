@@ -61,7 +61,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - `packages/frontend-core` runs with `bun test --parallel`, so each file has its own global. Its tests run without DOM globals. A test file that renders React or reads browser APIs imports `test-support/dom-environment` first. Keep pure tests without it, so they prove that the package runs without a DOM.
 - The host suite uses two workers to limit process load on Windows CI.
 - The host worker bundle test runs under Node, Bun, and Electron. It uses the Electron runtime from `apps/electron` and downloads it on first use when it is missing. The `Tests` jobs install that runtime before the suite.
-- The SQLite task-store test helper uses disposable files with WAL and foreign keys. It disables synchronous disk flushes before running production migrations. Tests that check production connection setup use `openSqliteTaskStoreConnection` directly.
+- The SQLite task-store test helper uses disposable files with WAL and foreign keys. It disables synchronous disk flushes before running production migrations. Tests that check production connection setup use `openHostDatabaseConnection` directly.
 - `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
 - The other workspaces run serially in one process.
 - The preload gives every parallel worker its own temp directory and config directory.

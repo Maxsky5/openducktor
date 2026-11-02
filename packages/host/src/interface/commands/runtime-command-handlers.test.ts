@@ -112,6 +112,7 @@ describe("createRuntimeCommandHandlers", () => {
   test("routes session stop and host runtime lifecycle commands", async () => {
     const { calls, router } = createHarness();
     const stopRequest = {
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       externalSessionId: "external-session-1",

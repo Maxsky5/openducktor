@@ -10,7 +10,7 @@ const activity = (command: string, terminalId = "terminal-1"): TerminalActivity 
     terminalId,
     label: command,
     initialWorkingDir: "/repo",
-    context: { repoPath: "/repo", taskId: "task-1" },
+    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
     lifecycle: "running",
     createdAt: "2026-10-14T00:00:00Z",
     exit: null,

@@ -6,7 +6,10 @@ import {
   createWorkspaceSettingsServiceTestDouble,
   createWorktreeFilePortTestDouble,
 } from "../../../test-support/service-test-doubles";
-import { createTaskStoreTestDouble } from "../../../test-support/task-store-test-double";
+import {
+  createTaskStoreTestDouble,
+  type TaskStoreTestOverrides,
+} from "../../../test-support/task-store-test-double";
 import type {
   AgentSessionRecord,
   CommitsAheadBehind,
@@ -18,6 +21,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   globalConfigSchema,
+  repoConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
   runtimeKindSchema,
@@ -92,7 +96,7 @@ const pullRequest = () => ({
   updatedAt: "2026-05-10T11:00:00.000Z",
   mergedAt: "2026-05-10T11:00:00.000Z",
 });
-type TaskStorePort = Partial<RealTaskStorePort>;
+type TaskStorePort = TaskStoreTestOverrides;
 type TaskActivityGuardPort = RealTaskActivityGuardPort;
 const createSettingsConfigPort = <Overrides extends Partial<SettingsConfigPort>>(
   port: Overrides,
@@ -144,7 +148,18 @@ const extendGitPort = (base: GitPort, overrides: Partial<GitPort>): GitPort =>
 const extendSettingsConfigPort = (
   base: SettingsConfigPort,
   overrides: Partial<SettingsConfigPort>,
-): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
+): SettingsConfigPort => {
+  const methods: Partial<SettingsConfigPort> = { ...base };
+  if (overrides.readConfig !== undefined) {
+    delete methods.readGlobalConfig;
+    delete methods.readRepoConfig;
+    delete methods.readRepoConfigByRepoPath;
+    delete methods.readWorkspaceCatalogSnapshot;
+    delete methods.readAutopilotSettings;
+  }
+  if (overrides.updateConfig !== undefined) delete methods.applyConfigChange;
+  return createSettingsConfigPort({ ...methods, ...overrides });
+};
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
 type TaskServiceTestInput = Omit<
@@ -152,14 +167,17 @@ type TaskServiceTestInput = Omit<
   "taskStore" | "taskActivityGuard" | "taskWorkflows"
 > & {
   taskActivityGuard?: TaskActivityGuardPort;
-  taskStore: TaskStorePort;
   taskWorkflows?: TaskWorkflowResolver;
-};
+} & (
+    | { taskStore: TaskStorePort; atomicTaskStore?: never }
+    | { atomicTaskStore: RealTaskStorePort; taskStore?: never }
+  );
 
 const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceInput => {
   const {
     taskActivityGuard,
     taskStore,
+    atomicTaskStore,
     toolDiscovery,
     workspaceSettingsService: workspaceSettingsServiceInput,
     ...rest
@@ -180,7 +198,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
     browserTabs: rest.browserTabs ?? { closeOwnerTabs: () => Effect.void },
     worktreeActions: rest.worktreeActions ?? createBuildWorktreeActions([]),
     toolDiscovery: resolvedToolDiscovery,
-    taskStore: createTaskStorePort(taskStore),
+    taskStore: atomicTaskStore ?? createTaskStorePort(taskStore!),
     taskWorkflows: rest.taskWorkflows ?? builtinTaskWorkflows,
   };
   if (workspaceSettingsService) {
@@ -208,7 +226,7 @@ const createAgentSessionSettingsConfig = (existingPaths: Set<string>): SettingsC
     readConfig() {
       return Effect.die(new Error("unexpected read config"));
     },
-    writeConfig() {
+    updateConfig() {
       return Effect.die(new Error("unexpected write config"));
     },
     defaultWorktreeBasePath(workspaceId) {
@@ -240,28 +258,33 @@ const createAgentSessionSettingsConfig = (existingPaths: Set<string>): SettingsC
   });
 const createAgentSessionWorkspaceSettingsService = (
   workspace: Pick<WorkspaceRecord, "repoPath" | "effectiveWorktreeBasePath">,
-): WorkspaceSettingsService =>
-  createWorkspaceSettingsServiceTestDouble({
-    listWorkspaces() {
-      return Effect.sync(() => {
-        return [
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            abbreviation: null,
-            tileColor: null,
-            repoPath: workspace.repoPath,
-            iconDataUrl: null,
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: "/worktrees/repo",
-            effectiveWorktreeBasePath: workspace.effectiveWorktreeBasePath,
-          },
-        ];
-      });
-    },
+): WorkspaceSettingsService => {
+  const record: WorkspaceRecord = {
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    abbreviation: null,
+    tileColor: null,
+    repoPath: workspace.repoPath,
+    iconDataUrl: null,
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/worktrees/repo",
+    effectiveWorktreeBasePath: workspace.effectiveWorktreeBasePath,
+  };
+  const config = repoConfigSchema.parse(record);
+  return createWorkspaceSettingsServiceTestDouble({
+    getRepoConfig: () => Effect.succeed(config),
+    getWorkspaceCatalog: () =>
+      Effect.succeed({
+        catalogRevision: 0,
+        openWorkspaces: [record],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      }),
+    listWorkspaces: () => Effect.succeed([record]),
   });
+};
 const createBuildSettingsConfig = (
   existingPaths: Set<string>,
   repoPath = "/repo",
@@ -282,7 +305,7 @@ const createBuildSettingsConfig = (
         }),
       );
     },
-    writeConfig() {
+    updateConfig() {
       return Effect.die(new Error("unexpected write config"));
     },
     defaultWorktreeBasePath(workspaceId) {
@@ -314,25 +337,24 @@ const createBuildSettingsConfig = (
   });
 const createBuildWorkspaceSettingsService = (
   repoConfig: Partial<RepoConfig> & Pick<RepoConfig, "workspaceId" | "repoPath" | "hooks">,
-): WorkspaceSettingsService =>
-  createWorkspaceSettingsServiceTestDouble({
-    getRepoConfigByRepoPath() {
-      return Effect.sync(() => {
-        return {
-          workspaceName: "Repo",
-          branchPrefix: "odt",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: {},
-          actions: { items: [], defaultActionId: null },
-          worktreeCopyPaths: [],
-          promptOverrides: {},
-          agentDefaults: {},
-          agentStudioState: { openTaskIds: [] },
-          ...repoConfig,
-        } satisfies RepoConfig;
-      });
-    },
+): WorkspaceSettingsService => {
+  const saved = {
+    workspaceName: "Repo",
+    branchPrefix: "odt",
+    defaultTargetBranch: { remote: "origin", branch: "main" },
+    git: {},
+    actions: { items: [], defaultActionId: null },
+    worktreeCopyPaths: [],
+    promptOverrides: {},
+    agentDefaults: {},
+    agentStudioState: { openTaskIds: [] },
+    ...repoConfig,
+  } satisfies RepoConfig;
+  return createWorkspaceSettingsServiceTestDouble({
+    getRepoConfig: () => Effect.succeed(saved),
+    getRepoConfigByRepoPath: () => Effect.succeed(saved),
   });
+};
 const createBuildSystemCommands = (calls: unknown[], ok = true): SystemCommandPort =>
   createSystemCommandPort({
     versionCommand() {

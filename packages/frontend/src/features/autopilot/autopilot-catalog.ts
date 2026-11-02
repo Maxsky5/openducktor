@@ -14,10 +14,15 @@ export const getAutopilotRule = (
   settings: AutopilotSettings,
   eventId: AutopilotEventId,
 ): AutopilotRule => {
-  return settings.rules.find((rule) => rule.eventId === eventId) ?? { eventId, actionIds: [] };
+  return (
+    settings.rules.find(
+      (rule) => rule.workflowId === "openducktor" && rule.eventId === eventId,
+    ) ?? { workflowId: "openducktor", eventId, actionIds: [] }
+  );
 };
 
 export const getAutopilotSelectedValue = (rule: AutopilotRule): AutopilotSelectValue => {
+  if (rule.workflowId !== "openducktor") return AUTOPILOT_DISABLED_VALUE;
   const actionId = rule.actionIds[0];
   return actionId === undefined ? AUTOPILOT_DISABLED_VALUE : builtinAutomationId(actionId);
 };
@@ -34,11 +39,19 @@ export const setAutopilotRuleAction = (
   eventId: AutopilotEventId,
   value: AutopilotSelectValue,
 ): AutopilotSettings => {
-  const currentRulesByEvent = new Map(settings.rules.map((rule) => [rule.eventId, rule]));
+  const currentRulesByEvent = new Map(
+    settings.rules
+      .filter((rule) => rule.workflowId === "openducktor")
+      .map((rule) => [rule.eventId, rule]),
+  );
   let hasChanged = false;
 
   const rules = BUILTIN_SIGNAL_IDS.map((id) => {
-    const currentRule = currentRulesByEvent.get(id) ?? { eventId: id, actionIds: [] };
+    const currentRule = currentRulesByEvent.get(id) ?? {
+      workflowId: "openducktor",
+      eventId: id,
+      actionIds: [],
+    };
     if (!currentRulesByEvent.has(id)) {
       hasChanged = true;
     }
@@ -59,10 +72,16 @@ export const setAutopilotRuleAction = (
     hasChanged = true;
 
     return {
+      workflowId: "openducktor",
       eventId: id,
       actionIds: nextActionIds,
     };
   });
 
-  return hasChanged ? { ...settings, rules } : settings;
+  return hasChanged
+    ? {
+        ...settings,
+        rules: [...settings.rules.filter((rule) => rule.workflowId !== "openducktor"), ...rules],
+      }
+    : settings;
 };

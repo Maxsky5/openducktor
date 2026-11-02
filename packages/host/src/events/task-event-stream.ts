@@ -39,6 +39,8 @@ export type TaskEventStreamSubscription = {
 };
 
 export type TaskEventStreamPort = {
+  cursor(): TaskEventCursor;
+  reset(): TaskEventCursor;
   publish(event: ExternalTaskSyncEvent): TaskEventCursor;
   subscribe(
     input: TaskEventStreamSubscribe,
@@ -153,6 +155,18 @@ export const createTaskEventStream = ({
   };
 
   return {
+    cursor: currentCursor,
+    reset() {
+      sequence += 1;
+      replayFloor = sequence;
+      buffer = [];
+      bufferBytes = 0;
+      for (const subscription of subscribers.values()) {
+        subscription.snapshotBoundary = null;
+        enqueueSnapshot(subscription, "buffer_gap");
+      }
+      return currentCursor();
+    },
     publish(event) {
       const parsed = externalTaskSyncEventSchema.safeParse(event);
       if (!parsed.success) {

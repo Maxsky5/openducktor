@@ -1,73 +1,92 @@
+import type { WorkspaceCatalog } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
+  findInCauseChain,
   type HostError,
   HostValidationError,
-  toHostOperationError,
+  isPathNotFoundError,
 } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type {
-  RuntimeSessionOwner,
+  RuntimeOwnershipScope,
   WorkspaceSessionStoreScope,
 } from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
-export const ownerKey = (runtimeKind: string, externalSessionId: string) =>
-  `${runtimeKind}\u0000${externalSessionId}`;
+/** The open workspaces that registered this repository path. Physical activity can match several. */
+export const openWorkspacesAtRepoPath = (
+  catalog: Pick<WorkspaceCatalog, "openWorkspaces">,
+  repoPath: string,
+): WorkspaceSessionStoreScope[] => {
+  const path = normalizePathForComparison(repoPath);
+  return catalog.openWorkspaces
+    .filter((workspace) => normalizePathForComparison(workspace.repoPath) === path)
+    .map(({ workspaceId, repoPath }) => ({ workspaceId, repoPath }));
+};
+
+export type RuntimeOwnershipScopeDependencies = {
+  settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
+  git: Pick<GitPort, "canonicalizePath" | "readCheckout">;
+};
+
+/** An ownership scope with the name of each workspace, for messages about a foreign owner. */
+type NamedRuntimeOwnershipScope = Omit<RuntimeOwnershipScope, "workspaces"> & {
+  workspaces: readonly (WorkspaceSessionStoreScope & { workspaceName: string })[];
+};
 
 /**
- * Reads the owners recorded by the other configured workspaces of the same Git repository.
- * A native conversation in a shared worktree can belong to one of them, and has one owner only.
+ * Resolves the registered workspaces, in every lifecycle state, whose repository has the same Git
+ * common directory as the workspace. A native conversation in a shared worktree has one owner in
+ * this scope. Git runs here, before the store checks the catalog revision in its transaction.
+ * An ownership claim takes the result as its `RuntimeOwnershipScope`.
  */
-export const createOtherWorkspaceOwnersReader =
-  ({
-    settings,
-    git,
-    candidateDirectory,
-    listRuntimeOwners,
-  }: {
-    settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
-    git: Pick<GitPort, "readCheckout">;
-    candidateDirectory: (directory: string) => Effect.Effect<string | null, HostError>;
-    listRuntimeOwners: (
-      input: WorkspaceSessionStoreScope,
-    ) => Effect.Effect<RuntimeSessionOwner[], HostError>;
-  }) =>
-  (scope: WorkspaceSessionStoreScope) =>
-    Effect.gen(function* () {
-      const catalog = yield* settings
-        .getWorkspaceCatalog()
-        .pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(cause, "workspaceSessionImport.workspaces"),
-          ),
-        );
-      const owners = new Map<string, { workspaceName: string; owner: RuntimeSessionOwner }>();
-      // Read the current repository once, and only when another workspace can share it.
-      const currentCheckout = yield* Effect.cached(git.readCheckout(scope.repoPath));
-      for (const workspace of [...catalog.openWorkspaces, ...catalog.closedWorkspaces]) {
-        if (workspace.workspaceId === scope.workspaceId) continue;
-        // A workspace whose repository no longer exists has no directory to share.
-        const repoPath = yield* candidateDirectory(workspace.repoPath);
-        if (repoPath === null) continue;
-        const [current, candidate] = yield* Effect.all(
-          [currentCheckout, git.readCheckout(repoPath)],
-          { concurrency: 2 },
-        );
-        if (!current) {
-          return yield* new HostValidationError({
-            field: "repoPath",
-            message: `Workspace repository is not a Git work tree: ${scope.repoPath}. Restore the repository before you import a chat.`,
-          });
-        }
-        // A directory outside any work tree shares no Git directory with the repository.
-        if (candidate?.commonDirectory !== current.commonDirectory) continue;
-        const recorded = yield* listRuntimeOwners({ workspaceId: workspace.workspaceId, repoPath });
-        for (const owner of recorded) {
-          owners.set(ownerKey(owner.runtimeKind, owner.externalSessionId), {
-            workspaceName: workspace.workspaceName,
-            owner,
-          });
-        }
-      }
-      return owners;
-    });
+export const resolveRuntimeOwnershipScope = (
+  { settings, git }: RuntimeOwnershipScopeDependencies,
+  scope: WorkspaceSessionStoreScope,
+): Effect.Effect<NamedRuntimeOwnershipScope, HostError> =>
+  Effect.gen(function* () {
+    const catalog = yield* settings.getWorkspaceCatalog();
+    const current = yield* git.readCheckout(scope.repoPath);
+    if (!current)
+      return yield* new HostValidationError({
+        field: "repoPath",
+        message: `Workspace repository is not a Git work tree: ${scope.repoPath}. Restore the repository before saving session ownership.`,
+      });
+    const candidates = yield* Effect.forEach(
+      [
+        ...catalog.openWorkspaces,
+        ...catalog.closedWorkspaces,
+        ...catalog.incompleteRemovals.map(({ workspace }) => workspace),
+      ],
+      ({ workspaceId, repoPath, workspaceName }) =>
+        Effect.gen(function* () {
+          if (workspaceId === scope.workspaceId) {
+            if (repoPath !== scope.repoPath)
+              return yield* new HostValidationError({
+                field: "repoPath",
+                message: "Workspace repository changed. Reload workspaces and retry.",
+              });
+            return { ...scope, workspaceName };
+          }
+          // A workspace whose repository no longer exists has no directory to share.
+          const path = yield* git
+            .canonicalizePath(repoPath)
+            .pipe(
+              Effect.catch((cause) =>
+                findInCauseChain(cause, isPathNotFoundError) === null
+                  ? Effect.fail(cause)
+                  : Effect.succeed(null),
+              ),
+            );
+          if (path === null) return null;
+          const checkout = yield* git.readCheckout(path);
+          return checkout?.commonDirectory === current.commonDirectory
+            ? { workspaceId, repoPath, workspaceName }
+            : null;
+        }),
+      { concurrency: 4 },
+    );
+    const peers = candidates.filter((peer) => peer !== null);
+    return { catalogRevision: catalog.catalogRevision, workspaces: peers };
+  });

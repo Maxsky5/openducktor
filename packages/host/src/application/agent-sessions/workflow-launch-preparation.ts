@@ -1,14 +1,15 @@
-import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
 import type {
-  AgentSessionLiveReadResult,
   AgentSessionModelSelection,
   AgentSessionLiveRef,
-  AgentSessionRecord,
   RepoConfig,
   WorkflowLaunchDecision,
   WorkflowLaunchRequest,
 } from "@openducktor/contracts";
-import type { WorkflowLaunchAttemptRequest } from "./workflow-launch-types";
+import type {
+  WorkflowLaunchAttemptRequest,
+  PreparedWorkflowDecision,
+  WorkflowLaunchPreparationDependencies,
+} from "./workflow-launch-types";
 import { findCatalogModel, resolveSavedModelAlias } from "@openducktor/core";
 import {
   requirePullRequestTarget,
@@ -18,50 +19,10 @@ import {
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostValidationError, toHostOperationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
-import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
-import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort, TaskRecord } from "../../ports/task-repository-ports";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
-import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
-import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
-import type { TaskService } from "../tasks/task-service";
-import type { GitProviderService } from "../git/git-provider-service";
-import type { resolveSessionMessageParts } from "../attachments/resolve-session-message-parts";
+import type { TaskRecord } from "../../ports/task-repository-ports";
 import { validateTaskSessionWorkflowAvailable } from "../tasks/support/task-session-workflow-validation";
 import { resolveRuntimeDescriptorForTaskSession } from "../tasks/support/task-worktree-cleanup";
 import { findWorkflowSession } from "./task-workflow-session-storage";
-
-/** A reuse decision carries the owned source record and its live state, read once. */
-export type PreparedWorkflowDecision =
-  | Exclude<WorkflowLaunchDecision, { startMode: "reuse" }>
-  | (Extract<WorkflowLaunchDecision, { startMode: "reuse" }> & {
-      source: AgentSessionRecord;
-      live: AgentSessionLiveReadResult;
-    });
-
-export type WorkflowLaunchPreparationDependencies = {
-  resolveParts: (
-    parts: Parameters<typeof resolveSessionMessageParts>[0],
-  ) => ReturnType<typeof resolveSessionMessageParts>;
-  settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getSettingsSnapshot">;
-  tasks: Pick<
-    TaskService,
-    "agentSessionsList" | "agentSessionUpdateModel" | "humanRequestChanges" | "updateTask"
-  >;
-  taskReader: Pick<TaskStorePort, "getTask">;
-  taskWorkflows: TaskWorkflowResolver;
-  worktrees: Pick<TaskWorktreeService, "getTaskWorktree">;
-  startPreparation: Pick<TaskSessionStartPreparationService, "validateTarget">;
-  git: Pick<GitPort, "canonicalizePath">;
-  definitions: RuntimeDefinitionsService;
-  registry: Pick<RuntimeRegistryPort, "requireReady">;
-  queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
-  provider: Pick<GitProviderService, "getContext">;
-  runtime: Pick<SessionLaunchRuntimePort, "read">;
-};
 
 export const prepareWorkflowLaunch = (
   deps: WorkflowLaunchPreparationDependencies,
@@ -71,13 +32,17 @@ export const prepareWorkflowLaunch = (
   onReuse: (source: AgentSessionLiveRef) => void,
 ) =>
   Effect.gen(function* () {
-    let task = yield* deps.taskReader.getTask({ repoPath, taskId: request.taskId });
+    let task = yield* deps.taskReader.getTask({
+      workspaceId: request.workspaceId,
+      repoPath,
+      taskId: request.taskId,
+    });
     const workflow = deps.taskWorkflows.forTask(task);
     const action = yield* requireLaunchAction(workflow, request);
     const actionId = action.id;
     const roleLabel = workflow.role(action.role).label;
     yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
-    const settings = yield* deps.settings.getSettingsSnapshot();
+    const settings = yield* deps.settingsConfig.readGlobalConfig();
     const overrides = workflow.prompts.mergeOverrides({
       globalOverrides: settings.globalPromptOverrides,
       repoOverrides: config.promptOverrides,
@@ -108,7 +73,10 @@ export const prepareWorkflowLaunch = (
       );
     const targetBranch = request.targetBranch ?? task.targetBranch ?? config.defaultTargetBranch;
     if (action.context === "pull_request") {
-      const unavailable = yield* pullRequestUnavailableReason(deps, repoPath);
+      const unavailable = yield* pullRequestUnavailableReason(deps, {
+        workspaceId: config.workspaceId,
+        repoPath,
+      });
       if (unavailable) {
         if (request.policy.kind === "automatic")
           return { kind: "skipped" as const, reason: unavailable };
@@ -159,6 +127,7 @@ export const prepareWorkflowLaunch = (
     if (decision.startMode === "reuse") onReuse({ repoPath, ...decision.sourceSession });
     if (decision.startMode === "fresh" && decision.targetWorkingDirectory)
       yield* deps.startPreparation.validateTarget({
+        workspaceId: request.workspaceId,
         canonicalRepoPath: repoPath,
         taskId: request.taskId,
         role: action.role,
@@ -172,7 +141,11 @@ export const prepareWorkflowLaunch = (
       prepared = decision;
     } else {
       const source = decision.sourceSession;
-      const records = yield* deps.tasks.agentSessionsList({ repoPath, taskId: request.taskId });
+      const records = yield* deps.tasks.agentSessionsList({
+        workspaceId: request.workspaceId,
+        repoPath,
+        taskId: request.taskId,
+      });
       const stored = findWorkflowSession(records, action.role, source);
       if (!stored)
         return yield* launchValidationError(
@@ -227,6 +200,7 @@ export const prepareWorkflowLaunch = (
     yield* deps.registry.requireReady(runtimeKind);
     if (request.beforeStartAction) {
       yield* deps.tasks.humanRequestChanges({
+        workspaceId: request.workspaceId,
         repoPath,
         taskId: request.taskId,
         note: request.beforeStartAction.note,
@@ -234,12 +208,17 @@ export const prepareWorkflowLaunch = (
     }
     if (request.targetBranch) {
       yield* deps.tasks.updateTask({
+        workspaceId: request.workspaceId,
         repoPath,
         taskId: request.taskId,
         patch: { targetBranch: request.targetBranch },
       });
     }
-    task = yield* deps.taskReader.getTask({ repoPath, taskId: request.taskId });
+    task = yield* deps.taskReader.getTask({
+      workspaceId: request.workspaceId,
+      repoPath,
+      taskId: request.taskId,
+    });
     yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
     const systemPrompt = workflow.prompts.systemPrompt({
       role: action.role,
@@ -325,10 +304,14 @@ const decideAutomaticLaunch = (
   Effect.gen(function* () {
     const { startMode } = workflow.automation(actionId);
     const { role, startModes: allowedStartModes } = action;
-    const records = yield* deps.tasks.agentSessionsList({ repoPath, taskId: request.taskId });
+    const records = yield* deps.tasks.agentSessionsList({
+      workspaceId: request.workspaceId,
+      repoPath,
+      taskId: request.taskId,
+    });
     const latest = records
       .filter((record) => record.role === role)
-      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0];
     const sourceSession = latest && {
       externalSessionId: latest.externalSessionId,
       runtimeKind: latest.runtimeKind,
@@ -361,7 +344,11 @@ const decideAutomaticLaunch = (
     const reuse = startMode === "reuse" && !forceFresh;
     const continuation =
       reuse || action.requiresWorktree
-        ? yield* deps.worktrees.getTaskWorktree({ repoPath, taskId: request.taskId })
+        ? yield* deps.worktrees.getTaskWorktree({
+            workspaceId: request.workspaceId,
+            repoPath,
+            taskId: request.taskId,
+          })
         : null;
     const roleLabel = workflow.role(role).label;
     if (action.requiresWorktree && !continuation)
@@ -449,9 +436,9 @@ const resolveConfiguredDefaultModel = (
  */
 const pullRequestUnavailableReason = (
   deps: Pick<WorkflowLaunchPreparationDependencies, "provider">,
-  repoPath: string,
+  workspace: { workspaceId: string; repoPath: string },
 ) =>
-  deps.provider.getContext(repoPath).pipe(
+  deps.provider.getContext(workspace).pipe(
     Effect.map((context) => {
       if (!context?.descriptor.capabilities.supportsPullRequests)
         return "The current Git provider does not support Pull Requests.";

@@ -99,6 +99,7 @@ export function WorkspaceSessionChat({
   const chatState = useMemo(
     () =>
       projectWorkspaceSessionChatState({
+        workspaceId: workspace.workspaceId,
         record,
         identity,
         session,
@@ -106,7 +107,15 @@ export function WorkspaceSessionChat({
         runtimeReadinessState: runtimeReadiness.state,
         fault,
       }),
-    [record, identity, session, readModel.sessionReadModelLoadState, runtimeReadiness.state, fault],
+    [
+      record,
+      identity,
+      session,
+      readModel.sessionReadModelLoadState,
+      runtimeReadiness.state,
+      fault,
+      workspace.workspaceId,
+    ],
   );
   const runtimeData = useSessionRuntimeData({
     repoPath: workspace.repoPath,
@@ -115,7 +124,7 @@ export function WorkspaceSessionChat({
         ? {
             identity,
             selectedModel: chatState.selectedModel,
-            sessionAssociation: { kind: "repository" },
+            sessionAssociation: { kind: "repository", workspaceId: workspace.workspaceId },
           }
         : null,
     runtimeDefinitions: runtime.allRuntimeDefinitions,
@@ -219,7 +228,7 @@ export function WorkspaceSessionChat({
     pendingQuestions: chatState.pendingQuestions,
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
-    sessionScope: { kind: "repository" },
+    sessionScope: { kind: "repository", workspaceId: workspace.workspaceId },
   });
   const isWaitingInput = isAgentSessionBlockedOnInput(chatState);
   const { sendTarget } = actions;

@@ -184,7 +184,10 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     try {
       const saved = requireSavedSettings(
         await saveSettingsSnapshot(
-          prepareSettingsSnapshotForSave({ ...settingsQuery.data, agentRuntimes: runtimeDraft }),
+          prepareSettingsSnapshotForSave(
+            { ...settingsQuery.data, agentRuntimes: runtimeDraft },
+            settingsQuery.data,
+          ),
         ),
       );
       reportSettingsSaveFollowUps(saved, (title, description) =>

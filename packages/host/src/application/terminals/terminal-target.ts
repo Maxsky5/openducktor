@@ -58,6 +58,7 @@ export const createTerminalTargetResolver = ({
       const repoPath = yield* canonicalizeRepositoryPath(context.repoPath, "create");
       const worktree = yield* taskWorktrees
         .getTaskWorktree({
+          workspaceId: context.workspaceId,
           repoPath,
           taskId: context.taskId,
         })
@@ -133,7 +134,7 @@ export const createTerminalTargetResolver = ({
           workingDir,
         });
       }
-      return { context: { repoPath, taskId: context.taskId }, workingDir: savedWorkingDir };
+      return { context: { ...context, repoPath }, workingDir: savedWorkingDir };
     });
 
   const resolveWorkspaceSession = (

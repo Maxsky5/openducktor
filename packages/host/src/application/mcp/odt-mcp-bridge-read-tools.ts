@@ -1,9 +1,7 @@
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
-  TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES,
   workflowArtifactId,
-  type TaskCard,
   type ArtifactReadRequest,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -15,7 +13,6 @@ import {
   mapPublicTask,
   mapTaskSummary,
   missingFreeTaskArtifact,
-  normalizeKey,
   parseResponse,
   parseToolInput,
   toMcpTaskArtifact,
@@ -49,7 +46,7 @@ const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
       ODT_TOOL_SCHEMAS.odt_search_tasks,
       input,
     );
-    const repoPath = yield* context.repoPathForWorkspace(parsed.workspaceId ?? "");
+    const scope = yield* context.workspaceScopeForWorkspace(parsed.workspaceId ?? "");
     // A filter value is valid when a task workflow of the host declares it.
     const { workflows } = context.taskWorkflows;
     const issueTypes = [...new Set(workflows.flatMap(({ issueTypes }) => issueTypes))];
@@ -69,38 +66,13 @@ const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
         message: `Status ${parsed.status} is not an open state of a task workflow.`,
       });
     }
-    const tasks = (yield* context.taskService.listTasks({ repoPath })).filter((task) => {
-      if (context.taskWorkflows.forTask(task).isTerminalState(task.status)) {
-        return false;
-      }
-      if (parsed.priority !== undefined && task.priority !== parsed.priority) {
-        return false;
-      }
-      if (parsed.issueType !== undefined && task.issueType !== parsed.issueType) {
-        return false;
-      }
-      if (parsed.status !== undefined && task.status !== parsed.status) {
-        return false;
-      }
-      if (
-        parsed.title !== undefined &&
-        !normalizeKey(task.title).includes(normalizeKey(parsed.title))
-      ) {
-        return false;
-      }
-      if (parsed.tags !== undefined) {
-        const labels = new Set(task.labels.map(normalizeKey));
-        return parsed.tags.every((tag) => labels.has(normalizeKey(tag)));
-      }
-      return true;
-    });
-    tasks.sort(compareTaskSearchResults);
-    const results = tasks.slice(0, parsed.limit).map(mapTaskSummary);
+    const { tasks, totalCount } = yield* context.taskService.searchTasks({ ...parsed, ...scope });
+    const results = tasks.map(mapTaskSummary);
     return yield* parseResponse("odt_search_tasks", RESPONSE_SCHEMAS.odt_search_tasks, {
       results,
       limit: parsed.limit,
-      totalCount: tasks.length,
-      hasMore: tasks.length > results.length,
+      totalCount,
+      hasMore: totalCount > results.length,
     });
   });
 
@@ -171,11 +143,15 @@ const executeReadTaskAssets: OdtMcpReadToolHandler = (context, input) =>
 const executeReadTask: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
     const parsed = yield* parseToolInput("odt_read_task", ODT_TOOL_SCHEMAS.odt_read_task, input);
-    const { repoPath, task } = yield* context.taskScopeForWorkspace(
+    const { workspaceId, repoPath, task } = yield* context.taskScopeForWorkspace(
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
-    const collection = yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id });
+    const collection = yield* context.taskService.listTaskArtifacts({
+      workspaceId,
+      repoPath,
+      taskId: task.id,
+    });
     return yield* parseResponse("odt_read_task", RESPONSE_SCHEMAS.odt_read_task, {
       task: {
         ...mapPublicTask(task),
@@ -192,39 +168,37 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       ODT_TOOL_SCHEMAS.odt_read_task_artifacts,
       input,
     );
-    const { repoPath, task } = yield* context.taskScopeForWorkspace(
+    const { workspaceId, repoPath, task } = yield* context.taskScopeForWorkspace(
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
     const workflow = context.taskWorkflows.forTask(task);
     const listedArtifacts = parsed.codes.some((code) => !workflow.artifact(code))
-      ? (yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id })).artifacts
+      ? (yield* context.taskService.listTaskArtifacts({ workspaceId, repoPath, taskId: task.id }))
+          .artifacts
       : [];
     const selections = [];
     for (const code of parsed.codes) {
       if (workflow.artifact(code)) {
-        selections.push({ artifactId: workflowArtifactId(task.id, code), workflow: true });
+        selections.push(workflowArtifactId(task.id, code));
         continue;
       }
       const artifact = findFreeTaskArtifact(listedArtifacts, code);
       if (artifact === undefined) return yield* missingFreeTaskArtifact(code);
-      selections.push({ artifactId: artifact.artifactId, workflow: false });
+      selections.push(artifact.artifactId);
     }
     const artifacts = yield* Effect.forEach(
       selections,
-      ({ artifactId, workflow }) => {
+      (artifactId) => {
         const request: ArtifactReadRequest = {
+          workspaceId,
           repoPath,
           taskId: task.id,
           artifactId,
         };
-        if (parsed.maxBytes !== undefined) request.maxBytes = parsed.maxBytes;
-        else if (!workflow) request.maxBytes = TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES;
-        if (parsed.byteOffset !== undefined) request.byteOffset = parsed.byteOffset;
-        if (parsed.expectedVersion !== undefined) request.expectedVersion = parsed.expectedVersion;
         return context.taskService.readTaskArtifact(request).pipe(
-          Effect.map(({ artifact, ...chunk }) => ({
-            ...chunk,
+          Effect.map(({ artifact, ...content }) => ({
+            ...content,
             artifact: toMcpTaskArtifact(artifact),
           })),
         );
@@ -244,14 +218,3 @@ const READ_TOOL_HANDLERS = {
   odt_read_task: executeReadTask,
   odt_read_task_artifacts: executeReadTaskArtifacts,
 } satisfies Record<OdtMcpReadToolName, OdtMcpReadToolHandler>;
-
-const compareTaskSearchResults = (
-  left: Pick<TaskCard, "id" | "updatedAt">,
-  right: Pick<TaskCard, "id" | "updatedAt">,
-): number => {
-  const updatedAtOrder = right.updatedAt.localeCompare(left.updatedAt);
-  if (updatedAtOrder !== 0) {
-    return updatedAtOrder;
-  }
-  return left.id.localeCompare(right.id);
-};

@@ -6,6 +6,9 @@ import type {
   TaskAgentSessions,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { eq } from "drizzle-orm";
+import { workspaces } from "../../adapters/sqlite/sqlite-host-settings-schema";
+import { tasks, taskSessions } from "../../adapters/sqlite/sqlite-host-database-schema";
 import { TestClock } from "effect/testing";
 import {
   createSqliteTaskStoreHarness,
@@ -13,6 +16,7 @@ import {
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { HostOperationError } from "../../effect/host-errors";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
+import { workspaceSessionOwnership } from "../../test-support/workspace-session-ownership";
 import { createAgentSessionActivityPersistence } from "./agent-session-activity-persistence";
 import { createAgentSessionLiveEnvelopePublisher } from "./agent-session-live-envelope";
 
@@ -194,6 +198,8 @@ test("reports a failed activity save through the shared live channel", async () 
   const h = await setup();
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const persistence = createAgentSessionActivityPersistence({
+    readTaskWorkspaces: () =>
+      Effect.succeed([{ workspaceId: database.workspaceId, repoPath: database.repoPath }]),
     tasks: database.store,
     workspace: {
       observe: () => Effect.void,
@@ -233,6 +239,97 @@ test("reports a failed activity save through the shared live channel", async () 
   expect((await h.saved()).lastActivityAt).toBe(2_000);
 });
 
+test("updates each exact saved task association of a shared physical session", async () => {
+  const h = await setup();
+  const otherWorkspaceId = "other-workspace";
+  await Effect.runPromise(
+    database.withHostDatabase("test.duplicateSavedAssociation", (session) =>
+      session.transaction("test.duplicateSavedAssociation", (transaction) =>
+        Effect.gen(function* () {
+          const [workspace] = yield* transaction.execute(
+            (db) =>
+              db.select().from(workspaces).where(eq(workspaces.workspaceId, database.workspaceId)),
+            "test.workspace",
+          );
+          const [task] = yield* transaction.execute(
+            (db) => db.select().from(tasks).where(eq(tasks.workspaceId, database.workspaceId)),
+            "test.task",
+          );
+          const [record] = yield* transaction.execute(
+            (db) =>
+              db
+                .select()
+                .from(taskSessions)
+                .where(eq(taskSessions.workspaceId, database.workspaceId)),
+            "test.session",
+          );
+          if (!workspace || !task || !record)
+            return yield* Effect.die(new Error("Missing saved fixture association."));
+          yield* transaction.execute(
+            (db) => db.insert(workspaces).values({ ...workspace, workspaceId: otherWorkspaceId }),
+            "test.otherWorkspace",
+          );
+          yield* transaction.execute(
+            (db) => db.insert(tasks).values({ ...task, workspaceId: otherWorkspaceId }),
+            "test.otherTask",
+          );
+          yield* transaction.execute(
+            (db) => db.insert(taskSessions).values({ ...record, workspaceId: otherWorkspaceId }),
+            "test.otherSession",
+          );
+        }),
+      ),
+    ),
+  );
+  const published: string[] = [];
+  const persistence = createAgentSessionActivityPersistence({
+    tasks: database.store,
+    readTaskWorkspaces: () =>
+      Effect.succeed(
+        [database.workspaceId, otherWorkspaceId].map((workspaceId) => ({
+          workspaceId,
+          repoPath: database.repoPath,
+        })),
+      ),
+    workspace: { observe: () => Effect.void, recordActivity: () => Effect.succeed(true) },
+    publishTaskRecords: (scope) => Effect.sync(() => void published.push(scope.workspaceId)),
+  });
+  await Effect.runPromise(
+    persistence.observe(
+      {
+        type: "transcript_event",
+        event: {
+          type: "session_error",
+          sessionRef: h.ref,
+          externalSessionId: h.ref.externalSessionId,
+          timestamp: new Date(3_000).toISOString(),
+          message: "The native session failed.",
+        },
+      },
+      "live",
+    ),
+  );
+  const records = await Effect.runPromise(
+    database.withHostDatabase("test.savedActivity", (session) =>
+      session.execute(
+        (db) =>
+          db
+            .select({
+              workspaceId: taskSessions.workspaceId,
+              lastActivityAt: taskSessions.lastActivityAt,
+            })
+            .from(taskSessions),
+        "test.savedActivity",
+      ),
+    ),
+  );
+  expect(records).toEqual([
+    { workspaceId: database.workspaceId, lastActivityAt: 3_000 },
+    { workspaceId: otherWorkspaceId, lastActivityAt: 3_000 },
+  ]);
+  expect(published).toEqual([database.workspaceId, otherWorkspaceId]);
+});
+
 type EventInput = AgentSessionTranscriptEvent extends infer Event
   ? Event extends AgentSessionTranscriptEvent
     ? Omit<Event, "sessionRef" | "externalSessionId" | "timestamp">
@@ -242,6 +339,7 @@ type EventInput = AgentSessionTranscriptEvent extends infer Event
 const setup = async () => {
   const task = await Effect.runPromise(
     database.store.createTask({
+      workspaceId: database.workspaceId,
       repoPath: database.repoPath,
       status: "open",
       task: { title: "Activity", issueType: "task", priority: 2 },
@@ -253,7 +351,16 @@ const setup = async () => {
     lastActivityAt: 2_000,
   });
   await Effect.runPromise(
-    database.store.upsertAgentSession({ repoPath: database.repoPath, taskId: task.id, session }),
+    database.store.upsertAgentSession({
+      workspaceId: database.workspaceId,
+      repoPath: database.repoPath,
+      ownershipScope: workspaceSessionOwnership({
+        workspaceId: database.workspaceId,
+        repoPath: database.repoPath,
+      }),
+      taskId: task.id,
+      session,
+    }),
   );
   const ref = {
     repoPath: database.repoPath,
@@ -265,6 +372,8 @@ const setup = async () => {
   const writes: number[] = [];
   const restart = () =>
     createAgentSessionActivityPersistence({
+      readTaskWorkspaces: () =>
+        Effect.succeed([{ workspaceId: database.workspaceId, repoPath: database.repoPath }]),
       tasks: {
         recordAgentSessionActivity: (input) => {
           writes.push(input.occurredAt);
@@ -329,6 +438,7 @@ const setup = async () => {
       (
         await Effect.runPromise(
           database.store.listAgentSessionsForTasks({
+            workspaceId: database.workspaceId,
             repoPath: database.repoPath,
             taskIds: [task.id],
           }),

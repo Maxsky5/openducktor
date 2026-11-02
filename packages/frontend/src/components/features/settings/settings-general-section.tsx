@@ -18,7 +18,9 @@ export function GeneralSettingsSection({ disabled }: GeneralSettingsSectionProps
       <SettingsAppUpdatesSection disabled={disabled} />
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
-        OpenDucktor saves settings to <code>config.json</code> in its config folder.
+        OpenDucktor saves shared settings to the host database <code>database.sqlite</code> in its
+        config folder. <code>config.json</code> in the same folder keeps the personal preferences of
+        this host.
       </div>
     </div>
   );

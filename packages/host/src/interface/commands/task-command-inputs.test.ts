@@ -6,14 +6,22 @@ describe("parseListAgentSessionsForTasksInput", () => {
   test("rejects a missing repo path", () => {
     expect(() =>
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         taskIds: ["task-1"],
       }),
     ).toThrow("repoPath is required.");
   });
 
+  test("rejects a missing workspace identity", () => {
+    expect(() => parseListAgentSessionsForTasksInput({ repoPath: "/repo", taskIds: [] })).toThrow(
+      "workspaceId is required.",
+    );
+  });
+
   test("rejects non-array task IDs", () => {
     expect(() =>
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: "task-1",
       }),
@@ -23,6 +31,7 @@ describe("parseListAgentSessionsForTasksInput", () => {
   test("rejects non-string task IDs with an accurate field error", () => {
     expect(() =>
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1", 2],
       }),
@@ -32,12 +41,14 @@ describe("parseListAgentSessionsForTasksInput", () => {
   test("rejects blank task IDs with a typed validation error", () => {
     expect(() =>
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1", " "],
       }),
     ).toThrow(HostValidationError);
     expect(() =>
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1", " "],
       }),
@@ -47,18 +58,20 @@ describe("parseListAgentSessionsForTasksInput", () => {
   test("trims and deduplicates valid task IDs at the command boundary", () => {
     expect(
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: [" task-2 ", "task-1", "task-2"],
       }),
-    ).toEqual({ repoPath: "/repo", taskIds: ["task-2", "task-1"] });
+    ).toEqual({ workspaceId: "repo", repoPath: "/repo", taskIds: ["task-2", "task-1"] });
   });
 
   test("accepts an empty task ID list", () => {
     expect(
       parseListAgentSessionsForTasksInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: [],
       }),
-    ).toEqual({ repoPath: "/repo", taskIds: [] });
+    ).toEqual({ workspaceId: "repo", repoPath: "/repo", taskIds: [] });
   });
 });

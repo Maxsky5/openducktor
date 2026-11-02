@@ -3,12 +3,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import {
-  resolveSqliteTaskStoreDatabasePath,
-  TASK_STORE_DATABASE_FILENAME,
-} from "../../infrastructure/sqlite/sqlite-task-store-path";
+import { createDirectMergeRecord } from "../../ports/task-store-port-contract-fixtures";
 import {
   createPullRequestRecord,
   expectFailureTag,
@@ -21,7 +18,7 @@ import {
   readTableNames,
   readTaskColumnNullability,
 } from "./sqlite-task-store-test-support";
-import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
+import { openHostDatabaseConnection } from "./sqlite-host-database-connection";
 
 const cleanups = new Set<() => Promise<void>>();
 
@@ -39,52 +36,6 @@ afterEach(async () => {
   await Promise.all(pendingCleanups.map((cleanup) => cleanup()));
 });
 
-describe("resolveSqliteTaskStoreDatabasePath", () => {
-  test("uses the workspace id literally under the task-stores config root", () => {
-    expect(
-      Effect.runSync(
-        resolveSqliteTaskStoreDatabasePath({
-          configDir: "/config",
-          workspaceId: "repo-alpha",
-        }),
-      ),
-    ).toBe(path.join("/config", "task-stores", "repo-alpha", TASK_STORE_DATABASE_FILENAME));
-  });
-
-  test("builds native task store paths from safe segments", () => {
-    expect(
-      Effect.runSync(
-        resolveSqliteTaskStoreDatabasePath({
-          configDir: path.join(path.sep, "home", "dev", ".openducktor"),
-          workspaceId: "repo-alpha",
-        }),
-      ),
-    ).toBe(
-      path.join(
-        path.sep,
-        "home",
-        "dev",
-        ".openducktor",
-        "task-stores",
-        "repo-alpha",
-        "database.sqlite",
-      ),
-    );
-  });
-
-  test("rejects invalid workspace ids instead of normalizing them", async () => {
-    for (const workspaceId of [" Repo Alpha ", "Repo-Alpha", "repo/alpha", "repo\\alpha", ".."]) {
-      await expectFailureTag(
-        resolveSqliteTaskStoreDatabasePath({
-          configDir: "/config",
-          workspaceId,
-        }),
-        "HostInvariantError",
-      );
-    }
-  });
-});
-
 describe("createSqliteTaskRepository SQLite integration", () => {
   test("disables disk sync only on disposable fixture connections", async () => {
     const harness = await createRepositoryHarness();
@@ -93,14 +44,14 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       FROM pragma_synchronous, pragma_foreign_keys, pragma_journal_mode
     `;
     const fixtureSettings = await Effect.runPromise(
-      harness.contextProvider(harness.repoPath, "test.fixtureSettings", ({ session }) =>
+      harness.contextProvider(harness.scope, "test.fixtureSettings", ({ session }) =>
         session.execute((database) => database.values(settingsQuery), "test.fixtureSettings"),
       ),
     );
     expect(fixtureSettings).toEqual([[0, 1, "wal"]]);
 
     const production = await Effect.runPromise(
-      openSqliteTaskStoreConnection(path.join(harness.configDir, "production.sqlite")),
+      openHostDatabaseConnection(path.join(harness.configDir, "production.sqlite")),
     );
     try {
       const settings = await Effect.runPromise(
@@ -109,7 +60,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
           "test.productionSettings",
         ),
       );
-      expect(settings).toEqual([[expect.any(Number), 1, "wal"]]);
+      expect(settings).toEqual([[3, 1, "delete"]]);
       expect(settings).not.toEqual([[0, 1, "wal"]]);
     } finally {
       await Effect.runPromise(production.release);
@@ -117,21 +68,21 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("disposes retained connections when the test harness is cleaned up", async () => {
-    const { cleanup, repoPath, store } = await createRepositoryHarness();
-    await Effect.runPromise(store.listTasks({ repoPath }));
+    const { cleanup, scope, store } = await createRepositoryHarness();
+    await Effect.runPromise(store.listTasks(scope));
 
     await cleanup();
 
-    await expect(Effect.runPromise(store.listTasks({ repoPath }))).rejects.toThrow(
-      "The SQLite task store is stopping and cannot accept a new operation.",
+    await expect(Effect.runPromise(store.listTasks(scope))).rejects.toThrow(
+      "The host database is stopping and cannot accept a new operation.",
     );
   });
 
-  test("diagnoses and initializes a workspace-scoped SQLite database with Drizzle migrations", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+  test("diagnoses and initializes a host SQLite database with Drizzle migrations", async () => {
+    const { databasePath, scope, store } = await createRepositoryHarness();
 
     await expect(access(databasePath)).rejects.toThrow();
-    await expect(Effect.runPromise(store.diagnoseRepoStore({ repoPath }))).resolves.toMatchObject({
+    await expect(Effect.runPromise(store.diagnoseRepoStore(scope))).resolves.toMatchObject({
       category: "healthy",
       status: "ready",
       isReady: true,
@@ -139,7 +90,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     });
     await expect(access(databasePath)).resolves.toBeNull();
 
-    await expect(Effect.runPromise(store.diagnoseRepoStore({ repoPath }))).resolves.toMatchObject({
+    await expect(Effect.runPromise(store.diagnoseRepoStore(scope))).resolves.toMatchObject({
       status: "ready",
     });
 
@@ -147,8 +98,8 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(tableNames).toEqual(
       expect.arrayContaining([
         "__drizzle_migrations",
+        "task_artifacts",
         "task_assets",
-        "tasks_artifacts",
         "tasks",
         "workspace_sessions",
       ]),
@@ -156,16 +107,6 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(tableNames).not.toContain("task_store_schema_migrations");
     expect(tableNames).not.toContain("task_documents");
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     const database = new Database(databasePath);
@@ -180,24 +121,24 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("shares directory and schema initialization across concurrent first operations", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
 
     const results = await Effect.runPromise(
       Effect.all(
-        Array.from({ length: 8 }, () => store.listTasks({ repoPath })),
+        Array.from({ length: 8 }, () => store.listTasks(scope)),
         { concurrency: "unbounded" },
       ),
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(11);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(1);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "With asset", issueType: "task", priority: 2 },
       }),
@@ -208,7 +149,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     try {
       database
         .query(
-          "INSERT INTO task_assets (id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO task_assets (workspace_id, id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES ('fairnest', ?, ?, ?, ?, ?, ?, ?)",
         )
         .run(
           "550e8400-e29b-41d4-a716-446655440000",
@@ -223,22 +164,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       expect(() =>
         database
           .query(
-            "INSERT INTO task_assets (id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          )
-          .run(
-            "550e8400-e29b-41d4-a716-446655440001",
-            task.id,
-            "plan",
-            "bad.png",
-            "image/png",
-            1,
-            Date.now(),
-          ),
-      ).toThrow();
-      expect(() =>
-        database
-          .query(
-            "INSERT INTO task_assets (id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO task_assets (workspace_id, id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES ('fairnest', ?, ?, ?, ?, ?, ?, ?)",
           )
           .run(
             "550e8400-e29b-41d4-a716-446655440002",
@@ -254,7 +180,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       database.close();
     }
 
-    await Effect.runPromise(store.deleteTask({ repoPath, taskId: task.id }));
+    await Effect.runPromise(store.deleteTask({ ...scope, taskId: task.id }));
     const verification = new Database(databasePath);
     try {
       const row = verification
@@ -267,21 +193,21 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("generates hash-based task ids with a workspace prefix", async () => {
-    const { repoPath, store } = await createRepositoryHarness({
+    const { scope, store } = await createRepositoryHarness({
       repoPath: "/repos/Renamed Folder",
       workspaceId: "fairnest",
     });
 
     const first = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "First", issueType: "feature", priority: 3 },
       }),
     );
     const second = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Second", issueType: "task", priority: 2 },
       }),
@@ -293,10 +219,10 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("stores the worktree cleanup value of a task as 1, 0, or NULL", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
     const created = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Keep", issueType: "task", priority: 2, removeWorktreeOnClose: false },
       }),
@@ -315,7 +241,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     };
     const update = (removeWorktreeOnClose: boolean | null) =>
       Effect.runPromise(
-        store.updateTask({ repoPath, taskId: created.id, patch: { removeWorktreeOnClose } }),
+        store.updateTask({ ...scope, taskId: created.id, patch: { removeWorktreeOnClose } }),
       );
 
     expect(created.removeWorktreeOnClose).toBe(false);
@@ -328,13 +254,13 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("caps generated task id prefixes at ten characters", async () => {
-    const { repoPath, store } = await createRepositoryHarness({
+    const { scope, store } = await createRepositoryHarness({
       workspaceId: "openducktor-workspace",
     });
 
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -347,20 +273,20 @@ describe("createSqliteTaskRepository SQLite integration", () => {
 
   test("retries task id candidates when SQLite reports an id conflict", async () => {
     const fixedNow = () => new Date("2026-06-10T10:00:00.000Z");
-    const { repoPath, store } = await createRepositoryHarness({
+    const { scope, store } = await createRepositoryHarness({
       now: fixedNow,
     });
 
     const first = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const second = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -372,9 +298,9 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("stores any non-blank workflow status and issue type", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
 
-    await Effect.runPromise(store.diagnoseRepoStore({ repoPath }));
+    await Effect.runPromise(store.diagnoseRepoStore(scope));
     insertRawTask({ databasePath, status: "reviewing", taskId: "fairnest-review-status" });
     insertRawTask({ databasePath, issueType: "article", taskId: "fairnest-article" });
     expect(() =>
@@ -386,14 +312,14 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("stores task descriptions as optional task data", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
 
-    await Effect.runPromise(store.diagnoseRepoStore({ repoPath }));
+    await Effect.runPromise(store.diagnoseRepoStore(scope));
 
     expect(readTaskColumnNullability(databasePath, "description")).toBe(true);
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -401,11 +327,11 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(task.description).toBe("");
   });
 
-  test("reads stored task target branches with extra keys", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+  test("reads task target branches from typed columns", async () => {
+    const { databasePath, scope, store } = await createRepositoryHarness();
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -413,21 +339,21 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     const database = new Database(databasePath);
     try {
       database
-        .query("UPDATE tasks SET target_branch_json = ? WHERE id = ?")
-        .run(JSON.stringify({ remote: "origin", branch: "main", extra: true }), task.id);
+        .query("UPDATE tasks SET target_branch = 'main', target_remote = 'origin' WHERE id = ?")
+        .run(task.id);
     } finally {
       database.close();
     }
 
     const targetBranch = { remote: "origin", branch: "main" };
-    const tasks = await Effect.runPromise(store.listTasks({ repoPath }));
+    const tasks = await Effect.runPromise(store.listTasks(scope));
     expect(tasks.find((item) => item.id === task.id)?.targetBranch).toEqual(targetBranch);
-    const metadata = await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id }));
+    const metadata = await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId: task.id }));
     expect(metadata.targetBranch).toEqual(targetBranch);
   });
 
   test("wraps raw SQLite execution failures as operation errors", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
     await mkdir(path.dirname(databasePath), { recursive: true });
     const database = new Database(databasePath);
     try {
@@ -436,19 +362,19 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       database.close();
     }
 
-    const failure = await expectFailureTag(store.listTasks({ repoPath }), "HostOperationError");
+    const failure = await expectFailureTag(store.listTasks(scope), "HostOperationError");
     expect(failure).toBeInstanceOf(HostOperationError);
     if (failure instanceof HostOperationError) {
       // The migrator runs each query through Effect.runPromise, which rejects with the typed error.
-      expect(failure.operation).toBe("sqliteTaskRepository.runMigrationQuery");
+      expect(failure.operation).toBe("sqliteHost.migrate");
     }
   });
 
   test("stores workflow artifact history in SQLite while task metadata reads the latest revision", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const { databasePath, scope, store } = await createRepositoryHarness();
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -456,9 +382,10 @@ describe("createSqliteTaskRepository SQLite integration", () => {
 
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
-        repoPath,
+        ...scope,
         taskId: task.id,
         markdown: " # First spec ",
         code: "spec",
@@ -466,45 +393,87 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
     const latestSpec = await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
-        repoPath,
+        ...scope,
         taskId: task.id,
         markdown: "# Second spec",
         code: "spec",
       }),
     );
-    const metadata = await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id }));
+    const metadata = await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId: task.id }));
 
     expect(latestSpec.artifact).toMatchObject({ markdown: "# Second spec", revision: 2 });
     expect(metadata.artifacts.spec).toMatchObject({ markdown: "# Second spec", revision: 2 });
     expect(readWorkflowArtifactCount(databasePath, task.id, "spec")).toBe(2);
   });
 
-  test("persists pull-request JSON as valid task metadata", async () => {
-    const { repoPath, store } = await createRepositoryHarness();
+  test("updates delivery records without deleting and inserting their rows", async () => {
+    const { scope, store, withHostDatabase } = await createRepositoryHarness();
+    const changes = async () => {
+      const rows = await Effect.runPromise(
+        withHostDatabase("test.deliveryChanges", (session) =>
+          session.execute(
+            (db) => db.values<[number]>(sql`select total_changes()`),
+            "test.deliveryChanges",
+          ),
+        ),
+      );
+      return rows[0]![0];
+    };
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
     const pullRequest = createPullRequestRecord();
-
-    await Effect.runPromise(store.setPullRequest({ repoPath, taskId: task.id, pullRequest }));
-
-    await expect(
-      Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id })),
-    ).resolves.toMatchObject({ pullRequest });
+    await Effect.runPromise(
+      store.setPullRequest({
+        ...scope,
+        taskId: task.id,
+        pullRequest: {
+          ...pullRequest,
+          repositoryIdentity: "repository",
+          lastSyncedAt: "2026-01-01T00:00:01.000Z",
+          mergedAt: "2026-01-01T00:00:02.000Z",
+          closedAt: "2026-01-01T00:00:03.000Z",
+        },
+      }),
+    );
+    const beforePullRequest = await changes();
+    await Effect.runPromise(store.setPullRequest({ ...scope, taskId: task.id, pullRequest }));
+    expect((await changes()) - beforePullRequest).toBe(2);
+    expect(
+      (await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId: task.id }))).pullRequest,
+    ).toEqual(pullRequest);
+    const directMerge = createDirectMergeRecord();
+    await Effect.runPromise(
+      store.setDirectMerge({
+        ...scope,
+        taskId: task.id,
+        directMerge: {
+          ...directMerge,
+          targetBranch: { ...directMerge.targetBranch, remote: "origin" },
+        },
+      }),
+    );
+    const beforeDirectMerge = await changes();
+    await Effect.runPromise(store.setDirectMerge({ ...scope, taskId: task.id, directMerge }));
+    expect((await changes()) - beforeDirectMerge).toBe(2);
+    expect(
+      (await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId: task.id }))).directMerge,
+    ).toEqual(directMerge);
   });
 
   test("lists only open and draft pull request sync candidates", async () => {
-    const { repoPath, store } = await createRepositoryHarness();
+    const { scope, store } = await createRepositoryHarness();
     const createTask = (title: string) =>
       Effect.runPromise(
         store.createTask({
-          repoPath,
+          ...scope,
           status: "open",
           task: { title, issueType: "task", priority: 2 },
         }),
@@ -518,37 +487,41 @@ describe("createSqliteTaskRepository SQLite integration", () => {
 
     await Effect.runPromise(
       store.setPullRequest({
-        repoPath,
+        ...scope,
         taskId: openTask.id,
         pullRequest: createPullRequestRecord({ number: 41, state: "open" }),
       }),
     );
     await Effect.runPromise(
       store.setPullRequest({
-        repoPath,
+        ...scope,
         taskId: draftTask.id,
         pullRequest: createPullRequestRecord({ number: 42, state: "draft" }),
       }),
     );
     await Effect.runPromise(
       store.setPullRequest({
-        repoPath,
+        ...scope,
         taskId: closedTask.id,
         pullRequest: createPullRequestRecord({ number: 43, state: "open" }),
       }),
     );
     await Effect.runPromise(
-      store.transitionTask({ repoPath, taskId: closedTask.id, status: "closed" }),
+      store.transitionTask({
+        ...scope,
+        taskId: closedTask.id,
+        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+      }),
     );
     await Effect.runPromise(
       store.setPullRequest({
-        repoPath,
+        ...scope,
         taskId: mergedTask.id,
         pullRequest: createPullRequestRecord({ number: 44, state: "merged" }),
       }),
     );
 
-    const candidates = await Effect.runPromise(store.listPullRequestSyncCandidates({ repoPath }));
+    const candidates = await Effect.runPromise(store.listPullRequestSyncCandidates(scope));
 
     expect(candidates.map((candidate) => candidate.id).sort()).toEqual(
       [draftTask.id, openTask.id].sort(),

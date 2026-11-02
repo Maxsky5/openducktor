@@ -50,15 +50,19 @@ describe("AzureDevOpsConnectionService", () => {
     const service = createAzureDevOpsConnectionService({
       connection,
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-        getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+        getRepoConfig: () => Effect.succeed(repoConfig),
       }),
     });
 
     await expect(
-      Effect.runPromise(service.startSignIn({ repoPath: "/repo", repository })),
+      Effect.runPromise(
+        service.startSignIn({ workspaceId: "repo", repoPath: "/repo", repository }),
+      ),
     ).rejects.toThrow("not enabled");
     await expect(
-      Effect.runPromise(service.replacePat({ repoPath: "/repo", repository, pat: "secret" })),
+      Effect.runPromise(
+        service.replacePat({ workspaceId: "repo", repoPath: "/repo", repository, pat: "secret" }),
+      ),
     ).rejects.toThrow("not enabled");
     expect(startCloudSignIn).not.toHaveBeenCalled();
     expect(replacePat).not.toHaveBeenCalled();

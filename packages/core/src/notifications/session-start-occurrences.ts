@@ -7,6 +7,7 @@ import { normalizeSessionErrorMessage } from "./session-error-message";
 
 /** The workspace fields that a session start notification shows. */
 export type SessionStartOccurrenceWorkspace = {
+  workspaceId?: string;
   repoPath: string;
   repositoryLabel: string;
 };
@@ -51,6 +52,7 @@ export const buildSessionStartedOccurrence = (
 ): NotificationActionOccurrence => ({
   occurrenceId: `agent.session_started:${workspace.repoPath}:${sessionKey(input.session)}:${input.launchAttemptId}`,
   kind: "agent.session_started",
+  ...(workspace.workspaceId !== undefined && { workspaceId: workspace.workspaceId }),
   repoPath: workspace.repoPath,
   repositoryLabel: workspace.repositoryLabel,
   task: task(input),
@@ -59,6 +61,7 @@ export const buildSessionStartedOccurrence = (
   status: "Agent Session started.",
   navigationTarget: {
     type: "agent_session",
+    ...(workspace.workspaceId !== undefined && { workspaceId: workspace.workspaceId }),
     repoPath: workspace.repoPath,
     taskId: input.taskId,
     session: toSession(input.session),
@@ -66,15 +69,16 @@ export const buildSessionStartedOccurrence = (
 });
 
 const errorNavigationTarget = (
-  { repoPath }: SessionStartOccurrenceWorkspace,
+  { repoPath, workspaceId }: SessionStartOccurrenceWorkspace,
   { taskId, role, session, errorAttentionId }: SessionStartOccurrenceInput,
 ): NotificationActionOccurrence["navigationTarget"] => {
-  if (!session) return { type: "agent_studio_task", repoPath, taskId, preferredRole: role };
+  const workspace = { repoPath, ...(workspaceId !== undefined && { workspaceId }) };
+  if (!session) return { type: "agent_studio_task", ...workspace, taskId, preferredRole: role };
   if (!errorAttentionId)
-    return { type: "agent_session", repoPath, taskId, session: toSession(session) };
+    return { type: "agent_session", ...workspace, taskId, session: toSession(session) };
   return {
     type: "session_error",
-    repoPath,
+    ...workspace,
     taskId,
     session: toSession(session),
     errorId: errorAttentionId,
@@ -90,6 +94,7 @@ export const buildSessionStartErrorOccurrence = (
   const occurrence: NotificationActionOccurrence = {
     occurrenceId: `agent.session_error:${workspace.repoPath}:${input.taskId}:${input.launchAttemptId}${sessionSuffix}`,
     kind: "agent.session_error",
+    ...(workspace.workspaceId !== undefined && { workspaceId: workspace.workspaceId }),
     repoPath: workspace.repoPath,
     repositoryLabel: workspace.repositoryLabel,
     task: task(input),

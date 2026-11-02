@@ -10,7 +10,7 @@ import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "./agent-model-favorites";
 
 type UseAgentModelFavoritesArgs = {
-  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<AgentModelFavorite[]>;
 };
 
 type FavoriteMutationIntent = {
@@ -64,8 +64,13 @@ export function useAgentModelFavorites({
         applyFavoriteMutationIntent(currentSnapshot.agentModelFavorites, intent),
       );
     },
-    onSuccess: (snapshot) => {
-      queryClient.setQueryData(settingsOptions.queryKey, snapshot);
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: settingsOptions.queryKey, exact: true });
+    },
+    onSuccess: (agentModelFavorites) => {
+      queryClient.setQueryData<SettingsSnapshot>(settingsOptions.queryKey, (current) =>
+        current ? { ...current, agentModelFavorites } : current,
+      );
     },
   });
   const favorites = settingsQuery.data?.agentModelFavorites ?? null;

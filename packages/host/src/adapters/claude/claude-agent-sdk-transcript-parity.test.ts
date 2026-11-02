@@ -1219,7 +1219,7 @@ describe("Claude live and hydrated transcript parity", () => {
         delivery: "new_turn",
         workingDirectory: "/repo",
         externalSessionId: "session-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         parts,
       },
       now: () => timestamp,

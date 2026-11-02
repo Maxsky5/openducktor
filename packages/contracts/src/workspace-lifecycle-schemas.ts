@@ -36,6 +36,7 @@ export const incompleteWorkspaceRemovalSchema = z.object({
 export type IncompleteWorkspaceRemoval = z.infer<typeof incompleteWorkspaceRemovalSchema>;
 
 export const workspaceCatalogSchema = z.object({
+  catalogRevision: z.number().int().nonnegative(),
   openWorkspaces: z.array(workspaceRecordSchema),
   closedWorkspaces: z.array(workspaceRecordSchema),
   incompleteRemovals: z.array(incompleteWorkspaceRemovalSchema),

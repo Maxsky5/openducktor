@@ -164,14 +164,12 @@ try {
   });
   const listed = await connection.queryClient.fetchQuery(workspaceListQueryOptions());
   assert.ok(listed.some((record) => record.workspaceId === workspace.workspaceId));
-  const created = await connection.host.client.taskCreate(workspace.repoPath, {
+  const created = await connection.host.client.taskCreate(workspace, {
     title: "Check the mobile client",
     issueType: "task",
     priority: 2,
   });
-  const taskData = await connection.queryClient.fetchQuery(
-    repoTaskDataQueryOptions(workspace.repoPath),
-  );
+  const taskData = await connection.queryClient.fetchQuery(repoTaskDataQueryOptions(workspace));
   assert.ok(taskData.tasks.some((task) => task.id === created.id));
   const runtimeStatus = await connection.host.client.runtimeStatus();
   assert.equal(runtimeStatus.hostInstanceId, remote.remote.readState().host?.hostInstanceId);

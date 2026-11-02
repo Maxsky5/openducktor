@@ -49,7 +49,13 @@ const createOperations = ({
   };
 
   return {
-    operations: createDocumentOperations({ activeRepoPath, host, queryClient, loadDocument }),
+    operations: createDocumentOperations({
+      activeRepoPath,
+      activeWorkspaceId: "workspace-1",
+      host,
+      queryClient,
+      loadDocument,
+    }),
     host,
     queryClient,
   };
@@ -81,11 +87,20 @@ describe("createDocumentOperations", () => {
         },
       });
       const listOptions = {
-        ...taskArtifactsQueryOptions(queryClient, "/repo-a", "task-1"),
+        ...taskArtifactsQueryOptions(
+          queryClient,
+          { workspaceId: "workspace-1", repoPath: "/repo-a" },
+          "task-1",
+        ),
         staleTime: Infinity,
       };
       const contentOptions = {
-        ...taskDocumentQueryOptions(queryClient, "/repo-a", "task-1", section),
+        ...taskDocumentQueryOptions(
+          queryClient,
+          { workspaceId: "workspace-1", repoPath: "/repo-a" },
+          "task-1",
+          section,
+        ),
         staleTime: Infinity,
       };
       await queryClient.fetchQuery(listOptions);
@@ -134,10 +149,17 @@ describe("createDocumentOperations", () => {
       const { operations, queryClient } = createOperations({
         host: { workflowArtifactSave: () => pending },
       });
-      const key = documentQueryKeys.document("/repo-a", "task-1", section);
+      const key = documentQueryKeys.document(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        "task-1",
+        section,
+      );
       const initial = createTaskCardFixture({ id: "task-1" });
       initial.artifactSummary[section] = { present: true, updatedAt: "2026-04-10T13:09:00.000Z" };
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [initial] });
+      queryClient.setQueryData(
+        taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+        { tasks: [initial] },
+      );
       queryClient.setQueryData(key, {
         markdown: "# Before",
         updatedAt: "2026-04-10T13:09:00.000Z",
@@ -159,7 +181,7 @@ describe("createDocumentOperations", () => {
         card.artifactSummary[section] = reset
           ? { present: false }
           : { present: true, updatedAt: timestamp };
-        const event = boardEvent("/repo-a", [card]);
+        const event = boardEvent({ workspaceId: "workspace-1", repoPath: "/repo-a" }, [card]);
         event.boardChanges!.artifactChanges = written
           ? [
               {
@@ -233,11 +255,15 @@ describe("createDocumentOperations", () => {
         host: { workflowArtifactSave: async () => saveResult(saved.updatedAt) },
       });
       const old = { markdown: "# Before the gap", updatedAt: "2026-04-10T13:09:00.000Z" };
-      const queryKey = documentQueryKeys.document("/repo-a", "task-1", section);
+      const queryKey = documentQueryKeys.document(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        "task-1",
+        section,
+      );
       queryClient.setQueryData(queryKey, old);
       const options = taskDocumentQueryOptions(
         queryClient,
-        "/repo-a",
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
         "task-1",
         section,
         () => pendingRead,
@@ -247,8 +273,8 @@ describe("createDocumentOperations", () => {
         .catch((error: Error) => error);
       const observer = new QueryObserver(queryClient, { ...options, staleTime: Infinity });
       const unsubscribe = observer.subscribe(() => {});
-      const listTasks = mock(async (repoPath: string) => {
-        if (repoPath !== "/repo-a") return [];
+      const listTasks = mock(async (scope: { workspaceId: string; repoPath: string }) => {
+        if (scope.repoPath !== "/repo-a") return [];
         boardReadStarted();
         return boardResponse;
       });
@@ -256,11 +282,16 @@ describe("createDocumentOperations", () => {
       const sync = createTaskViewSync({ queryClient, ports: { listTasks, loadFreshDocument } });
       const card = createTaskCardFixture({ id: "task-1", updatedAt: saved.updatedAt });
       card.artifactSummary[section] = { present: true, updatedAt: saved.updatedAt };
-      const load = sync.loadWorkspace("/repo-a", { forceFresh: true });
+      const load = sync.loadWorkspace(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        { forceFresh: true },
+      );
       let recovery: Promise<unknown> | undefined;
       try {
         await boardStarted;
-        recovery = sync.reconcileStreamSnapshot(["/repo-b"]);
+        recovery = sync.reconcileStreamSnapshot([
+          { workspaceId: "workspace-2", repoPath: "/repo-b" },
+        ]);
         await operations.saveDocument("task-1", section, saved.markdown);
         boardResponse = Promise.resolve([card]);
         finishBoard([card]);
@@ -303,21 +334,30 @@ describe("createDocumentOperations", () => {
       });
       initial.artifactSummary[section] = { present: true, updatedAt: initial.updatedAt };
       const old = { markdown: "# Before the gap", updatedAt: initial.updatedAt };
-      const queryKey = documentQueryKeys.document("/repo-a", "task-1", section);
+      const queryKey = documentQueryKeys.document(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        "task-1",
+        section,
+      );
       queryClient.setQueryData(queryKey, old);
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [initial] });
+      queryClient.setQueryData(
+        taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+        { tasks: [initial] },
+      );
       const reset = createTaskCardFixture({ ...initial, updatedAt: "2026-04-10T13:11:00.000Z" });
       reset.artifactSummary[section] = { present: false };
       const snapshotCards = omitted || unobserved ? [] : [reset];
-      const listTasks = mock(async (repoPath: string) =>
-        repoPath === "/repo-a" ? snapshotCards : [],
+      const listTasks = mock(async (scope: { workspaceId: string; repoPath: string }) =>
+        scope.repoPath === "/repo-a" ? snapshotCards : [],
       );
       const boardObserver =
         activeRepoPath === "/repo-a" || unobserved
           ? null
           : new QueryObserver<RepoTaskData>(queryClient, {
-              queryKey: taskQueryKeys.repoData("/repo-a"),
-              queryFn: async () => ({ tasks: await listTasks("/repo-a") }),
+              queryKey: taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+              queryFn: async () => ({
+                tasks: await listTasks({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+              }),
               staleTime: Infinity,
             });
       const unsubscribeBoard = boardObserver?.subscribe(() => {});
@@ -325,7 +365,13 @@ describe("createDocumentOperations", () => {
       const documentObserver =
         change === "inactive reset with a document observer" || activeRepoPath === "/repo-a"
           ? new QueryObserver(queryClient, {
-              ...taskDocumentQueryOptions(queryClient, "/repo-a", "task-1", section, loadDocument),
+              ...taskDocumentQueryOptions(
+                queryClient,
+                { workspaceId: "workspace-1", repoPath: "/repo-a" },
+                "task-1",
+                section,
+                loadDocument,
+              ),
               staleTime: Infinity,
             })
           : null;
@@ -341,7 +387,16 @@ describe("createDocumentOperations", () => {
           (error: Error) => error,
         );
       try {
-        await sync.reconcileStreamSnapshot(activeRepoPath ? [activeRepoPath] : []);
+        await sync.reconcileStreamSnapshot(
+          activeRepoPath
+            ? [
+                {
+                  workspaceId: activeRepoPath === "/repo-a" ? "workspace-1" : "workspace-2",
+                  repoPath: activeRepoPath,
+                },
+              ]
+            : [],
+        );
         finishSave(saveResult("2026-04-10T13:10:00.000Z"));
         const outcome = await completion;
         expect(outcome).toBeInstanceOf(Error);
@@ -353,7 +408,9 @@ describe("createDocumentOperations", () => {
         );
         if (documentObserver) expect(documentObserver.getCurrentResult().data).toEqual(recovered);
         expect(
-          queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"))?.tasks,
+          queryClient.getQueryData<RepoTaskData>(
+            taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+          )?.tasks,
         ).toEqual(unobserved ? [initial] : snapshotCards);
 
         // A missing board card can also be a retained task outside the closed-task window.
@@ -366,7 +423,7 @@ describe("createDocumentOperations", () => {
         await operations.saveDocument("task-1", section, later.markdown);
         expect(queryClient.getQueryData<TaskDocumentPayload>(queryKey)).toEqual(later);
         expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
-        expect(listTasks).toHaveBeenCalledTimes(
+        expect(listTasks.mock.calls.filter(([scope]) => scope.repoPath === "/repo-a")).toHaveLength(
           unobserved ? 0 : activeRepoPath === "/repo-a" ? 1 : 2,
         );
         expect(loadDocument).toHaveBeenCalledTimes(activeRepoPath === "/repo-a" ? 1 : 0);
@@ -396,7 +453,11 @@ describe("createDocumentOperations", () => {
       const { operations, queryClient } = createOperations({
         host: { workflowArtifactSave: () => pendingSave },
       });
-      const queryKey = documentQueryKeys.document("/repo-a", "task-1", section);
+      const queryKey = documentQueryKeys.document(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        "task-1",
+        section,
+      );
       const empty = { markdown: "", updatedAt: null };
       const old = { markdown: "# Initial", updatedAt: "2026-04-10T13:09:00.000Z" };
       const startsEmpty = change === "empty" || change === "cold";
@@ -404,7 +465,10 @@ describe("createDocumentOperations", () => {
       initial.artifactSummary[section] = startsEmpty
         ? { present: false }
         : { present: true, updatedAt: old.updatedAt };
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [initial] });
+      queryClient.setQueryData(
+        taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+        { tasks: [initial] },
+      );
       if (change !== "cold") queryClient.setQueryData(queryKey, startsEmpty ? empty : old);
       const readDocument = mock(async () => old);
       const observer =
@@ -442,7 +506,9 @@ describe("createDocumentOperations", () => {
         snapshotCards = [card];
         snapshotDocument = empty;
         if (change === "snapshot" || change === "snapshot-start") {
-          const recovery = sync.reconcileStreamSnapshot(["/repo-a"]);
+          const recovery = sync.reconcileStreamSnapshot([
+            { workspaceId: "workspace-1", repoPath: "/repo-a" },
+          ]);
           if (change === "snapshot-start") finishSave(saveResult(saved.updatedAt));
           await recovery;
         } else
@@ -450,6 +516,7 @@ describe("createDocumentOperations", () => {
             {
               kind: "tasks_updated",
               eventId: "committed-change",
+              workspaceId: "workspace-1",
               repoPath: "/repo-a",
               taskIds: ["task-1"],
               removedTaskIds: change === "removed" ? ["task-1"] : [],
@@ -484,7 +551,9 @@ describe("createDocumentOperations", () => {
             if (observer) expect(observer.getCurrentResult().data).toEqual(expected);
           }
         }
-        const board = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"));
+        const board = queryClient.getQueryData<RepoTaskData>(
+          taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
+        );
         expect(board?.tasks).toEqual(change === "removed" ? [] : [card]);
         const snapshotReads = change === "snapshot" || change === "snapshot-start" ? 1 : 0;
         expect(listTasks).toHaveBeenCalledTimes(snapshotReads);
@@ -514,7 +583,13 @@ describe("createDocumentOperations", () => {
         host: { workflowArtifactSave: () => pendingSave },
       });
       const options = () =>
-        taskDocumentQueryOptions(queryClient, "/repo-a", "task-1", section, () => pendingRead);
+        taskDocumentQueryOptions(
+          queryClient,
+          { workspaceId: "workspace-1", repoPath: "/repo-a" },
+          "task-1",
+          section,
+          () => pendingRead,
+        );
       const read = queryClient.fetchQuery(options());
       const joinedRead = queryClient.fetchQuery(options());
       const observer = new QueryObserver(queryClient, options());
@@ -559,13 +634,21 @@ describe("createDocumentOperations", () => {
       markdown: "# QA",
       updatedAt: "2026-02-22T10:02:00.000Z",
     });
-    expect(loadDocument).toHaveBeenCalledWith("/repo-a", "task-1", "qaReport");
+    expect(loadDocument).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", repoPath: "/repo-a" },
+      "task-1",
+      "qaReport",
+    );
   });
 
   test("saves a draft without a workflow event and updates its cache entry", async () => {
     const workflowArtifactSave = mock(async () => saveResult("2026-02-22T10:03:00.000Z"));
     const { operations, queryClient } = createOperations({ host: { workflowArtifactSave } });
-    const key = documentQueryKeys.document("/repo-a", "task-1", "plan");
+    const key = documentQueryKeys.document(
+      { workspaceId: "workspace-1", repoPath: "/repo-a" },
+      "task-1",
+      "plan",
+    );
     queryClient.setQueryData(key, {
       markdown: "# Old plan",
       updatedAt: "2026-02-22T10:00:00.000Z",
@@ -576,6 +659,7 @@ describe("createDocumentOperations", () => {
     });
 
     expect(workflowArtifactSave).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
       repoPath: "/repo-a",
       taskId: "task-1",
       code: "plan",
@@ -590,11 +674,22 @@ describe("createDocumentOperations", () => {
 
   test("keeps unrelated document caches unchanged after a document mutation", async () => {
     const { operations, queryClient } = createOperations();
-    const otherKey = documentQueryKeys.document("/repo-b", "task-1", "spec");
-    queryClient.setQueryData(documentQueryKeys.document("/repo-a", "task-1", "spec"), {
-      markdown: "# Old spec",
-      updatedAt: "2026-02-22T10:00:00.000Z",
-    });
+    const otherKey = documentQueryKeys.document(
+      { workspaceId: "workspace-2", repoPath: "/repo-b" },
+      "task-1",
+      "spec",
+    );
+    queryClient.setQueryData(
+      documentQueryKeys.document(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        "task-1",
+        "spec",
+      ),
+      {
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T10:00:00.000Z",
+      },
+    );
     queryClient.setQueryData(otherKey, {
       markdown: "# Other workspace spec",
       updatedAt: "2026-02-22T10:00:00.000Z",
@@ -611,7 +706,11 @@ describe("createDocumentOperations", () => {
       const { operations, queryClient } = createOperations({
         host: { workflowArtifactSave: mock(async () => saveResult("2026-02-22T10:01:00.000Z")) },
       });
-      const key = documentQueryKeys.document("/repo-a", "task-1", code);
+      const key = documentQueryKeys.document(
+        { workspaceId: "workspace-1", repoPath: "/repo-a" },
+        "task-1",
+        code,
+      );
       const newer = { markdown: "# Newer", updatedAt: "2026-02-22T10:05:00.000Z" };
       queryClient.setQueryData(key, newer);
 

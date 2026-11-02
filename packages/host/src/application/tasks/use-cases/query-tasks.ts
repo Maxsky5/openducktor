@@ -1,5 +1,7 @@
+import { loadTaskSessions } from "../support/task-sessions";
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
-import { HostDependencyError, HostInvariantError } from "../../../effect/host-errors";
+import { HostDependencyError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
 import {
   enrichTask,
@@ -7,14 +9,17 @@ import {
   validateAgentSessionWorkingDirectory,
 } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import { resolveRuntimeOwnershipScope } from "../../workspaces/workspace-session-import-owners";
 
 export const createTaskQueryUseCases = ({
   taskStore,
   taskWorkflows,
   settingsConfig,
   workspaceSettingsService,
+  gitPort,
 }: CreateTaskServiceInput): Pick<
   TaskService,
+  | "searchTasks"
   | "listTasks"
   | "findTask"
   | "listTaskReferences"
@@ -36,21 +41,27 @@ export const createTaskQueryUseCases = ({
         ),
       ),
   listTaskReferences: (input) => taskStore.listTaskReferences(input),
+  searchTasks: (input) =>
+    taskStore
+      .searchTasks(input)
+      .pipe(
+        Effect.map((result) => ({ ...result, tasks: enrichTasks(taskWorkflows, result.tasks) })),
+      ),
   listTasks: (input) =>
     taskStore.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(taskWorkflows, tasks))),
 
   listKanbanTasks(input) {
     return Effect.gen(function* () {
-      if (!workspaceSettingsService) {
+      if (!settingsConfig) {
         return yield* Effect.fail(
           new HostDependencyError({
-            dependency: "workspaceSettingsService",
+            dependency: "settingsConfig",
             operation: "tasks_list",
-            message: "Workspace settings service is required for tasks_list.",
+            message: "Settings config port is required for tasks_list.",
           }),
         );
       }
-      const settings = yield* workspaceSettingsService.getSettingsSnapshot();
+      const settings = yield* settingsConfig.readGlobalConfig();
       const tasks = yield* taskStore.listTasks({
         ...input,
         doneVisibleDays: settings.kanban.doneVisibleDays,
@@ -69,20 +80,7 @@ export const createTaskQueryUseCases = ({
   },
 
   agentSessionsList(input) {
-    return Effect.gen(function* () {
-      const [taskSessions] = yield* taskStore.listAgentSessionsForTasks({
-        repoPath: input.repoPath,
-        taskIds: [input.taskId],
-      });
-      if (!taskSessions) {
-        return yield* new HostInvariantError({
-          invariant: "task-agent-sessions-result",
-          message: `Task store returned no session result for task: ${input.taskId}`,
-          details: input,
-        });
-      }
-      return taskSessions.agentSessions;
-    });
+    return loadTaskSessions(taskStore, input);
   },
 
   agentSessionsListForTasks(input) {
@@ -98,13 +96,28 @@ export const createTaskQueryUseCases = ({
         workspaceSettingsService,
       );
 
-      yield* validateAgentSessionWorkingDirectory(
-        dependencies.settingsConfig,
-        dependencies.workspaceSettingsService,
-        repoPath,
-        session,
+      const workspace = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
+      yield* validateAgentSessionWorkingDirectory(dependencies.settingsConfig, workspace, session);
+      if (!gitPort)
+        return yield* new HostDependencyError({
+          dependency: "gitPort",
+          operation: "agent_session_upsert",
+          message: "Git port is required to check session ownership before saving it.",
+        });
+      const ownershipScope = yield* resolveRuntimeOwnershipScope(
+        {
+          settings: dependencies.workspaceSettingsService,
+          git: gitPort,
+        },
+        { workspaceId: workspace.workspaceId, repoPath },
       );
-      yield* dependencies.upsertAgentSession({ repoPath, taskId, session });
+      yield* dependencies.upsertAgentSession({
+        workspaceId: input.workspaceId,
+        repoPath,
+        taskId,
+        session,
+        ownershipScope,
+      });
 
       return true;
     });
@@ -114,7 +127,7 @@ export const createTaskQueryUseCases = ({
     return taskStore.updateAgentSessionModel(input);
   },
 
-  agentSessionDelete({ repoPath, taskId, identity }) {
-    return taskStore.deleteAgentSession({ repoPath, taskId, identity });
+  agentSessionDelete(input) {
+    return taskStore.deleteAgentSession(input);
   },
 });

@@ -53,10 +53,13 @@ const testToastApi: DiagnosticsToastApi = {
 let pathCheckHandler = async (_force?: boolean): Promise<PathCheck> => makePathCheck();
 const pathCheckMock = mock((force?: boolean) => pathCheckHandler(force));
 let gitCheckHandler = async (): Promise<GitCheck> => makeGitCheck();
-let taskStoreCheckHandler = async (_repoPath: string): Promise<TaskStoreCheck> =>
-  makeTaskStoreCheck();
+let taskStoreCheckHandler = async (
+  _repoPath: import("@openducktor/contracts").WorkspaceRef,
+): Promise<TaskStoreCheck> => makeTaskStoreCheck();
 const gitCheckMock = mock(() => gitCheckHandler());
-const taskStoreCheckMock = mock((repoPath: string) => taskStoreCheckHandler(repoPath));
+const taskStoreCheckMock = mock((scope: import("@openducktor/contracts").WorkspaceRef) =>
+  taskStoreCheckHandler(scope),
+);
 const refreshHostRuntimeStatusMock = mock(async () => {});
 
 type UseChecksHook = (typeof import("./use-checks"))["useChecks"];
@@ -181,7 +184,8 @@ beforeEach(async () => {
   refreshHostRuntimeStatusMock.mockClear();
   pathCheckHandler = async () => makePathCheck();
   gitCheckHandler = async () => makeGitCheck();
-  taskStoreCheckHandler = async (_repoPath: string) => makeTaskStoreCheck();
+  taskStoreCheckHandler = async (_scope: import("@openducktor/contracts").WorkspaceRef) =>
+    makeTaskStoreCheck();
 });
 
 describe("use-checks", () => {
@@ -426,10 +430,13 @@ describe("use-checks", () => {
   }, 5000);
 
   test("keeps the task-store result of each repository across workspace switches", async () => {
-    const taskStoreCheck = mock(async (repoPath: string): Promise<TaskStoreCheck> =>
-      makeTaskStoreCheck({
-        taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
-      }),
+    const taskStoreCheck = mock(
+      async ({
+        repoPath,
+      }: import("@openducktor/contracts").WorkspaceRef): Promise<TaskStoreCheck> =>
+        makeTaskStoreCheck({
+          taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
+        }),
     );
 
     taskStoreCheckHandler = taskStoreCheck;
@@ -447,7 +454,7 @@ describe("use-checks", () => {
       );
       taskStoreCheck.mockClear();
       await harness.run(async (value) => {
-        await value.refreshTaskStoreCheckForRepo("/repo-b");
+        await value.refreshTaskStoreCheckForRepo({ workspaceId: "repo-b", repoPath: "/repo-b" });
       });
 
       expect(harness.getLatest().taskStoreCheck.data?.taskStorePath).toBe(
@@ -469,7 +476,7 @@ describe("use-checks", () => {
 
       taskStoreCheck.mockClear();
       await harness.run(async (value) => {
-        await value.refreshTaskStoreCheckForRepo("/repo-b");
+        await value.refreshTaskStoreCheckForRepo({ workspaceId: "repo-b", repoPath: "/repo-b" });
       });
 
       expect(taskStoreCheck).not.toHaveBeenCalled();

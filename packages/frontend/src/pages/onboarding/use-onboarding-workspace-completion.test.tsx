@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { PropsWithChildren } from "react";
@@ -29,7 +30,10 @@ describe("useOnboardingWorkspaceCompletion", () => {
     const onComplete = mock(() => {});
     const connection = createTestClientConnection();
     const queryClient = connection.queryClient;
-    queryClient.setQueryData(repoTaskDataQueryOptions("/repos/project").queryKey, { tasks: [] });
+    queryClient.setQueryData(
+      repoTaskDataQueryOptions(workspaceRefFixture("/repos/project")).queryKey,
+      { tasks: [] },
+    );
     queryClient.setQueryData(platformQueryOptions().queryKey, "darwin");
     const workspaceState = {
       isSwitchingWorkspace: false,
@@ -57,19 +61,17 @@ describe("useOnboardingWorkspaceCompletion", () => {
       loadRepoSettings: async () => {
         throw new Error("Not used");
       },
-      saveRepoSettings: async () => {},
-      saveWorkspaceModelDefaults: async () => {},
-      loadSettingsSnapshot: async () => settingsSnapshot,
       detectGithubRepository: async () => null,
-      saveGlobalGitConfig: async () => {},
       previewSettingsSnapshotRuntime: async () => ({ impact: null }),
       saveSettingsSnapshot: async () => ({
         type: "saved" as const,
+        shared: "saved" as const,
+        preferences: "saved" as const,
         workspaces: [],
         runtimeApplications: [],
         refreshError: null,
       }),
-      saveAgentModelFavorites: async () => settingsSnapshot,
+      saveAgentModelFavorites: async () => settingsSnapshot.agentModelFavorites,
     } satisfies WorkspaceStateContextValue;
     const wrapper = ({ children }: PropsWithChildren): React.ReactElement => (
       <ClientConnectionProvider connection={connection}>
@@ -84,7 +86,9 @@ describe("useOnboardingWorkspaceCompletion", () => {
 
     try {
       await harness.mount();
-      await harness.run((completion) => completion.completeWorkspace("/repos/project"));
+      await harness.run((completion) =>
+        completion.completeWorkspace(workspaceRefFixture("/repos/project")),
+      );
 
       expect(addWorkspace).not.toHaveBeenCalled();
       expect(onComplete).toHaveBeenCalledTimes(1);

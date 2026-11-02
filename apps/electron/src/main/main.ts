@@ -24,7 +24,7 @@ import {
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
   checkStartupSettingsEffect,
-  findInvalidSettingsFileError,
+  resolveOpenDucktorLogDirectory,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
@@ -91,7 +91,11 @@ import {
 } from "./electron-main-lifecycle";
 import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
-import { renderInvalidSettingsErrorHtml } from "./electron-settings-error-window";
+import {
+  createDataUpgradeWindowHook,
+  createElectronStartupWindows,
+  startupErrorMessage,
+} from "./electron-startup-windows";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { createElectronNotificationRuntime } from "./electron-notification-runtime";
 import {
@@ -171,11 +175,10 @@ const hostValidationErrorSchema = z.object({
 const reportElectronMainFailure = (cause: unknown): void => {
   process.stderr.write(`OpenDucktor Electron fatal boundary: ${errorMessage(cause)}\n`);
 };
+const configDirScope = app.isPackaged ? "production" : "dev";
 const electronMainLogger = await initializeElectronMainLogger({
   exitProcess: (exitCode) => process.exit(exitCode),
-  loggerEffect: createElectronMainLogger({
-    configDirScope: app.isPackaged ? "production" : "dev",
-  }),
+  loggerEffect: createElectronMainLogger({ configDirScope }),
   reportFailure: reportElectronMainFailure,
 });
 const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);
@@ -208,6 +211,7 @@ const ipcMain = createMainWindowIpcRegistrar(nativeIpcMain, (sender) =>
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
 let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
+let mainWindowCreated = false;
 
 const isTaggedHostValidationError = (
   cause: unknown,
@@ -283,6 +287,22 @@ const mapStartupPreparationError = (
         cause,
       });
 
+const startupWindows = createElectronStartupWindows({
+  createWindow: (options) => new BrowserWindow(options),
+  exitApp: (exitCode) => app.exit(exitCode),
+  isHostShutdownComplete: () => shutdownController.isHostShutdownComplete(),
+  resolveLogDirectory: () => resolveOpenDucktorLogDirectory(configDirScope, process.env),
+  shouldUseDarkColors: () => nativeTheme.shouldUseDarkColors,
+  whenReady: () => app.whenReady(),
+});
+
+const onHostDatabaseImport = createDataUpgradeWindowHook({
+  openWindow: startupWindows.openDataUpgradeWindow,
+  reportFailure: reportElectronNonFatalFailure,
+  // Startup finishes the APIs that must run before `ready` before it creates the host router.
+  whenReady: () => app.whenReady(),
+});
+
 const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistribution) =>
   createElectronEffectHostCommandRouter({
     azureDevOpsFetch: (input, init) =>
@@ -291,6 +311,7 @@ const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistrib
     eventBus: hostEventBus,
     isPackaged: app.isPackaged,
     lifecycleLogger: electronLifecycleLogger,
+    onHostDatabaseImport,
     onBackgroundFailure: (failure) =>
       Effect.sync(() => {
         reportElectronMainFatalFailure(failure);
@@ -348,7 +369,7 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
     if (developmentInstanceClaim === "duplicate") {
       return process.exit(0);
     }
-    yield* checkStartupSettingsEffect(app.isPackaged ? "production" : "dev", process.env).pipe(
+    yield* checkStartupSettingsEffect(configDirScope, process.env).pipe(
       Effect.mapError(
         (cause) =>
           new ElectronLifecycleError({
@@ -539,6 +560,7 @@ const createMainWindowEffect = (
           cause,
         }),
     });
+    mainWindowCreated = true;
     browserRuntime.attachMainWindow(window);
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => {
@@ -1080,55 +1102,27 @@ const startupEffect = composeElectronMainStartupEffect({
   waitUntilReady: waitForElectronReadyEffect,
 });
 
-let startupFailureWindow: ElectronBrowserWindow | null = null;
-const showInvalidSettingsError = async (message: string): Promise<void> => {
-  if (startupFailureWindow !== null) {
-    startupFailureWindow.focus();
-    return;
-  }
-  await app.whenReady();
-  const window = new BrowserWindow({
-    width: 760,
-    height: 520,
-    minWidth: 560,
-    minHeight: 360,
-    title: "OpenDucktor settings error",
-    autoHideMenuBar: true,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-  startupFailureWindow = window;
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event) => event.preventDefault());
-  window.on("closed", () => {
-    startupFailureWindow = null;
-    app.exit(1);
-  });
-  await window.loadURL(
-    `data:text/html;charset=UTF-8,${encodeURIComponent(renderInvalidSettingsErrorHtml(message))}`,
-  );
-};
-
 runElectronMainTask(() =>
   runElectronMainStartupBoundary({
     cleanupAfterFailure: () => disposeActiveElectronRuntimeEffect("startup-failure"),
     exitProcess: (exitCode) => {
       process.exit(exitCode);
     },
-    invalidSettingsMessage: (cause) => findInvalidSettingsFileError(cause)?.message ?? null,
     logger: electronLifecycleLogger,
     markShutdownComplete: shutdownController.markHostShutdownComplete,
     markShutdownStarted: shutdownController.markHostShutdownStarted,
     reportFailure: reportElectronMainFailure,
-    ...(app.isPackaged && { showInvalidSettingsError }),
+    ...(app.isPackaged && { showStartupError: startupWindows.showStartupError }),
+    startupErrorMessage,
     startupEffect,
   }),
 );
 
 app.on("window-all-closed", () => {
+  // Before the main window exists, only startup windows close, and startup owns the app lifetime.
+  if (!mainWindowCreated) {
+    return;
+  }
   runElectronMainTask(() =>
     shutdownController.shutdownHostAndQuit({ reason: "window-all-closed" }),
   );

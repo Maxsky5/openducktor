@@ -17,10 +17,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useIsMutating, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
-import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useCallback, useMemo, useState } from "react";
 import type { RuntimeImpactReviewState } from "@/components/features/runtimes/runtime-impact-review";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { getAvailableRuntimeDefinitions } from "@openducktor/frontend-core/lib/agent-runtime";
@@ -31,9 +28,6 @@ import {
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
 import type { RuntimeExecutableValidationState } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
-import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@openducktor/frontend-core/sessions/model-selection/agent-model-favorites";
-import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "@/state/mutations/kanban-task-card-view";
-import { SESSION_GROUPING_MUTATION_KEY } from "@openducktor/frontend-core/sessions/navigation/use-session-grouping";
 import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import {
   validateCustomAgentRoleDrafts,
@@ -177,6 +171,8 @@ export type SettingsModalController = {
   ) => void;
   clearSelectedRepoDefaultModel: () => void;
   submit: () => Promise<boolean>;
+  discardDraft: () => void;
+  retainDraft: () => void;
 };
 
 type UseSettingsModalControllerArgs = {
@@ -196,20 +192,12 @@ export const useSettingsModalController = ({
   const {
     activeWorkspace,
     workspaces,
-    loadSettingsSnapshot,
     detectGithubRepository,
-    saveGlobalGitConfig,
     saveAgentModelFavorites,
     previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
   } = workspaceState;
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
-  const isAgentModelFavoritesMutationPending =
-    useIsMutating({ mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY }) > 0;
-  const isKanbanTaskCardViewMutationPending =
-    useIsMutating({ mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY }) > 0;
-  const isSidebarSessionGroupingMutationPending =
-    useIsMutating({ mutationKey: SESSION_GROUPING_MUTATION_KEY }) > 0;
   const workspacePolicy = useWorkspacePolicy(
     activeWorkspace?.repoPath ?? null,
     workspaceSelectionPolicy,
@@ -223,6 +211,9 @@ export const useSettingsModalController = ({
 
   const {
     loadedSnapshot,
+    draftBaseline,
+    unavailableTargetError,
+    discardDraft,
     snapshotDraft,
     setSnapshotDraft,
     selectedWorkspaceId,
@@ -232,6 +223,8 @@ export const useSettingsModalController = ({
     isLoadingSettings,
     settingsError,
     retrySettings,
+    acknowledgeSave,
+    retainDraft,
     requiredWorkspaceSelectionUnresolved,
     requiredWorkspaceRepoPath,
   } = useSettingsModalSnapshotState({
@@ -363,61 +356,19 @@ export const useSettingsModalController = ({
     selectedWorkspaceId,
     setSnapshotDraft,
   });
-  const [taskCardViewEditState, setTaskCardViewEditState] = useState({
-    loadedSnapshot,
+  const { dirtySections } = useSettingsModalDirtyState({
     open,
-    wasEdited: false,
-  });
-  if (
-    taskCardViewEditState.loadedSnapshot !== loadedSnapshot ||
-    taskCardViewEditState.open !== open
-  ) {
-    setTaskCardViewEditState({ loadedSnapshot, open, wasEdited: false });
-  }
-  const applyTrackedGlobalKanbanSettingsUpdate = useCallback(
-    (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
-      applyGlobalKanbanSettingsUpdate((current) => {
-        const next = updater(current);
-        if (next.taskCardView !== current.taskCardView) {
-          setTaskCardViewEditState((state) =>
-            state.wasEdited ? state : { ...state, wasEdited: true },
-          );
-        }
-        return next;
-      });
-    },
-    [applyGlobalKanbanSettingsUpdate],
-  );
-
-  const { dirtySections, markDirty } = useSettingsModalDirtyState({
-    open,
-    loadedSnapshot,
+    baseline: draftBaseline,
+    draft: snapshotDraft,
   });
 
-  // Another client can save Autopilot rules while this modal is open. Their own query follows
-  // the host, and the draft shows them unless the user edited them here. Each draft load starts
-  // from the cached settings snapshot, which can hold older rules.
-  const savedAutopilotQuery = useQuery({ ...autopilotSettingsQueryOptions(), enabled: open });
-  const savedAutopilot = savedAutopilotQuery.data;
-  const savedAutopilotError = savedAutopilotQuery.error
-    ? errorMessage(savedAutopilotQuery.error)
-    : null;
-  useEffect(() => {
-    if (!savedAutopilot || !loadedSnapshot || dirtySections.autopilot) return;
-    setSnapshotDraft((draft) =>
-      draft && draft.autopilot !== savedAutopilot ? { ...draft, autopilot: savedAutopilot } : draft,
-    );
-  }, [dirtySections.autopilot, loadedSnapshot, savedAutopilot, setSnapshotDraft]);
+  const savedAutopilotError = settingsError;
 
   const selectedRepoDefaultWorktreeBasePath = selectedWorkspace?.defaultWorktreeBasePath ?? null;
-  const selectedRepoEffectiveWorktreeBasePath = useMemo(() => {
-    const draftWorktreeBasePath = selectedRepoConfig?.worktreeBasePath?.trim();
-    if (draftWorktreeBasePath) {
-      return draftWorktreeBasePath;
-    }
-
-    return selectedRepoDefaultWorktreeBasePath;
-  }, [selectedRepoConfig?.worktreeBasePath, selectedRepoDefaultWorktreeBasePath]);
+  const selectedRepoEffectiveWorktreeBasePath = useMemo(
+    () => selectedRepoConfig?.worktreeBasePath?.trim() || selectedRepoDefaultWorktreeBasePath,
+    [selectedRepoConfig?.worktreeBasePath, selectedRepoDefaultWorktreeBasePath],
+  );
   const settingsSectionErrorCountByIdWithValidation = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
@@ -448,8 +399,8 @@ export const useSettingsModalController = ({
     submit,
   } = useSettingsModalSaveOrchestration({
     open,
-    loadSettingsSnapshot,
-    loadedSnapshot,
+    loadedSnapshot: draftBaseline,
+    unavailableTargetError,
     snapshotDraft,
     dirtySections,
     validation: {
@@ -488,13 +439,10 @@ export const useSettingsModalController = ({
       },
     },
     onRuntimeAvailabilityError,
-    saveGlobalGitConfig,
     previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
-    isAgentModelFavoritesMutationPending,
-    isKanbanTaskCardViewMutationPending,
-    isSidebarSessionGroupingMutationPending,
-    wasKanbanTaskCardViewEdited: taskCardViewEditState.wasEdited,
+    acknowledgeSave,
+    retainDraft,
   });
   const draftActions = useMemo(
     () => ({
@@ -508,7 +456,7 @@ export const useSettingsModalController = ({
       updateAgentRuntimes: applyAgentRuntimesUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateCustomAgentRoles: applyCustomAgentRolesUpdate,
-      updateGlobalKanbanSettings: applyTrackedGlobalKanbanSettingsUpdate,
+      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
       updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
       updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
@@ -528,7 +476,7 @@ export const useSettingsModalController = ({
       applyAgentRuntimesUpdate,
       applyReusablePromptsUpdate,
       applyCustomAgentRolesUpdate,
-      applyTrackedGlobalKanbanSettingsUpdate,
+      applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
       applyGlobalPromptOverridesUpdate,
       applyRepoPromptOverridesUpdate,
@@ -559,7 +507,6 @@ export const useSettingsModalController = ({
     clearSelectedRepoDefaultModel,
   } = useSettingsModalDirtyDraftActions({
     clearSaveError,
-    markDirty,
     draftActions,
   });
   const { checkAgain: checkRuntimeExecutables } = runtimeExecutableSetup;
@@ -569,7 +516,7 @@ export const useSettingsModalController = ({
   );
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
-    selectedRepoPath: selectedWorkspaceRepoPath,
+    selectedWorkspace,
     detectGithubRepository,
     updateSelectedRepoConfig,
   });
@@ -659,6 +606,8 @@ export const useSettingsModalController = ({
     confirmRuntimeReview,
     cancelRuntimeReview,
     submit,
+    discardDraft,
+    retainDraft,
   };
 };
 

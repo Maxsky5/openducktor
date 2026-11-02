@@ -11,6 +11,7 @@ export type TaskSessionRecordsState =
 
 type UseTaskSessionRecordsArgs = {
   repoPath: string | null;
+  workspaceId: string | null;
   taskIds: string[];
   enabled: boolean;
   queryClient: QueryClient;
@@ -19,6 +20,7 @@ type UseTaskSessionRecordsArgs = {
 
 export const useTaskSessionRecords = ({
   repoPath,
+  workspaceId,
   taskIds,
   enabled,
   queryClient,
@@ -26,13 +28,14 @@ export const useTaskSessionRecords = ({
 }: UseTaskSessionRecordsArgs): TaskSessionRecordsState => {
   const sessionLists = useAgentSessionLists({
     repoPath,
+    workspaceId,
     taskIds,
     enabled,
     queryClient,
     readPort,
   });
   return useMemo((): TaskSessionRecordsState => {
-    if (sessionLists.isPending) {
+    if (workspaceId === null || sessionLists.isPending) {
       return { kind: "loading" };
     }
     if (sessionLists.error) {
@@ -41,7 +44,7 @@ export const useTaskSessionRecords = ({
     const taskSessionTargets = Object.keys(sessionLists.data).map((id) => ({ id }));
     return {
       kind: "ready",
-      records: toTaskSessionRecords(taskSessionTargets, sessionLists.data),
+      records: toTaskSessionRecords(taskSessionTargets, sessionLists.data, workspaceId),
     };
-  }, [sessionLists.data, sessionLists.error, sessionLists.isPending]);
+  }, [workspaceId, sessionLists.data, sessionLists.error, sessionLists.isPending]);
 };

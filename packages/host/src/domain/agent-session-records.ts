@@ -1,3 +1,4 @@
+import { parseZonedIsoInstant } from "./iso-instant";
 import {
   type AgentSessionModelSelection,
   type AgentSessionRecord,
@@ -68,6 +69,10 @@ export const compactAgentSessionRecord = (
     };
   }
 
+  const startedAt = parseAgentSessionStartedAt(compacted.startedAt);
+  if (!startedAt.success) return compactionFailure("startedAt", startedAt.message);
+  compacted.startedAt = new Date(startedAt.milliseconds).toISOString();
+
   const parsed = agentSessionRecordSchema.safeParse({
     ...compacted,
   });
@@ -80,4 +85,18 @@ export const compactAgentSessionRecord = (
     "agentSession",
     `Invalid compacted agent session: ${parsed.error.message}`,
   );
+};
+
+/** Parses a zoned ISO 8601 instant without rounding its precision or calendar fields. */
+export const parseAgentSessionStartedAt = (
+  value: string,
+): { success: true; milliseconds: number } | { success: false; message: string } => {
+  const milliseconds = parseZonedIsoInstant(value, "reject");
+  return milliseconds === null
+    ? {
+        success: false,
+        message:
+          "Agent session startedAt must be a valid zoned ISO 8601 date at exact millisecond precision. Correct the source timestamp and retry.",
+      }
+    : { success: true, milliseconds };
 };

@@ -313,8 +313,8 @@ const latestStartedRecord = (records: readonly AgentSessionRecord[]): AgentSessi
 };
 
 const isNewerRecord = (record: AgentSessionRecord, current: AgentSessionRecord): boolean =>
-  record.startedAt > current.startedAt ||
-  (record.startedAt === current.startedAt &&
+  Date.parse(record.startedAt) > Date.parse(current.startedAt) ||
+  (Date.parse(record.startedAt) === Date.parse(current.startedAt) &&
     agentSessionIdentityKey(record) < agentSessionIdentityKey(current));
 
 const taskEntries = (

@@ -187,7 +187,7 @@ const useTaskSessionMenus = ({
   const router = useRouter();
   const { repoPath, identity } = target;
   const { workspaceId } = target.workspace;
-  const { groups, summaries } = useTaskSessionGroups(repoPath, taskId);
+  const { groups, summaries } = useTaskSessionGroups({ workspaceId, repoPath }, taskId);
   const now = useMinuteClock();
   const currentKey = agentSessionIdentityKey(identity);
   const historyItems = useMemo(
@@ -202,7 +202,13 @@ const useTaskSessionMenus = ({
     },
     [currentKey, groups, router, workspaceId],
   );
-  const quickActions = useTaskQuickActions({ repoPath, task, summaries, sessionWorking });
+  const quickActions = useTaskQuickActions({
+    workspaceId,
+    repoPath,
+    task,
+    summaries,
+    sessionWorking,
+  });
   const quickItems = useMemo(() => quickActionItems(quickActions), [quickActions]);
   const runQuickAction = useCallback(
     (id: string) => {
@@ -245,7 +251,7 @@ export function SessionHeader({
   const facts = useSessionFacts();
   const { modelCatalog } = useSessionRuntimeInfo();
   const taskId = owner.kind === "task" ? owner.taskId : null;
-  const { task } = useRepoTask(repoPath, taskId);
+  const { task } = useRepoTask({ workspaceId: workspace.workspaceId, repoPath }, taskId);
   const { width } = useWindowDimensions();
   const { title, details, accessibilityLabel } = sessionHeaderText({
     owner,

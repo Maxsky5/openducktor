@@ -1,62 +1,57 @@
+import { applySettingsEdits } from "./settings-edits";
 import {
   agentModelFavoritesSchema,
-  globalConfigSchema,
+  jsonValuesEqual,
   repoConfigSchema,
   type SettingsSnapshotSaveInput,
   settingsSnapshotSaveInputSchema,
-  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { configValidationMessage } from "../../config/config-validation-message";
 import { parseConfig } from "../../config/parse-config";
+import { applyTaskWorkflowSettings } from "../../config/workflow-settings";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import {
-  applyAgentStudioStateAction,
-  buildAgentStudioStateUpdate,
-} from "./workspace-agent-studio-state";
+import { applyAgentStudioStateAction } from "./workspace-agent-studio-state";
 import { createCustomAgentRoleOperations } from "./custom-agent-role-operations";
-import {
-  openWorkspaceRecordsInEffectiveOrder,
-  workspaceRecordsInEffectiveOrder,
-} from "./workspace-catalog-model";
+import { buildWorkspaceCatalog, workspaceRecordsInEffectiveOrder } from "./workspace-catalog-model";
 import { createHostIdentitySettingsMethods } from "./host-identity-settings";
 import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
-import { updateSidebarSessionGrouping } from "./workspace-sidebar-grouping";
+import { withSerializedConfigWrites } from "./workspace-settings-serializer";
 import {
-  areAgentModelFavoritesEqual,
-  withSerializedConfigWrites,
-} from "./workspace-settings-serializer";
-import {
-  buildMergedRepoConfig,
   ensureRepoPathAvailable,
-  findRepoConfigByRepoPath,
-  loadGlobalConfig,
-  normalizeSnapshotWorkspaces,
   type PreparedSettingsSnapshot,
+  type SettingsWriteResult,
   requireConfiguredWorkspace,
   saveAndReturnWorkspaceRecord,
   toSettingsSnapshot,
   touchRecentWorkspace,
   validateAndNormalizeRepoConfig,
-  type RepoConfigDraft,
+  validateGitRepoPath,
   type WorkspaceSettingsError,
   type WorkspaceSettingsService,
 } from "./workspace-settings-model";
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
-const createUnserializedWorkspaceSettingsService = (
+export const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
+  taskWorkflows: TaskWorkflowResolver,
+): WorkspaceSettingsService =>
+  withSerializedConfigWrites(createSettingsService(settingsConfig, taskWorkflows));
+
+const createSettingsService = (
+  settingsConfig: SettingsConfigPort,
+  taskWorkflows: TaskWorkflowResolver,
 ): WorkspaceSettingsService => ({
   ...createCustomAgentRoleOperations(settingsConfig),
   ...createWorkspaceLifecycleSettingsMethods(settingsConfig),
   ...createHostIdentitySettingsMethods(settingsConfig),
   listWorkspaces() {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
+      const snapshot = yield* settingsConfig.readWorkspaceCatalogSnapshot();
       return yield* Effect.try({
-        try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, config),
+        try: () => buildWorkspaceCatalog(settingsConfig, snapshot).openWorkspaces,
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -67,147 +62,103 @@ const createUnserializedWorkspaceSettingsService = (
   },
   addWorkspace(input) {
     return Effect.gen(function* () {
-      const draft: RepoConfigDraft = {
-        workspaceId: input.workspaceId,
-        workspaceName: input.workspaceName,
-        repoPath: input.repoPath,
-        abbreviation: input.abbreviation,
-        tileColor: input.tileColor,
-      };
-      if (input.git !== undefined) draft.git = input.git;
-      if (input.defaultModel !== undefined) draft.defaultModel = input.defaultModel;
-      if (input.agentDefaults !== undefined) draft.agentDefaults = input.agentDefaults;
-      const repoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, draft);
-      const config = yield* loadGlobalConfig(settingsConfig);
-
-      if (config.workspaces[repoConfig.workspaceId]) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace already exists in config: ${repoConfig.workspaceId}`,
-            field: "workspaceId",
-          }),
-        );
-      }
-      yield* Effect.try({
-        try: () => ensureRepoPathAvailable(config, repoConfig.repoPath),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-
-      config.workspaces[repoConfig.workspaceId] = repoConfig;
-      config.workspaceOrder = [...config.workspaceOrder, repoConfig.workspaceId];
-      config.activeWorkspace = repoConfig.workspaceId;
-      touchRecentWorkspace(config, repoConfig.workspaceId);
-
+      const repoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, input);
       return yield* saveAndReturnWorkspaceRecord(
         settingsConfig,
-        config,
-        repoConfig.workspaceId,
+        (current, catalog) => {
+          if (current.workspaces[input.workspaceId])
+            throw new HostValidationError({
+              field: "workspaceId",
+              message: `Workspace already exists in config: ${input.workspaceId}`,
+            });
+          ensureRepoPathAvailable(
+            {
+              workspaces: Object.fromEntries(
+                catalog.map((workspace) => [workspace.workspaceId, workspace]),
+              ),
+            },
+            repoConfig.repoPath,
+          );
+          current.workspaces[input.workspaceId] = repoConfig;
+          current.workspaceOrder = [...current.workspaceOrder, input.workspaceId];
+          current.activeWorkspace = input.workspaceId;
+          touchRecentWorkspace(current, input.workspaceId);
+          return current;
+        },
+        input.workspaceId,
         input.onRegistered,
       );
     });
   },
   selectWorkspace(workspaceId) {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const repoConfig = config.workspaces[workspaceId];
-      if (!repoConfig) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace not found in config: ${workspaceId}`,
-            field: "workspaceId",
-          }),
-        );
+      const snapshot = yield* settingsConfig.readWorkspaceCatalogSnapshot();
+      const catalog = buildWorkspaceCatalog(settingsConfig, snapshot);
+      const selected = catalog.openWorkspaces.find(
+        (workspace) => workspace.workspaceId === workspaceId,
+      );
+      if (!selected) {
+        const workspace = snapshot.workspaces.find((entry) => entry.workspaceId === workspaceId);
+        let message = `Workspace not found in config: ${workspaceId}. Add/select the workspace before updating configuration.`;
+        if (workspace?.closed)
+          message = `Workspace is closed: ${workspaceId}. Reopen it before selecting it.`;
+        else if (workspace?.removal)
+          message = `Workspace removal is incomplete for ${workspaceId}. Retry removal from the workspace rail before using it.`;
+        return yield* new HostValidationError({ field: "workspaceId", message });
       }
-      if (repoConfig.closed) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace is closed: ${workspaceId}. Reopen it before selecting it.`,
-            field: "workspaceId",
-          }),
-        );
-      }
-      if (repoConfig.removal) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace removal is incomplete for ${workspaceId}. Retry removal from the workspace rail before using it.`,
-            field: "workspaceId",
-          }),
-        );
-      }
-
-      config.activeWorkspace = workspaceId;
-      touchRecentWorkspace(config, workspaceId);
-      return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, workspaceId);
+      yield* settingsConfig.updatePreferences((current) => {
+        const next = { ...current, activeWorkspace: workspaceId };
+        touchRecentWorkspace(next, workspaceId);
+        return next;
+      });
+      return { ...selected, isActive: true };
     });
   },
   reorderWorkspaces(workspaceOrder) {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const openWorkspaceIds = openWorkspaceRecordsInEffectiveOrder(settingsConfig, config).map(
-        (record) => record.workspaceId,
-      );
-      if (workspaceOrder.length !== openWorkspaceIds.length) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace reorder must include exactly ${openWorkspaceIds.length} open workspaces.`,
+      const snapshot = yield* settingsConfig.readWorkspaceCatalogSnapshot();
+      const catalog = buildWorkspaceCatalog(settingsConfig, snapshot);
+      const open = new Set(catalog.openWorkspaces.map(({ workspaceId }) => workspaceId));
+      if (workspaceOrder.length !== open.size)
+        return yield* new HostValidationError({
+          field: "workspaceOrder",
+          message: `Workspace reorder must include exactly ${open.size} open workspaces.`,
+        });
+      const seen = new Set<string>();
+      for (const id of workspaceOrder) {
+        if (!open.has(id))
+          return yield* new HostValidationError({
             field: "workspaceOrder",
-          }),
-        );
+            message: `Workspace reorder included unknown or closed workspace id: ${id}`,
+          });
+        if (seen.has(id))
+          return yield* new HostValidationError({
+            field: "workspaceOrder",
+            message: `Workspace reorder included duplicate workspace id: ${id}`,
+          });
+        seen.add(id);
       }
-
-      const openWorkspaceIdSet = new Set(openWorkspaceIds);
-      const seenWorkspaceIds = new Set<string>();
-      for (const workspaceId of workspaceOrder) {
-        if (!openWorkspaceIdSet.has(workspaceId)) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Workspace reorder included unknown or closed workspace id: ${workspaceId}`,
-              field: "workspaceOrder",
-            }),
-          );
-        }
-        if (seenWorkspaceIds.has(workspaceId)) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Workspace reorder included duplicate workspace id: ${workspaceId}`,
-              field: "workspaceOrder",
-            }),
-          );
-        }
-        seenWorkspaceIds.add(workspaceId);
-      }
-
-      let openIndex = 0;
-      config.workspaceOrder = workspaceRecordsInEffectiveOrder(settingsConfig, config).map(
-        (record) => {
-          if (!openWorkspaceIdSet.has(record.workspaceId)) {
-            return record.workspaceId;
-          }
-          const nextWorkspaceId = workspaceOrder[openIndex];
-          openIndex += 1;
-          return nextWorkspaceId ?? record.workspaceId;
-        },
+      const workspaces = Object.fromEntries(
+        snapshot.workspaces.map((workspace) => [workspace.workspaceId, workspace]),
       );
-      const parsed = yield* parseConfig(globalConfigSchema, config);
-      yield* settingsConfig.writeConfig(parsed);
-      return yield* Effect.try({
-        try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, config),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
+      const preferences = yield* settingsConfig.updatePreferences((current) => {
+        let index = 0;
+        return {
+          ...current,
+          workspaceOrder: workspaceRecordsInEffectiveOrder(settingsConfig, {
+            ...current,
+            workspaces,
+          }).map((workspace) =>
+            open.has(workspace.workspaceId) ? workspaceOrder[index++]! : workspace.workspaceId,
+          ),
+        };
       });
+      return buildWorkspaceCatalog(settingsConfig, { ...snapshot, ...preferences }).openWorkspaces;
     });
   },
   getRepoConfig(workspaceId) {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const repoConfig = config.workspaces[workspaceId];
+      const repoConfig = yield* settingsConfig.readRepoConfig(workspaceId);
       if (!repoConfig) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -222,135 +173,42 @@ const createUnserializedWorkspaceSettingsService = (
   },
   getRepoConfigByRepoPath(rawRepoPath) {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      return yield* findRepoConfigByRepoPath(settingsConfig, config, rawRepoPath);
+      const repoPath = yield* settingsConfig.canonicalizePath(rawRepoPath);
+      const repoConfig = yield* settingsConfig.readRepoConfigByRepoPath(repoPath);
+      if (repoConfig === null)
+        return yield* new HostValidationError({
+          message: `Workspace is not configured for repository: ${repoPath}`,
+          field: "repoPath",
+        });
+      return yield* parseConfig(repoConfigSchema, repoConfig);
     });
   },
   replaceAgentStudioState(workspaceId, rawState) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const update = yield* Effect.try({
-        try: () => buildAgentStudioStateUpdate(config, workspaceId, rawState),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, rawState),
-            cause,
-          }),
-      });
-
-      yield* settingsConfig.writeConfig(update.config);
-      return update.repoConfig;
-    });
+    return settingsConfig.updateWorkspacePreferences(workspaceId, () => rawState);
   },
   applyAgentStudioStateAction(workspaceId, action) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const current = yield* Effect.try({
-        try: () => requireConfiguredWorkspace(config, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, action),
-            cause,
-          }),
-      });
-      const state = applyAgentStudioStateAction(current.agentStudioState, action);
-      if (state === current.agentStudioState) {
+    return settingsConfig.updateWorkspacePreferences(workspaceId, (current) =>
+      applyAgentStudioStateAction(current.agentStudioState, action),
+    );
+  },
+  updateRepoGitConfig(workspaceId, git) {
+    return saveAndReturnWorkspaceRecord(
+      settingsConfig,
+      (current) => {
+        current.workspaces[workspaceId] = repoConfigSchema.parse({
+          ...requireConfiguredWorkspace(current, workspaceId),
+          git,
+        });
+        current.activeWorkspace ??= workspaceId;
+        touchRecentWorkspace(current, workspaceId);
         return current;
-      }
-      const update = yield* Effect.try({
-        try: () => buildAgentStudioStateUpdate(config, workspaceId, state),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, action),
-            cause,
-          }),
-      });
-      yield* settingsConfig.writeConfig(update.config);
-      return update.repoConfig;
-    });
-  },
-  updateRepoConfig(workspaceId, update) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const existing = yield* Effect.try({
-        try: () => requireConfiguredWorkspace(config, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const nextRepoConfig = yield* validateAndNormalizeRepoConfig(
-        settingsConfig,
-        buildMergedRepoConfig(workspaceId, existing, update, false),
-      );
-      yield* Effect.try({
-        try: () => ensureRepoPathAvailable(config, nextRepoConfig.repoPath, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-
-      config.workspaces[workspaceId] = nextRepoConfig;
-      if (config.activeWorkspace === undefined) {
-        config.activeWorkspace = workspaceId;
-      }
-      touchRecentWorkspace(config, workspaceId);
-      return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, workspaceId);
-    });
-  },
-  saveRepoSettings(workspaceId, settings) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const existing = yield* Effect.try({
-        try: () => requireConfiguredWorkspace(config, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const nextRepoConfig = yield* validateAndNormalizeRepoConfig(
-        settingsConfig,
-        buildMergedRepoConfig(workspaceId, existing, settings, true),
-      );
-      yield* Effect.try({
-        try: () => ensureRepoPathAvailable(config, nextRepoConfig.repoPath, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-
-      config.workspaces[workspaceId] = nextRepoConfig;
-      touchRecentWorkspace(config, workspaceId);
-      return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, workspaceId);
-    });
-  },
-  updateRepoHooks(workspaceId, hooks) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const existing = yield* Effect.try({
-        try: () => requireConfiguredWorkspace(config, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-
-      const payload = { ...existing, hooks };
-      config.workspaces[workspaceId] = yield* parseConfig(repoConfigSchema, payload);
-      touchRecentWorkspace(config, workspaceId);
-      return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, workspaceId);
-    });
+      },
+      workspaceId,
+    );
   },
   getSettingsSnapshot() {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
+      const config = yield* settingsConfig.readConfig();
       return yield* Effect.try({
         try: () => toSettingsSnapshot(config),
         catch: (cause) =>
@@ -361,137 +219,113 @@ const createUnserializedWorkspaceSettingsService = (
       });
     });
   },
-  saveSettingsSnapshotWith(rawSnapshot, commit) {
-    return saveSettingsSnapshotWith(settingsConfig, rawSnapshot, commit);
+  saveSettingsSnapshotWith(prepared, commit) {
+    return saveSettingsSnapshotWith(settingsConfig, taskWorkflows, prepared, commit);
   },
   prepareSettingsSnapshot(rawSnapshot) {
-    return prepareSettingsSnapshot(settingsConfig, rawSnapshot);
+    return prepareSettingsSnapshot(settingsConfig, taskWorkflows, rawSnapshot);
   },
   updateAgentModelFavorites(rawFavorites) {
     return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
       const favorites = yield* parseConfig(agentModelFavoritesSchema, rawFavorites);
-      const payload = { ...config, agentModelFavorites: favorites };
-      const nextConfig = yield* parseConfig(globalConfigSchema, payload);
-
-      yield* settingsConfig.writeConfig(nextConfig);
-      return yield* Effect.try({
-        try: () => toSettingsSnapshot(nextConfig),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      return yield* settingsConfig
+        .updatePreferences((current) => ({
+          ...current,
+          agentModelFavorites: favorites,
+        }))
+        .pipe(Effect.map((saved) => saved.agentModelFavorites));
     });
   },
   updateKanbanTaskCardView(taskCardView) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const nextConfig = yield* parseConfig(globalConfigSchema, {
-        ...config,
-        kanban: { ...config.kanban, taskCardView },
-      });
-
-      yield* settingsConfig.writeConfig(nextConfig);
-      return yield* Effect.try({
-        try: () => toSettingsSnapshot(nextConfig),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-    });
+    return settingsConfig
+      .updatePreferences((current) => ({
+        ...current,
+        kanban: { ...current.kanban, taskCardView },
+      }))
+      .pipe(Effect.map((saved) => saved.kanban.taskCardView));
   },
   updateSidebarSessionGrouping(sidebarSessionGrouping) {
-    return updateSidebarSessionGrouping(settingsConfig, sidebarSessionGrouping);
+    return settingsConfig
+      .updatePreferences((current) => ({
+        ...current,
+        appearance: { ...current.appearance, sidebarSessionGrouping },
+      }))
+      .pipe(Effect.map((saved) => saved.appearance.sidebarSessionGrouping));
   },
   setTheme(theme) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const nextConfig = yield* parseConfig(globalConfigSchema, { ...config, theme });
-      yield* settingsConfig.writeConfig(nextConfig);
-    });
-  },
-  updateGlobalGitConfig(git) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const nextConfig = yield* parseConfig(globalConfigSchema, { ...config, git });
-      yield* settingsConfig.writeConfig(nextConfig);
-    });
+    return settingsConfig
+      .updatePreferences((current) => ({ ...current, theme }))
+      .pipe(Effect.asVoid);
   },
 });
 
-export const createWorkspaceSettingsService = (
-  settingsConfig: SettingsConfigPort,
-): WorkspaceSettingsService =>
-  withSerializedConfigWrites(createUnserializedWorkspaceSettingsService(settingsConfig));
-
 const prepareSettingsSnapshot = (
   settingsConfig: SettingsConfigPort,
+  taskWorkflows: TaskWorkflowResolver,
   rawSnapshot: SettingsSnapshotSaveInput,
 ): Effect.Effect<PreparedSettingsSnapshot, WorkspaceSettingsError> =>
   Effect.gen(function* () {
-    const config = yield* loadGlobalConfig(settingsConfig);
-    const snapshot = yield* parseConfig(settingsSnapshotSaveInputSchema, rawSnapshot);
-    if (!areAgentModelFavoritesEqual(snapshot.agentModelFavorites, config.agentModelFavorites)) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: "Model favorites changed since settings were loaded. Reload settings and retry.",
-          field: "agentModelFavorites",
-        }),
-      );
+    const edits = yield* parseConfig(settingsSnapshotSaveInputSchema, rawSnapshot);
+    const current = yield* settingsConfig.readConfig(Object.keys(edits.workspaces ?? {}));
+    const catalog = Object.values(edits.workspaces ?? {}).some(
+      (patch) => patch.repoPath !== undefined && patch.repoPath !== patch.expectedRepoPath,
+    )
+      ? (yield* settingsConfig.readWorkspaceCatalogSnapshot()).workspaces
+      : Object.values(current.workspaces);
+    for (const [id, patch] of Object.entries(edits.workspaces ?? {})) {
+      if (patch.repoPath !== undefined && patch.repoPath !== patch.expectedRepoPath) {
+        const repoPath = yield* validateGitRepoPath(settingsConfig, patch.repoPath);
+        edits.workspaces![id] = { ...patch, repoPath };
+      }
     }
-    const workspaces = yield* normalizeSnapshotWorkspaces(
-      settingsConfig,
-      config,
-      snapshot.workspaces,
-    );
-    const payload = {
-      ...config,
-      git: snapshot.git,
-      general: snapshot.general,
-      system: snapshot.system,
-      appearance: snapshot.appearance,
-      chat: snapshot.chat,
-      reusablePrompts: snapshot.reusablePrompts,
-      kanban: snapshot.kanban,
-      notifications: snapshot.notifications,
-      agentRuntimes: snapshot.agentRuntimes,
-      agentModelFavorites: config.agentModelFavorites,
-      workspaces,
-      globalPromptOverrides: snapshot.globalPromptOverrides,
-    };
-    if (snapshot.customAgentRoles !== undefined)
-      payload.customAgentRoles = snapshot.customAgentRoles;
-    if (snapshot.autopilot !== undefined) payload.autopilot = snapshot.autopilot;
-    const next = yield* parseConfig(globalConfigSchema, payload);
-    return { current: config, next };
+    const next = yield* Effect.try({
+      try: () =>
+        applyTaskWorkflowSettings(applySettingsEdits(current, edits, catalog), taskWorkflows),
+      catch: (cause) =>
+        new HostValidationError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    return { current, next, edits };
   });
 
 const saveSettingsSnapshotWith = <A, E>(
   settingsConfig: SettingsConfigPort,
-  rawSnapshot: SettingsSnapshotSaveInput,
+  taskWorkflows: TaskWorkflowResolver,
+  prepared: PreparedSettingsSnapshot,
   commit: (
-    prepared: PreparedSettingsSnapshot,
-    write: Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>,
+    write: Effect.Effect<SettingsWriteResult, WorkspaceSettingsError>,
   ) => Effect.Effect<A, E>,
-): Effect.Effect<A, E | WorkspaceSettingsError> =>
-  Effect.gen(function* () {
-    const prepared = yield* prepareSettingsSnapshot(settingsConfig, rawSnapshot);
-    return yield* commit(
-      prepared,
-      Effect.gen(function* () {
-        yield* settingsConfig.writeConfig(prepared.next);
-        return yield* Effect.try({
-          try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, prepared.next),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-      }),
-    );
-  });
+): Effect.Effect<A, E | WorkspaceSettingsError> => {
+  const { edits } = prepared;
+  return commit(
+    Effect.gen(function* () {
+      // Rebase the prepared edits on the current rows inside the write transaction.
+      const persistence = yield* settingsConfig.applyConfigChange(
+        (current, catalog) => {
+          for (const kind of Object.keys(edits.global?.agentRuntimes ?? {})) {
+            if (!jsonValuesEqual(current.agentRuntimes[kind], prepared.current.agentRuntimes[kind]))
+              throw new HostValidationError({
+                field: "agentRuntimes",
+                message: `Runtime ${kind} settings changed during review. Preview and save settings again.`,
+              });
+          }
+          return applyTaskWorkflowSettings(
+            applySettingsEdits(current, edits, catalog),
+            taskWorkflows,
+          );
+        },
+        Object.keys(edits.workspaces ?? {}),
+      );
+      return {
+        shared: persistence.shared,
+        preferences: persistence.preferences,
+        workspaces: buildWorkspaceCatalog(
+          settingsConfig,
+          yield* settingsConfig.readWorkspaceCatalogSnapshot(persistence.config),
+        ).openWorkspaces,
+      };
+    }),
+  );
+};

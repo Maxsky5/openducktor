@@ -25,7 +25,12 @@ const replaceStoreSessions = (
 describe("toAgentSessionSummary", () => {
   test("preserves session working directory for build-session consumers", () => {
     const session = createAgentSessionFixture({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       workingDirectory: "/repo",
     });
 
@@ -342,7 +347,12 @@ describe("createAgentSessionsStore session snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
     });
@@ -414,7 +424,12 @@ describe("createAgentSessionsStore session snapshots", () => {
     const session = {
       ...createAgentSessionFixture({
         ...identity,
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
         historyLoadState: "not_requested",
       }),
       messages: createSessionMessagesState(identity.externalSessionId),
@@ -530,7 +545,12 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const baseSession = createAgentSessionFixture({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       status: "running",
     });
 
@@ -561,7 +581,12 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       status: "running",
       pendingApprovals: [],
     });
@@ -605,7 +630,12 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo/opencode",
       status: "running",
@@ -636,14 +666,24 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const opencodeSession = createAgentSessionFixture({
       externalSessionId: "shared-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo/opencode",
       status: "running",
     });
     const codexSession = createAgentSessionFixture({
       externalSessionId: "shared-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "spec",
+      },
       runtimeKind: "codex",
       workingDirectory: "/repo/codex",
       status: "running",
@@ -688,29 +728,67 @@ test("lists and removes task owners only in its bound workspace", () => {
   replaceStoreSessions(store, [
     createAgentSessionFixture({
       externalSessionId: "build",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     }),
     createAgentSessionFixture({
       externalSessionId: "spec",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
     }),
     createAgentSessionFixture({
       externalSessionId: "removed",
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "build",
+      },
     }),
     createAgentSessionFixture({
       externalSessionId: "repository",
       sessionAssociation: { kind: "repository" },
     }),
+    createAgentSessionFixture({
+      externalSessionId: "foreign",
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "foreign-workspace",
+        taskId: "task-2",
+        role: "build",
+      },
+    }),
   ]);
-  expect(store.listSessionTaskIds("/a").sort()).toEqual(["task-1", "task-2"]);
+  expect(store.listSessionTaskIds({ workspaceId: "workspace-1", repoPath: "/a" }).sort()).toEqual([
+    "task-1",
+    "task-2",
+  ]);
 
-  store.removeTaskSessions("/b", ["task-1"]);
-  expect(store.listSessionTaskIds("/a").sort()).toEqual(["task-1", "task-2"]);
-  store.removeTaskSessions("/a", ["task-2"]);
+  store.removeTaskSessions({ workspaceId: "workspace-1", repoPath: "/b" }, ["task-1"]);
+  expect(store.listSessionTaskIds({ workspaceId: "workspace-1", repoPath: "/a" }).sort()).toEqual([
+    "task-1",
+    "task-2",
+  ]);
+  store.removeTaskSessions({ workspaceId: "workspace-1", repoPath: "/a" }, ["task-2"]);
 
-  expect(store.listSessionTaskIds("/a")).toEqual(["task-1"]);
-  expect(store.listSessionTaskIds("/b")).toEqual([]);
+  expect(store.listSessionTaskIds({ workspaceId: "workspace-1", repoPath: "/a" })).toEqual([
+    "task-1",
+  ]);
+  expect(store.listSessionTaskIds({ workspaceId: "workspace-1", repoPath: "/b" })).toEqual([]);
+  expect(store.listSessionTaskIds({ workspaceId: "foreign-workspace", repoPath: "/a" })).toEqual([
+    "task-2",
+  ]);
+  expect(
+    store.listSessionSnapshots().some(({ externalSessionId }) => externalSessionId === "foreign"),
+  ).toBe(true);
 });
 
 test.each(["idle", "running"] as const)(

@@ -1,3 +1,4 @@
+import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -16,8 +17,12 @@ import {
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
-import { createTaskSyncService } from "../tasks/sync/task-sync-service";
-import { noMergeDetection } from "../tasks/sync/task-sync-service.test-support";
+
+import { noMergeDetection, syncWorkspace } from "../tasks/sync/task-sync-service.test-support";
+import {
+  applyHostSharedConfigEdits,
+  readHostSharedConfig,
+} from "../../adapters/sqlite/sqlite-host-settings-store";
 import type { WorkflowArtifactSaveInput } from "../tasks/task-inputs";
 import type { CommittedTaskStatusChange } from "../tasks/task-mutation-operation";
 import { createTaskServiceWithMutationProgress } from "../tasks/task-service";
@@ -275,7 +280,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
     const commits = workflow.commits.length;
     const publications = workflow.events.length;
     workflow.executeSql(
-      "CREATE TRIGGER reject_qa BEFORE INSERT ON tasks_artifacts WHEN NEW.code = 'qaReport' BEGIN SELECT RAISE(ABORT, 'Report write rejected'); END",
+      "CREATE TRIGGER reject_qa BEFORE INSERT ON task_artifacts WHEN NEW.code = 'qaReport' BEGIN SELECT RAISE(ABORT, 'Report write rejected'); END",
     );
     expect(
       (
@@ -403,7 +408,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       expect(
         workflow.commits.filter((change) => change.operation === "build-completed"),
       ).toHaveLength(1);
-      expect(workflow.events.at(-1)).toMatchObject({ statusChanges: [] });
+      expect(workflow.events).toHaveLength(publicationCount + 1);
       expect(workflow.actions).toEqual(["startQa"]);
     },
   );
@@ -442,8 +447,23 @@ const createWorkflowHarness = async ({
   const config = globalConfigSchema.parse({
     version: 4,
     workspaces: { workflow: repo },
-    autopilot: { rules },
+    autopilot: {
+      rules: rules.map((rule) => ({
+        workflowId: taskWorkflows.workflows[0]!.definition.id,
+        ...rule,
+      })),
+    },
   });
+  await run(
+    fixture.withHostDatabase("test.config", (session) =>
+      session.transaction("test.config", (transaction) =>
+        Effect.gen(function* () {
+          const current = yield* readHostSharedConfig(transaction);
+          yield* applyHostSharedConfigEdits(transaction, current, config);
+        }),
+      ),
+    ),
+  );
   const settingsConfig = createSettingsConfigTestDouble({
     readConfig: () => Effect.succeed(config),
     pathExists: () => Effect.succeed(true),
@@ -456,7 +476,14 @@ const createWorkflowHarness = async ({
   const hookCalls: Array<{ command: string; cwd: string | undefined }> = [];
   const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath: () => Effect.succeed(repo),
-    getSettingsSnapshot: () => publicationGate.pipe(Effect.as(config)),
+    getRepoConfig: () => Effect.succeed(repo),
+    getWorkspaceCatalog: () =>
+      Effect.succeed({
+        catalogRevision: 0,
+        openWorkspaces: [syncWorkspace(repoPath, "workflow")],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      }),
   });
   const taskService = createTaskServiceWithMutationProgress({
     taskWorkflows,
@@ -482,6 +509,9 @@ const createWorkflowHarness = async ({
   let autopilot: AutopilotService;
   const taskSyncService = createTaskSyncService({
     taskService,
+    settingsConfig: {
+      readGlobalConfig: () => publicationGate.pipe(Effect.as(config)),
+    },
     workspaceSettingsService,
     mergeDetection: noMergeDetection,
     taskEventStream: {
@@ -561,11 +591,12 @@ const createWorkflowHarness = async ({
     createTask: async (issueType = "task") => {
       const task = await run(
         tasks.createTask({
+          workspaceId: "workflow",
           repoPath,
           task: { title: "Workflow", issueType, priority: 2 },
         }),
       );
-      return { repoPath, taskId: task.id };
+      return { workspaceId: "workflow", repoPath, taskId: task.id };
     },
     waitForOutcomes: async (count: number) => {
       for (let turn = 0; turn < 500; turn++) {

@@ -1,76 +1,58 @@
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
+import { expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
-import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
-import { createSqliteTaskRepository } from "./sqlite-task-repository";
-import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
-import {
-  createSqliteTaskStoreHarness,
-  insertRawTask,
-  openSqliteTaskStoreTestConnection,
-  type SqliteTaskStoreTestHarness,
-} from "./sqlite-task-store-test-support";
-import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
+import { workspaces } from "./sqlite-host-settings-schema";
+import { createSqliteTaskStoreHarness, insertRawTask } from "./sqlite-task-store-test-support";
 
-let harness: SqliteTaskStoreTestHarness;
-beforeEach(async () => {
-  harness = await createSqliteTaskStoreHarness();
-});
-afterEach(async () => {
-  await harness.cleanup();
-});
-
-test("a closed workspace still reports its open tasks and their session directories", async () => {
-  const repoPath = path.join(harness.configDir, "closed-repo");
-  await mkdir(repoPath);
-  const scope = { workspaceId: "closed-owner", repoPath };
-  const admission = createWorkspaceAdmissionService({
-    workspaceSettingsService: {
-      getWorkspaceCatalog: () =>
-        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
-    },
-  });
-  const manager = createSqliteTaskRepositoryContextManager({
-    taskWorkflows: builtinTaskWorkflows,
-    configDir: harness.configDir,
-    processEnv: {},
-    openConnection: openSqliteTaskStoreTestConnection,
-    assertWorkspaceAdmitted: admission.assertTaskStoreAccess,
-    assertWorkspaceOwnershipReadAdmitted: (input) =>
-      admission.assertTaskStoreOwnershipReadAccess({ ...input, operation: "test.worktreeOwners" }),
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed(scope.workspaceId),
-  });
-  const tasks = createSqliteTaskRepository({ contextProvider: manager.withDatabase });
+test("a closed workspace still reports its open tasks and session directories", async () => {
+  const harness = await createSqliteTaskStoreHarness();
+  const scope = { workspaceId: "fairnest", repoPath: harness.repoPath };
   try {
-    expect(await Effect.runPromise(manager.listOpenTasksForWorktreeOwnership(scope))).toEqual([]);
-    const databasePath = Effect.runSync(
-      resolveSqliteTaskStoreDatabasePath({
-        configDir: harness.configDir,
-        workspaceId: scope.workspaceId,
-      }),
-    );
-    const sessionsJson = (workingDirectory: string) =>
-      JSON.stringify([createAgentSessionRecord({ workingDirectory })]);
-    insertRawTask({ databasePath, taskId: "open", agentSessionsJson: sessionsJson(" /trees/a ") });
+    await Effect.runPromise(harness.store.listTaskIds(scope));
     insertRawTask({
-      databasePath,
+      databasePath: harness.databasePath,
+      taskId: "open",
+      agentSessionsJson: JSON.stringify([
+        createAgentSessionRecord({ workingDirectory: " /trees/a " }),
+      ]),
+    });
+    insertRawTask({
+      databasePath: harness.databasePath,
       taskId: "done",
       status: "closed",
-      agentSessionsJson: sessionsJson("/trees/b"),
+      agentSessionsJson: JSON.stringify([
+        createAgentSessionRecord({ workingDirectory: "/trees/b" }),
+      ]),
     });
-
-    admission.blockWorkspace({ ...scope, reason: "closed" });
-
-    await expect(Effect.runPromise(tasks.listTasks({ repoPath }))).rejects.toThrow(
+    await Effect.runPromise(
+      harness.withHostDatabase("test.closeWorkspace", (session) =>
+        session.execute(
+          (db) =>
+            db
+              .update(workspaces)
+              .set({ closed: true })
+              .where(eq(workspaces.workspaceId, scope.workspaceId)),
+          "test.closeWorkspace",
+        ),
+      ),
+    );
+    await expect(Effect.runPromise(harness.store.listTasks(scope))).rejects.toThrow(
       "Workspace is closed",
     );
-    expect(await Effect.runPromise(manager.listOpenTasksForWorktreeOwnership(scope))).toEqual([
-      { taskId: "open", title: "Task", sessionDirectories: ["/trees/a"] },
+    expect(
+      await Effect.runPromise(
+        harness.taskOwnership.listOpenTasksForWorktreeOwnership({ workspaces: [scope] }),
+      ),
+    ).toEqual([
+      {
+        workspaceId: scope.workspaceId,
+        taskId: "open",
+        title: "Task",
+        sessionDirectories: ["/trees/a"],
+      },
     ]);
   } finally {
-    await Effect.runPromise(manager.dispose());
+    await harness.cleanup();
   }
 });

@@ -69,6 +69,6 @@ export const sessionEntryLocation = (entry: SessionNavigationEntry): SessionEntr
 export const sessionEntryTerminalContext = (entry: SessionNavigationEntry): TerminalContext => {
   const { repoPath, workspaceId } = entry.workspace;
   return entry.context.kind === "task"
-    ? { repoPath, taskId: entry.context.task.id }
+    ? { workspaceId, repoPath, taskId: entry.context.task.id }
     : { kind: "workspace_session", repoPath, workspaceId, sessionId: entry.context.session.id };
 };

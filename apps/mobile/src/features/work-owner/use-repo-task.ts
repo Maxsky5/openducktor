@@ -1,12 +1,14 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { skippedQueryOptions } from "@openducktor/frontend-core/queries/skipped-query";
+import type { RepoTaskData } from "@openducktor/frontend-core/queries/tasks";
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   repoTaskDataQueryOptions,
+  taskQueryKeys,
   unfilteredRepoTaskDataQueryOptions,
 } from "@openducktor/frontend-core/queries/tasks";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-
-const NO_REPO = "__no_workspace__";
 
 export type RepoTaskRead = {
   /** The task, or null while it loads, when it does not exist, or without a task. */
@@ -24,12 +26,25 @@ export type RepoTaskRead = {
  * the complete list, which loads only then (`docs/tanstack-query-cache-strategy.md`). The task
  * stream keeps both lists current.
  */
-export const useRepoTask = (repoPath: string | null, taskId: string | null): RepoTaskRead => {
-  const enabled = repoPath !== null && taskId !== null;
-  const board = useQuery({ ...repoTaskDataQueryOptions(repoPath ?? NO_REPO), enabled });
+export const useRepoTask = (scope: WorkspaceRef | null, taskId: string | null): RepoTaskRead => {
+  const enabled = scope !== null && taskId !== null;
+  const board = useQuery({
+    ...(scope
+      ? repoTaskDataQueryOptions(scope)
+      : skippedQueryOptions<RepoTaskData>({
+          queryKey: taskQueryKeys.skippedBoard,
+          staleTime: Infinity,
+        })),
+    enabled,
+  });
   const boardTask = board.data?.tasks.find((entry) => entry.id === taskId) ?? null;
   const complete = useQuery({
-    ...unfilteredRepoTaskDataQueryOptions(repoPath ?? NO_REPO),
+    ...(scope
+      ? unfilteredRepoTaskDataQueryOptions(scope)
+      : skippedQueryOptions<RepoTaskData>({
+          queryKey: taskQueryKeys.skippedComplete,
+          staleTime: Infinity,
+        })),
     enabled: enabled && board.isSuccess && boardTask === null,
   });
   const fromComplete = boardTask === null && board.isSuccess;
@@ -38,9 +53,10 @@ export const useRepoTask = (repoPath: string | null, taskId: string | null): Rep
   const { refetch: refetchBoard } = board;
   const { refetch: refetchComplete } = complete;
   const refetch = useCallback(() => {
+    if (!enabled) return;
     void refetchBoard();
     if (fromComplete) void refetchComplete();
-  }, [fromComplete, refetchBoard, refetchComplete]);
+  }, [enabled, fromComplete, refetchBoard, refetchComplete]);
   const error = board.error ?? (fromComplete ? complete.error : null);
   const isPending = board.isPending || (fromComplete && complete.isPending);
   return useMemo(

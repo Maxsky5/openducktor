@@ -165,7 +165,6 @@ function TaskSubmitFooterActions({
         onClick={() => void controller.submit()}
         disabled={
           controller.isFormDisabled ||
-          controller.hasExternalTaskConflict ||
           controller.destinationError !== null ||
           !controller.state.title.trim()
         }
@@ -259,8 +258,9 @@ function TaskCreateModalSectionContent({
       workspaceId={controller.workspaceId}
       taskId={controller.taskId}
       issueImageContext={
-        controller.workspaceRepoPath && task?.sourceIssue
+        controller.workspaceId && controller.workspaceRepoPath && task?.sourceIssue
           ? {
+              workspaceId: controller.workspaceId,
               repoPath: controller.workspaceRepoPath,
               sourceId: task.sourceIssue.sourceId,
               providerId: task.sourceIssue.providerId,

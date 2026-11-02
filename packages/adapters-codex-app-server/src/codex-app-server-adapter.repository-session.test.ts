@@ -40,6 +40,42 @@ class NameFailingTransport extends RecordingTransport {
   }
 }
 
+test("controls one native repository conversation from each selected saved workspace", async () => {
+  const { adapter, transports } = createHarness();
+  const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
+  const started = await adapter.startSession({
+    repoPath: "/repo",
+    runtimeKind: "codex",
+    workingDirectory: "/repo",
+    sessionScope: { kind: "repository", workspaceId: "first" },
+    runtimePolicy,
+    systemPrompt: "First workspace",
+    model: { providerId: "openai", modelId: "gpt-5" },
+  });
+  for (const workspaceId of ["second", "first"]) {
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: started.externalSessionId,
+      sessionScope: { kind: "repository", workspaceId },
+      runtimePolicy,
+      systemPrompt: workspaceId,
+    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: started.externalSessionId,
+        sessionScope: { kind: "repository", workspaceId },
+        runtimePolicy,
+        parts: [{ kind: "text", text: workspaceId }],
+      }),
+    );
+  }
+  expect(
+    transports.get("runtime-live")?.calls.filter((call) => call.method === "turn/start"),
+  ).toHaveLength(2);
+});
+
 class MatchingPreviewTransport extends RecordingTransport {
   nativeName: string | null = null;
   failNextNameWrite = true;
@@ -122,7 +158,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -705,7 +741,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -731,7 +767,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "spec" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -744,7 +780,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: started.externalSessionId,
-        sessionScope: { kind: "workflow", taskId: "task-2", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-2", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -755,7 +791,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       adapter.sendUserMessage(
         codexUserMessageInput({
           externalSessionId: started.externalSessionId,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           parts: [{ kind: "text", text: "Continue" }],
         }),
       ),
@@ -763,14 +799,14 @@ describe("CodexAppServerAdapter repository sessions", () => {
     await expect(
       adapter.loadSessionHistory(
         codexSessionRuntimeRef(started.externalSessionId, {
-          sessionScope: { kind: "workflow", taskId: "task-2", role: "spec" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-2", role: "spec" },
         }),
       ),
     ).rejects.toThrow("does not belong to the requested scope");
     await expect(
       adapter.loadSessionContextUsage(
         codexSessionRuntimeRef(started.externalSessionId, {
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
         }),
       ),
     ).rejects.toThrow("requested workflow scope for task 'task-1' and role 'qa'");
@@ -783,7 +819,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "spec" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -795,14 +831,19 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         parentExternalSessionId: started.externalSessionId,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     ).resolves.toMatchObject({
       title: "BUILD task-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build",
+      },
     });
     expect(
       transports.get("runtime-live")?.calls.findLast((call) => call.method === "thread/fork")
@@ -834,7 +875,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: started.externalSessionId,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -845,7 +886,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       adapter.sendUserMessage(
         codexUserMessageInput({
           externalSessionId: started.externalSessionId,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           parts: [{ kind: "text", text: "Continue" }],
         }),
       ),
@@ -862,7 +903,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },

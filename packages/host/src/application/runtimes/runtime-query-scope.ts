@@ -52,7 +52,11 @@ export const requireSessionScope = (
     if (input.sessionScope?.kind !== "workflow") return;
     const scope = input.sessionScope;
     const metadata = yield* taskReader
-      .getTaskMetadata({ repoPath: input.repoPath, taskId: scope.taskId })
+      .getTaskMetadata({
+        workspaceId: scope.workspaceId,
+        repoPath: input.repoPath,
+        taskId: scope.taskId,
+      })
       .pipe(
         Effect.mapError((cause) =>
           runtimeQueryError(

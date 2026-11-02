@@ -1,3 +1,4 @@
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type { SessionPanelsModel } from "@/features/session-panels";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
@@ -76,7 +77,12 @@ const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
   createAgentSessionFixture({
     externalSessionId: "session-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "planner",
+    },
 
     runtimeKind: "opencode",
   });
@@ -449,9 +455,6 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
   addWorkspace: async () => {
     throw new Error("Not used");
   },
-  saveWorkspaceModelDefaults: async () => {
-    throw new Error("Not used");
-  },
   selectWorkspace: async () => undefined,
   reorderWorkspaces: async () => undefined,
   refreshBranches: async () => undefined,
@@ -462,19 +465,9 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
     }
     return repoSettingsState.repoSettings;
   },
-  saveRepoSettings: async () => undefined,
-  loadSettingsSnapshot: async () => {
-    throw new Error("loadSettingsSnapshot is not used in this test");
-  },
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => undefined,
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
-  saveSettingsSnapshot: async () => ({
-    type: "saved" as const,
-    workspaces: [],
-    runtimeApplications: [],
-    refreshError: null,
-  }),
+  saveSettingsSnapshot: async () => savedSettingsResult(),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -842,6 +835,7 @@ describe("useAgentsPageShellModel", () => {
         () => {},
       );
       orchestrationState.taskExecutionDocumentPanelModel = {
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-1",
         selection: { kind: "workflow", code: "plan" },

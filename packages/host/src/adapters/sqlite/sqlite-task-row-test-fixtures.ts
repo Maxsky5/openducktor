@@ -1,26 +1,17 @@
-import type { TaskRow } from "./sqlite-task-store-schema";
-
-const now = (): Date => new Date("2026-06-10T10:00:00.000Z");
+import type { TaskRow } from "./sqlite-host-database-schema";
 
 export const taskRowFixture = (overrides: Partial<TaskRow> = {}): TaskRow => ({
-  agentSessionsJson: "[]",
-  createdAt: now(),
-  description: null,
-  directMergeJson: null,
+  workspaceId: "fairnest",
   id: "task-1",
-  issueType: "task",
-  labelsJson: "[]",
-  priority: 2,
-  pullRequestJson: null,
-  sourceProviderId: null,
-  sourceScope: null,
-  sourceId: null,
-  sourceNumber: null,
-  sourceUrl: null,
-  status: "open",
-  targetBranchJson: null,
   title: "Task",
-  updatedAt: now(),
+  description: null,
+  status: "open",
+  issueType: "task",
+  priority: 2,
+  targetBranch: null,
+  targetRemote: null,
   removeWorktreeOnClose: null,
+  createdAt: new Date("2026-06-10T10:00:00.000Z"),
+  updatedAt: new Date("2026-06-10T10:00:00.000Z"),
   ...overrides,
 });

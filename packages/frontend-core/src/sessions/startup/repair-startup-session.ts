@@ -91,6 +91,7 @@ export function installStartupSessionRepair(
                   workingDirectory: target.record.workingDirectory,
                   sessionScope: {
                     kind: "workflow",
+                    workspaceId: current.origin.workspaceId,
                     taskId: scope.taskId,
                     role: target.record.role,
                   },

@@ -74,7 +74,12 @@ describe("agent-studio-workspace-state", () => {
   test("uses the matched session role and canonical external session id", () => {
     const session = createAgentSessionSummaryFixture({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
     expect(
       buildAgentStudioReadState({

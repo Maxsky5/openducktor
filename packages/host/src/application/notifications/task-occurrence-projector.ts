@@ -42,11 +42,13 @@ export const createTaskOccurrenceProjector = ({
       const navigationTarget: NotificationOccurrence["navigationTarget"] = {
         ...notification.navigation,
         repoPath,
+        workspaceId: event.workspaceId,
         taskId: current.id,
       };
       const occurrence: NotificationOccurrence = {
         occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}:${index}`,
         kind,
+        workspaceId: event.workspaceId,
         repoPath,
         repositoryLabel: currentRepositoryLabel,
         task: { id: current.id, title: current.title },

@@ -24,7 +24,6 @@ import {
   createTaskService,
   createTaskServiceWithMutationProgress,
   extendGitPort,
-  extendSettingsConfigPort,
   githubPullListPayload,
   githubPullResponsePayload,
   pullRequest,
@@ -242,7 +241,9 @@ describe("createTaskService pull requests", () => {
       }),
     });
     await expect(
-      Effect.runPromise(service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toMatchObject({
       outcome: "linked",
       pullRequest: {
@@ -255,6 +256,7 @@ describe("createTaskService pull requests", () => {
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest: expect.objectContaining({ number: 42, state: "open" }),
@@ -301,7 +303,9 @@ describe("createTaskService pull requests", () => {
     });
 
     const error = await Effect.runPromise(
-      Effect.flip(service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.flip(
+        service.detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
@@ -485,6 +489,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         service.linkPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           number: 77,
@@ -499,6 +504,7 @@ describe("createTaskService pull requests", () => {
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest: expect.objectContaining({ number: 77, state: "open" }),
@@ -669,7 +675,7 @@ describe("createTaskService pull requests", () => {
               },
             },
           }),
-        }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+        }).detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({
       outcome: "merged",
@@ -834,7 +840,7 @@ describe("createTaskService pull requests", () => {
               },
             },
           }),
-        }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+        }).detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({
       outcome: "not_found",
@@ -1039,24 +1045,7 @@ describe("createTaskService pull requests", () => {
           },
         },
       ),
-      settingsConfig: extendSettingsConfigPort(
-        createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        {
-          readConfig() {
-            return Effect.tryPromise({
-              try: async () => {
-                return null;
-              },
-              catch: (cause) =>
-                new HostOperationError({
-                  operation: "test.effect",
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause: cause,
-                }),
-            });
-          },
-        },
-      ),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       systemCommands,
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
@@ -1077,6 +1066,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         service.upsertPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           content: { title: "Create PR", body: "Body" },
@@ -1114,6 +1104,7 @@ describe("createTaskService pull requests", () => {
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest: expect.objectContaining({ number: 77, state: "open" }),
@@ -1124,6 +1115,7 @@ describe("createTaskService pull requests", () => {
     const failure = await Effect.runPromise(
       service
         .upsertPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           content: { title: "Create PR", body: "Body" },
@@ -1137,6 +1129,7 @@ describe("createTaskService pull requests", () => {
     const providerFailure = await Effect.runPromise(
       service
         .upsertPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           content: { title: "Create PR", body: "Body" },
@@ -1328,24 +1321,7 @@ describe("createTaskService pull requests", () => {
               },
             },
           ),
-          settingsConfig: extendSettingsConfigPort(
-            createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-            {
-              readConfig() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return null;
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
-                });
-              },
-            },
-          ),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           systemCommands: createPullRequestUpsertSystemCommands({
             calls,
             payload: githubPullResponsePayload({ number: 42, draft: true }),
@@ -1366,6 +1342,7 @@ describe("createTaskService pull requests", () => {
             },
           }),
         }).upsertPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           content: { title: "Updated PR", body: "Body" },
@@ -1550,24 +1527,7 @@ describe("createTaskService pull requests", () => {
               },
             },
           ),
-          settingsConfig: extendSettingsConfigPort(
-            createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-            {
-              readConfig() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return null;
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
-                });
-              },
-            },
-          ),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           systemCommands: createPullRequestUpsertSystemCommands({
             calls,
             payload: githubPullResponsePayload({ number: 77 }),
@@ -1588,6 +1548,7 @@ describe("createTaskService pull requests", () => {
             },
           }),
         }).upsertPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           content: { title: "Create PR", body: "Body" },
@@ -1712,21 +1673,7 @@ describe("createTaskService pull requests", () => {
         createTaskService({
           taskWorkflows: builtinTaskWorkflows,
           gitPort: createDirectMergeGitPort({ calls }),
-          settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
-            readConfig() {
-              return Effect.tryPromise({
-                try: async () => {
-                  return null;
-                },
-                catch: (cause) =>
-                  new HostOperationError({
-                    operation: "test.effect",
-                    message: cause instanceof Error ? cause.message : String(cause),
-                    cause: cause,
-                  }),
-              });
-            },
-          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           systemCommands: createPullRequestUpsertSystemCommands({
             calls,
             payload: githubPullResponsePayload({ number: 77 }),
@@ -1739,6 +1686,7 @@ describe("createTaskService pull requests", () => {
             hooks: { postComplete: [] },
           }),
         }).upsertPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           content: { title: "Create PR", body: "Body" },
@@ -1917,12 +1865,13 @@ describe("createTaskService pull requests", () => {
                 },
               },
             }),
-          }).repoPullRequestSync({ repoPath: "/repo" }),
+          }).repoPullRequestSync({ workspaceId: "repo", repoPath: "/repo" }),
         ),
       ).resolves.toEqual({ ok: true });
       expect(calls).toContainEqual({
         type: "setPullRequest",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           pullRequest: expect.objectContaining({ number: 42, state: "merged" }),
@@ -1930,7 +1879,13 @@ describe("createTaskService pull requests", () => {
       });
       expect(calls).toContainEqual({
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "closed",
+          cause: {},
+        },
       });
       // The global setting removes the worktree. The task override keeps it.
       const cleanupCallSchema = z
@@ -2098,12 +2053,13 @@ describe("createTaskService pull requests", () => {
             }),
           },
           [],
-        ).repoPullRequestSync({ repoPath: "/repo" }),
+        ).repoPullRequestSync({ workspaceId: "repo", repoPath: "/repo" }),
       ),
     ).resolves.toEqual({ ok: true });
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest: expect.objectContaining({
@@ -2113,6 +2069,65 @@ describe("createTaskService pull requests", () => {
         }),
       },
     });
+  });
+  test("does not rewrite a pull request when only the provider date format differs", async () => {
+    const setPullRequestCalls: unknown[] = [];
+    const storedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2011-01-26T19:01:12.000Z",
+      updatedAt: "2011-01-26T19:01:12.000Z",
+      lastSyncedAt: "2011-01-26T19:05:00.000Z",
+    };
+    const taskStore: TaskStorePort = {
+      listPullRequestSyncCandidates: () =>
+        Effect.succeed([{ id: "task-1", status: "human_review", pullRequest: storedPullRequest }]),
+      setPullRequest: (input) =>
+        Effect.sync(() => {
+          setPullRequestCalls.push(input);
+          return true;
+        }),
+    };
+    const service = createGithubTaskService({
+      systemCommands: createPullRequestSyncSystemCommands({
+        calls: [],
+        payload: JSON.stringify({
+          number: 42,
+          html_url: "https://github.com/openai/openducktor/pull/42",
+          draft: false,
+          state: "open",
+          created_at: "2011-01-26T19:01:12Z",
+          updated_at: "2011-01-26T19:01:12Z",
+          merged_at: null,
+          closed_at: null,
+          head: { ref: "odt/task-1" },
+          base: { ref: "main" },
+        }),
+      }),
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { postComplete: [] },
+        git: {
+          provider: {
+            id: "github",
+            enabled: true,
+            repository: { host: "github.com", owner: "openai", name: "openducktor" },
+            autoDetected: false,
+          },
+        },
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" }),
+      ),
+    ).resolves.toEqual({ ran: true, changedTaskIds: [] });
+    expect(setPullRequestCalls).toEqual([]);
   });
   test("reports deduplicated changed task ids when a later pull request write fails", async () => {
     const mutationFailure = new HostOperationError({
@@ -2165,7 +2180,9 @@ describe("createTaskService pull requests", () => {
     });
 
     const failure = await Effect.runPromise(
-      service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
+      service
+        .repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" })
+        .pipe(Effect.flip),
     );
     expect(failure).toBeInstanceOf(TaskMutationProgressFailure);
     expect(failure).toMatchObject({
@@ -2218,7 +2235,9 @@ describe("createTaskService pull requests", () => {
 
     await expect(
       Effect.runPromise(
-        service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
+        service
+          .repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" })
+          .pipe(Effect.flip),
       ),
     ).resolves.toBe(mutationFailure);
   });
@@ -2282,7 +2301,9 @@ describe("createTaskService pull requests", () => {
       });
 
       const result = await Effect.runPromise(
-        Effect.result(service.repoPullRequestSyncDetailed({ repoPath: "/repo" })),
+        Effect.result(
+          service.repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" }),
+        ),
       );
       if (closure === "fails validation") {
         expect(result).toMatchObject({
@@ -2433,140 +2454,37 @@ describe("createTaskService pull requests", () => {
               },
             },
           }),
-        }).repoPullRequestSync({ repoPath: "/repo" }),
+        }).repoPullRequestSync({ workspaceId: "repo", repoPath: "/repo" }),
       ),
     ).rejects.toThrow(/GitHub CLI/i);
-    expect(calls).toEqual([{ type: "resolveCommand", command: "gh" }]);
+    expect(calls).toMatchObject([{ type: "resolveCommand", command: "gh" }]);
   });
-  test("unlinks a pull request after validating task state and metadata", async () => {
+  test("unlinks a pull request from the current task record", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      getTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "get", input });
-            return task({ status: "human_review" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTaskMetadata(input) {
-        return Effect.sync(() => {
-          calls.push({ type: "metadata", input });
-          return {
-            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-            pullRequest: {
-              providerId: "github",
-              number: 42,
-              url: "https://github.com/openai/openducktor/pull/42",
-              state: "open",
-              createdAt: "2026-05-01T00:00:00.000Z",
-              updatedAt: "2026-05-02T00:00:00.000Z",
-            },
-            agentSessions: [],
-          };
-        });
-      },
-      setPullRequest(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "setPullRequest", input });
-            return true;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected list");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest({
-          repoPath: "/repo",
-          taskId: "task-1",
+      getTask: (input) =>
+        Effect.sync(() => {
+          calls.push({ type: "get", input });
+          return task({ status: "human_review", pullRequest: pullRequest() });
         }),
+      getTaskMetadata: () => Effect.die(new Error("Unlink must not read unrelated metadata.")),
+      setPullRequest: (input) =>
+        Effect.sync(() => {
+          calls.push({ type: "setPullRequest", input });
+          return true;
+        }),
+    };
+    const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
+    expect(
+      await Effect.runPromise(
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest(
+          input,
+        ),
       ),
-    ).resolves.toBe(true);
+    ).toBe(true);
     expect(calls).toEqual([
-      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
-      {
-        type: "setPullRequest",
-        input: { repoPath: "/repo", taskId: "task-1", pullRequest: null },
-      },
+      { type: "get", input },
+      { type: "setPullRequest", input: { ...input, pullRequest: null } },
     ]);
   });
   test("rejects pull request unlink outside PR management statuses", async () => {
@@ -2679,6 +2597,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
         }),
@@ -2800,6 +2719,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).unlinkPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
         }),
@@ -2846,6 +2766,7 @@ describe("createTaskService pull requests", () => {
     const error = await Effect.runPromise(
       service
         .linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -2858,9 +2779,9 @@ describe("createTaskService pull requests", () => {
       _tag: "HostDependencyError",
       message: "Worktree file port is required for git worktree mutation commands.",
     });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
     ]);
   });
@@ -2999,6 +2920,7 @@ describe("createTaskService pull requests", () => {
     await expect(
       Effect.runPromise(
         service.linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -3006,18 +2928,23 @@ describe("createTaskService pull requests", () => {
         }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "setPullRequest",
-        input: { repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: pullRequest(),
+        },
       },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       // The confirmed close removes the same targets as a manual close.
       { type: "listBranches", workingDir: "/repo" },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       { type: "releaseSessions", sessionIds: [buildSession.externalSessionId] },
       {
         type: "removeWorktree",
@@ -3027,9 +2954,16 @@ describe("createTaskService pull requests", () => {
       },
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "closed",
+          cause: {},
+        },
       },
     ]);
   });
@@ -3080,6 +3014,7 @@ describe("createTaskService pull requests", () => {
     const result = await Effect.runPromise(
       service
         .linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -3127,6 +3062,7 @@ describe("createTaskService pull requests", () => {
     const error = await Effect.runPromise(
       Effect.flip(
         service.linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -3138,9 +3074,9 @@ describe("createTaskService pull requests", () => {
     expect(error).toBeInstanceOf(TaskPolicyError);
     if (!(error instanceof TaskPolicyError)) throw error;
     expect(error.code).toBe("TASK_POLICY_ERROR");
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
     ]);
   });
   test("returns a closed task unchanged when the same merged pull request is already linked", async () => {
@@ -3258,6 +3194,7 @@ describe("createTaskService pull requests", () => {
             hooks: { postComplete: [] },
           }),
         }).linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -3265,9 +3202,9 @@ describe("createTaskService pull requests", () => {
         }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
     ]);
   });
   test("rejects pull request link completion for unmerged pull requests", async () => {
@@ -3381,6 +3318,7 @@ describe("createTaskService pull requests", () => {
             hooks: { postComplete: [] },
           }),
         }).linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,

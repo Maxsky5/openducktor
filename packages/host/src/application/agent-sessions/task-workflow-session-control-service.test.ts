@@ -80,12 +80,17 @@ const createAgentSessionCommandService = ({
     },
     approvalPolicy: { reply: () => Effect.die(new Error("unexpected approval reply")) },
     readSessionRootRefs: (repoPath) =>
-      input.tasks.agentSessionsList({ repoPath, taskId: "task-1" }).pipe(
+      input.tasks.agentSessionsList({ workspaceId: "repo", repoPath, taskId: "task-1" }).pipe(
         Effect.map((records) =>
           records.map((record) => ({
             repoPath,
             ...record,
-            sessionScope: { kind: "workflow" as const, taskId: "task-1", role: record.role },
+            sessionScope: {
+              kind: "workflow" as const,
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: record.role,
+            },
           })),
         ),
         Effect.mapError(
@@ -155,7 +160,7 @@ const workflowStart: AgentWorkflowSessionStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   targetWorkingDirectory: "/repo/worktree",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   systemPrompt: "Build the feature",
   model: {
     runtimeKind: "opencode",
@@ -411,7 +416,7 @@ describe("createAgentSessionCommandService", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
           externalSessionId: "session-1",
-          sessionScope: { kind: "workflow", taskId: "task-1", role },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role },
           forkPoint: { messageId: "completed-reply" },
         }),
       );
@@ -423,7 +428,7 @@ describe("createAgentSessionCommandService", () => {
         model: h.source.selectedModel,
         systemPrompt: "Current host context",
         forkPoint: { messageId: "completed-reply" },
-        sessionScope: { kind: "workflow", taskId: "task-1", role },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role },
       });
       expect(result.record).toEqual(h.records[0]!);
       expect(result.record).toMatchObject({
@@ -445,7 +450,7 @@ describe("createAgentSessionCommandService", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
           externalSessionId: "session-1",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           forkPoint: { messageId: "completed-reply" },
         }),
       );
@@ -469,7 +474,12 @@ describe("createAgentSessionCommandService", () => {
             runtimeKind: "opencode",
             workingDirectory: "/repo/worktree",
             externalSessionId: "session-1",
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             forkPoint: { messageId: "completed-reply" },
           }),
         ),
@@ -544,6 +554,7 @@ describe("createAgentSessionCommandService", () => {
         taskSessionStart: {
           prepare: () =>
             Effect.succeed({
+              workspaceId: "repo",
               canonicalRepoPath: "/repo",
               rollback: () =>
                 Effect.sync(() => {
@@ -649,6 +660,7 @@ describe("createAgentSessionCommandService", () => {
           Effect.sync(() => {
             calls.push("prepare");
             return {
+              workspaceId: "repo",
               canonicalRepoPath: "/repo",
               rollback: () => Effect.void,
               preparedStatus: preparedTask.status,
@@ -662,6 +674,7 @@ describe("createAgentSessionCommandService", () => {
           Effect.gen(function* () {
             calls.push("complete");
             yield* applyStartEvent({
+              workspaceId: "repo",
               repoPath: "/repo",
               taskId: "task-1",
               eventId: "start-builder",
@@ -709,7 +722,7 @@ describe("createAgentSessionCommandService", () => {
         service.startWorkflowSession({
           repoPath: "/repo",
           runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: workflowStart.systemPrompt,
           model: workflowStart.model!,
         }),
@@ -733,6 +746,7 @@ describe("createAgentSessionCommandService", () => {
         taskSessionStart: {
           prepare: () =>
             Effect.succeed({
+              workspaceId: "repo",
               canonicalRepoPath: "/repo",
               rollback: () =>
                 Effect.sync(() => {
@@ -787,7 +801,12 @@ describe("createAgentSessionCommandService", () => {
           service.startWorkflowSession({
             repoPath: "/repo",
             runtimeKind: "opencode",
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
             systemPrompt: workflowStart.systemPrompt,
             model: workflowStart.model!,
           }),
@@ -927,7 +946,7 @@ describe("createAgentSessionCommandService", () => {
         service.startWorkflowSession({
           repoPath: "/repo",
           runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: workflowStart.systemPrompt,
           model: workflowStart.model!,
         }),
@@ -957,6 +976,7 @@ describe("createAgentSessionCommandService", () => {
       taskSessionStart: {
         prepare: () =>
           Effect.succeed({
+            workspaceId: "repo",
             canonicalRepoPath: "/repo",
             rollback: () =>
               Effect.sync(() => {
@@ -1005,7 +1025,7 @@ describe("createAgentSessionCommandService", () => {
         service.startWorkflowSession({
           repoPath: "/repo",
           runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: workflowStart.systemPrompt,
           model: workflowStart.model!,
         }),
@@ -1705,6 +1725,7 @@ describe("createAgentSessionCommandService", () => {
       ]);
       expect(storedModels).toEqual([
         {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           identity: {

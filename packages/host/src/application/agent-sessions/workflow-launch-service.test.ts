@@ -31,7 +31,12 @@ const createdRef: AgentSessionLiveRef = {
   workingDirectory: "/worktrees/task",
   externalSessionId: "session-1",
 };
-const builderScope = { kind: "workflow" as const, taskId: "task", role: "build" as const };
+const builderScope = {
+  kind: "workflow" as const,
+  workspaceId: "workspace",
+  taskId: "task",
+  role: "build" as const,
+};
 
 type StartupTrackerDependencies = Parameters<typeof createNodeSessionStartupTracker>[0];
 
@@ -402,6 +407,7 @@ test.each(["codex", "claude", "opencode"] as const)(
           h.envelopes.map((event) => agentSessionLiveEnvelopeSchema.parse(event)),
         ).toContainEqual({
           type: "task_session_records_updated",
+          workspaceId: "workspace",
           repoPath: "/repo",
           taskId: "task",
           agentSessions: h.records,

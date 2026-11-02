@@ -1,17 +1,23 @@
 import {
-  type RepoConfig,
   type WorkspaceCatalog,
   type WorkspacePathResolution,
   type WorkspaceRecord,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
 import { HostInvariantError } from "../../effect/host-errors";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { LoadedGlobalConfig } from "../../config/global-config";
+import type {
+  SettingsConfigPort,
+  WorkspaceCatalogRepo,
+  WorkspaceCatalogSnapshot,
+} from "../../ports/settings-config-port";
+
+type CatalogConfig = Pick<WorkspaceCatalogSnapshot, "workspaceOrder" | "activeWorkspace"> & {
+  workspaces: Record<string, WorkspaceCatalogRepo>;
+};
 
 export const workspaceRecordForId = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
+  config: CatalogConfig,
   workspaceId: string,
 ): WorkspaceRecord => {
   const repo = config.workspaces[workspaceId];
@@ -23,7 +29,7 @@ export const workspaceRecordForId = (
   }
   return workspaceRecordFromRepo(settingsConfig, config, workspaceId, repo);
 };
-const sortedWorkspaceIds = (config: LoadedGlobalConfig): string[] => {
+const sortedWorkspaceIds = (config: CatalogConfig): string[] => {
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();
   for (const workspaceId of config.workspaceOrder) {
@@ -48,9 +54,9 @@ const sortedWorkspaceIds = (config: LoadedGlobalConfig): string[] => {
 };
 const workspaceRecordFromRepo = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
+  config: Pick<WorkspaceCatalogSnapshot, "activeWorkspace">,
   workspaceId: string,
-  repo: RepoConfig,
+  repo: WorkspaceCatalogRepo,
 ): WorkspaceRecord => {
   const defaultWorktreeBasePath = settingsConfig.defaultWorktreeBasePath(workspaceId);
   const effectiveWorktreeBasePath =
@@ -73,7 +79,7 @@ const workspaceRecordFromRepo = (
 };
 export const workspaceRecordsInEffectiveOrder = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
+  config: CatalogConfig,
 ): WorkspaceRecord[] =>
   sortedWorkspaceIds(config).map((workspaceId) => {
     const repo = config.workspaces[workspaceId];
@@ -85,25 +91,32 @@ export const workspaceRecordsInEffectiveOrder = (
     }
     return workspaceRecordFromRepo(settingsConfig, config, workspaceId, repo);
   });
-const isClosedWorkspace = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
+const isClosedWorkspace = (config: CatalogConfig, workspaceId: string): boolean =>
   config.workspaces[workspaceId]?.closed === true;
-const isIncompleteRemoval = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
+const isIncompleteRemoval = (config: CatalogConfig, workspaceId: string): boolean =>
   config.workspaces[workspaceId]?.removal !== undefined;
-const isBlockedWorkspace = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
+const isBlockedWorkspace = (config: CatalogConfig, workspaceId: string): boolean =>
   isClosedWorkspace(config, workspaceId) || isIncompleteRemoval(config, workspaceId);
 export const openWorkspaceRecordsInEffectiveOrder = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
+  config: CatalogConfig,
 ): WorkspaceRecord[] =>
   workspaceRecordsInEffectiveOrder(settingsConfig, config).filter(
     (record) => !isBlockedWorkspace(config, record.workspaceId),
   );
 export const buildWorkspaceCatalog = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
+  snapshot: WorkspaceCatalogSnapshot,
 ): WorkspaceCatalog => {
+  const config: CatalogConfig = {
+    ...snapshot,
+    workspaces: Object.fromEntries(
+      snapshot.workspaces.map((workspace) => [workspace.workspaceId, workspace]),
+    ),
+  };
   const records = workspaceRecordsInEffectiveOrder(settingsConfig, config);
   return {
+    catalogRevision: snapshot.catalogRevision,
     openWorkspaces: records.filter((record) => !isBlockedWorkspace(config, record.workspaceId)),
     closedWorkspaces: records.filter(
       (record) =>
@@ -117,7 +130,7 @@ export const buildWorkspaceCatalog = (
   };
 };
 export const firstOpenWorkspaceId = (
-  config: LoadedGlobalConfig,
+  config: CatalogConfig,
   excludedWorkspaceId?: string,
 ): string | undefined =>
   sortedWorkspaceIds(config).find(
@@ -128,8 +141,8 @@ export const firstOpenWorkspaceId = (
   );
 export const workspacePathResolution = (
   settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
-  repoConfig: RepoConfig,
+  config: Pick<WorkspaceCatalogSnapshot, "activeWorkspace">,
+  repoConfig: WorkspaceCatalogRepo,
 ): WorkspacePathResolution => {
   if (repoConfig.removal) {
     return {

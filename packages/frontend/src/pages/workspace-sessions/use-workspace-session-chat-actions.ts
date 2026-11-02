@@ -151,7 +151,7 @@ export function useWorkspaceSessionChatActions(
       if (!preparation.ready || !identity)
         throw new Error("The session is not ready. Reopen the chat before sending.");
       const sendOptions: AgentMessageSendOptions = {
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: workspace.workspaceId },
         assertCanSubmit: (session) => {
           assertCurrent();
           if (!matchesAgentSessionIdentity(session, identity))
@@ -269,6 +269,7 @@ export function useWorkspaceSessionChatActions(
         return {
           identity,
           sendOptions: {
+            sessionScope: { kind: "repository", workspaceId: workspace.workspaceId },
             assertCanSubmit: (session) => {
               assertCurrentRecipient();
               if (!matchesAgentSessionIdentity(session, identity))
@@ -294,6 +295,7 @@ export function useWorkspaceSessionChatActions(
       record,
       reportSendFailure,
       store,
+      workspace.workspaceId,
     ],
   );
 

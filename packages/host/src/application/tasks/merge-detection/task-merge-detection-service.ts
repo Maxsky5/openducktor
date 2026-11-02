@@ -1,10 +1,7 @@
-import type { TaskMergeStatusSnapshot } from "@openducktor/contracts";
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import type { TaskMergeStatusSnapshot, WorkspaceRef } from "@openducktor/contracts";
 import { Clock, Effect, Exit, Scope, Semaphore } from "effect";
-import {
-  canonicalTargetBranch,
-  isMergeDetectionCandidateTask,
-  targetBranchRef,
-} from "../../../domain/task";
+import { canonicalTargetBranch, targetBranchRef } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import { createKeyedSharedFlight } from "../../../effect/shared-flight";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
@@ -46,30 +43,29 @@ export type TaskMergeDetectionError =
 
 export type TaskMergeDetectionService = {
   /** The latest snapshot of a workspace. It is empty before the first pass. */
-  getSnapshot(repoPath: string): Effect.Effect<TaskMergeStatusSnapshot>;
+  getSnapshot(workspace: WorkspaceRef): Effect.Effect<TaskMergeStatusSnapshot>;
   /**
    * Runs a pass that fetches the target remotes again, and returns its snapshot. It fails when the
    * workspace cannot run a pass.
    */
-  checkWorkspace(repoPath: string): Effect.Effect<TaskMergeStatusSnapshot, TaskMergeDetectionError>;
+  checkWorkspace(
+    workspace: WorkspaceRef,
+  ): Effect.Effect<TaskMergeStatusSnapshot, TaskMergeDetectionError>;
   /**
    * Runs a scheduled pass of an open workspace. It skips a remote fetch of the last 5 minutes. A
    * call during a pass of the same workspace waits for that pass and gets its snapshot.
    */
-  runPass(repoPath: string): Effect.Effect<TaskMergeStatusSnapshot, TaskMergeDetectionError>;
+  runPass(workspace: WorkspaceRef): Effect.Effect<TaskMergeStatusSnapshot, TaskMergeDetectionError>;
   shutdown(): Effect.Effect<void>;
 };
 
 export type CreateTaskMergeDetectionServiceInput = {
-  taskStore: Pick<TaskStorePort, "listTasks" | "listDirectMergeTaskIds">;
+  taskStore: Pick<TaskStorePort, "listMergeCandidates" | "listDirectMergeTaskIds">;
   gitPort: GitPort;
   /** The fetch that the Git panel shares, so each remote fetches once for both. */
   remoteFetch: RemoteFetchService;
   settingsConfig: SettingsConfigPort;
-  workspaceSettingsService: Pick<
-    WorkspaceSettingsService,
-    "getRepoConfigByRepoPath" | "getWorkspaceCatalog"
-  >;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig" | "getWorkspaceCatalog">;
   publish(snapshot: TaskMergeStatusSnapshot): void;
   logger: { error(message: string): Effect.Effect<void, unknown> };
 };
@@ -92,37 +88,42 @@ export const createTaskMergeDetectionService = ({
   // Many workspaces can run passes together, so one limit holds for all of them.
   const checks = Semaphore.makeUnsafe(CHECK_CONCURRENCY);
 
-  const snapshotOf = (repoPath: string): TaskMergeStatusSnapshot => ({
-    repoPath,
-    tasks: [...(entries.get(repoPath)?.values() ?? [])].map((entry) => entry.status),
+  const workspaceKey = (workspace: WorkspaceRef) =>
+    JSON.stringify([workspace.workspaceId, workspace.repoPath]);
+  const snapshotOf = (workspace: WorkspaceRef): TaskMergeStatusSnapshot => ({
+    ...workspace,
+    tasks: [...(entries.get(workspaceKey(workspace))?.values() ?? [])].map((entry) => entry.status),
   });
 
   /** Why a workspace runs no pass, or null when it is open and its removal is complete. */
-  const skipReason = (repoPath: string) =>
+  const skipReason = (workspace: WorkspaceRef) =>
     Effect.gen(function* () {
       const catalog = yield* workspaceSettingsService.getWorkspaceCatalog();
-      if (catalog.incompleteRemovals.some((removal) => removal.workspace.repoPath === repoPath)) {
+      const matches = (record: WorkspaceRef) =>
+        record.workspaceId === workspace.workspaceId && record.repoPath === workspace.repoPath;
+      if (catalog.incompleteRemovals.some((removal) => matches(removal.workspace))) {
         return "Workspace removal is incomplete. Finish removal from the workspace rail.";
       }
-      if (catalog.openWorkspaces.some((workspace) => workspace.repoPath === repoPath)) return null;
-      return catalog.closedWorkspaces.some((workspace) => workspace.repoPath === repoPath)
+      if (catalog.openWorkspaces.some(matches)) return null;
+      return catalog.closedWorkspaces.some(matches)
         ? "The workspace is closed. Reopen it to check the merge status of its tasks."
         : "No open workspace uses this repository. Open the workspace first.";
     });
 
-  const startPass = (repoPath: string, force: boolean) =>
-    passes.run(repoPath, detectWorkspace(repoPath, force));
+  const startPass = (workspace: WorkspaceRef, force: boolean) =>
+    passes.run(workspaceKey(workspace), detectWorkspace(workspace, force));
 
-  const detectWorkspace = (repoPath: string, force: boolean) =>
+  const detectWorkspace = (workspace: WorkspaceRef, force: boolean) =>
     Effect.gen(function* () {
-      const last = entries.get(repoPath) ?? new Map<string, Entry>();
+      const key = workspaceKey(workspace);
+      const last = entries.get(key) ?? new Map<string, Entry>();
       const checkedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-      const detected = yield* Effect.result(detectEntries(repoPath, last, checkedAt, force));
+      const detected = yield* Effect.result(detectEntries(workspace, last, checkedAt, force));
       if (detected._tag === "Failure") {
         // Each task keeps its last result and shows why this pass failed.
         const message = errorMessage(detected.failure);
         entries.set(
-          repoPath,
+          key,
           new Map(
             [...last].map(([taskId, entry]) => [
               taskId,
@@ -130,33 +131,37 @@ export const createTaskMergeDetectionService = ({
             ]),
           ),
         );
-        const failed = entries.get(repoPath);
-        if (failed && hasStatusChange(last, failed)) publish(snapshotOf(repoPath));
+        const failed = entries.get(key);
+        if (failed && hasStatusChange(last, failed)) publish(snapshotOf(workspace));
         return yield* Effect.fail(detected.failure);
       }
-      entries.set(repoPath, detected.success);
-      const snapshot = snapshotOf(repoPath);
+      entries.set(key, detected.success);
+      const snapshot = snapshotOf(workspace);
       // A pass that changes only check times publishes nothing, so readers keep their data.
       if (hasStatusChange(last, detected.success)) publish(snapshot);
       return snapshot;
     });
 
   const detectEntries = (
-    repoPath: string,
+    workspace: WorkspaceRef,
     last: ReadonlyMap<string, Entry>,
     checkedAt: string,
     force: boolean,
   ) =>
     Effect.gen(function* () {
+      const { repoPath } = workspace;
       const next = new Map<string, Entry>();
       // A closed task is never a candidate, so the read leaves out the closed history.
-      const candidates = (yield* taskStore.listTasks({
-        repoPath,
-        doneVisibleDays: 0,
-      })).filter(isMergeDetectionCandidateTask);
+      const candidates = yield* taskStore.listMergeCandidates(workspace);
       // Without candidates, the pass makes no Git call.
       if (candidates.length === 0) return next;
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, workspace);
+      if (repoConfig.repoPath !== workspace.repoPath)
+        return yield* new HostValidationError({
+          field: "repoPath",
+          message: "The workspace repository changed before merge detection. Reload the workspace.",
+          details: workspace,
+        });
       const gitRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
       const worktreeBase = yield* readCanonicalManagedWorktreeBase(
         gitPort,
@@ -164,7 +169,7 @@ export const createTaskMergeDetectionService = ({
         repoConfig,
       );
       const branchTips = yield* listTaskBranchTips(gitPort, gitRepoPath, repoConfig.branchPrefix);
-      const directMergeTaskIds = new Set(yield* taskStore.listDirectMergeTaskIds({ repoPath }));
+      const directMergeTaskIds = new Set(yield* taskStore.listDirectMergeTaskIds(workspace));
       const pending: PendingCheck[] = [];
       for (const task of candidates) {
         const plan = planTaskCheck(task, {
@@ -290,20 +295,20 @@ export const createTaskMergeDetectionService = ({
     );
 
   return {
-    getSnapshot: (repoPath) => Effect.sync(() => snapshotOf(repoPath)),
-    checkWorkspace: (repoPath) =>
+    getSnapshot: (workspace) => Effect.sync(() => snapshotOf(workspace)),
+    checkWorkspace: (workspace) =>
       Effect.gen(function* () {
-        const reason = yield* skipReason(repoPath);
+        const reason = yield* skipReason(workspace);
         if (reason !== null) {
           return yield* new HostValidationError({
             field: "repoPath",
             message: reason,
-            details: { repoPath },
+            details: workspace,
           });
         }
-        return yield* startPass(repoPath, true);
+        return yield* startPass(workspace, true);
       }),
-    runPass: (repoPath) => startPass(repoPath, false),
+    runPass: (workspace) => startPass(workspace, false),
     shutdown: () => Scope.close(scope, Exit.void),
   };
 };

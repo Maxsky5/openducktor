@@ -109,7 +109,7 @@ describe("agent message delivery: queue actions and steering", () => {
       Effect.runPromise(
         harness.service.manage({
           ...target,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           action: { kind: "remove", submissionId: "submission-first" },
         }),
       ),

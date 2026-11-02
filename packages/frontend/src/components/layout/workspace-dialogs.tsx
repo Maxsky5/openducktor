@@ -163,6 +163,7 @@ function WorkspaceDialogs({
           onOpenChange={(open) => {
             if (!open) onClose();
           }}
+          workspaceId={dialog.workspace.workspaceId}
           repoPath={dialog.workspace.repoPath}
           provider={dialog.provider}
         />

@@ -169,7 +169,7 @@ for (const failure of [
       ]);
       if (["error", "messageerror", "send"].includes(failure))
         expect(failures[0]?.cause).toBe(native);
-      if (failure === "exit") expect(failures[0]?.details).toMatchObject({ exitCode: 7 });
+      if (failure === "exit") expect(failures[0]).toMatchObject({ details: { exitCode: 7 } });
       expect(failed[0]!.threadId).toBe(-1);
       expect((await Effect.runPromise(payload())).base64).toBe(png);
     } finally {
@@ -209,7 +209,7 @@ test("admission bounds file allocations and cancels queued work before reading",
     await started.promise;
     expect(allocations).toBe(2);
     const failures = failureOf(await Effect.runPromiseExit(payload("overflow")));
-    expect(failures[0]?.details).toMatchObject({ phase: "capacity" });
+    expect(failures[0]).toMatchObject({ details: { phase: "capacity" } });
     await Effect.runPromise(Fiber.interrupt(fibers[7]!));
     expect(allocations).toBe(2);
     await Promise.all(fibers.map((fiber) => Effect.runPromise(Fiber.interrupt(fiber))));
@@ -284,7 +284,7 @@ test("a deadline stops an unresponsive worker and releases its slot", async () =
           const worker = yield* Effect.promise(() => started.promise);
           yield* TestClock.adjust("30 seconds");
           const failures = failureOf(yield* Fiber.await(job));
-          expect(failures[0]?.details).toMatchObject({ phase: "deadline" });
+          expect(failures[0]).toMatchObject({ details: { phase: "deadline" } });
           expect(worker.threadId).toBe(-1);
           expect(
             (yield* timedWorkers.preparePayload(
@@ -314,8 +314,8 @@ test("shutdown cancels active and queued jobs and rejects new jobs", async () =>
     expect((await Promise.all(jobs)).every(Exit.isFailure)).toBe(true);
     expect(seen).toHaveLength(2);
     expect(seen.every((worker) => worker.threadId === -1)).toBe(true);
-    expect(failureOf(await Effect.runPromiseExit(payload()))[0]?.details).toMatchObject({
-      phase: "shutdown",
+    expect(failureOf(await Effect.runPromiseExit(payload()))[0]).toMatchObject({
+      details: { phase: "shutdown" },
     });
   } finally {
     await Effect.runPromise(workers.shutdown);
@@ -386,8 +386,8 @@ test("cancellation at scheduler boundaries preserves all admission slots", async
   try {
     await started.promise;
     for (const job of jobs) expect(job.pollUnsafe()).toBeUndefined();
-    expect(failureOf(await Effect.runPromiseExit(payload("overflow")))[0]?.details).toMatchObject({
-      phase: "capacity",
+    expect(failureOf(await Effect.runPromiseExit(payload("overflow")))[0]).toMatchObject({
+      details: { phase: "capacity" },
     });
   } finally {
     await Promise.all(jobs.map((job) => Effect.runPromise(Fiber.interrupt(job))));

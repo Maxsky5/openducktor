@@ -4,6 +4,7 @@ import type { TaskStoreError, TaskRecord } from "./task-repository-ports";
 
 export type IssueImportStorePort = {
   getSourceIssue(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
   }): Effect.Effect<
@@ -11,18 +12,21 @@ export type IssueImportStorePort = {
     TaskStoreError
   >;
   findLinkedTaskIds(input: {
+    workspaceId: string;
     repoPath: string;
     providerId: string;
     scope: string;
     sourceIds: string[];
   }): Effect.Effect<Record<string, string>, TaskStoreError>;
   findSourceScopes(input: {
+    workspaceId: string;
     repoPath: string;
     providerId: string;
     scope: string;
     sourceIds: string[];
   }): Effect.Effect<string[], TaskStoreError>;
   replaceSourceScope(input: {
+    workspaceId: string;
     repoPath: string;
     providerId: string;
     oldScope: string;
@@ -30,6 +34,7 @@ export type IssueImportStorePort = {
     sourceIds: string[];
   }): Effect.Effect<void, TaskStoreError>;
   createImportedTask(input: {
+    workspaceId: string;
     repoPath: string;
     sourceIssue: SourceIssueReference;
     task: TaskCreateInput;

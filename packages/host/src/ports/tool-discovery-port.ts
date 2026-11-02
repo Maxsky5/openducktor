@@ -1,5 +1,5 @@
 import type { ToolExecutableSourceCategory } from "@openducktor/contracts";
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type { HostDependencyError, HostValidationError } from "../effect/host-errors";
 
 export const TOOL_DISCOVERY_IDS = [
@@ -55,8 +55,3 @@ export const validateExactToolPath = (
   toolId: ToolDiscoveryId,
   executablePath: string,
 ) => port.validateToolPath(toolId, executablePath);
-
-export class ToolDiscoveryPortTag extends Context.Service<
-  ToolDiscoveryPortTag,
-  ToolDiscoveryPort
->()("@openducktor/host/ToolDiscoveryPort") {}

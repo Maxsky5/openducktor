@@ -42,6 +42,7 @@ describe("createTaskService direct merge", () => {
     const error = await Effect.runPromise(
       service
         .directMerge({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -61,7 +62,7 @@ describe("createTaskService direct merge", () => {
       _tag: "HostDependencyError",
       message: "Worktree file port is required for task_direct_merge.",
     });
-    expect(calls).toEqual([]);
+    expect(calls).toMatchObject([]);
   });
   test("rejects a repeated direct merge before Git work or task writes", async () => {
     const calls: unknown[] = [];
@@ -96,6 +97,7 @@ describe("createTaskService direct merge", () => {
     const result = await Effect.runPromise(
       Effect.result(
         service.directMerge({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -120,7 +122,7 @@ describe("createTaskService direct merge", () => {
         details: { repoPath: "/repo", taskId: "task-1" },
       },
     });
-    expect(calls).toEqual([]);
+    expect(calls).toMatchObject([]);
   });
 
   test("records a published direct merge and moves ai review to human review", async () => {
@@ -225,6 +227,7 @@ describe("createTaskService direct merge", () => {
     await expect(
       Effect.runPromise(
         service.directMerge({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -242,7 +245,7 @@ describe("createTaskService direct merge", () => {
       outcome: "completed",
       task: { id: "task-1", status: "human_review" },
     });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "readConfig" },
@@ -282,6 +285,7 @@ describe("createTaskService direct merge", () => {
           },
         },
       },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "human_review", cause: {} },
@@ -376,6 +380,7 @@ describe("createTaskService direct merge", () => {
       const result = await Effect.runPromise(
         service
           .directMerge({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             input: {
@@ -498,6 +503,7 @@ describe("createTaskService direct merge", () => {
             hooks: { postComplete: [] },
           }),
         }).directMerge({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -603,10 +609,15 @@ describe("createTaskService direct merge", () => {
     });
     await expect(
       Effect.runPromise(
-        service.completeDirectMerge({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+        service.completeDirectMerge({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/repo" },
@@ -623,6 +634,7 @@ describe("createTaskService direct merge", () => {
       },
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "closed", cause: {} },
@@ -694,13 +706,17 @@ describe("createTaskService direct merge", () => {
     const removals = () => calls.filter((call) => removeWorktreeCallSchema.safeParse(call).success);
 
     const kept = await Effect.runPromise(
-      Effect.result(service.completeDirectMerge({ ...input, removeWorktree: false })),
+      Effect.result(
+        service.completeDirectMerge({ workspaceId: "repo", ...input, removeWorktree: false }),
+      ),
     );
     expect(kept._tag).toBe("Failure");
     expect(removals()).toEqual([]);
 
     await expect(
-      Effect.runPromise(service.completeDirectMerge({ ...input, removeWorktree: true })),
+      Effect.runPromise(
+        service.completeDirectMerge({ workspaceId: "repo", ...input, removeWorktree: true }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
     expect(removals()).toEqual([
       {
@@ -761,7 +777,12 @@ describe("createTaskService direct merge", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).completeDirectMerge({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+        }).completeDirectMerge({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
       ),
     ).rejects.toThrow("Publication is required.");
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
@@ -801,7 +822,12 @@ describe("createTaskService direct merge", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).completeDirectMerge({ repoPath: "/repo", taskId: "task-1", removeWorktree: true }),
+        }).completeDirectMerge({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
       ),
     ).rejects.toThrow("Task task-1 does not have a locally applied direct merge to complete.");
   });

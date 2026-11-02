@@ -8,7 +8,6 @@ import type { AzureDevOpsGitProviderFormController } from "./use-azure-devops-gi
 type AzureAreaController = Pick<
   AzureDevOpsGitProviderFormController,
   | "providerEnabled"
-  | "connectionInput"
   | "canManageConnection"
   | "hasConnectedAccount"
   | "areaPaths"
@@ -18,7 +17,12 @@ type AzureAreaController = Pick<
   | "canLoadAreaPaths"
   | "reloadAreaPaths"
   | "areaPathsError"
->;
+> & {
+  connectionInput: Pick<
+    NonNullable<AzureDevOpsGitProviderFormController["connectionInput"]>,
+    "repoPath" | "repository"
+  > | null;
+};
 
 type AzureDevOpsAreaSettingsProps = {
   controller: AzureAreaController;

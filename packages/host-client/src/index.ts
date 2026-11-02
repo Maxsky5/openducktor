@@ -160,9 +160,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     workspaceRemove: workspaceClient.workspaceRemove.bind(workspaceClient),
     workspaceResolvePath: workspaceClient.workspaceResolvePath.bind(workspaceClient),
     workspaceReorder: workspaceClient.workspaceReorder.bind(workspaceClient),
-    workspaceUpdateRepoConfig: workspaceClient.workspaceUpdateRepoConfig.bind(workspaceClient),
-    workspaceSaveRepoSettings: workspaceClient.workspaceSaveRepoSettings.bind(workspaceClient),
-    workspaceUpdateRepoHooks: workspaceClient.workspaceUpdateRepoHooks.bind(workspaceClient),
     workspaceGetRepoConfig: workspaceClient.workspaceGetRepoConfig.bind(workspaceClient),
     workspaceReplaceAgentStudioState:
       workspaceClient.workspaceReplaceAgentStudioState.bind(workspaceClient),
@@ -176,8 +173,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceUpdateKanbanTaskCardView.bind(workspaceClient),
     workspaceUpdateSidebarSessionGrouping:
       workspaceClient.workspaceUpdateSidebarSessionGrouping.bind(workspaceClient),
-    workspaceUpdateGlobalGitConfig:
-      workspaceClient.workspaceUpdateGlobalGitConfig.bind(workspaceClient),
     workspaceDetectGithubRepository:
       workspaceClient.workspaceDetectGithubRepository.bind(workspaceClient),
     workspaceDetectAzureDevOpsRepository:

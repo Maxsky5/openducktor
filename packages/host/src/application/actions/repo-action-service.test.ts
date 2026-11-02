@@ -17,7 +17,7 @@ const action = (overrides: Partial<RepoAction> = {}): RepoAction => ({
 
 const request = {
   workingDir: "/repo",
-  context: { repoPath: "/repo", taskId: "task-1" },
+  context: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
   actionId: "checks",
 };
 
@@ -25,7 +25,7 @@ const makeService = (actions: RepoAction[]) => {
   const started: Array<Parameters<TerminalCommandService["startCommand"]>[0]> = [];
   const service = createRepoActionService({
     settings: {
-      getRepoConfigByRepoPath: () =>
+      getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
             workspaceId: "workspace-1",

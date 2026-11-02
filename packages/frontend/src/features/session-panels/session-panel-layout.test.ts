@@ -54,7 +54,7 @@ const readyTab = (terminalId: string, tabId = `tab:${terminalId}`): TerminalTab 
   const summary: TerminalSummary = {
     terminalId,
     label: terminalId,
-    context: { repoPath: "/repo", taskId: "task-1" },
+    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
     initialWorkingDir: "/repo",
     createdAt: "2026-10-09T00:00:00.000Z",
     lifecycle: "running",

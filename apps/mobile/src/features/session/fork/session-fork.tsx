@@ -137,7 +137,7 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
           {
             ...identity,
             repoPath,
-            sessionScope: { kind: "workflow", taskId, role },
+            sessionScope: { kind: "workflow", workspaceId, taskId, role },
             forkPoint: point,
           },
           {

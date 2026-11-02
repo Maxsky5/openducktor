@@ -5,7 +5,12 @@ import { requireWorkflowAgentSessionScope } from "./require-workflow-agent-sessi
 
 describe("requireWorkflowAgentSessionScope", () => {
   test("returns workflow scope through the success channel", async () => {
-    const scope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const scope = {
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build",
+    } as const;
 
     await expect(
       Effect.runPromise(requireWorkflowAgentSessionScope(scope, "resolve runtime policy")),

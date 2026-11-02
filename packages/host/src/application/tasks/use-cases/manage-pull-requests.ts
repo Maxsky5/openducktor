@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { ensureCleanTaskWorktree } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
@@ -36,9 +37,9 @@ export const createTaskPullRequestManagementUseCases = ({
           workspaceSettingsService,
         }),
       );
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const metadata = yield* taskStore.getTaskMetadata(input);
       if (metadata.pullRequest !== undefined) {
         return yield* new HostValidationError({
           field: "taskId",
@@ -52,8 +53,7 @@ export const createTaskPullRequestManagementUseCases = ({
         taskId,
         directMerge: metadata.directMerge,
       });
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = repoConfig.repoPath;
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const selectedProviderId = provider.getDescriptor().id;
@@ -64,6 +64,7 @@ export const createTaskPullRequestManagementUseCases = ({
         linkedProviderId: pullRequest.record.providerId,
       });
       yield* taskStore.setPullRequest({
+        workspaceId: input.workspaceId,
         repoPath: effectiveRepoPath,
         taskId,
         pullRequest: pullRequest.record,
@@ -73,7 +74,7 @@ export const createTaskPullRequestManagementUseCases = ({
   },
   upsertPullRequest(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId, content } = input;
+      const { taskId, content } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestUpsertDependencies({
           gitPort,
@@ -83,11 +84,13 @@ export const createTaskPullRequestManagementUseCases = ({
           workspaceSettingsService,
         }),
       );
-      const current = yield* taskStore.getTask({ repoPath, taskId });
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const current = yield* taskStore.getTask(input);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = repoConfig.repoPath;
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
+      const metadata = yield* taskStore.getTaskMetadata({
+        ...input,
+        repoPath: effectiveRepoPath,
+      });
       yield* ensureNoDirectMergeEffect({
         operation: "upsert_pull_request",
         repoPath: effectiveRepoPath,
@@ -157,7 +160,12 @@ export const createTaskPullRequestManagementUseCases = ({
         linkedProviderId: pullRequest.providerId,
       }).pipe(Effect.mapError((cause) => (isAzureDevOps ? linkFailure(cause) : cause)));
       yield* taskStore
-        .setPullRequest({ repoPath: effectiveRepoPath, taskId, pullRequest })
+        .setPullRequest({
+          workspaceId: input.workspaceId,
+          repoPath: effectiveRepoPath,
+          taskId,
+          pullRequest,
+        })
         .pipe(Effect.mapError((cause) => (isAzureDevOps ? linkFailure(cause) : cause)));
       return pullRequest;
     });
@@ -165,17 +173,21 @@ export const createTaskPullRequestManagementUseCases = ({
   unlinkPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      if (metadata.pullRequest === undefined) {
+      if (current.pullRequest === undefined) {
         return yield* new HostValidationError({
           field: "taskId",
           message: `Task ${taskId} does not have a linked pull request.`,
           details: { repoPath, taskId },
         });
       }
-      return yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest: null });
+      return yield* taskStore.setPullRequest({
+        workspaceId: input.workspaceId,
+        repoPath,
+        taskId,
+        pullRequest: null,
+      });
     });
   },
 });

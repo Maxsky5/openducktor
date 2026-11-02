@@ -212,6 +212,7 @@ function SettingsDialog({
   const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
       if (!controller.isSaving) {
+        controller.retainDraft();
         close();
       }
       return;
@@ -310,7 +311,10 @@ function SettingsDialog({
             section: navigation.section,
             repositorySection: navigation.repositorySection,
           }}
-          onCancel={close}
+          onCancel={() => {
+            controller.discardDraft();
+            close();
+          }}
           onSave={handleSave}
         />
       </DialogContent>

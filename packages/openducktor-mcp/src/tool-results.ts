@@ -165,7 +165,7 @@ export const toTaskArtifactsToolResult = (
     throw new OdtToolError({
       code: "ODT_TOOL_EXECUTION_ERROR",
       message:
-        "The artifact response reaches the 10 MiB MCP response limit. Select fewer artifacts or reduce maxBytes.",
+        "The artifact response reaches the 10 MiB MCP response limit. Select fewer artifacts. If one artifact exceeds the limit, open it in the app.",
     });
   }
   return result;
@@ -229,9 +229,8 @@ const toArtifactResult = (
 ): ArtifactResult => {
   const { dataBase64, ...metadata } = payload;
   const entry: ArtifactResult["entry"] = metadata;
-  const length = (metadata.nextByteOffset ?? metadata.totalBytes) - metadata.byteOffset;
   const { artifact } = metadata;
-  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?version=${encodeURIComponent(metadata.version)}&offset=${metadata.byteOffset}&length=${length}`;
+  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?revision=${artifact.revision}`;
   const blocks: ToolResult["content"] = [];
   const resource = {
     type: "resource" as const,
@@ -255,11 +254,7 @@ const toArtifactResult = (
       });
       blocks.push(resource);
     }
-  } else if (
-    taskAssetMediaTypeSchema.options.some((type) => type === mediaType) &&
-    metadata.byteOffset === 0 &&
-    metadata.nextByteOffset === null
-  ) {
+  } else if (taskAssetMediaTypeSchema.options.some((type) => type === mediaType)) {
     blocks.push({
       type: "image",
       mimeType: mediaType,

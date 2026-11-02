@@ -1,3 +1,4 @@
+import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
@@ -5,21 +6,21 @@ import {
   readTaskArtifactsResultSchema,
   readTaskResultSchema,
   repoConfigSchema,
-  type ArtifactContentChunk,
+  type ArtifactReadResult,
   type TaskArtifact,
   type McpTaskArtifact,
   type TaskCard,
   type SetTaskArtifactInput,
   type TaskMetadataArtifact,
 } from "@openducktor/contracts";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Result } from "effect";
 import type { JSONType } from "zod";
 import { taskRowFixture } from "../../adapters/sqlite/sqlite-task-row-test-fixtures";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { tasks } from "../../adapters/sqlite/sqlite-task-store-schema";
+import { tasks } from "../../adapters/sqlite/sqlite-host-database-schema";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
 import type { ManagedCallerResolver } from "../agent-sessions/managed-caller-resolver";
@@ -27,9 +28,12 @@ import {
   createEventPublishingTaskService,
   type EventPublishingTaskService,
 } from "../tasks/event-publishing-task-service";
-import { createTaskSyncServiceForTest } from "../tasks/sync/task-sync-service.test-support";
+import { noMergeDetection, syncWorkspace } from "../tasks/sync/task-sync-service.test-support";
 import { createTaskServiceWithMutationProgress, type TaskService } from "../tasks/task-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
+
+import { createTaskEventStream } from "../../events/task-event-stream";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 
 let harness: SqliteTaskStoreTestHarness;
 let service: EventPublishingTaskService;
@@ -37,15 +41,11 @@ let scopeCalls: string[];
 const scope = { workspaceId: "fixture", taskId: "Artifact task" };
 const content = "é\r\n";
 const file = { fileName: "notes.txt", mediaType: "text/plain" };
-const chunk = (artifact: TaskArtifact): ArtifactContentChunk => ({
+const contentResult = (artifact: TaskArtifact): ArtifactReadResult => ({
   artifact,
-  version: "version-1",
-  byteOffset: 0,
-  nextByteOffset: null,
-  totalBytes: 4,
   dataBase64: "w6kNCg==",
 });
-const taskScope = () => ({ repoPath: harness.repoPath, taskId: "task-1" });
+const taskScope = () => ({ ...harness.scope, taskId: "task-1" });
 const seedArtifact = (code: string, text: string = content, name = code) =>
   Effect.runPromise(
     service.createTaskArtifact({
@@ -58,7 +58,7 @@ const seedArtifact = (code: string, text: string = content, name = code) =>
   );
 const seedTaskState = (status: TaskCard["status"], issueType: TaskCard["issueType"] = "task") =>
   Effect.runPromise(
-    harness.contextProvider(harness.repoPath, "test.seedWorkflowState", ({ session }) =>
+    harness.contextProvider(harness.scope, "test.seedWorkflowState", ({ session }) =>
       session.execute(
         (db) => db.update(tasks).set({ status, issueType }),
         "test.seedWorkflowState",
@@ -87,11 +87,16 @@ const managedOwner = (role: string, taskId = "task-1"): RuntimeSessionOwner => (
 });
 
 beforeEach(async () => {
-  harness = await createSqliteTaskStoreHarness();
+  harness = await createSqliteTaskStoreHarness({ workspaceId: "fixture" });
   await Effect.runPromise(
-    harness.contextProvider(harness.repoPath, "test.seed", ({ session }) =>
+    harness.contextProvider(harness.scope, "test.seed", ({ session }) =>
       session.execute(
-        (db) => db.insert(tasks).values(taskRowFixture({ id: "task-1", title: "Artifact task" })),
+        (db) =>
+          db
+            .insert(tasks)
+            .values(
+              taskRowFixture({ workspaceId: "fixture", id: "task-1", title: "Artifact task" }),
+            ),
         "test.insertTask",
       ),
     ),
@@ -103,10 +108,25 @@ beforeEach(async () => {
   service = createEventPublishingTaskService({
     taskWorkflows: builtinTaskWorkflows,
     taskService: base,
-    taskSyncService: createTaskSyncServiceForTest({
+    taskSyncService: createTaskSyncService({
       taskService: base,
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-      eventBus: { publish: () => {} },
+      mergeDetection: noMergeDetection,
+      taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
+      settingsConfig: {
+        readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+      },
+      workspaceSettingsService: {
+        getWorkspaceCatalog: () =>
+          Effect.succeed({
+            catalogRevision: 0,
+            openWorkspaces: [syncWorkspace(harness.repoPath, harness.workspaceId)],
+            closedWorkspaces: [],
+            incompleteRemovals: [],
+          }),
+        listWorkspaces: () => Effect.succeed([]),
+      },
+      publicationReporter: { report: () => Effect.void },
+      onBackgroundFailure: () => Effect.void,
     }),
   });
   scopeCalls = [];
@@ -135,9 +155,8 @@ const bridgeWith = (
         scopeCalls.push(workspaceId);
         return Effect.succeed(
           repoConfigSchema.parse({
-            workspaceId: "fixture",
             workspaceName: "Fixture",
-            repoPath: harness.repoPath,
+            ...harness.scope,
           }),
         );
       },
@@ -377,11 +396,16 @@ test.each([
           ...taskScope(),
           markdown: "# Later write",
           code,
+          decide: (current: { status: string }) =>
+            Result.succeed({
+              status: code === "qaReport" ? "in_progress" : current.status,
+              workflowId: "openducktor",
+            }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
         };
         yield* harness.store.saveWorkflowArtifact(
-          code === "qaReport" ? { ...later, verdict: "rejected", status: "in_progress" } : later,
+          code === "qaReport" ? { ...later, verdict: "rejected" } : later,
         );
       });
     const bridge = bridgeWith({
@@ -688,10 +712,20 @@ test("reads a complete spec after task metadata in two calls without artifact ID
   if (!spec) throw new Error("Missing selected specification");
   expect(spec.artifact).toMatchObject({ classification: "workflow", code: "spec" });
   expect(spec.artifact).not.toHaveProperty("artifactId");
-  expect(spec.byteOffset).toBe(0);
-  expect(spec.nextByteOffset).toBeNull();
-  expect(spec.totalBytes).toBe(Buffer.byteLength(markdown));
   expect(Buffer.from(spec.dataBase64, "base64").toString("utf8")).toBe(markdown);
+});
+
+test("reads complete large free artifacts in one call", async () => {
+  const text = "x".repeat(1024 * 1024 + 1);
+  await seedArtifact("large-notes", text, "Large notes");
+  const bridge = bridgeWith();
+  const result = readTaskArtifactsResultSchema.parse(
+    await Effect.runPromise(
+      bridge.invoke("odt_read_task_artifacts", { ...scope, codes: ["large-notes"] }),
+    ),
+  );
+  expect(result.artifacts).toHaveLength(1);
+  expect(Buffer.from(result.artifacts[0]!.dataBase64, "base64").toString()).toBe(text);
 });
 
 test("overlaps mixed workflow and free reads and keeps code request order", async () => {
@@ -721,12 +755,12 @@ test("overlaps mixed workflow and free reads and keeps code request order", asyn
         if (input.artifactId === second.artifactId) {
           yield* Deferred.await(bothStarted);
           finished.push("Second");
-          return chunk(second);
+          return contentResult(second);
         }
         if (input.artifactId === first.artifactId) {
           finished.push("First");
           yield* Deferred.succeed(bothStarted, undefined);
-          return chunk(first);
+          return contentResult(first);
         }
         return yield* service.readTaskArtifact(input);
       }),
@@ -743,51 +777,15 @@ test("overlaps mixed workflow and free reads and keeps code request order", asyn
   ]);
   expect(finished).toEqual(["First", "Second"]);
   expect(calls).toEqual(
-    [second, workflow, first].map(({ artifactId, classification }) => {
+    [second, workflow, first].map(({ artifactId }) => {
       const expected: Parameters<TaskService["readTaskArtifact"]>[0] = {
         ...taskScope(),
         artifactId,
       };
-      if (classification === "free") expected.maxBytes = 16 * 1024;
       return expected;
     }),
   );
   expect(scopeCalls).toEqual(["fixture"]);
-});
-
-test("passes a continued read's byte and version controls", async () => {
-  const { artifact } = await seedArtifact("notes", content, "Notes");
-  const calls: unknown[] = [];
-  const continued: ArtifactContentChunk = { ...chunk(artifact), byteOffset: 4, dataBase64: "" };
-  const bridge = bridgeWith({
-    readTaskArtifact: (input) => {
-      calls.push(input);
-      return Effect.succeed(continued);
-    },
-  });
-  const result = readTaskArtifactsResultSchema.parse(
-    await Effect.runPromise(
-      bridge.invoke("odt_read_task_artifacts", {
-        ...scope,
-        codes: ["notes"],
-        byteOffset: 4,
-        expectedVersion: "version-1",
-        maxBytes: 100,
-      }),
-    ),
-  );
-  expect(result.artifacts).toMatchObject([
-    { artifact: { name: "Notes" }, byteOffset: 4, nextByteOffset: null, dataBase64: "" },
-  ]);
-  expect(calls).toEqual([
-    {
-      ...taskScope(),
-      artifactId: artifact.artifactId,
-      byteOffset: 4,
-      expectedVersion: "version-1",
-      maxBytes: 100,
-    },
-  ]);
 });
 
 test("propagates a selected read failure without returning a partial batch", async () => {
@@ -795,11 +793,11 @@ test("propagates a selected read failure without returning a partial batch", asy
   await seedArtifact("second", content, "Second");
   const failure = new HostOperationError({
     operation: "artifact.read",
-    message: "Artifact version changed. Read its first chunk again.",
+    message: "Artifact version changed. Read its first contentResult again.",
   });
   const bridge = bridgeWith({
     readTaskArtifact: ({ artifactId }) =>
-      artifactId === first.artifactId ? Effect.succeed(chunk(first)) : Effect.fail(failure),
+      artifactId === first.artifactId ? Effect.succeed(contentResult(first)) : Effect.fail(failure),
   });
   const error = await Effect.runPromise(
     bridge

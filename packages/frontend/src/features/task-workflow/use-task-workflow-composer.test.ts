@@ -52,17 +52,21 @@ afterEach(async () => {
 });
 
 describe("useTaskWorkflowComposer", () => {
-  test("closes an edit when its workspace changes and keeps it closed after the return", async () => {
+  test("keeps an editor bound to its first workspace when another workspace has the same task ID", async () => {
     const hook = await mount(inA);
     await hook.run((state) => state.onEdit(task.id));
     expect(hook.getLatest().composer).toMatchObject({ open: true, task });
 
     // Workspace B also has a task with the same ID.
     await hook.update(inB);
-    expect(hook.getLatest().composer).toMatchObject({ open: false, task: null });
+    expect(hook.getLatest().composer).toMatchObject({
+      open: true,
+      task,
+      destination: { workspaceId: workspaceA.workspaceId, repoPath: workspaceA.repoPath },
+    });
 
     await hook.update(inA);
-    expect(hook.getLatest().composer.open).toBe(false);
+    expect(hook.getLatest().composer.open).toBe(true);
   });
 
   test("edits a closed task outside the board list", async () => {
@@ -77,17 +81,17 @@ describe("useTaskWorkflowComposer", () => {
     });
   });
 
-  test("closes an edit when its task is removed from the workspace", async () => {
+  test("keeps the last saved task available when its query entry is removed", async () => {
     const hook = await mount(inA);
     await hook.run((state) => state.onEdit(task.id));
 
-    connection.queryClient.setQueryData(taskQueryKeys.unfilteredRepoData(workspaceA.repoPath), {
+    connection.queryClient.setQueryData(taskQueryKeys.unfilteredRepoData(workspaceA), {
       tasks: [],
     });
     await hook.update({ ...inA, tasks: [] });
     await hook.update(inA);
 
-    expect(hook.getLatest().composer.open).toBe(false);
+    expect(hook.getLatest().composer).toMatchObject({ open: true, task });
   });
 
   test("keeps a new task open with its first workspace after a workspace change", async () => {

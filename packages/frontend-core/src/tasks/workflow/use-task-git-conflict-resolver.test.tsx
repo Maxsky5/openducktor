@@ -62,7 +62,7 @@ const session = (
   toAgentSessionSummary(
     createAgentSessionFixture({
       externalSessionId,
-      sessionAssociation: { kind: "workflow", taskId, role },
+      sessionAssociation: { kind: "workflow", workspaceId: "workspace-1", taskId, role },
       runtimeKind: "opencode",
       status: "idle",
       runtimeStatusMessage: null,

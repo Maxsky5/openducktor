@@ -1,3 +1,4 @@
+import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
 import { sourceIssueReferenceSchema } from "./git-schemas";
 import { issueTypeSchema, taskPrioritySchema } from "./task-schemas";
@@ -14,7 +15,7 @@ export const sourceIssueSchema = sourceIssueReferenceSchema.extend({
 export type SourceIssue = z.infer<typeof sourceIssueSchema>;
 
 export const issueItemsListInputSchema = z.object({
-  repoPath: z.string().min(1),
+  ...workspaceRefSchema.shape,
   search: z.string().default(""),
   cursor: z.string().optional(),
 });
@@ -29,14 +30,14 @@ export const issueItemsListResultSchema = z.object({
 export type IssueItemsListResult = z.infer<typeof issueItemsListResultSchema>;
 
 export const issueItemGetInputSchema = z.object({
-  repoPath: z.string().min(1),
+  ...workspaceRefSchema.shape,
   sourceId: z.string().min(1),
 });
 export type IssueItemGetInput = z.infer<typeof issueItemGetInputSchema>;
 
 export const issueImageGetInputSchema = z.union([
   issueItemGetInputSchema.extend({ url: z.url() }),
-  z.object({ repoPath: z.string().min(1), taskId: z.string().min(1), url: z.url() }),
+  z.object({ ...workspaceRefSchema.shape, taskId: z.string().min(1), url: z.url() }),
 ]);
 export type IssueImageGetInput = z.infer<typeof issueImageGetInputSchema>;
 
@@ -47,7 +48,7 @@ export const issueImageGetResultSchema = z.object({
 export type IssueImageGetResult = z.infer<typeof issueImageGetResultSchema>;
 
 export const issueItemsImportInputSchema = z.object({
-  repoPath: z.string().min(1),
+  ...workspaceRefSchema.shape,
   items: z
     .array(
       z.object({
@@ -81,5 +82,5 @@ export const issueItemsImportResultSchema = z.object({
 });
 export type IssueItemsImportResult = z.infer<typeof issueItemsImportResultSchema>;
 
-export const azureAreaPathsInputSchema = z.object({ repoPath: z.string().min(1) });
+export const azureAreaPathsInputSchema = workspaceRefSchema;
 export const azureAreaPathsResultSchema = z.array(z.string().min(1));

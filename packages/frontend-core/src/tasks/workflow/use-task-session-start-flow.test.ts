@@ -24,7 +24,12 @@ const builderSession = (externalSessionId: string, startedAt: string): AgentSess
   createAgentSessionSummaryFixture({
     externalSessionId,
     startedAt,
-    sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "TASK-1",
+      role: "build",
+    },
     workingDirectory: `/repo/worktrees/${externalSessionId}`,
   });
 

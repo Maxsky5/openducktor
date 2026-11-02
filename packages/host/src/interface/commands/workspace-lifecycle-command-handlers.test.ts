@@ -11,6 +11,7 @@ import {
 import { createWorkspaceLifecycleCommandHandlers } from "./workspace-lifecycle-command-handlers";
 
 const catalog: WorkspaceCatalog = {
+  catalogRevision: 0,
   openWorkspaces: [],
   closedWorkspaces: [],
   incompleteRemovals: [],

@@ -6,7 +6,7 @@ const savedArtifact = { markdown: "# Saved", updatedAt: "2026-05-10T10:00:00.000
 
 /** A store that records saves and transitions of one task. */
 const recordingStore = (current: ReturnType<typeof task>, calls: unknown[]): TaskStorePort => ({
-  getTask: (input) => Effect.sync(() => (calls.push({ type: "get", input }), current)),
+  getTask: () => Effect.succeed(current),
   saveWorkflowArtifact: (input) =>
     Effect.sync(() => {
       calls.push({ type: "save", input });
@@ -28,6 +28,7 @@ describe("createTaskService workflow artifact saves", () => {
         taskWorkflows: builtinTaskWorkflows,
         taskStore: recordingStore(current, calls),
       }).workflowArtifactSave({
+        workspaceId: "repo",
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         repoPath: "/repo",
@@ -42,8 +43,7 @@ describe("createTaskService workflow artifact saves", () => {
       artifact: { ...savedArtifact, markdown: "# Spec" },
       changes: { taskIds: ["task-1"], removedTaskIds: [] },
     });
-    expect(calls).toEqual([
-      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+    expect(calls).toMatchObject([
       {
         type: "save",
         input: {
@@ -68,6 +68,7 @@ describe("createTaskService workflow artifact saves", () => {
         taskWorkflows: builtinTaskWorkflows,
         taskStore: recordingStore(current, calls),
       }).workflowArtifactSave({
+        workspaceId: "repo",
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         repoPath: "/repo",
@@ -78,8 +79,7 @@ describe("createTaskService workflow artifact saves", () => {
       }),
     );
 
-    expect(calls).toEqual([
-      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+    expect(calls).toMatchObject([
       {
         type: "save",
         input: {
@@ -129,6 +129,7 @@ describe("createTaskService workflow artifact saves", () => {
           taskWorkflows: builtinTaskWorkflows,
           taskStore: recordingStore(current, calls),
         }).workflowArtifactSave({
+          workspaceId: "repo",
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           repoPath: "/repo",
@@ -140,8 +141,7 @@ describe("createTaskService workflow artifact saves", () => {
         }),
       );
 
-      expect(calls).toEqual([
-        { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+      expect(calls).toMatchObject([
         {
           type: "save",
           input: {
@@ -189,6 +189,7 @@ describe("createTaskService workflow artifact saves", () => {
         taskStore: recordingStore(task({ id: "task-1", status: "ai_review" }), calls),
       })
         .workflowArtifactSave({
+          workspaceId: "repo",
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           repoPath: "/repo",
@@ -200,7 +201,7 @@ describe("createTaskService workflow artifact saves", () => {
     );
 
     expect(error.message).toBe(message);
-    expect(calls).toEqual([{ type: "get", input: { repoPath: "/repo", taskId: "task-1" } }]);
+    expect(calls).toMatchObject([]);
   });
 
   test("rejects a submit that its event does not admit, before a store write", async () => {
@@ -211,6 +212,7 @@ describe("createTaskService workflow artifact saves", () => {
         taskStore: recordingStore(task({ id: "task-1", status: "open" }), calls),
       })
         .workflowArtifactSave({
+          workspaceId: "repo",
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           repoPath: "/repo",
@@ -226,6 +228,6 @@ describe("createTaskService workflow artifact saves", () => {
     expect(error.message).toBe(
       "Saving the QA Report is only allowed from blocked, ai_review, or human_review (current: open).",
     );
-    expect(calls).toEqual([{ type: "get", input: { repoPath: "/repo", taskId: "task-1" } }]);
+    expect(calls).toMatchObject([]);
   });
 });

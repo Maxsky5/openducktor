@@ -103,13 +103,9 @@ describe("task artifact results", () => {
     mediaType: "text/plain",
     byteSize: 0,
   };
-  const chunk = (bytes: Buffer, mediaType = "text/plain") => ({
+  const contentResult = (bytes: Buffer, mediaType = "text/plain") => ({
     artifact: { ...artifact, mediaType, byteSize: bytes.length },
-    version: "version-1",
     dataBase64: bytes.toString("base64"),
-    byteOffset: 0,
-    nextByteOffset: null,
-    totalBytes: bytes.length,
   });
 
   test.each([
@@ -118,16 +114,12 @@ describe("task artifact results", () => {
     { mediaType: "application/json", text: "é😀\u0000" },
   ])("preserves exact $mediaType text $text in one JSON result", ({ mediaType, text }) => {
     const result = toTaskArtifactsToolResult({
-      artifacts: [chunk(Buffer.from(text), mediaType)],
+      artifacts: [contentResult(Buffer.from(text), mediaType)],
     });
     expect(result.content).toHaveLength(1);
     expect(result.structuredContent?.artifacts).toEqual([
       {
         artifact: { ...artifact, mediaType, byteSize: Buffer.byteLength(text) },
-        version: "version-1",
-        byteOffset: 0,
-        nextByteOffset: null,
-        totalBytes: Buffer.byteLength(text),
         content: text,
       },
     ]);
@@ -137,7 +129,7 @@ describe("task artifact results", () => {
 
   test("returns exact SVG source and original bytes without a raster preview", () => {
     const text = '\ufeff<svg xmlns="http://www.w3.org/2000/svg">\r\n<text>é😀</text>\r\n</svg>\n';
-    const original = chunk(Buffer.from(text), "image/svg+xml");
+    const original = contentResult(Buffer.from(text), "image/svg+xml");
     const result = toTaskArtifactsToolResult({ artifacts: [original] });
     const { dataBase64, ...metadata } = original;
     expect(result.structuredContent?.artifacts).toEqual([{ ...metadata, content: text }]);
@@ -145,7 +137,7 @@ describe("task artifact results", () => {
       {
         type: "resource",
         resource: {
-          uri: expect.stringContaining("version=version-1&offset=0&length="),
+          uri: expect.stringContaining("revision=1"),
           mimeType: "image/svg+xml",
           blob: dataBase64,
         },
@@ -157,7 +149,7 @@ describe("task artifact results", () => {
     "returns complete %s bytes as one native image without codec work",
     (mediaType) => {
       // Reads must return these bytes even though an image decoder would reject them.
-      const original = chunk(Buffer.from([0, 1, 0xfe, 0xff]), mediaType);
+      const original = contentResult(Buffer.from([0, 1, 0xfe, 0xff]), mediaType);
       const result = toTaskArtifactsToolResult({ artifacts: [original] });
       expect(result.content.slice(1)).toEqual([
         { type: "image", mimeType: mediaType, data: original.dataBase64 },
@@ -166,34 +158,12 @@ describe("task artifact results", () => {
     },
   );
 
-  test.each([
-    { byteOffset: 0, nextByteOffset: 4, totalBytes: 8 },
-    { byteOffset: 4, nextByteOffset: null, totalBytes: 8 },
-  ])("returns partial raster reads as bytes at offset $byteOffset", (range) => {
-    const original = {
-      ...chunk(Buffer.from([0, 1, 0xfe, 0xff]), "image/png"),
-      ...range,
-    };
-    original.artifact.byteSize = range.totalBytes;
-    const result = toTaskArtifactsToolResult({ artifacts: [original] });
-    expect(result.content.slice(1)).toEqual([
-      {
-        type: "resource",
-        resource: {
-          uri: expect.stringContaining(`offset=${range.byteOffset}&length=4`),
-          mimeType: "image/png",
-          blob: original.dataBase64,
-        },
-      },
-    ]);
-  });
-
-  test("returns named spec and plan text in the selected order with chunk metadata", () => {
+  test("returns named spec and plan text in the selected order with complete content", () => {
     const artifacts = [
       { code: "plan" as const, name: "Implementation plan", text: "# Plan\r\n1. Build\r\n" },
       { code: "spec" as const, name: "Requirements", text: "# Spec\n\nShip é😀.\n" },
     ].map(({ code, name, text }) => ({
-      ...chunk(Buffer.from(text), "text/markdown"),
+      ...contentResult(Buffer.from(text), "text/markdown"),
       artifact: {
         code,
         name,
@@ -203,7 +173,6 @@ describe("task artifact results", () => {
         updatedAt: null,
         mediaType: "text/markdown" as const,
       },
-      version: `version-${code}`,
     }));
     const result = toTaskArtifactsToolResult({ artifacts });
     expect(result.content).toHaveLength(1);
@@ -211,18 +180,10 @@ describe("task artifact results", () => {
       artifacts: [
         {
           artifact: artifacts[0]?.artifact,
-          version: "version-plan",
-          byteOffset: 0,
-          nextByteOffset: null,
-          totalBytes: Buffer.byteLength("# Plan\r\n1. Build\r\n"),
           content: "# Plan\r\n1. Build\r\n",
         },
         {
           artifact: artifacts[1]?.artifact,
-          version: "version-spec",
-          byteOffset: 0,
-          nextByteOffset: null,
-          totalBytes: Buffer.byteLength("# Spec\n\nShip é😀.\n"),
           content: "# Spec\n\nShip é😀.\n",
         },
       ],
@@ -234,7 +195,7 @@ describe("task artifact results", () => {
     "returns invalid %s UTF-8 bytes with a decoding failure",
     (mediaType) => {
       const result = toTaskArtifactsToolResult({
-        artifacts: [chunk(Buffer.from([0xef, 0xbb, 0xbf, 0xc3, 0x28]), mediaType)],
+        artifacts: [contentResult(Buffer.from([0xef, 0xbb, 0xbf, 0xc3, 0x28]), mediaType)],
       });
       expect(result.content[1]).toMatchObject({
         type: "text",
@@ -245,23 +206,19 @@ describe("task artifact results", () => {
         resource: {
           blob: "77u/wyg=",
           mimeType: mediaType,
-          uri: expect.stringContaining("version=version-1&offset=0&length=5"),
+          uri: expect.stringContaining("revision=1"),
         },
       });
       expect(result.structuredContent?.artifacts).toEqual([
         {
           artifact: { ...artifact, mediaType, byteSize: 5 },
-          version: "version-1",
-          byteOffset: 0,
-          nextByteOffset: null,
-          totalBytes: 5,
         },
       ]);
     },
   );
 
   test("blob resource URIs use stable codes and omit display names", () => {
-    const original = chunk(Buffer.from([0xff]));
+    const original = contentResult(Buffer.from([0xff]));
     const result = toTaskArtifactsToolResult({
       artifacts: [
         {
@@ -283,7 +240,7 @@ describe("task artifact results", () => {
       {
         type: "resource",
         resource: {
-          uri: "odt-artifact:///tasks/task-1/artifacts/workflow/spec?version=version-1&offset=0&length=1",
+          uri: "odt-artifact:///tasks/task-1/artifacts/workflow/spec?revision=1",
           mimeType: "text/markdown",
           blob: "/w==",
         },
@@ -291,7 +248,7 @@ describe("task artifact results", () => {
       {
         type: "resource",
         resource: {
-          uri: "odt-artifact:///tasks/task-1/artifacts/free/output?version=version-1&offset=0&length=1",
+          uri: "odt-artifact:///tasks/task-1/artifacts/free/output?revision=1",
           mimeType: "text/plain",
           blob: "/w==",
         },
@@ -300,13 +257,13 @@ describe("task artifact results", () => {
   });
 
   test("bounds the full JSON-RPC response for escaped text and request IDs", () => {
-    const payload = chunk(Buffer.alloc(512 * 1024));
+    const payload = contentResult(Buffer.alloc(512 * 1024));
     const result = toTaskArtifactsToolResult({ artifacts: [payload] }, "request-1");
     expect(
       Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", id: "request-1", result })) + 1,
     ).toBeLessThan(10 * 1024 * 1024);
     expect(() =>
-      toTaskArtifactsToolResult({ artifacts: [chunk(Buffer.alloc(1024 * 1024))] }),
+      toTaskArtifactsToolResult({ artifacts: [contentResult(Buffer.alloc(1024 * 1024))] }),
     ).toThrow("10 MiB MCP response limit");
     expect(() =>
       toTaskArtifactsToolResult({ artifacts: [payload] }, "x".repeat(4 * 1024 * 1024)),
@@ -314,13 +271,13 @@ describe("task artifact results", () => {
   });
 
   test("rejects an image batch that exceeds the response limit", () => {
-    const original = chunk(Buffer.alloc(1024 * 1024, 0xff), "image/png");
+    const original = contentResult(Buffer.alloc(1024 * 1024, 0xff), "image/png");
     const result = toTaskArtifactsToolResult({ artifacts: [original] });
     expect(result.content.slice(1)).toEqual([
       { type: "image", mimeType: "image/png", data: original.dataBase64 },
     ]);
     expect(() =>
       toTaskArtifactsToolResult({ artifacts: Array.from({ length: 8 }, () => original) }),
-    ).toThrow("Select fewer artifacts or reduce maxBytes");
+    ).toThrow("Select fewer artifacts");
   });
 });

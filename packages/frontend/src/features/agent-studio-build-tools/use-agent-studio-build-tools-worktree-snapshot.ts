@@ -30,6 +30,7 @@ import {
 } from "./use-agent-studio-build-tools-bootstrap";
 
 type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
+  workspaceId: string | null;
   workspaceRepoPath: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   selectedView: BuildToolsSelectedView;
@@ -67,6 +68,7 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
 };
 
 export function useAgentStudioBuildToolsWorktreeSnapshot({
+  workspaceId,
   workspaceRepoPath,
   activeBranch,
   selectedView,
@@ -93,6 +95,7 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     taskWorktreeVersion,
   } = taskGitContext(workspaceRepoPath, activeBranch, selectedView, buildToolsBootstrap);
   const panel = useTaskGitPanel({
+    workspaceId,
     repoPath,
     taskId,
     contextMode: gitPanelContextMode,

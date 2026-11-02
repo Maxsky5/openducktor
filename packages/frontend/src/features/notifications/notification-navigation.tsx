@@ -41,7 +41,11 @@ export function NotificationNavigationRegistrar(): null {
       let beforeNavigate: ((selectWorkspace: () => Promise<void>) => Promise<boolean>) | undefined;
       // Session content can hold unsaved file edits that a new target would replace.
       if (target.type !== "notification_settings" && location.pathname === SESSIONS_PATH) {
-        const targetWorkspace = workspaces.find((entry) => entry.repoPath === target.repoPath);
+        const targetWorkspace = workspaces.find(
+          (entry) =>
+            entry.repoPath === target.repoPath &&
+            (target.workspaceId === undefined || entry.workspaceId === target.workspaceId),
+        );
         const visibleKind = parseSessionsPageKind(
           new URLSearchParams(location.search).get(SESSIONS_QUERY_KEYS.kind),
         );
@@ -76,12 +80,12 @@ export function NotificationNavigationRegistrar(): null {
         activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
         workspaces,
         selectWorkspace,
-        loadTasks: async (repoPath) => {
-          const taskOptions = unfilteredRepoTaskDataQueryOptions(repoPath);
+        loadTasks: async (workspace) => {
+          const taskOptions = unfilteredRepoTaskDataQueryOptions(workspace);
           return (await queryClient.fetchQuery({ ...taskOptions, staleTime: 0 })).tasks;
         },
-        loadTaskSessions: (repoPath, taskId) =>
-          loadAgentSessionListFromQuery(queryClient, repoPath, taskId, { forceFresh: true }),
+        loadTaskSessions: (workspace, taskId) =>
+          loadAgentSessionListFromQuery(queryClient, workspace, taskId, { forceFresh: true }),
         loadWorkspaceSessions: (workspaceId) =>
           queryClient.fetchQuery(workspaceSessionListQueryOptions(workspaceId)),
         navigate,

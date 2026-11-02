@@ -215,12 +215,7 @@ export function WorkspaceSidebar({
       const href = buildSessionNavigationHref(target);
       guardTransition(() => {
         if (target.kind !== "workspace_session") {
-          void prefetchTaskArtifacts(
-            queryClient,
-            entry.workspace.repoPath,
-            target.taskId,
-            target.role,
-          );
+          void prefetchTaskArtifacts(queryClient, entry.workspace, target.taskId, target.role);
         }
         // The Sessions page opens the workspace that the address names.
         void navigate(href);

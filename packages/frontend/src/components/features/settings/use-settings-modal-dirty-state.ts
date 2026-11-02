@@ -1,5 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
-import { useCallback, useState } from "react";
+import { type JsonValue, jsonValuesEqual, type SettingsSnapshot } from "@openducktor/contracts";
 
 export type DirtySections = {
   customAgentRoles: boolean;
@@ -33,43 +32,39 @@ export const EMPTY_DIRTY_SECTIONS: DirtySections = {
 
 type UseSettingsModalDirtyStateArgs = {
   open: boolean;
-  loadedSnapshot: SettingsSnapshot | null;
+  baseline: SettingsSnapshot | null;
+  draft: SettingsSnapshot | null;
 };
 
-type SettingsModalDirtyState = {
-  dirtySections: DirtySections;
-  markDirty: (section: keyof DirtySections) => void;
-};
-
+/** Dirty sections follow field values, including the baseline of a partial save. */
 export const useSettingsModalDirtyState = ({
   open,
-  loadedSnapshot,
-}: UseSettingsModalDirtyStateArgs): SettingsModalDirtyState => {
-  const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
-  const [resetInputs, setResetInputs] = useState({ loadedSnapshot, open });
-
-  const markDirty = useCallback((section: keyof DirtySections): void => {
-    setDirtySections((current) => {
-      if (current[section]) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [section]: true,
-      };
-    });
-  }, []);
-
-  if (resetInputs.open !== open || resetInputs.loadedSnapshot !== loadedSnapshot) {
-    setResetInputs({ loadedSnapshot, open });
-    if (!open || loadedSnapshot) {
-      setDirtySections(EMPTY_DIRTY_SECTIONS);
-    }
-  }
-
-  return {
-    dirtySections,
-    markDirty,
-  };
+  baseline,
+  draft,
+}: UseSettingsModalDirtyStateArgs) => {
+  const dirtySections: DirtySections =
+    !open || !baseline || !draft
+      ? EMPTY_DIRTY_SECTIONS
+      : {
+          customAgentRoles: different(baseline.customAgentRoles, draft.customAgentRoles),
+          general: different(baseline.general, draft.general),
+          appearance:
+            different(baseline.appearance, draft.appearance) ||
+            different(baseline.system, draft.system),
+          chat: different(baseline.chat, draft.chat),
+          notifications: different(baseline.notifications, draft.notifications),
+          reusablePrompts: different(baseline.reusablePrompts, draft.reusablePrompts),
+          globalGit: different(baseline.git, draft.git),
+          agentRuntimes: different(baseline.agentRuntimes, draft.agentRuntimes),
+          kanban: different(baseline.kanban, draft.kanban),
+          autopilot: different(baseline.autopilot, draft.autopilot),
+          globalPromptOverrides: different(
+            baseline.globalPromptOverrides,
+            draft.globalPromptOverrides,
+          ),
+          repoSettings: different(baseline.workspaces, draft.workspaces),
+        };
+  return { dirtySections };
 };
+
+const different = (left: JsonValue, right: JsonValue): boolean => !jsonValuesEqual(left, right);

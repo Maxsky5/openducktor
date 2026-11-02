@@ -113,8 +113,8 @@ export function useTaskApprovalImpact({
   task: Pick<TaskCard, "id" | "title">;
   enabled: boolean;
 }): TaskApprovalImpact {
-  const { repoPath, mergeCandidate, branchOid, impact } = useTaskWorktreeReads(task.id, enabled);
-  const mergeStatusQuery = useQuery(workspaceTaskMergeStatusQueryOptions(repoPath));
+  const { scope, mergeCandidate, branchOid, impact } = useTaskWorktreeReads(task.id, enabled);
+  const mergeStatusQuery = useQuery(workspaceTaskMergeStatusQueryOptions(scope));
   const stop = useTaskStopImpact({ taskIds: [task.id], operation: "close", enabled });
   const stopError = stop.error === null ? null : stopImpactReadErrorMessage(stop.error);
   const mergeStatusView = mergeStatusViewOf(
@@ -191,8 +191,10 @@ export const useTaskCloseChoice = (
 
 const useTaskWorktreeReads = (taskId: string, enabled: boolean) => {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const repoPath = activeWorkspace?.repoPath ?? null;
-  const target = enabled && repoPath !== null ? { repoPath, taskId } : null;
+  const scope = activeWorkspace
+    ? { workspaceId: activeWorkspace.workspaceId, repoPath: activeWorkspace.repoPath }
+    : null;
+  const target = enabled && scope !== null ? { ...scope, taskId } : null;
   // A closing confirmation keeps the data that it shows, so its exit shows no change. A new
   // opening reads again, and the old data counts as no data until the new read ends.
   const cleanupQuery = useQuery({
@@ -201,7 +203,9 @@ const useTaskWorktreeReads = (taskId: string, enabled: boolean) => {
   });
   const terminalQuery = useQuery({
     ...terminalListByFilterQueryOptions({
-      filter: target ? { kind: "task", repoPath: target.repoPath, taskId } : null,
+      filter: target
+        ? { kind: "task", workspaceId: target.workspaceId, repoPath: target.repoPath, taskId }
+        : null,
     }),
     placeholderData: keepPreviousData,
   });
@@ -216,7 +220,7 @@ const useTaskWorktreeReads = (taskId: string, enabled: boolean) => {
     },
   });
   return {
-    repoPath,
+    scope,
     mergeCandidate: cleanup?.mergeCandidate === true,
     branchOid: cleanup?.branchOid ?? null,
     impact,

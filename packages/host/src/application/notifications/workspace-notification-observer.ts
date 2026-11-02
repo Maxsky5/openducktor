@@ -124,7 +124,16 @@ export const createWorkspaceNotificationObserver = ({
     ): Effect.Effect<void, HostOperationError> =>
       Effect.suspend(() => {
         if (!state.active) return Effect.void;
-        return select(addWorkspaceSessionTitle(occurrence));
+        return select(
+          addWorkspaceSessionTitle({
+            ...occurrence,
+            workspaceId: state.record.workspaceId,
+            navigationTarget:
+              occurrence.navigationTarget.type === "notification_settings"
+                ? occurrence.navigationTarget
+                : { ...occurrence.navigationTarget, workspaceId: state.record.workspaceId },
+          }),
+        );
       });
     const publish = (occurrences: NotificationOccurrence[]) =>
       Effect.forEach(occurrences, publishOccurrence, { discard: true });
@@ -156,6 +165,7 @@ export const createWorkspaceNotificationObserver = ({
       Effect.gen(function* () {
         if (taskIds.length === 0) return;
         const records = yield* tasks.agentSessionsListForTasks({
+          workspaceId: state.record.workspaceId,
           repoPath: state.record.repoPath,
           taskIds,
         });
@@ -171,7 +181,12 @@ export const createWorkspaceNotificationObserver = ({
             retained.add(key);
             state.taskOwners.set(key, {
               taskId,
-              scope: { kind: "workflow", taskId, role: session.role },
+              scope: {
+                kind: "workflow",
+                workspaceId: state.record.workspaceId,
+                taskId,
+                role: session.role,
+              },
             });
           }
         }
@@ -196,6 +211,11 @@ export const createWorkspaceNotificationObserver = ({
           return;
         }
         const event = input.event;
+        if (
+          event.workspaceId !== state.record.workspaceId ||
+          event.repoPath !== state.record.repoPath
+        )
+          return;
         if (event.kind === "external_task_created") {
           state.tasks.set(event.taskId, event.taskSnapshot);
           yield* refreshTaskOwners([event.taskId]);
@@ -228,7 +248,10 @@ export const createWorkspaceNotificationObserver = ({
       );
     const initialize = () =>
       Effect.gen(function* () {
-        const baseline = yield* tasks.listTasks({ repoPath: state.record.repoPath });
+        const baseline = yield* tasks.listTasks({
+          workspaceId: state.record.workspaceId,
+          repoPath: state.record.repoPath,
+        });
         if (!state.active) return;
         for (const task of baseline) state.tasks.set(task.id, task);
         yield* refreshTaskOwners(baseline.map(({ id }) => id));

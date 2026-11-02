@@ -25,10 +25,20 @@ describe("classifyDiagnosticsQueryError", () => {
 describe("taskStoreCheckQueryOptionsOrSkip", () => {
   test("gives a read without a repository the reserved skipped key", () => {
     const skipped = taskStoreCheckQueryOptionsOrSkip(null);
-    const live = taskStoreCheckQueryOptionsOrSkip("/repo");
+    const live = taskStoreCheckQueryOptionsOrSkip({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+    });
 
-    expect(Array.from(skipped.queryKey)).toEqual(["checks", "task-store", "skipped"]);
+    expect(Array.from(skipped.queryKey)).toEqual(["checks", "skipped", "task-store"]);
     expect(skipped.queryFn).toBe(skipToken);
-    expect(Array.from(live.queryKey)).toEqual(["checks", "task-store", "/repo"]);
+    expect(Array.from(live.queryKey)).toEqual([
+      "checks",
+      "task-store",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+    ]);
+    expect(live.queryKey).not.toEqual(
+      taskStoreCheckQueryOptionsOrSkip({ workspaceId: "workspace-2", repoPath: "/repo" }).queryKey,
+    );
   });
 });

@@ -179,8 +179,8 @@ const makeService = ({
   const taskReader: Pick<TaskReader, "getTask"> = {
     getTask: () => Effect.succeed(makeTask(pullRequest)),
   };
-  const workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath"> = {
-    getRepoConfigByRepoPath: () => Effect.succeed(makeRepoConfig(configuredProviderId)),
+  const workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig"> = {
+    getRepoConfig: () => Effect.succeed(makeRepoConfig(configuredProviderId)),
   };
   return createPullRequestReviewService({
     resolver: Effect.runSync(createGitProviderResolver(providers)),
@@ -203,7 +203,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual(makeLoadedContext("gitlab"));
@@ -220,7 +220,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual({
@@ -240,7 +240,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual({
@@ -264,7 +264,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual({
@@ -284,7 +284,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual({
@@ -304,7 +304,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual({
@@ -338,7 +338,7 @@ describe("createPullRequestReviewService", () => {
     });
 
     const context = await Effect.runPromise(
-      service.getContext({ repoPath: "/repo", taskId: "task-1" }),
+      service.getContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(context).toEqual({

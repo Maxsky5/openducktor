@@ -63,7 +63,12 @@ describe("createContinueInterruptedTurn", () => {
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
   });
 

@@ -1,3 +1,4 @@
+import { diffSettingsSnapshot } from "./settings-snapshot-edits";
 import { describe, expect, test } from "bun:test";
 import type { JSONType } from "zod";
 import { workspaceRecordSchema } from "./git-schemas";
@@ -58,23 +59,46 @@ const expectedDefaultChatSettings = {
 } as const;
 
 describe("config-schemas", () => {
-  test("settings transport carries roles and distinguishes unchanged roles from deletion", () => {
+  test("settings edits distinguish role creation, updates, removal, and unchanged roles", () => {
     const role = { id: "review", name: "Reviewer", systemPrompt: "Review code." };
-    const snapshot = settingsSnapshotSchema.parse({ theme: "light", customAgentRoles: [role] });
-    expect(snapshot.customAgentRoles).toEqual([role]);
-    expect(settingsSnapshotSaveInputSchema.parse(snapshot).customAgentRoles).toEqual([role]);
-    const { customAgentRoles, ...missingRoles } = snapshot;
-    expect(customAgentRoles).toEqual([role]);
-    expect(settingsSnapshotSaveInputSchema.parse(missingRoles).customAgentRoles).toBeUndefined();
+    expect(settingsSnapshotSaveInputSchema.parse({}).customAgentRoles).toBeUndefined();
     expect(
-      settingsSnapshotSaveInputSchema.parse({ ...snapshot, customAgentRoles: [] }).customAgentRoles,
-    ).toEqual([]);
+      settingsSnapshotSaveInputSchema.parse({
+        customAgentRoles: {
+          create: [role],
+          update: { existing: { name: "New name" } },
+          remove: ["old"],
+        },
+      }).customAgentRoles,
+    ).toEqual({ create: [role], update: { existing: { name: "New name" } }, remove: ["old"] });
     expect(
       settingsSnapshotSaveInputSchema.safeParse({
-        ...snapshot,
-        customAgentRoles: [{ ...role, name: " " }],
+        customAgentRoles: { create: [{ ...role, name: " " }] },
       }).success,
     ).toBe(false);
+  });
+
+  test("encodes only edited leaves and retains explicit clear intent", () => {
+    const before = settingsSnapshotSchema.parse({
+      theme: "light",
+      system: { preferredOpenInToolId: "zed" },
+      workspaces: {
+        repo: { ...baseRepoConfigInput, defaultTargetBranch: { remote: "origin", branch: "main" } },
+      },
+    });
+    const after = structuredClone(before);
+    after.system = {};
+    after.workspaces.repo!.defaultTargetBranch = { branch: "main" };
+    after.chat.showThinkingMessages = true;
+    expect(diffSettingsSnapshot(before, after)).toEqual({
+      global: {
+        system: { preferredOpenInToolId: { type: "clear" } },
+        chat: { showThinkingMessages: true },
+      },
+      workspaces: {
+        repo: { expectedRepoPath: "/repo", defaultTargetBranch: { remote: { type: "clear" } } },
+      },
+    });
   });
 
   test("uses version 4 runtime paths and retains the version 2 schema", () => {
@@ -100,7 +124,8 @@ describe("config-schemas", () => {
 
   test("requires an executable path in current runtime settings", () => {
     expect(
-      settingsSnapshotSaveInputSchema.safeParse({
+      settingsSnapshotSchema.safeParse({
+        theme: "light",
         git: { defaultMergeMethod: "merge_commit" },
         general: { openAgentStudioTabOnBackgroundSessionStart: true },
         appearance: { horizontalScrollbarVisibility: "system" },
@@ -119,27 +144,21 @@ describe("config-schemas", () => {
     ).toBe(false);
   });
 
-  test("limits bulk settings saves to explicitly owned fields", () => {
-    expect(settingsSnapshotSaveInputSchema.keyof().options).toEqual([
-      "system",
-      "customAgentRoles",
-      "git",
-      "general",
-      "appearance",
-      "chat",
-      "reusablePrompts",
-      "kanban",
-      "autopilot",
-      "notifications",
-      "agentRuntimes",
-      "agentModelFavorites",
-      "workspaces",
-      "globalPromptOverrides",
-    ]);
-    expect(settingsSnapshotSaveInputSchema.safeParse({}).success).toBe(false);
+  test("accepts sparse edits without filling omitted fields and rejects snapshot replacements", () => {
+    expect(
+      settingsSnapshotSaveInputSchema.parse({ global: { git: { defaultMergeMethod: "squash" } } }),
+    ).toEqual({ global: { git: { defaultMergeMethod: "squash" } } });
+    expect(settingsSnapshotSaveInputSchema.parse({})).toEqual({});
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse(settingsSnapshotSchema.parse({ theme: "light" }))
+        .success,
+    ).toBe(false);
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({ global: { agentModelFavorites: [] } }).success,
+    ).toBe(false);
     expect(
       settingsSnapshotSaveInputSchema.safeParse({
-        git: { defaultMergeMethod: "merge_commit" },
+        workspaces: { repo: { branchPrefix: "changed" } },
       }).success,
     ).toBe(false);
   });
@@ -1122,23 +1141,9 @@ describe("config-schemas", () => {
       },
     });
 
-    const saveInput = settingsSnapshotSaveInputSchema.parse({
-      system: snapshot.system,
-      git: snapshot.git,
-      general: snapshot.general,
-      appearance: snapshot.appearance,
-      chat: snapshot.chat,
-      reusablePrompts: snapshot.reusablePrompts,
-      kanban: snapshot.kanban,
-      autopilot: snapshot.autopilot,
-      notifications: snapshot.notifications,
-      agentRuntimes: snapshot.agentRuntimes,
-      agentModelFavorites: snapshot.agentModelFavorites,
-      workspaces: snapshot.workspaces,
-      globalPromptOverrides: snapshot.globalPromptOverrides,
-    });
+    const saveInput = settingsSnapshotSaveInputSchema.parse({ autopilot: snapshot.autopilot });
 
-    expect(saveInput.autopilot.alwaysStartQaReviewsFresh).toBe(true);
+    expect(saveInput.autopilot?.alwaysStartQaReviewsFresh).toBe(true);
     expect(autopilotSettingsSchema.parse({ rules: [] }).alwaysStartQaReviewsFresh).toBe(false);
     expect(
       autopilotSettingsSchema.parse({ alwaysStartQaReviewsFresh: false, rules: [] })
@@ -1177,10 +1182,12 @@ describe("config-schemas", () => {
       autopilot: {
         rules: [
           {
+            workflowId: "openducktor",
             eventId: "taskProgressedToHumanReview",
             actionIds: ["startGeneratePullRequest", "startGeneratePullRequest"],
           },
           {
+            workflowId: "openducktor",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startPlanner", "startPlanner"],
           },
@@ -1189,8 +1196,16 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.autopilot.rules).toEqual([
-      { eventId: "taskProgressedToHumanReview", actionIds: ["startGeneratePullRequest"] },
-      { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
+      {
+        workflowId: "openducktor",
+        eventId: "taskProgressedToHumanReview",
+        actionIds: ["startGeneratePullRequest"],
+      },
+      {
+        workflowId: "openducktor",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: ["startPlanner"],
+      },
     ]);
   });
 
@@ -1203,10 +1218,12 @@ describe("config-schemas", () => {
       autopilot: {
         rules: [
           {
+            workflowId: "openducktor",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startPlanner"],
           },
           {
+            workflowId: "openducktor",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startBuilder", "startPlanner"],
           },
@@ -1215,6 +1232,7 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.autopilot.rules[0]).toEqual({
+      workflowId: "openducktor",
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startPlanner", "startBuilder"],
     });

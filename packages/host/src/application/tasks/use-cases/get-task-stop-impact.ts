@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import {
   type AgentSessionRecord,
   type RepoConfig,
@@ -137,14 +138,20 @@ export const createTaskStopImpactUseCase = ({
       const dependencies = yield* requireDependencies(() =>
         requireTaskStopImpactDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
-      const repoConfig = yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(
-        input.repoPath,
-      );
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const targets: StopImpactTarget[] = [];
       for (const taskId of new Set(input.taskIds)) {
-        const task = yield* taskStore.getTask({ repoPath: input.repoPath, taskId });
-        const metadata = yield* taskStore.getTaskMetadata({ repoPath: input.repoPath, taskId });
+        const task = yield* taskStore.getTask({
+          workspaceId: input.workspaceId,
+          repoPath: input.repoPath,
+          taskId,
+        });
+        const metadata = yield* taskStore.getTaskMetadata({
+          workspaceId: input.workspaceId,
+          repoPath: input.repoPath,
+          taskId,
+        });
         const workflow = taskWorkflows.forTask(task);
         targets.push({ task, taskId, sessions: metadata.agentSessions, workflow });
       }

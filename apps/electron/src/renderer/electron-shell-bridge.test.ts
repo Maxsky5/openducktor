@@ -30,6 +30,7 @@ const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
   eventId: `event-${sequence}`,
   kind: "external_task_created",
   boardChanges: null,
+  workspaceId: "repo",
   repoPath: "/repo",
   taskId: `task-${sequence}`,
   taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },

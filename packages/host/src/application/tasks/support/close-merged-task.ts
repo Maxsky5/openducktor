@@ -15,14 +15,14 @@ import { completeTaskPublication } from "./complete-task-publication";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import { cleanupConfirmedMergeClose } from "./task-close-cleanup";
 import { enrichTask } from "./task-workflow-helpers";
-import { decisionTransition, type AdmittedTaskEvent } from "./task-workflow-events";
+import { decideEffectTransition, type AdmittedTaskEvent } from "./task-workflow-events";
 
 /** Callers hold the task lifecycle guard and validate closure before entering this operation. */
 export const closeMergedTask = (
   services: ReturnType<typeof requireMergedTaskCleanupDependencies> &
     Pick<
       TaskServiceUseCaseInput,
-      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator"
+      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator" | "taskWorkflows"
     > & { taskActivityGuard: TaskActivityGuardPort | undefined; workflow: TaskWorkflow },
   input: TaskDirectMergeCompleteIntent,
   merge: DirectMergeRecord,
@@ -50,6 +50,7 @@ export const closeMergedTask = (
               (input.removeWorktree && state.keptWorktree === true);
             if (needsCleanup) {
               yield* cleanupConfirmedMergeClose({
+                workspaceId: input.workspaceId,
                 dependencies: services,
                 taskStore,
                 lifecycle: services.taskSessionLifecycleCoordinator,
@@ -67,18 +68,32 @@ export const closeMergedTask = (
               else state.keptWorktree = true;
             }
             const task = yield* Effect.uninterruptible(
-              taskStore.transitionTask({ repoPath, taskId, ...decisionTransition(decision) }).pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => {
-                    state.observation.taskClosed = true;
-                    delete state.deletedBranches;
-                  }),
+              taskStore
+                .transitionTask({
+                  workspaceId: input.workspaceId,
+                  repoPath,
+                  taskId,
+                  decide: (task) =>
+                    decideEffectTransition(
+                      services.taskWorkflows.forTask(task),
+                      operation === "complete-direct-merge"
+                        ? "direct_merge.completed"
+                        : "direct_merge.local",
+                      task,
+                    ),
+                })
+                .pipe(
+                  Effect.tap(() =>
+                    Effect.sync(() => {
+                      state.observation.taskClosed = true;
+                      delete state.deletedBranches;
+                    }),
+                  ),
                 ),
-              ),
             );
             state.observation.phase = "settled";
             yield* completionState.publish(state);
-            return enrichTask(services.workflow, task);
+            return enrichTask(services.taskWorkflows.forTask(task), task);
           }),
         ),
       );

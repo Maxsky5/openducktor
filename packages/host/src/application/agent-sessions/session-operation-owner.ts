@@ -29,7 +29,9 @@ type Operation = {
   preparation: Record<"model" | "reattach", SessionOperationObservation["nativeOutcome"]>;
 };
 export const createSessionOperationOwner = (deps: {
-  resolveRoot: (ref: AgentSessionLiveRef) => Effect.Effect<AgentSessionAuthorizedRoot, HostError>;
+  resolveRoot: (
+    ref: AgentSessionLiveRef & { sessionScope?: AgentMessageTarget["sessionScope"] | undefined },
+  ) => Effect.Effect<AgentSessionAuthorizedRoot, HostError>;
   policyFor: (target: AgentMessageTarget) => AgentSessionOperationPolicy;
   publish: AgentSessionLiveStateService["publishOperation"];
   retain: AgentSessionLiveStateService["retainOperation"];

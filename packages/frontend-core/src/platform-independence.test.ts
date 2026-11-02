@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "./test-support/workspace-ref-fixture";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -64,8 +65,12 @@ describe("frontend core without a DOM", () => {
     });
     try {
       const [dataA, dataB] = await Promise.all([
-        connectionA.queryClient.fetchQuery(repoTaskDataQueryOptions(REPO_PATH)),
-        connectionB.queryClient.fetchQuery(repoTaskDataQueryOptions(REPO_PATH)),
+        connectionA.queryClient.fetchQuery(
+          repoTaskDataQueryOptions(workspaceRefFixture(REPO_PATH)),
+        ),
+        connectionB.queryClient.fetchQuery(
+          repoTaskDataQueryOptions(workspaceRefFixture(REPO_PATH)),
+        ),
       ]);
       expect(dataA.tasks.map((task) => task.id)).toEqual(["task-a"]);
       expect(dataB.tasks.map((task) => task.id)).toEqual(["task-b"]);
@@ -96,15 +101,19 @@ describe("frontend core without a DOM", () => {
     });
     const connectionB = createTestClientConnection({ host: hostWithTasks([]) });
     const lateRead = connectionA.queryClient
-      .fetchQuery(repoTaskDataQueryOptions(REPO_PATH))
+      .fetchQuery(repoTaskDataQueryOptions(workspaceRefFixture(REPO_PATH)))
       .catch((cause: unknown) => cause);
 
     await connectionA.dispose();
     lateTasks.resolve([createTaskCardFixture({ id: "late-task" })]);
     await lateRead;
 
-    expect(connectionA.queryClient.getQueryData(taskQueryKeys.repoData(REPO_PATH))).toBeUndefined();
-    expect(connectionB.queryClient.getQueryData(taskQueryKeys.repoData(REPO_PATH))).toBeUndefined();
+    expect(
+      connectionA.queryClient.getQueryData(taskQueryKeys.repoData(workspaceRefFixture(REPO_PATH))),
+    ).toBeUndefined();
+    expect(
+      connectionB.queryClient.getQueryData(taskQueryKeys.repoData(workspaceRefFixture(REPO_PATH))),
+    ).toBeUndefined();
     expect(() => connectionHost(connectionA.queryClient)).toThrow(
       "This query client has no open host connection.",
     );
@@ -230,7 +239,10 @@ describe("frontend core without a DOM", () => {
     const stopRunEvents = await host.subscribeRunEvents((payload) => {
       if ("__openducktorConnectionControl" in payload) controlEvents.push(payload);
     });
-    const observer = new QueryObserver(queryClient, repoTaskDataQueryOptions(REPO_PATH));
+    const observer = new QueryObserver(
+      queryClient,
+      repoTaskDataQueryOptions(workspaceRefFixture(REPO_PATH)),
+    );
     const stopObserver = observer.subscribe(() => {});
     try {
       await waitForExpectation(() => expect(host.remote.readState().status).toBe("connected"));

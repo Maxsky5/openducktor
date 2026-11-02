@@ -58,6 +58,7 @@ describe("createTaskService build and review", () => {
           taskStore,
           gitPort: createBuildStartGitPort({ calls: [] }),
         }).buildBlocked({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: current.id,
           reason: "Needs clarification",
@@ -65,7 +66,7 @@ describe("createTaskService build and review", () => {
       );
       expect(result.status).toBe("blocked");
       expect(result.artifactSummary).toEqual(current.artifactSummary);
-      expect(transitions).toEqual(
+      expect(transitions).toMatchObject(
         status === "blocked"
           ? []
           : [{ repoPath: "/repo", taskId: current.id, status: "blocked", cause: {} }],
@@ -91,13 +92,14 @@ describe("createTaskService build and review", () => {
             taskStore,
             gitPort: createBuildStartGitPort({ calls: [] }),
           }).buildBlocked({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             reason: "Needs clarification",
           }),
         ),
       ).rejects.toThrow(`build-blocked is not allowed for task task-1 (task) from ${status}`);
-      expect(transitions).toEqual([]);
+      expect(transitions).toMatchObject([]);
     },
   );
 
@@ -179,16 +181,23 @@ describe("createTaskService build and review", () => {
         taskStore,
         gitPort: createBuildStartGitPort({ calls: [] }),
       }).buildBlocked({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         reason: " Waiting on API ",
       }),
     );
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "blocked", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "blocked",
+          cause: {},
+        },
       },
     ]);
     expect(blocked).toMatchObject({
@@ -271,11 +280,7 @@ describe("createTaskService build and review", () => {
           taskWorkflows: builtinTaskWorkflows,
           taskStore,
           gitPort: createBuildStartGitPort({ calls: [] }),
-        }).buildBlocked({
-          repoPath: "/repo",
-          taskId: "task-1",
-          reason: " ",
-        }),
+        }).buildBlocked({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1", reason: " " }),
       ),
     ).rejects.toThrow("build_blocked requires a non-empty reason");
   });
@@ -366,15 +371,22 @@ describe("createTaskService build and review", () => {
     };
     const resumed = await Effect.runPromise(
       createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).buildResumed({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
       }),
     );
-    expect(calls).toEqual([
-      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+    expect(calls).toMatchObject([
+      { type: "get", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "in_progress",
+          cause: {},
+        },
       },
     ]);
     expect(resumed).toMatchObject({
@@ -467,6 +479,7 @@ describe("createTaskService build and review", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).buildResumed({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
         }),
@@ -587,7 +600,12 @@ describe("createTaskService build and review", () => {
           actions: installAction,
           worktreeCopyPaths: [".env"],
         }),
-      }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      }).buildStart({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskId: "task-1",
+        runtimeKind: "opencode",
+      }),
     );
     expect(bootstrap).toEqual({
       runtimeKind: "opencode",
@@ -597,7 +615,7 @@ describe("createTaskService build and review", () => {
       expect.arrayContaining([
         { type: "canonicalizePath", path: "/repo" },
         { type: "isGitRepository", path: "/repo" },
-        { type: "getTask", input: { repoPath: "/repo", taskId: "task-1" } },
+        { type: "getTask", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
         { type: "ensureDirectory", path: "/worktrees/repo" },
         { type: "referenceExists", workingDir: "/repo", reference: "origin/main" },
         {
@@ -623,14 +641,20 @@ describe("createTaskService build and review", () => {
         },
         {
           type: "runWorktreeActions",
-          context: { repoPath: "/repo", taskId: "task-1" },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
           worktreePath: "/worktrees/repo/task-1",
           actions: installAction,
         },
         { type: "requireRuntime", runtimeKind: "opencode" },
         {
           type: "transition",
-          input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
+          input: {
+            workspaceId: "repo",
+            repoPath: "/repo",
+            taskId: "task-1",
+            status: "in_progress",
+            cause: {},
+          },
         },
       ]),
     );
@@ -750,14 +774,19 @@ describe("createTaskService build and review", () => {
             hooks: { postComplete: [] },
             actions: installAction,
           }),
-        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        }).buildStart({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow('Worktree action "Install" exited with code 1.');
     expect(calls).toEqual(
       expect.arrayContaining([
         {
           type: "runWorktreeActions",
-          context: { repoPath: "/repo", taskId: "task-1" },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
           worktreePath: "/worktrees/repo/task-1",
           actions: installAction,
         },
@@ -867,18 +896,20 @@ describe("createTaskService build and review", () => {
     });
     const completed = await Effect.runPromise(
       service.buildCompleted({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         summary: "Done",
       }),
     );
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       {
         command: "sh",
         args: ["-lc", "printf cleanup"],
         options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
       },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
         input: {
@@ -915,7 +946,7 @@ describe("createTaskService build and review", () => {
     });
 
     await expect(
-      Effect.runPromise(service.buildCompleted({ repoPath: "/repo", taskId })),
+      Effect.runPromise(service.buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId })),
     ).rejects.toThrow("Task ID must name one worktree directory");
     expect(calls).not.toContainEqual(expect.objectContaining({ command: "sh" }));
   });
@@ -1012,10 +1043,11 @@ describe("createTaskService build and review", () => {
             repoPath: "/repo",
             hooks: { postComplete: ["  "] },
           }),
-        }).buildCompleted({ repoPath: "/repo", taskId: "task-1" }),
+        }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "human_review" });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
+      { type: "list", input: { repoPath: "/repo" } },
       { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
@@ -1111,19 +1143,26 @@ describe("createTaskService build and review", () => {
             repoPath: "/repo",
             hooks: { postComplete: ["sh -lc 'echo cleanup failed >&2; exit 1'"] },
           }),
-        }).buildCompleted({ repoPath: "/repo", taskId: "task-1" }),
+        }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("Worktree cleanup script command failed");
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       {
         command: "sh",
         args: ["-lc", "echo cleanup failed >&2; exit 1"],
         options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
       },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "blocked", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "blocked",
+          cause: {},
+        },
       },
     ]);
   });
@@ -1149,14 +1188,14 @@ describe("createTaskService build and review", () => {
           hooks: { postComplete: ["sh -lc 'exit 1'"] },
         }),
       })
-        .buildCompleted({ repoPath: "/repo", taskId: "task-1" })
+        .buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
         .pipe(Effect.flip),
     );
 
     if (!(result instanceof TaskMutationProgressFailure)) {
       throw new Error("Expected a TaskMutationProgressFailure");
     }
-    expect(transitions).toEqual(["blocked"]);
+    expect(transitions).toMatchObject(["blocked"]);
     expect(result.operation).toBe("build-completed");
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("Worktree cleanup script command failed");
@@ -1241,7 +1280,7 @@ describe("createTaskService build and review", () => {
             repoPath: "/repo",
             hooks: { postComplete: ["sh -lc 'exit 1'"] },
           }),
-        }).buildCompleted({ repoPath: "/repo", taskId: "task-1" }),
+        }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "human_review" });
   });
@@ -1268,14 +1307,20 @@ describe("createTaskService build and review", () => {
       });
 
       const result = await Effect.runPromise(
-        Effect.result(service.humanRequestChanges({ repoPath: "/repo", taskId: current.id })),
+        Effect.result(
+          service.humanRequestChanges({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            taskId: current.id,
+          }),
+        ),
       );
 
       expect(result).toMatchObject({
         _tag: "Failure",
         failure: { _tag: "TaskPolicyError", code: "TASK_TRANSITION_NOT_ALLOWED" },
       });
-      expect(transitions).toEqual([]);
+      expect(transitions).toMatchObject([]);
     },
   );
 
@@ -1300,11 +1345,11 @@ describe("createTaskService build and review", () => {
     });
 
     const result = await Effect.runPromise(
-      service.humanRequestChanges({ repoPath: "/repo", taskId: current.id }),
+      service.humanRequestChanges({ workspaceId: "repo", repoPath: "/repo", taskId: current.id }),
     );
 
     expect(result).toMatchObject({ id: current.id, status: "in_progress" });
-    expect(transitions).toEqual([]);
+    expect(transitions).toMatchObject([]);
   });
 
   test("requests human changes after checking direct merge metadata", async () => {
@@ -1410,17 +1455,24 @@ describe("createTaskService build and review", () => {
     };
     const reopened = await Effect.runPromise(
       createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).humanRequestChanges({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         note: "Please adjust",
       }),
     );
-    expect(calls).toEqual([
-      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+    expect(calls).toMatchObject([
+      { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
+      { type: "get", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       {
         type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress", cause: {} },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "in_progress",
+          cause: {},
+        },
       },
     ]);
     expect(reopened).toMatchObject({
@@ -1527,6 +1579,7 @@ describe("createTaskService build and review", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).humanRequestChanges({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
         }),

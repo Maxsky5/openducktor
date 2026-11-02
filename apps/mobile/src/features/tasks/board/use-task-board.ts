@@ -70,10 +70,23 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
   const { settingsQuery, filter, matchingTasks, historicalSessionsByTaskId } = board;
   const { refetch: refetchSettings } = settingsQuery;
   // Observe the task list read of the task owner without starting another read.
-  const taskRead = useQuery({ ...repoTaskDataQueryOptions(workspace.repoPath), enabled: false });
+  const taskRead = useQuery({
+    ...repoTaskDataQueryOptions({
+      workspaceId: workspace.workspaceId,
+      repoPath: workspace.repoPath,
+    }),
+    enabled: false,
+  });
 
-  const mergedTargetByTaskId = useMergedTaskTargets(workspace.repoPath, board.kanbanTasks);
-  const summaries = useAgentSessionSummaries();
+  const mergedTargetByTaskId = useMergedTaskTargets(
+    { workspaceId: workspace.workspaceId, repoPath: workspace.repoPath },
+    board.kanbanTasks,
+  );
+  const allSummaries = useAgentSessionSummaries();
+  const summaries = useMemo(
+    () => allSummaries.filter((summary) => summary.workspaceId === workspace.workspaceId),
+    [allSummaries, workspace.workspaceId],
+  );
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(summaries), [summaries]);
   const activeContextByTaskId = useMemo(
     () => buildActiveTaskSessionContextByTaskId(summaries),

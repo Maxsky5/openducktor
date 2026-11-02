@@ -29,7 +29,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const recordedActivityTimestamps: Array<string | number> = [];
     let clearTurnDurationCalls = 0;
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
 
     const updateSession = createSessionUpdater(sessionsRef);
@@ -118,7 +125,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
       const sessionsRef = createSessionsRef([
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           status: "running",
         }),
       ]);
@@ -249,7 +261,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         runtimeKind: "claude",
         status: "idle",
         messages: [
@@ -322,7 +339,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         status: "running",
       }),
     ]);
@@ -431,7 +453,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         status: "idle",
       }),
     ]);
@@ -693,7 +720,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
         selectedModel: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -766,7 +798,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         runtimeKind: "claude",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
       }),
     ]);
 
@@ -859,7 +896,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
   test("records explicit tool start timing for live assistant turns", async () => {
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const recordTurnActivityTimestamp = mock(() => {});
     const session = getSession(sessionsRef);
@@ -920,7 +964,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const recordTurnActivityTimestamp = mock(() => {});
     const updateSession = createSessionUpdater(sessionsRef);
@@ -973,7 +1024,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -1051,7 +1109,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -1114,7 +1179,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -1218,7 +1290,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -1298,7 +1377,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -1380,7 +1466,14 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 

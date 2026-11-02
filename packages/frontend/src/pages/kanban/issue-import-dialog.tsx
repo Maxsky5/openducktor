@@ -37,6 +37,7 @@ import { IssueSelectionStep } from "./issue-import-selection-step";
 type IssueImportDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workspaceId: string;
   repoPath: string;
   provider: NonNullable<RepositoryGitProviderContext>;
   onCloseAutoFocus?: (event: Event) => void;
@@ -48,6 +49,7 @@ export function IssueImportDialog({ open, ...props }: IssueImportDialogProps): R
 
 function IssueImportDialogSession({
   onOpenChange,
+  workspaceId,
   repoPath,
   provider,
   onCloseAutoFocus,
@@ -69,7 +71,13 @@ function IssueImportDialogSession({
   const unavailableReason = issueImportUnavailableReason(provider);
   const unavailable = unavailableReason !== null;
   const query = useQuery({
-    ...issueImportListQueryOptions({ repoPath, provider, search, cursor: cursors[pageIndex] }),
+    ...issueImportListQueryOptions({
+      workspaceId,
+      repoPath,
+      provider,
+      search,
+      cursor: cursors[pageIndex],
+    }),
     enabled: !unavailable && !searchPending,
   });
   const items = query.data?.items ?? [];
@@ -86,6 +94,7 @@ function IssueImportDialogSession({
   } = useIssueImportSubmission({
     selectedItems,
     reviews,
+    workspaceId,
     repoPath,
     providerId: provider.config.id,
     providerScope: provider.config,
@@ -162,6 +171,7 @@ function IssueImportDialogSession({
             }
             review={
               <IssueReviewStep
+                workspaceId={workspaceId}
                 repoPath={repoPath}
                 selectedItems={selectedItems}
                 reviews={reviews}

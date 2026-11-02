@@ -22,7 +22,10 @@ import {
 import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import { Effect } from "effect";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
-import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runtime-working-directory";
+import {
+  requireRuntimeWorkingDirectory,
+  type RuntimeWorkingDirectoryInput,
+} from "../../application/runtimes/runtime-working-directory";
 import {
   type HostError,
   type HostOperationErrorAggregate,
@@ -204,7 +207,7 @@ export const createClaudeLiveSessionAdapterPreparer =
       });
 
       const requireSessionWorkingDirectory = (
-        input: { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string },
+        input: RuntimeWorkingDirectoryInput & { runtimeKind: RuntimeKind },
         operation: string,
       ) =>
         requireClaudePolicy(input.runtimeKind, operation).pipe(

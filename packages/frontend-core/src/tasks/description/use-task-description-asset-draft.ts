@@ -2,7 +2,7 @@ import {
   TASK_ASSET_MAX_DESCRIPTION_ASSETS,
   type TaskAssetStageResult,
 } from "@openducktor/contracts";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/errors";
 
 export type TaskDescriptionAssetUpload = {
@@ -14,6 +14,13 @@ export type TaskDescriptionAssetUpload = {
 
 /** A picked image file. The platform reads it and shows its preview. */
 export type TaskDescriptionAssetDraftFile = { name: string };
+
+type DraftAsset = { previewUrl: string; workspaceId: string; revokePreviewUrl(url: string): void };
+export type RetainedDescriptionAssets = Map<string, Map<string, DraftAsset>>;
+export type DescriptionAssetRetention = {
+  drafts: RetainedDescriptionAssets;
+  referencedAssetIds(draftKey: string): ReadonlySet<string>;
+};
 
 type UseTaskDescriptionAssetDraftInput<F extends TaskDescriptionAssetDraftFile> = {
   active: boolean;
@@ -28,6 +35,7 @@ type UseTaskDescriptionAssetDraftInput<F extends TaskDescriptionAssetDraftFile> 
   createPreviewUrl(file: F): string;
   /** Releases a URL from `createPreviewUrl`. */
   revokePreviewUrl(url: string): void;
+  retention?: DescriptionAssetRetention;
 };
 
 /** The staged images of a draft and the actions that do not take a file. */
@@ -72,6 +80,7 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
   onDiscardError,
   createPreviewUrl,
   revokePreviewUrl,
+  retention,
 }: UseTaskDescriptionAssetDraftInput<F>): TaskDescriptionAssetDraft<F> => {
   const stateContextKey = active && workspaceId ? `${workspaceId}:${draftKey}` : null;
   const [draftState, setDraftState] = useState<TaskDescriptionAssetDraftState>(() =>
@@ -80,7 +89,7 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
   if (draftState.contextKey !== stateContextKey) {
     setDraftState(emptyDraftState(stateContextKey));
   }
-  const assets = useRef(new Map<string, { previewUrl: string; workspaceId: string }>());
+  const assets = useRef(new Map<string, DraftAsset>());
   // The preview ports can change between renders without discarding the staged images.
   const previewPorts = useRef({ createPreviewUrl, revokePreviewUrl });
   useLayoutEffect(() => {
@@ -98,7 +107,7 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
 
   const clearAssetRefs = useCallback((): void => {
     for (const asset of assets.current.values()) {
-      previewPorts.current.revokePreviewUrl(asset.previewUrl);
+      asset.revokePreviewUrl(asset.previewUrl);
     }
     assets.current.clear();
   }, []);
@@ -109,9 +118,7 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
   }, [clearAssetRefs]);
 
   const discardAssetSnapshot = useCallback(
-    async (
-      snapshot: Array<[string, { previewUrl: string; workspaceId: string }]>,
-    ): Promise<void> => {
+    async (snapshot: Array<[string, DraftAsset]>): Promise<void> => {
       const idsByWorkspace = new Map<string, string[]>();
       for (const [assetId, asset] of snapshot) {
         const ids = idsByWorkspace.get(asset.workspaceId) ?? [];
@@ -125,6 +132,23 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
       );
     },
     [discardStaged],
+  );
+
+  const releaseAssets = useCallback(
+    (ownerKey: string | undefined): void => {
+      const snapshot = Array.from(assets.current.entries());
+      const referenced = ownerKey ? retention?.referencedAssetIds(ownerKey) : undefined;
+      const kept = snapshot.filter(([id]) => referenced?.has(id));
+      const discarded = snapshot.filter(([id]) => !referenced?.has(id));
+      if (ownerKey && retention) {
+        if (kept.length) retention.drafts.set(ownerKey, new Map(kept));
+        else retention.drafts.delete(ownerKey);
+      }
+      for (const [, asset] of discarded) asset.revokePreviewUrl(asset.previewUrl);
+      assets.current = new Map();
+      if (discarded.length) void discardAssetSnapshot(discarded).catch(onDiscardError);
+    },
+    [discardAssetSnapshot, onDiscardError, retention],
   );
 
   useEffect(() => {
@@ -146,29 +170,24 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
         previousContext.key !== nextContext.key ||
         previousContext.workspaceId !== nextContext.workspaceId)
     ) {
-      const snapshot = Array.from(assets.current.entries());
-      clearAssetRefs();
-      void discardAssetSnapshot(snapshot).catch(onDiscardError);
+      releaseAssets(previousContext.key);
     }
-  }, [
-    active,
-    clearAssetRefs,
-    discardAssetSnapshot,
-    draftKey,
-    onDiscardError,
-    stateContextKey,
-    workspaceId,
-  ]);
+    if (nextContext) {
+      const retained = retention?.drafts.get(nextContext.key);
+      if (retained) {
+        assets.current = new Map(retained);
+      }
+    }
+  }, [active, draftKey, stateContextKey, workspaceId, releaseAssets, retention]);
 
   useEffect(
     () => () => {
       generation.current += 1;
+      const ownerKey = context.current?.key;
       context.current = null;
-      const snapshot = Array.from(assets.current.entries());
-      clearAssetRefs();
-      void discardAssetSnapshot(snapshot).catch(onDiscardError);
+      releaseAssets(ownerKey);
     },
-    [clearAssetRefs, discardAssetSnapshot, onDiscardError],
+    [releaseAssets],
   );
 
   const stage = useCallback(
@@ -233,6 +252,7 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
         assets.current.set(staged.assetId, {
           previewUrl,
           workspaceId: uploadContext.workspaceId,
+          revokePreviewUrl: previewPorts.current.revokePreviewUrl,
         });
         setDraftState((current) =>
           current.contextKey === uploadContext.stateKey
@@ -280,7 +300,8 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
     const snapshot = Array.from(assets.current.entries());
     await discardAssetSnapshot(snapshot);
     clearLocalAssets();
-  }, [clearLocalAssets, discardAssetSnapshot]);
+    retention?.drafts.delete(draftKey);
+  }, [clearLocalAssets, discardAssetSnapshot, retention, draftKey]);
 
   const reconcileSuccessfulSave = useCallback(
     async (referencedAssetIds: ReadonlySet<string>): Promise<void> => {
@@ -291,14 +312,21 @@ export const useTaskDescriptionAssetDraft = <F extends TaskDescriptionAssetDraft
         await discardAssetSnapshot(unreferenced);
       } finally {
         clearLocalAssets();
+        retention?.drafts.delete(draftKey);
       }
     },
-    [clearLocalAssets, discardAssetSnapshot],
+    [clearLocalAssets, discardAssetSnapshot, retention, draftKey],
+  );
+
+  const retainedAssets = active ? retention?.drafts.get(draftKey) : undefined;
+  const retainedPreviews = useMemo(
+    () => new Map(Array.from(retainedAssets ?? [], ([id, asset]) => [id, asset.previewUrl])),
+    [retainedAssets],
   );
 
   return {
     uploads: draftState.uploads,
-    previews: draftState.previews,
+    previews: draftState.previews.size ? draftState.previews : retainedPreviews,
     isUploading: draftState.uploads.some((upload) => upload.status === "uploading"),
     stage,
     stagedAssetIds,

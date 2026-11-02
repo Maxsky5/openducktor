@@ -7,6 +7,27 @@ import {
 } from "./feedback-store";
 
 describe("feedback store", () => {
+  test("keeps an explicit recovery action with its current message", () => {
+    const { store, feedback } = createFeedbackStore();
+    let retries = 0;
+    feedback.show("error", "Shared data updates stopped", {
+      id: "sync",
+      duration: Infinity,
+      action: {
+        label: "Retry",
+        onClick: () => {
+          retries += 1;
+        },
+      },
+    });
+    const message = store.getState().messages[0];
+    expect(message?.action?.label).toBe("Retry");
+    expect(retries).toBe(0);
+    message?.action?.onClick();
+    expect(retries).toBe(1);
+    feedback.show("error", "New failure", { id: "sync", duration: Infinity });
+    expect(store.getState().messages[0]?.action).toBeUndefined();
+  });
   test("replaces a message with the same ID and keeps errors longer", () => {
     const { store, feedback } = createFeedbackStore();
     feedback.show("info", "Saving", { id: "save" });

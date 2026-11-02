@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TaskRefreshOptions } from "../../app-state/app-state-contexts";
@@ -8,10 +9,15 @@ import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseTaskReadFlowArgs = {
+  activeWorkspaceId: string | null;
   activeRepoPath: string | null;
 };
 
-type TaskToastDedupeRef = MutableRefObject<{ repoPath: string; description: string } | null>;
+type TaskToastDedupeRef = MutableRefObject<{
+  workspaceId: string;
+  repoPath: string;
+  description: string;
+} | null>;
 
 export type UseTaskReadFlowResult = {
   tasks: TaskCard[];
@@ -21,32 +27,44 @@ export type UseTaskReadFlowResult = {
   isLoadingTasks: boolean;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskReadState: () => void;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
+  loadWorkspaceTasks: (scope: WorkspaceRef) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
 };
 
-export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTaskReadFlowResult {
+export function useTaskReadFlow({
+  activeWorkspaceId,
+  activeRepoPath,
+}: UseTaskReadFlowArgs): UseTaskReadFlowResult {
   const queryClient = useQueryClient();
   const taskViewSync = useMemo(() => getProductionTaskViewSync(queryClient), [queryClient]);
-  const lastTaskRefreshToastRef = useRef<{ repoPath: string; description: string } | null>(null);
-  const lastTaskLoadErrorToastRef = useRef<{ repoPath: string; description: string } | null>(null);
+  const lastTaskRefreshToastRef = useRef<{
+    workspaceId: string;
+    repoPath: string;
+    description: string;
+  } | null>(null);
+  const lastTaskLoadErrorToastRef = useRef<{
+    workspaceId: string;
+    repoPath: string;
+    description: string;
+  } | null>(null);
 
   const refreshTaskData = useCallback(
-    async (repoPath: string, taskIdOrIds?: string | string[]) => {
+    async (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => {
       const taskIds = toTaskIds(taskIdOrIds);
       if (taskIds) {
-        await taskViewSync.refreshDocumentsForTasks(repoPath, taskIds);
+        await taskViewSync.refreshDocumentsForTasks(scope, taskIds);
         return;
       }
 
-      await taskViewSync.refreshManually(repoPath);
+      await taskViewSync.refreshManually(scope);
     },
     [taskViewSync],
   );
 
   const refreshFlow = useTaskRefreshFlow({
+    activeWorkspaceId,
     activeRepoPath,
     refreshTaskData,
     lastTaskRefreshToastRef,
@@ -55,13 +73,18 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
   const { resetManualLoading } = refreshFlow;
 
   useTaskReadFlowRepoSwitchCleanup({
+    activeWorkspaceId,
     activeRepoPath,
     resetManualLoading,
     lastTaskRefreshToastRef,
     lastTaskLoadErrorToastRef,
   });
 
-  const readModel = useTaskQueryReadModel({ activeRepoPath, lastTaskLoadErrorToastRef });
+  const readModel = useTaskQueryReadModel({
+    activeWorkspaceId,
+    activeRepoPath,
+    lastTaskLoadErrorToastRef,
+  });
 
   const clearTaskReadState = useCallback(() => {
     resetManualLoading();
@@ -97,25 +120,36 @@ const toTaskIds = (taskIdOrIds?: string | string[]): string[] | null => {
 };
 
 const useTaskReadFlowRepoSwitchCleanup = ({
+  activeWorkspaceId,
   activeRepoPath,
   resetManualLoading,
   lastTaskRefreshToastRef,
   lastTaskLoadErrorToastRef,
 }: {
+  activeWorkspaceId: string | null;
   activeRepoPath: string | null;
   resetManualLoading: () => void;
   lastTaskRefreshToastRef: TaskToastDedupeRef;
   lastTaskLoadErrorToastRef: TaskToastDedupeRef;
 }): void => {
-  const currentWorkspaceRepoPathRef = useRef(activeRepoPath);
+  const currentWorkspaceRef = useRef({ activeWorkspaceId, activeRepoPath });
 
   useEffect(() => {
-    const previousActiveRepoPath = currentWorkspaceRepoPathRef.current;
-    currentWorkspaceRepoPathRef.current = activeRepoPath;
-    if (previousActiveRepoPath !== activeRepoPath) {
+    const previousWorkspace = currentWorkspaceRef.current;
+    currentWorkspaceRef.current = { activeWorkspaceId, activeRepoPath };
+    if (
+      previousWorkspace.activeWorkspaceId !== activeWorkspaceId ||
+      previousWorkspace.activeRepoPath !== activeRepoPath
+    ) {
       resetManualLoading();
       lastTaskRefreshToastRef.current = null;
       lastTaskLoadErrorToastRef.current = null;
     }
-  }, [activeRepoPath, lastTaskLoadErrorToastRef, lastTaskRefreshToastRef, resetManualLoading]);
+  }, [
+    activeWorkspaceId,
+    activeRepoPath,
+    lastTaskLoadErrorToastRef,
+    lastTaskRefreshToastRef,
+    resetManualLoading,
+  ]);
 };

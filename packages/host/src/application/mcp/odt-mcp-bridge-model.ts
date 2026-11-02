@@ -20,7 +20,7 @@ type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
 const MAX_TASK_CANDIDATES = 5;
 
-export const normalizeKey = (value: string): string => value.trim().toLowerCase();
+const normalizeKey = (value: string): string => value.trim().toLowerCase();
 
 export const buildTaskUpdatePatch = (
   current: TaskRecord,

@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
@@ -34,11 +35,13 @@ describe("TaskViewSync races", () => {
     async (change) => {
       const result = createDeferred<RepoTaskData>();
       const { queryClient, sync } = createSync(createPorts());
-      const key = taskQueryKeys.repoData("/repo");
+      const key = taskQueryKeys.repoData(workspaceRefFixture("/repo"));
       const read = queryClient.fetchQuery({ queryKey: key, queryFn: () => result.promise });
       void read.catch(() => {});
       await sync.reconcileExternalEvent(
-        boardEvent("/repo", [createTaskCardFixture({ id: "task-1", title: "Obsolete" })]),
+        boardEvent(workspaceRefFixture("/repo"), [
+          createTaskCardFixture({ id: "task-1", title: "Obsolete" }),
+        ]),
         eventCursor(),
       );
       const replacement = createTaskCardFixture({ id: "task-1", title: "Replacement" });
@@ -64,8 +67,8 @@ describe("TaskViewSync races", () => {
     const result = createDeferred<RepoTaskData>();
     const ids = createDeferred<string[]>();
     const { queryClient, sync } = createSync(createPorts());
-    const queryKey = taskQueryKeys.repoData("/inactive");
-    const idKey = taskQueryKeys.ids("/inactive");
+    const queryKey = taskQueryKeys.repoData(workspaceRefFixture("/inactive"));
+    const idKey = taskQueryKeys.ids(workspaceRefFixture("/inactive"));
     const readBoard = mock(() => result.promise);
     const readIds = mock(() => ids.promise);
     const options = { queryKey, queryFn: readBoard, gcTime: 0 };
@@ -85,7 +88,10 @@ describe("TaskViewSync races", () => {
       stopObserving();
       for (let index = 0; index < 50; index++) {
         changed = createTaskCardFixture({ id: "task-1", title: `Changed ${index}` });
-        await sync.reconcileExternalEvent(boardEvent("/inactive", [changed]), eventCursor());
+        await sync.reconcileExternalEvent(
+          boardEvent(workspaceRefFixture("/inactive"), [changed]),
+          eventCursor(),
+        );
       }
       expect(queryClient.getQueryData(queryKey)).toBeUndefined();
       expect(queryClient.getQueryData(idKey)).toBeUndefined();
@@ -115,8 +121,8 @@ describe("TaskViewSync races", () => {
       const result = createDeferred<RepoTaskData>();
       const ids = createDeferred<string[]>();
       const { queryClient, sync } = createSync(createPorts());
-      const queryKey = taskQueryKeys.repoData("/repo");
-      const idKey = taskQueryKeys.ids("/repo");
+      const queryKey = taskQueryKeys.repoData(workspaceRefFixture("/repo"));
+      const idKey = taskQueryKeys.ids(workspaceRefFixture("/repo"));
       const early = createTaskCardFixture({ id: "early" });
       const item = createTaskCardFixture({ id: "item" });
       const other = createTaskCardFixture({ id: "other" });
@@ -159,15 +165,19 @@ describe("TaskViewSync races", () => {
       const reopened = Object.freeze({ ...edge, status: "open" as const });
       try {
         await sync.reconcileExternalEvent(
-          boardEvent("/repo", [earlyChanged, firstItem, moved], { removedTaskIds: ["old"] }),
+          boardEvent(workspaceRefFixture("/repo"), [earlyChanged, firstItem, moved], {
+            removedTaskIds: ["old"],
+          }),
           eventCursor(),
         );
         await sync.reconcileExternalEvent(
-          boardEvent("/repo", [marker], { doneVisibleDays: 0 }),
+          boardEvent(workspaceRefFixture("/repo"), [marker], { doneVisibleDays: 0 }),
           eventCursor(),
         );
         await sync.reconcileExternalEvent(
-          boardEvent("/repo", [lastItem, restored, reopened], { doneVisibleDays: 7 }),
+          boardEvent(workspaceRefFixture("/repo"), [lastItem, restored, reopened], {
+            doneVisibleDays: 7,
+          }),
           eventCursor(),
         );
         result.resolve({ tasks });
@@ -206,12 +216,13 @@ describe("TaskViewSync races", () => {
     const latest = createTaskCardFixture({ id: "task-1", title: "Latest host snapshot" });
     const queued = createTaskCardFixture({ id: "task-1", title: "Earlier stream change" });
     const { queryClient, sync } = createSync(createPorts({ listTasks: async () => [latest] }));
-    const key = taskQueryKeys.repoData("/repo");
+    const key = taskQueryKeys.repoData(workspaceRefFixture("/repo"));
     const coldRead = queryClient.fetchQuery({ queryKey: key, queryFn: () => staleRead.promise });
     void coldRead.catch(() => {});
     await sync.reconcileExternalEvent(
       {
         kind: "tasks_updated",
+        workspaceId: "workspace-1",
         eventId: "earlier-change",
         repoPath: "/repo",
         taskIds: [queued.id],
@@ -224,7 +235,7 @@ describe("TaskViewSync races", () => {
       eventCursor(),
     );
 
-    await sync.refreshManually("/repo");
+    await sync.refreshManually(workspaceRefFixture("/repo"));
     expect(queryClient.getQueryData<RepoTaskData>(key)).toEqual({ tasks: [latest] });
     staleRead.resolve({ tasks: [createTaskCardFixture({ id: "task-1", title: "Old read" })] });
     await Promise.allSettled([coldRead]);
@@ -241,8 +252,8 @@ describe("TaskViewSync races", () => {
     });
     const { sync } = createSync(createPorts({ listTasks }));
 
-    const snapshot = sync.reconcileStreamSnapshot(["/repo"]);
-    const workspaceLoad = sync.loadWorkspace("/repo");
+    const snapshot = sync.reconcileStreamSnapshot([workspaceRefFixture("/repo")]);
+    const workspaceLoad = sync.loadWorkspace(workspaceRefFixture("/repo"));
     void workspaceLoad.catch(() => {});
 
     try {
@@ -253,7 +264,7 @@ describe("TaskViewSync races", () => {
 
       taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
       await expect(snapshot).resolves.toEqual({
-        taskIdsByRepo: new Map([["/repo", ["task-1"]]]),
+        taskIdsByRepo: new Map([[workspaceRefFixture("/repo"), ["task-1"]]]),
         failures: new Map(),
       });
       await expect(workspaceLoad).resolves.toBeUndefined();
@@ -276,16 +287,18 @@ describe("TaskViewSync races", () => {
     });
     const { queryClient, sync } = createSync(createPorts({ listTasks }));
 
-    const workspaceLoad = sync.loadWorkspace("/repo", { forceFresh: true });
+    const workspaceLoad = sync.loadWorkspace(workspaceRefFixture("/repo"), { forceFresh: true });
     await firstTaskListStarted.promise;
-    const retentionRefresh = sync.refreshAfterTaskRetentionChange(["/repo"]);
+    const retentionRefresh = sync.refreshAfterTaskRetentionChange([workspaceRefFixture("/repo")]);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     expect(listTasks).toHaveBeenCalledTimes(1);
     firstTaskList.resolve(tasks);
     await Promise.all([workspaceLoad, retentionRefresh]);
     expect(listTasks).toHaveBeenCalledTimes(2);
-    expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))).toEqual({
+    expect(
+      queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo"))),
+    ).toEqual({
       tasks,
     });
   });
@@ -303,14 +316,15 @@ describe("TaskViewSync races", () => {
       }),
     );
 
-    const first = sync.refreshManually("/repo");
-    const second = sync.refreshManually("/repo");
+    const first = sync.refreshManually(workspaceRefFixture("/repo"));
+    const second = sync.refreshManually(workspaceRefFixture("/repo"));
 
     await expect(first).rejects.toBe(firstFailure);
     await expect(second).resolves.toBeUndefined();
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
-        ?.id,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData(workspaceRefFixture("/repo")),
+      )?.tasks[0]?.id,
     ).toBe("fresh");
   });
 
@@ -337,9 +351,9 @@ describe("TaskViewSync races", () => {
       return cancelQueries(...args);
     };
 
-    const first = sync.refreshManually("/repo");
+    const first = sync.refreshManually(workspaceRefFixture("/repo"));
     await firstCancelStarted.promise;
-    const second = sync.refreshManually("/repo");
+    const second = sync.refreshManually(workspaceRefFixture("/repo"));
 
     try {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -349,8 +363,9 @@ describe("TaskViewSync races", () => {
       await Promise.all([first, second]);
 
       expect(
-        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
-          ?.id,
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(
+          taskQueryKeys.repoData(workspaceRefFixture("/repo")),
+        )?.tasks[0]?.id,
       ).toBe("task-2");
     } finally {
       releaseFirstCancel.resolve();
@@ -370,7 +385,7 @@ describe("TaskViewSync races", () => {
         }),
       }),
     );
-    const documentKey = documentQueryKeys.document("/repo", "task-1", "spec");
+    const documentKey = documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec");
     queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
     const observer = new QueryObserver(queryClient, {
       queryKey: documentKey,
@@ -395,7 +410,7 @@ describe("TaskViewSync races", () => {
 
     try {
       await staleDocumentStarted.promise;
-      await sync.reconcileStreamSnapshot(["/repo"]);
+      await sync.reconcileStreamSnapshot([workspaceRefFixture("/repo")]);
 
       expect(calls.indexOf("cancel")).toBeLessThan(calls.indexOf("invalidate"));
       expect(
@@ -431,8 +446,16 @@ describe("TaskViewSync races", () => {
       updatedAt: "2026-04-10T13:11:00.000Z",
     }));
     const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const activeDocumentKey = documentQueryKeys.document("/repo", "task-1", "spec");
-    const inactiveDocumentKey = documentQueryKeys.document("/inactive", "task-1", "spec");
+    const activeDocumentKey = documentQueryKeys.document(
+      workspaceRefFixture("/repo"),
+      "task-1",
+      "spec",
+    );
+    const inactiveDocumentKey = documentQueryKeys.document(
+      workspaceRefFixture("/inactive"),
+      "task-1",
+      "spec",
+    );
     queryClient.setQueryData(activeDocumentKey, { markdown: "# Active cached", updatedAt: null });
     queryClient.setQueryData(inactiveDocumentKey, {
       markdown: "# Inactive cached",
@@ -459,15 +482,23 @@ describe("TaskViewSync races", () => {
 
     try {
       await Promise.all([activeStaleStarted.promise, inactiveStaleStarted.promise]);
-      await sync.reconcileStreamSnapshot(["/repo"]);
+      await sync.reconcileStreamSnapshot([workspaceRefFixture("/repo")]);
 
       activeStaleDocument.resolve({ markdown: "# Late active", updatedAt: null });
       inactiveStaleDocument.resolve({ markdown: "# Late inactive", updatedAt: null });
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-      expect(loadFreshDocument).not.toHaveBeenCalledWith("/inactive", "task-1", "spec");
+      expect(loadFreshDocument).toHaveBeenCalledWith(
+        workspaceRefFixture("/repo"),
+        "task-1",
+        "spec",
+      );
+      expect(loadFreshDocument).not.toHaveBeenCalledWith(
+        workspaceRefFixture("/inactive"),
+        "task-1",
+        "spec",
+      );
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(activeDocumentKey),
       ).toEqual({

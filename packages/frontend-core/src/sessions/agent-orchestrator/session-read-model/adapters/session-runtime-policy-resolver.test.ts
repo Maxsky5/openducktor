@@ -38,7 +38,12 @@ test("loads settings inside the runtime-policy adapter for Codex policy", async 
   expect(
     resolvePolicy({
       runtimeKind: "codex",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     }),
   ).toMatchObject({ kind: "codex" });
   expect(loadSettingsSnapshot).toHaveBeenCalledTimes(1);

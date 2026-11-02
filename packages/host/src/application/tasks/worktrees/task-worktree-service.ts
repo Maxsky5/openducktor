@@ -1,6 +1,8 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import {
   type RepoConfig,
   type TaskWorktreeSummary,
+  type WorkspaceRef,
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -25,8 +27,7 @@ export type TaskWorktreeService = {
     input: TaskWorktreeInput,
   ): Effect.Effect<TaskWorktreeSummary | null, TaskWorktreeServiceError>;
 };
-export type TaskWorktreeInput = {
-  repoPath: string;
+export type TaskWorktreeInput = WorkspaceRef & {
   taskId: string;
 };
 export type CreateTaskWorktreeServiceInput = {
@@ -48,10 +49,10 @@ export const createTaskWorktreeService = ({
 }: CreateTaskWorktreeServiceInput): TaskWorktreeService => ({
   getTaskWorktree(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
+      const { taskId } = input;
       const idError = taskWorktreeIdError(taskId);
       if (idError) return yield* idError;
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
       const worktreePath = settingsConfig.join(
         resolveWorktreeBasePath(settingsConfig, repoConfig),
         taskId,

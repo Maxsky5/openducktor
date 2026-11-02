@@ -188,7 +188,11 @@ const latestTaskSession = (
 ): TaskSessionTarget | null => {
   let latestLive: KanbanTaskSession | null = null;
   for (const session of liveSessions) {
-    if (!latestLive || (session.startedAt ?? "") > (latestLive.startedAt ?? "")) {
+    if (
+      !latestLive ||
+      (session.startedAt === undefined ? -Infinity : Date.parse(session.startedAt)) >
+        (latestLive.startedAt === undefined ? -Infinity : Date.parse(latestLive.startedAt))
+    ) {
       latestLive = session;
     }
   }
@@ -197,7 +201,8 @@ const latestTaskSession = (
   }
   let latestRecord: AgentSessionRecord | null = null;
   for (const record of records) {
-    if (!latestRecord || record.startedAt > latestRecord.startedAt) latestRecord = record;
+    if (!latestRecord || Date.parse(record.startedAt) > Date.parse(latestRecord.startedAt))
+      latestRecord = record;
   }
   return latestRecord
     ? { role: builtinRoleId(latestRecord.role), identity: toAgentSessionIdentity(latestRecord) }

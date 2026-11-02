@@ -33,6 +33,7 @@ export const createNodeTaskEventServices = ({
   onBackgroundFailure,
   taskEventPublicationReporter,
   workspaceSettingsService,
+  settingsConfig,
 }: {
   baseTaskService: TaskServiceWithMutationProgress;
   taskWorkflows: TaskWorkflowResolver;
@@ -45,6 +46,7 @@ export const createNodeTaskEventServices = ({
   onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
   workspaceSettingsService: WorkspaceSettingsService;
+  settingsConfig: CreateTaskSyncServiceInput["settingsConfig"];
 }): NodeTaskEventServices => {
   const taskEventStream = createTaskEventStream({
     reporter: {
@@ -71,6 +73,7 @@ export const createNodeTaskEventServices = ({
     taskEventStream,
     taskService: baseTaskService,
     workspaceSettingsService,
+    settingsConfig,
   });
 
   return {

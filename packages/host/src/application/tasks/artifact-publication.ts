@@ -4,6 +4,7 @@ import {
   type TaskMetadataArtifact,
   type TaskEventCursor,
   type TaskChangeSet,
+  type WorkspaceRef,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { workflowArtifactChange } from "./artifact-changes";
@@ -47,11 +48,10 @@ export const createArtifactPublishingMethods = (
 ): ArtifactPublishingMethods => {
   const publishArtifactSave = (
     operation: "create-artifact" | "rename-artifact" | "replace-artifact",
-    input: { repoPath: string; taskId: string },
+    input: WorkspaceRef & { taskId: string },
     mutation: Effect.Effect<Omit<ArtifactSaveResult, "cursor">, TaskServiceError>,
   ): Effect.Effect<ArtifactSaveResult, TaskServiceError> =>
-    publishMutation(operation, input.repoPath, changeForTask(input.taskId), mutation, {
-      settleOnInterrupt: true,
+    publishMutation(operation, input, changeForTask(input.taskId), mutation, {
       artifactChanges: (result) => [
         {
           taskId: input.taskId,
@@ -73,11 +73,10 @@ export const createArtifactPublishingMethods = (
     deleteTaskArtifact: (input) =>
       publishMutation(
         "delete-artifact",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.deleteTaskArtifact(input),
         {
-          settleOnInterrupt: true,
           artifactChanges: () => [
             {
               taskId: input.taskId,
@@ -91,7 +90,7 @@ export const createArtifactPublishingMethods = (
     workflowArtifactSave: (input) =>
       publishMutation(
         "save-workflow-artifact",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         Effect.suspend(() => taskService.workflowArtifactSave(input)),
         {

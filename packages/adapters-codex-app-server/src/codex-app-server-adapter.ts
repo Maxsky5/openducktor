@@ -440,12 +440,13 @@ export class CodexAppServerAdapter
   /** Binds the managed MCP server of the session's workspace to one thread request. */
   private threadConfig(
     repoPath: string,
-    sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools">,
+    sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools" | "sessionScope">,
   ): Promise<CodexThreadConfig> {
     return resolveCodexThreadConfig(
       this.options.resolveManagedMcpServer,
       repoPath,
       sessionPolicy.enabledTools,
+      sessionPolicy.sessionScope.workspaceId,
     );
   }
 

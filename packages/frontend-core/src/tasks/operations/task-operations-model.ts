@@ -1,4 +1,4 @@
-import type { TaskUpdatePatch } from "@openducktor/contracts";
+import type { TaskUpdatePatch, WorkspaceRef } from "@openducktor/contracts";
 
 export const WORKSPACE_REQUIRED_ERROR = "Select a workspace first.";
 
@@ -7,6 +7,14 @@ export const requireActiveRepo = (activeRepo: string | null): string => {
     throw new Error(WORKSPACE_REQUIRED_ERROR);
   }
   return activeRepo;
+};
+
+export const requireWorkspaceRef = (
+  repoPath: string | null,
+  workspaceId: string | null,
+): WorkspaceRef => {
+  if (!repoPath || !workspaceId) throw new Error(WORKSPACE_REQUIRED_ERROR);
+  return { workspaceId, repoPath };
 };
 
 export const toNormalizedTitle = (title: string): string => title.trim();

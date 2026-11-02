@@ -1,593 +1,567 @@
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sql } from "drizzle-orm";
-import { Deferred, Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
-import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
-import { openSqliteTaskStoreTestConnection } from "./sqlite-task-store-test-support";
+import { eq } from "drizzle-orm";
+import { Effect } from "effect";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { HostValidationError } from "../../effect/host-errors";
+import {
+  createSqliteHostDatabaseManager,
+  type SqliteWorkspacesReadProvider,
+} from "./sqlite-task-repository-context";
+import { createSqliteTaskOwnershipReader } from "./sqlite-workspace-ownership-reads";
+import { createSqliteWorkspaceSessionStore } from "./sqlite-workspace-session-store";
+import { encodeWorkspaceSessionRecord } from "./sqlite-workspace-session-reads";
+import { workspaceSessions } from "./sqlite-workspace-session-schema";
+import { taskSessions } from "./sqlite-host-database-schema";
+import { workspaces, workspaceRemovals } from "./sqlite-host-settings-schema";
+import { tasks, taskAssets, taskArtifacts } from "./sqlite-host-database-schema";
 
-const tempDirectories = new Set<string>();
-
+const temporaryDirectories = new Set<string>();
+const workspace = (workspaceId: string, repoPath = `/repos/${workspaceId}`) => ({
+  workspaceId,
+  workspaceName: workspaceId,
+  repoPath,
+  branchPrefix: "task",
+  defaultTargetBranch: "main",
+  closed: false,
+});
+const task = (workspaceId: string) => ({
+  workspaceId,
+  id: "same-task",
+  title: workspaceId,
+  status: "open",
+  issueType: "task",
+  priority: 2,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+});
 const createHarness = async () => {
-  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-"));
-  tempDirectories.add(configDir);
-  const manager = createSqliteTaskRepositoryContextManager({
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-host-database-"));
+  temporaryDirectories.add(configDir);
+  const manager = createSqliteHostDatabaseManager({
+    configDir,
     taskWorkflows: builtinTaskWorkflows,
-    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
-    openConnection: openSqliteTaskStoreTestConnection,
-    processEnv: {},
-    resolveDatabasePath: ({ workspaceId }) =>
-      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
-    resolveWorkspaceIdForRepoPath: (repoPath) => Effect.succeed(path.basename(repoPath)),
   });
-  return { configDir, manager };
-};
-
-const createCloseFailureHarness = async (
-  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never> = () =>
-    Effect.void,
-) => {
-  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-failure-"));
-  tempDirectories.add(configDir);
-  const manager = createSqliteTaskRepositoryContextManager({
-    taskWorkflows: builtinTaskWorkflows,
-    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
-    onBackgroundFailure,
-    processEnv: {},
-    resolveDatabasePath: ({ workspaceId }) =>
-      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
-    resolveWorkspaceIdForRepoPath: (repoPath) => Effect.succeed(path.basename(repoPath)),
-    openConnection: (databasePath) =>
-      openSqliteTaskStoreTestConnection(databasePath).pipe(
-        Effect.map((connection) => ({
-          ...connection,
-          release: connection.release.pipe(
-            Effect.andThen(
-              Effect.fail(
-                new HostOperationError({
-                  operation: "test.closeSqliteTaskStoreConnection",
-                  message: `Failed to close ${path.basename(path.dirname(databasePath))}.`,
-                }),
-              ),
-            ),
-          ),
-        })),
+  await Effect.runPromise(
+    manager.withHostDatabase("test.seed", (session) =>
+      session.execute(
+        (db) => db.insert(workspaces).values([workspace("alpha"), workspace("beta")]),
+        "test.seed",
       ),
-  });
+    ),
+  );
   return manager;
 };
-
 afterEach(async () => {
   await Promise.all(
-    Array.from(tempDirectories, (directory) => rm(directory, { force: true, recursive: true })),
+    [...temporaryDirectories].map((directory) => rm(directory, { force: true, recursive: true })),
   );
-  tempDirectories.clear();
+  temporaryDirectories.clear();
 });
 
-test("reuses one SQLite connection for repeated operations on the same database path", async () => {
-  const { manager } = await createHarness();
-
-  try {
-    const [first, second] = await Effect.runPromise(
-      Effect.all(
-        [
-          manager.withDatabase("/repos/alpha", "test.first", ({ session }) =>
-            Effect.succeed(session.database),
-          ),
-          manager.withDatabase("/repos/alpha", "test.second", ({ session }) =>
-            Effect.succeed(session.database),
-          ),
-        ],
-        { concurrency: "unbounded" },
-      ),
-    );
-
-    expect(second).toBe(first);
-  } finally {
-    await Effect.runPromise(manager.dispose());
-  }
-});
-
-test("does not open configured workspace databases before their first operation", async () => {
-  const { configDir, manager } = await createHarness();
-
-  try {
-    expect(await Bun.file(path.join(configDir, "alpha", "database.sqlite")).exists()).toBe(false);
-  } finally {
-    await Effect.runPromise(manager.dispose());
-  }
-});
-
-test("opens a connection using only the resolved database path", async () => {
-  const inputs: unknown[] = [];
-  const manager = createSqliteTaskRepositoryContextManager({
-    taskWorkflows: builtinTaskWorkflows,
-    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
-    openConnection: (databasePath) => {
-      inputs.push(databasePath);
-      return Effect.fail(
-        new HostOperationError({
-          operation: "test.openSqliteTaskStoreConnection",
-          message: "Stop after observing the connection input.",
-        }),
-      );
-    },
-    processEnv: {},
-    resolveDatabasePath: () => Effect.succeed("/task-stores/alpha/database.sqlite"),
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed("alpha"),
-  });
-
-  await Effect.runPromise(
-    Effect.result(
-      manager.withDatabase("/repos/alpha", "test.observe-open-input", () => Effect.void),
-    ),
-  );
-
-  expect(inputs).toEqual(["/task-stores/alpha/database.sqlite"]);
-  await Effect.runPromise(manager.dispose());
-});
-
-test("uses the explicit config directory instead of the environment", async () => {
-  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-config-root-"));
-  tempDirectories.add(configDir);
-  const inputs: string[] = [];
-  const manager = createSqliteTaskRepositoryContextManager({
-    taskWorkflows: builtinTaskWorkflows,
-    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
-    configDir,
-    openConnection: (databasePath) => {
-      inputs.push(databasePath);
-      return Effect.fail(
-        new HostOperationError({
-          operation: "test.openSqliteTaskStoreConnection",
-          message: "Stop after observing the connection input.",
-        }),
-      );
-    },
-    processEnv: { OPENDUCKTOR_CONFIG_DIR: path.join(configDir, "other") },
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed("alpha"),
-  });
-
-  await Effect.runPromise(
-    Effect.result(
-      manager.withDatabase("/repos/alpha", "test.explicit-config-dir", () => Effect.void),
-    ),
-  );
-
-  expect(inputs).toEqual([path.join(configDir, "task-stores", "alpha", "database.sqlite")]);
-  await Effect.runPromise(manager.dispose());
-});
-
-test("closes an idle SQLite connection after five minutes", async () => {
-  const { manager } = await createHarness();
-
-  try {
-    const [beforeExpiry, afterExpiry] = await Effect.runPromise(
-      Effect.gen(function* () {
-        const first = yield* manager.withDatabase(
-          "/repos/alpha",
-          "test.before-expiry",
-          ({ session }) => Effect.succeed(session.database),
-        );
-        yield* TestClock.adjust("5 minutes");
-        yield* Effect.yieldNow;
-        const second = yield* manager.withDatabase(
-          "/repos/alpha",
-          "test.after-expiry",
-          ({ session }) => Effect.succeed(session.database),
-        );
-        return [first, second] as const;
-      }).pipe(Effect.provide(TestClock.layer())),
-    );
-
-    expect(afterExpiry).not.toBe(beforeExpiry);
-  } finally {
-    await Effect.runPromise(manager.dispose());
-  }
-});
-
-test("restarts the idle timeout after later activity", async () => {
-  const { manager } = await createHarness();
-
-  try {
-    const [first, beforeResetExpiry, afterResetExpiry] = await Effect.runPromise(
-      Effect.gen(function* () {
-        const initial = yield* manager.withDatabase("/repos/alpha", "test.initial", ({ session }) =>
-          Effect.succeed(session.database),
-        );
-        yield* TestClock.adjust("4 minutes");
-        const reused = yield* manager.withDatabase("/repos/alpha", "test.reuse", ({ session }) =>
-          Effect.succeed(session.database),
-        );
-        yield* TestClock.adjust("4 minutes");
-        const stillOpen = yield* manager.withDatabase(
-          "/repos/alpha",
-          "test.before-reset-expiry",
-          ({ session }) => Effect.succeed(session.database),
-        );
-        yield* TestClock.adjust("5 minutes");
-        yield* Effect.yieldNow;
-        const reopened = yield* manager.withDatabase(
-          "/repos/alpha",
-          "test.after-reset-expiry",
-          ({ session }) => Effect.succeed(session.database),
-        );
-        expect(reused).toBe(initial);
-        return [initial, stillOpen, reopened] as const;
-      }).pipe(Effect.provide(TestClock.layer())),
-    );
-
-    expect(beforeResetExpiry).toBe(first);
-    expect(afterResetExpiry).not.toBe(first);
-  } finally {
-    await Effect.runPromise(manager.dispose());
-  }
-});
-
-test("keeps every recently active database path open without a global connection limit", async () => {
-  const { manager } = await createHarness();
-
-  try {
-    const sessions = await Effect.runPromise(
-      Effect.forEach(
-        Array.from({ length: 6 }, (_, index) => `/repos/workspace-${index}`),
-        (repoPath) =>
-          manager.withDatabase(repoPath, "test.open-workspace", ({ session }) =>
-            Effect.succeed(session),
-          ),
-      ),
-    );
-
-    await Effect.runPromise(
-      Effect.forEach(
-        sessions,
-        (session) =>
-          session
-            .execute(
-              (database) => database.run(sql.raw("SELECT 1;")),
-              "test.verify-open-connection",
-            )
-            .pipe(Effect.asVoid),
-        { discard: true },
-      ),
-    );
-    expect(sessions).toHaveLength(6);
-  } finally {
-    await Effect.runPromise(manager.dispose());
-  }
-});
-
-test("serializes complete operations that use the same database path", async () => {
-  const { manager } = await createHarness();
-
-  try {
-    const { afterRelease, beforeRelease } = await Effect.runPromise(
-      Effect.gen(function* () {
-        const events: string[] = [];
-        const firstEntered = yield* Deferred.make<void>();
-        const releaseFirst = yield* Deferred.make<void>();
-        const secondAttempted = yield* Deferred.make<void>();
-        const first = yield* Effect.forkChild(
-          manager.withDatabase("/repos/alpha", "test.first-operation", () =>
-            Effect.gen(function* () {
-              events.push("first:start");
-              yield* Deferred.succeed(firstEntered, undefined);
-              yield* Deferred.await(releaseFirst);
-              events.push("first:end");
-            }),
-          ),
-        );
-        yield* Deferred.await(firstEntered);
-        const second = yield* Effect.forkChild(
-          Effect.gen(function* () {
-            yield* Deferred.succeed(secondAttempted, undefined);
-            yield* manager.withDatabase("/repos/alpha", "test.second-operation", () =>
-              Effect.sync(() => events.push("second")),
-            );
-          }),
-        );
-        yield* Deferred.await(secondAttempted);
-        yield* Effect.yieldNow;
-        const beforeRelease = [...events];
-        yield* Deferred.succeed(releaseFirst, undefined);
-        yield* Fiber.join(first);
-        yield* Fiber.join(second);
-        return { afterRelease: [...events], beforeRelease };
-      }),
-    );
-
-    expect(beforeRelease).toEqual(["first:start"]);
-    expect(afterRelease).toEqual(["first:start", "first:end", "second"]);
-  } finally {
-    await Effect.runPromise(manager.dispose());
-  }
-});
-
-test("ownership reads share database serialization and stop after disposal", async () => {
-  const { manager } = await createHarness();
-  const workspaceScope = { workspaceId: "alpha", repoPath: "/repos/alpha" };
+test("nested repository operations share one cross-workspace transaction", async () => {
+  const manager = await createHarness();
   try {
     const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const events: string[] = [];
-        const entered = yield* Deferred.make<void>();
-        const release = yield* Deferred.make<void>();
-        const operation = yield* Effect.forkChild(
-          manager.withDatabase(workspaceScope.repoPath, "test.active-operation", () =>
+      Effect.result(
+        manager.withHostDatabase("test.outer", (session) =>
+          session.transaction("test.outer", () =>
             Effect.gen(function* () {
-              events.push("operation:start");
-              yield* Deferred.succeed(entered, undefined);
-              yield* Deferred.await(release);
-              events.push("operation:end");
+              yield* manager.withDatabase(
+                { workspaceId: "alpha", repoPath: "/repos/alpha" },
+                "test.alpha",
+                ({ session }) =>
+                  session.transaction("test.alpha", (transaction) =>
+                    transaction.execute(
+                      (db) => db.insert(tasks).values(task("alpha")),
+                      "test.insert",
+                    ),
+                  ),
+              );
+              yield* manager.withDatabase(
+                { workspaceId: "beta", repoPath: "/repos/beta" },
+                "test.beta",
+                ({ session }) =>
+                  session.transaction("test.beta", (transaction) =>
+                    transaction.execute(
+                      (db) => db.insert(tasks).values(task("beta")),
+                      "test.insert",
+                    ),
+                  ),
+              );
+              return yield* Effect.fail("reject both");
             }),
           ),
-        );
-        yield* Deferred.await(entered);
-        const owners = yield* Effect.forkChild(
-          manager
-            .listWorkspaceSessionsForWorktreeOwnership(workspaceScope)
-            .pipe(Effect.tap(() => Effect.sync(() => events.push("owners")))),
-        );
-        yield* Effect.yieldNow;
-        const beforeRelease = [...events];
-        const disposal = yield* Effect.forkChild(manager.dispose());
-        yield* Deferred.succeed(release, undefined);
-        yield* Fiber.join(operation);
-        const records = yield* Fiber.join(owners);
-        yield* Fiber.join(disposal);
-        const afterDisposal = yield* Effect.result(
-          manager.listWorkspaceSessionsForWorktreeOwnership(workspaceScope),
-        );
-        return { beforeRelease, events, records, afterDisposal };
-      }),
+        ),
+      ),
     );
-    expect(result.beforeRelease).toEqual(["operation:start"]);
-    expect(result.events).toEqual(["operation:start", "operation:end", "owners"]);
-    expect(result.records).toEqual([]);
-    expect(result.afterDisposal._tag).toBe("Failure");
+    expect(result._tag).toBe("Failure");
+    const saved = await Effect.runPromise(
+      manager.withHostDatabase("test.read", (session) =>
+        session.execute((db) => db.select().from(tasks), "test.read"),
+      ),
+    );
+    expect(saved).toEqual([]);
   } finally {
     await Effect.runPromise(manager.dispose());
   }
 });
 
-test("waits for admitted workspace operations before closing their slot", async () => {
-  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-race-"));
-  tempDirectories.add(configDir);
-  const operationAdmitted = Deferred.makeUnsafe<void>();
-  const releaseAdmission = Deferred.makeUnsafe<void>();
-  const events: string[] = [];
-  const manager = createSqliteTaskRepositoryContextManager({
-    taskWorkflows: builtinTaskWorkflows,
-    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
-    assertWorkspaceAdmitted: () =>
-      Effect.gen(function* () {
-        events.push("admitted");
-        yield* Deferred.succeed(operationAdmitted, undefined);
-        yield* Deferred.await(releaseAdmission);
-      }),
-    processEnv: {},
-    resolveDatabasePath: ({ workspaceId }) =>
-      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed("alpha"),
-  });
-
-  const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      const operation = yield* Effect.forkChild(
-        manager.withDatabase("/repos/alpha", "test.active-operation", () =>
-          Effect.sync(() => events.push("operation")),
+test("current registration and lifecycle reject stale workspace access", async () => {
+  const manager = await createHarness();
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.close", (session) =>
+        session.execute(
+          (db) =>
+            db.update(workspaces).set({ closed: true }).where(eq(workspaces.workspaceId, "alpha")),
+          "test.close",
         ),
-      );
-      yield* Deferred.await(operationAdmitted);
-      const close = yield* Effect.forkChild(
-        manager
-          .closeWorkspace("alpha")
-          .pipe(Effect.tap(() => Effect.sync(() => events.push("closed")))),
-      );
-      yield* Effect.yieldNow;
-      const beforeRelease = [...events];
-      yield* Deferred.succeed(releaseAdmission, undefined);
-      yield* Fiber.join(operation);
-      yield* Fiber.join(close);
-      return { beforeRelease, afterRelease: [...events] };
-    }),
-  );
-
-  expect(result.beforeRelease).toEqual(["admitted"]);
-  expect(result.afterRelease).toEqual(["admitted", "operation", "closed"]);
-  await Effect.runPromise(manager.dispose());
-});
-
-test.each([false, true])(
-  "ownership reads cannot reopen a database during removal cleanup, failed=%s",
-  async (failed) => {
-    const { manager, configDir } = await createHarness();
-    const workspaceScope = { workspaceId: "alpha", repoPath: "/repos/alpha" };
-    const databaseDirectory = path.join(configDir, workspaceScope.workspaceId);
-    const databasePath = path.join(databaseDirectory, "database.sqlite");
-    try {
-      await Effect.runPromise(
-        manager.withDatabase(workspaceScope.repoPath, "test.open", () => Effect.void),
-      );
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          const removed = yield* Deferred.make<void>();
-          const finishCleanup = yield* Deferred.make<void>();
-          const removal = yield* Effect.forkChild(
-            manager
-              .closeWorkspace(
-                workspaceScope.workspaceId,
-                Effect.gen(function* () {
-                  yield* Effect.promise(() =>
-                    rm(databaseDirectory, { recursive: true, force: true }),
-                  );
-                  yield* Deferred.succeed(removed, undefined);
-                  yield* Deferred.await(finishCleanup);
-                  if (failed)
-                    return yield* new HostOperationError({
-                      operation: "test.cleanup",
-                      message: "Cleanup failed after removing the database.",
-                    });
-                }),
-              )
-              .pipe(Effect.result),
-          );
-          yield* Deferred.await(removed);
-          const concurrentRead = yield* Effect.result(
-            manager.listWorkspaceSessionsForWorktreeOwnership(workspaceScope),
-          );
-          const existsDuringCleanup = yield* Effect.promise(() => Bun.file(databasePath).exists());
-          yield* Deferred.succeed(finishCleanup, undefined);
-          const removalResult = yield* Fiber.join(removal);
-          return { concurrentRead, existsDuringCleanup, removalResult };
-        }),
-      );
-      expect(result.concurrentRead._tag).toBe("Failure");
-      expect(result.existsDuringCleanup).toBe(false);
-      expect(result.removalResult._tag).toBe(failed ? "Failure" : "Success");
-      if (failed) {
-        await expect(
-          Effect.runPromise(manager.listWorkspaceSessionsForWorktreeOwnership(workspaceScope)),
-        ).rejects.toThrow("task store is closing");
-        await Effect.runPromise(
-          manager.closeWorkspace(
-            workspaceScope.workspaceId,
-            Effect.promise(() => rm(databaseDirectory, { recursive: true, force: true })),
-          ),
-        );
-      }
-      expect(await Bun.file(databasePath).exists()).toBe(false);
-    } finally {
-      await Effect.runPromise(manager.dispose());
-    }
-  },
-);
-
-test("stops admission and drains an active operation before disposal completes", async () => {
-  const { manager } = await createHarness();
-
-  const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const operationEntered = yield* Deferred.make<void>();
-      const releaseOperation = yield* Deferred.make<void>();
-      const operation = yield* Effect.forkChild(
-        manager.withDatabase("/repos/alpha", "test.active-operation", () =>
+      ),
+    );
+    const closed = await Effect.runPromise(
+      Effect.result(
+        manager.withDatabase(
+          { workspaceId: "alpha", repoPath: "/repos/alpha" },
+          "test.closed",
+          () => Effect.void,
+        ),
+      ),
+    );
+    expect(closed._tag).toBe("Failure");
+    const administrative = await Effect.runPromise(
+      manager.withDatabase(
+        { workspaceId: "alpha", repoPath: "/repos/alpha", access: "administrative" },
+        "test.admin",
+        ({ workspaceId }) => Effect.succeed(workspaceId),
+      ),
+    );
+    expect(administrative).toBe("alpha");
+    await Effect.runPromise(
+      manager.withHostDatabase("test.replace", (session) =>
+        session.transaction("test.replace", (transaction) =>
           Effect.gen(function* () {
-            events.push("operation:start");
-            yield* Deferred.succeed(operationEntered, undefined);
-            yield* Deferred.await(releaseOperation);
-            events.push("operation:end");
+            yield* transaction.execute(
+              (db) => db.delete(workspaces).where(eq(workspaces.workspaceId, "alpha")),
+              "test.delete",
+            );
+            yield* transaction.execute(
+              (db) => db.insert(workspaces).values(workspace("replacement", "/repos/alpha")),
+              "test.replace",
+            );
           }),
         ),
-      );
-      yield* Deferred.await(operationEntered);
-      const disposal = yield* Effect.forkChild(
-        manager.dispose().pipe(Effect.tap(() => Effect.sync(() => events.push("disposed")))),
-      );
-      yield* Effect.yieldNow;
-      const beforeRelease = [...events];
-      yield* Deferred.succeed(releaseOperation, undefined);
-      yield* Fiber.join(operation);
-      yield* Fiber.join(disposal);
-      const admissionResult = yield* Effect.result(
-        manager.withDatabase("/repos/alpha", "test.after-dispose", () => Effect.void),
-      );
-      return { admissionResult, afterRelease: [...events], beforeRelease };
-    }),
-  );
-
-  expect(result.beforeRelease).toEqual(["operation:start"]);
-  expect(result.afterRelease).toEqual(["operation:start", "operation:end", "disposed"]);
-  expect(result.admissionResult._tag).toBe("Failure");
-  if (result.admissionResult._tag === "Failure") {
-    expect(result.admissionResult.failure).toMatchObject({
-      _tag: "HostOperationError",
-      operation: "sqliteTaskRepository.acquireConnection",
-    });
+      ),
+    );
+    const stale = await Effect.runPromise(
+      Effect.result(
+        manager.withDatabase(
+          { workspaceId: "alpha", repoPath: "/repos/alpha" },
+          "test.stale",
+          () => Effect.void,
+        ),
+      ),
+    );
+    expect(stale._tag).toBe("Failure");
+  } finally {
+    await Effect.runPromise(manager.dispose());
   }
 });
 
-test("closes retained connections during disposal", async () => {
-  const { manager } = await createHarness();
-  const session = await Effect.runPromise(
-    manager.withDatabase("/repos/alpha", "test.capture-session", ({ session }) =>
-      Effect.succeed(session),
-    ),
-  );
-
-  await Effect.runPromise(manager.dispose());
-
-  const queryResult = await Effect.runPromise(
-    Effect.result(
-      session.execute((database) => database.run(sql.raw("SELECT 1;")), "test.query-after-dispose"),
-    ),
-  );
-  expect(queryResult._tag).toBe("Failure");
+test("a write transaction rejects a workspace that another connection closed", async () => {
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-host-database-"));
+  temporaryDirectories.add(configDir);
+  const createManager = () =>
+    createSqliteHostDatabaseManager({ configDir, taskWorkflows: builtinTaskWorkflows });
+  const manager = createManager();
+  const other = createManager();
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.seed", (session) =>
+        session.execute((db) => db.insert(workspaces).values(workspace("alpha")), "test.seed"),
+      ),
+    );
+    const closeAlpha = other.withHostDatabase("test.close", (session) =>
+      session.execute(
+        (db) =>
+          db.update(workspaces).set({ closed: true }).where(eq(workspaces.workspaceId, "alpha")),
+        "test.close",
+      ),
+    );
+    const failure = await Effect.runPromise(
+      manager
+        .withDatabase(
+          { workspaceId: "alpha", repoPath: "/repos/alpha" },
+          "test.write",
+          ({ session }) =>
+            Effect.promise(() => Effect.runPromise(closeAlpha)).pipe(
+              Effect.andThen(session.transaction("test.write", () => Effect.void)),
+            ),
+        )
+        .pipe(Effect.flip),
+    );
+    expect(failure).toBeInstanceOf(HostValidationError);
+    expect(failure.message).toContain("Workspace is closed: alpha");
+  } finally {
+    await Effect.runPromise(manager.dispose());
+    await Effect.runPromise(other.dispose());
+  }
 });
 
-test("reports close failures from every retained database during disposal", async () => {
-  const manager = await createCloseFailureHarness();
-  await Effect.runPromise(
-    Effect.forEach(
-      ["/repos/alpha", "/repos/beta"],
-      (repoPath) => manager.withDatabase(repoPath, "test.open", () => Effect.void),
-      { discard: true },
-    ),
-  );
-
-  const result = await Effect.runPromise(Effect.result(manager.dispose()));
-
-  expect(result._tag).toBe("Failure");
-  if (result._tag === "Failure") {
-    expect(result.failure.message.split("\n").sort()).toEqual([
-      "Failed to close alpha.",
-      "Failed to close beta.",
+test("cleanup claims retain closed tasks in a closed workspace with incomplete removal", async () => {
+  const manager = await createHarness();
+  const scope = { workspaceId: "alpha", repoPath: "/repos/alpha" };
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.removalClaims", (session) =>
+        session.transaction("test.removalClaims", (transaction) =>
+          Effect.gen(function* () {
+            yield* transaction.execute(
+              (db) => db.insert(tasks).values({ ...task("alpha"), status: "closed" }),
+              "test.closedTask",
+            );
+            yield* transaction.execute(
+              (db) =>
+                db
+                  .update(workspaces)
+                  .set({ closed: true })
+                  .where(eq(workspaces.workspaceId, "alpha")),
+              "test.closedWorkspace",
+            );
+            yield* transaction.execute(
+              (db) =>
+                db
+                  .insert(workspaceRemovals)
+                  .values({ workspaceId: "alpha", removeTaskWorktrees: true, phase: "worktrees" }),
+              "test.removal",
+            );
+          }),
+        ),
+      ),
+    );
+    const ownership = createSqliteTaskOwnershipReader(manager.readWorkspaces);
+    expect(
+      await Effect.runPromise(
+        ownership.listTaskDirectoriesForWorktreeOwnership({ workspaces: [scope] }),
+      ),
+    ).toEqual([
+      { workspaceId: "alpha", taskId: "same-task", title: "alpha", sessionDirectories: [] },
     ]);
+    await expect(
+      Effect.runPromise(ownership.listOpenTasksForWorktreeOwnership({ workspaces: [scope] })),
+    ).rejects.toThrow("removal is incomplete");
+    await expect(
+      Effect.runPromise(
+        ownership.listTaskDirectoriesForWorktreeOwnership({
+          workspaces: [{ ...scope, repoPath: "/replacement" }],
+        }),
+      ),
+    ).rejects.toThrow("no longer matches");
+  } finally {
+    await Effect.runPromise(manager.dispose());
   }
 });
 
-test("retains a workspace slot when shutdown fails", async () => {
-  const manager = await createCloseFailureHarness();
-  await Effect.runPromise(manager.withDatabase("/repos/alpha", "test.open", () => Effect.void));
-
-  const first = await Effect.runPromise(Effect.result(manager.closeWorkspace("alpha")));
-  const retry = await Effect.runPromise(Effect.result(manager.closeWorkspace("alpha")));
-
-  expect(first._tag).toBe("Failure");
-  expect(retry._tag).toBe("Failure");
-  if (retry._tag === "Failure") {
-    expect(retry.failure.message).toBe("Failed to close alpha.");
+test("full workspace identity selects one of the workspaces at the same path", async () => {
+  const manager = await createHarness();
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.duplicate", (session) =>
+        session.execute(
+          (db) => db.insert(workspaces).values(workspace("duplicate", "/repos/alpha")),
+          "test.duplicate",
+        ),
+      ),
+    );
+    const explicit = await Effect.runPromise(
+      manager.withDatabase(
+        { workspaceId: "alpha", repoPath: "/repos/alpha" },
+        "test.explicit",
+        ({ workspaceId }) => Effect.succeed(workspaceId),
+      ),
+    );
+    expect(explicit).toBe("alpha");
+  } finally {
+    await Effect.runPromise(manager.dispose());
   }
 });
 
-test("reports an idle close failure and rejects later operations for that database", async () => {
-  const backgroundFailures: HostOperationErrorAggregate[] = [];
-  const manager = await createCloseFailureHarness((failure) =>
-    Effect.sync(() => {
-      backgroundFailures.push(failure);
-    }),
-  );
+test("workspace cascades preserve identical task artifact and asset IDs elsewhere", async () => {
+  const manager = await createHarness();
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.rows", (session) =>
+        session.transaction("test.rows", (transaction) =>
+          Effect.gen(function* () {
+            yield* transaction.execute(
+              (db) => db.insert(tasks).values([task("alpha"), task("beta")]),
+              "test.tasks",
+            );
+            for (const workspaceId of ["alpha", "beta"]) {
+              yield* transaction.execute(
+                (db) =>
+                  db.insert(taskAssets).values({
+                    workspaceId,
+                    id: "same-asset",
+                    taskId: "same-task",
+                    scope: "description",
+                    originalName: "image.png",
+                    mediaType: "image/png",
+                    byteSize: 0,
+                    createdAt: new Date(0),
+                  }),
+                "test.assets",
+              );
+              yield* transaction.execute(
+                (db) =>
+                  db.insert(taskArtifacts).values({
+                    workspaceId,
+                    taskId: "same-task",
+                    artifactId: "workflow:same-task:spec",
+                    classification: "workflow",
+                    code: "spec",
+                    revision: 1,
+                    name: "Spec",
+                    markdown: workspaceId,
+                    format: "plain_text",
+                  }),
+                "test.artifacts",
+              );
+            }
+            yield* transaction.execute(
+              (db) => db.delete(workspaces).where(eq(workspaces.workspaceId, "beta")),
+              "test.remove",
+            );
+          }),
+        ),
+      ),
+    );
+    const result = await Effect.runPromise(
+      manager.withHostDatabase("test.read", (session) =>
+        Effect.all({
+          tasks: session.execute((db) => db.select().from(tasks), "test.tasks"),
+          assets: session.execute((db) => db.select().from(taskAssets), "test.assets"),
+          artifacts: session.execute((db) => db.select().from(taskArtifacts), "test.artifacts"),
+        }),
+      ),
+    );
+    expect(result.tasks.map((row) => row.workspaceId)).toEqual(["alpha"]);
+    expect(result.assets.map((row) => row.workspaceId)).toEqual(["alpha"]);
+    expect(result.artifacts.map((row) => row.markdown)).toEqual(["alpha"]);
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
+});
 
-  const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      yield* manager.withDatabase("/repos/alpha", "test.open", () => Effect.void);
-      yield* TestClock.adjust("5 minutes");
-      yield* Effect.yieldNow;
-      return yield* Effect.result(
-        manager.withDatabase("/repos/alpha", "test.after-close-failure", () => Effect.void),
+test("workspace access applies one lifecycle policy in the operation transaction", async () => {
+  const manager = await createHarness();
+  const alpha = { workspaceId: "alpha", repoPath: "/repos/alpha" };
+  const beta = { workspaceId: "beta", repoPath: "/repos/beta" };
+  const read = (scopes: Parameters<SqliteWorkspacesReadProvider>[0]) =>
+    Effect.runPromise(manager.readWorkspaces(scopes, "test.read", () => Effect.succeed("read")));
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.lifecycle", (session) =>
+        session.transaction("test.lifecycle", (transaction) =>
+          Effect.gen(function* () {
+            yield* transaction.execute(
+              (db) =>
+                db
+                  .update(workspaces)
+                  .set({ closed: true })
+                  .where(eq(workspaces.workspaceId, "alpha")),
+              "test.close",
+            );
+            yield* transaction.execute(
+              (db) =>
+                db
+                  .insert(workspaceRemovals)
+                  .values({ workspaceId: "beta", removeTaskWorktrees: false, phase: "worktrees" }),
+              "test.removal",
+            );
+          }),
+        ),
+      ),
+    );
+    await expect(read([{ ...alpha, access: "open" }])).rejects.toThrow(
+      "Workspace is closed: alpha",
+    );
+    expect(await read([{ ...alpha, access: "ownership" }])).toBe("read");
+    await expect(
+      read([
+        { ...alpha, access: "ownership" },
+        { ...beta, access: "ownership" },
+      ]),
+    ).rejects.toThrow("Workspace removal is incomplete for beta");
+    expect(
+      await read([
+        { ...alpha, access: "ownership" },
+        { ...beta, access: "administrative" },
+      ]),
+    ).toBe("read");
+    await expect(
+      read([{ ...beta, repoPath: "/repos/alpha", access: "administrative" }]),
+    ).rejects.toThrow("no longer matches");
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
+});
+
+test("cross-workspace ownership reads keep same-path workspaces and same task IDs apart with a fixed query count", async () => {
+  const manager = await createHarness();
+  // Both workspaces register one repository path and use the same task and chat IDs.
+  const alpha = { workspaceId: "alpha", repoPath: "/repos/alpha" };
+  const twin = { workspaceId: "twin", repoPath: "/repos/alpha" };
+  const chat = (externalSessionId: string) => ({
+    id: "same-chat",
+    runtimeKind: "codex" as const,
+    externalSessionId,
+    executionTarget: {
+      kind: "local_repo_root" as const,
+      workingDirectory: `/trees/${externalSessionId}`,
+    },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: externalSessionId,
+    targetBranch: null,
+    createdAt: 1,
+    updatedAt: 1,
+    archivedAt: null,
+  });
+  const taskSession = (workspaceId: string) => ({
+    workspaceId,
+    taskId: "same-task",
+    position: 0,
+    externalSessionId: `${workspaceId}-task`,
+    role: "build",
+    startedAt: 0,
+    runtimeKind: "codex",
+    workingDirectory: `/trees/${workspaceId}-task`,
+  });
+  try {
+    await Effect.runPromise(
+      manager.withHostDatabase("test.seedTwins", (session) =>
+        session.transaction("test.seedTwins", (transaction) =>
+          Effect.gen(function* () {
+            yield* transaction.execute(
+              (db) => db.insert(workspaces).values(workspace("twin", "/repos/alpha")),
+              "test.twin",
+            );
+            yield* transaction.execute(
+              (db) => db.insert(tasks).values([task("alpha"), task("twin"), task("beta")]),
+              "test.tasks",
+            );
+            yield* transaction.execute(
+              (db) =>
+                db
+                  .insert(taskSessions)
+                  .values([taskSession("alpha"), taskSession("twin"), taskSession("beta")]),
+              "test.taskSessions",
+            );
+            yield* transaction.execute(
+              (db) =>
+                db
+                  .insert(workspaceSessions)
+                  .values([
+                    encodeWorkspaceSessionRecord("alpha", chat("alpha-chat")),
+                    encodeWorkspaceSessionRecord("twin", chat("twin-chat")),
+                    encodeWorkspaceSessionRecord("beta", chat("beta-chat")),
+                  ]),
+              "test.chats",
+            );
+          }),
+        ),
+      ),
+    );
+    let queries = 0;
+    const counted: SqliteWorkspacesReadProvider = (scopes, operation, use) =>
+      manager.readWorkspaces(scopes, operation, (context) =>
+        use({
+          ...context,
+          session: {
+            ...context.session,
+            execute: (run, name, details) => {
+              queries += 1;
+              return context.session.execute(run, name, details);
+            },
+          },
+        }),
       );
-    }).pipe(Effect.provide(TestClock.layer())),
-  );
+    const store = createSqliteWorkspaceSessionStore({
+      contextProvider: manager.withDatabase,
+      workspacesProvider: counted,
+    });
+    const ownership = createSqliteTaskOwnershipReader(counted);
+    const both = { workspaces: [alpha, twin] };
 
-  expect(backgroundFailures.map((failure) => failure.message)).toEqual(["Failed to close alpha."]);
-  expect(result._tag).toBe("Failure");
-  if (result._tag === "Failure") {
-    expect(result.failure.message).toBe("Failed to close alpha.");
+    const roots = await Effect.runPromise(store.listLiveSessionRoots(both));
+    expect(
+      roots
+        .map(({ sessionScope, externalSessionId }) => [
+          sessionScope.kind,
+          sessionScope.workspaceId,
+          externalSessionId,
+        ])
+        .sort(),
+    ).toEqual([
+      ["repository", "alpha", "alpha-chat"],
+      ["repository", "twin", "twin-chat"],
+      ["workflow", "alpha", "alpha-task"],
+      ["workflow", "twin", "twin-task"],
+    ]);
+    expect(queries).toBe(2);
+
+    queries = 0;
+    const chats = await Effect.runPromise(store.listForWorktreeOwnership(both));
+    expect(
+      chats.map(({ workspaceId, externalSessionId }) => [workspaceId, externalSessionId]).sort(),
+    ).toEqual([
+      ["alpha", "alpha-chat"],
+      ["twin", "twin-chat"],
+    ]);
+    expect(await Effect.runPromise(ownership.listOpenTasksForWorktreeOwnership(both))).toEqual([
+      {
+        workspaceId: "alpha",
+        taskId: "same-task",
+        title: "alpha",
+        sessionDirectories: ["/trees/alpha-task"],
+      },
+      {
+        workspaceId: "twin",
+        taskId: "same-task",
+        title: "twin",
+        sessionDirectories: ["/trees/twin-task"],
+      },
+    ]);
+    expect(queries).toBe(2);
+
+    queries = 0;
+    expect(
+      (
+        await Effect.runPromise(
+          store.findByRuntimeSession({
+            ...both,
+            runtimeKind: "codex",
+            externalSessionId: "twin-chat",
+          }),
+        )
+      ).map(({ workspaceId, session }) => [workspaceId, session.id]),
+    ).toEqual([["twin", "same-chat"]]);
+    expect(queries).toBe(1);
+    expect(await Effect.runPromise(store.listLiveSessionRoots({ workspaces: [twin] }))).toEqual([
+      expect.objectContaining({
+        sessionScope: { kind: "repository", workspaceId: "twin" },
+        externalSessionId: "twin-chat",
+      }),
+      expect.objectContaining({
+        sessionScope: expect.objectContaining({ kind: "workflow", workspaceId: "twin" }),
+        externalSessionId: "twin-task",
+      }),
+    ]);
+  } finally {
+    await Effect.runPromise(manager.dispose());
   }
-  await Effect.runPromise(manager.dispose().pipe(Effect.ignore));
 });

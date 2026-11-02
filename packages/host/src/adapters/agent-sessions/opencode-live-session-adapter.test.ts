@@ -188,7 +188,12 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           Effect.result(
             prepared.adapter.sendUserMessage({
               ...ref,
-              sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+              sessionScope: {
+                kind: "workflow",
+                workspaceId: "repo",
+                taskId: "task-1",
+                role: "build",
+              },
               parts: [{ kind: "text", text: "Continue implementation" }],
               delivery: "new_turn",
             }),
@@ -887,7 +892,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       prepared.adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -913,7 +918,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -1077,7 +1082,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -1194,7 +1199,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       prepared.adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
     const refreshSnapshots = prepared.adapter.refreshSnapshots;
@@ -1427,7 +1432,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
     await Effect.runPromise(prepared.startForwarding());
@@ -1497,7 +1502,12 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const second = await Effect.runPromise(prepareAdapter(secondRuntime, ignoreObservationLoss));
     const firstAdapter = first.adapter;
     const secondAdapter = second.adapter;
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
     await Effect.runPromise(
       firstAdapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
     );
@@ -1594,7 +1604,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       prepared.adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
 
@@ -1735,7 +1745,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       prepared.adapter.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     );
     await Effect.runPromise(prepared.startForwarding());

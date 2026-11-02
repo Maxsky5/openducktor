@@ -30,11 +30,12 @@ export function useTaskSessionFork({
   repoPath: string | null;
   workspaceId: string | null;
   identity: AgentSessionIdentity | null;
-  scope: AgentSessionWorkflowScope;
+  scope: AgentSessionWorkflowScope | null;
   disabledReason: string | null;
 }) {
   const identity = useStableAgentSessionIdentity(inputIdentity);
-  const { taskId, role } = scope;
+  const taskId = scope?.taskId;
+  const role = scope?.role;
   const queryClient = useQueryClient();
   const connection = useClientConnection();
   const location = useLocation();
@@ -59,7 +60,15 @@ export function useTaskSessionFork({
   }, [active, connection, location.key, ownerKey]);
   const [failure, setFailure] = useState<{ ownerKey: string; message: string } | null>(null);
   const actions = useMemo<AgentChatForkActions | null>(() => {
-    if (!repoPath || !workspaceId || !identity) return null;
+    if (
+      !repoPath ||
+      !workspaceId ||
+      !identity ||
+      !taskId ||
+      !role ||
+      scope?.workspaceId !== workspaceId
+    )
+      return null;
     return {
       disabledReason,
       isPending: (point) => pending.has(sessionForkRequestKey(repoPath, identity, point)),
@@ -75,7 +84,7 @@ export function useTaskSessionFork({
           {
             ...identity,
             repoPath,
-            sessionScope: { kind: "workflow", taskId, role },
+            sessionScope: { kind: "workflow", workspaceId, taskId, role },
             forkPoint: point,
           },
           {
@@ -104,6 +113,7 @@ export function useTaskSessionFork({
     taskId,
     role,
     connection,
+    scope?.workspaceId,
   ]);
   return { actions, error: failure?.ownerKey === ownerKey ? failure.message : null };
 }

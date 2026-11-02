@@ -18,7 +18,12 @@ describe("agent session context query keys", () => {
     });
     const workflowScope = agentSessionContextQueryKeys.usage({
       ...sessionRefFixture,
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
 
     expect(withoutScope).toEqual([

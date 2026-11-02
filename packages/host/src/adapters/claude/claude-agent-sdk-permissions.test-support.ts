@@ -57,7 +57,12 @@ const createClaudePermissionTestSessionForScope = (
 });
 
 export const createClaudePermissionTestSession = (role: AgentRole = "spec"): ClaudeSessionContext =>
-  createClaudePermissionTestSessionForScope({ kind: "workflow", taskId: "task-1", role });
+  createClaudePermissionTestSessionForScope({
+    kind: "workflow",
+    workspaceId: "repo",
+    taskId: "task-1",
+    role,
+  });
 
 export const createClaudeRepositoryPermissionTestSession = (): ClaudeSessionContext =>
   createClaudePermissionTestSessionForScope({ kind: "repository" });

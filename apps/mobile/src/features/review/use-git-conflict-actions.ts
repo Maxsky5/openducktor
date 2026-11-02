@@ -68,6 +68,7 @@ export type GitConflictActions = {
 
 /** The Builder sessions of a task from the live session state of its workspace. */
 const useTaskBuilderSessions = (
+  workspaceId: string,
   repoPath: string,
   taskId: string | null,
 ): AgentSessionSummary[] | null => {
@@ -82,9 +83,12 @@ const useTaskBuilderSessions = (
       taskId === null || snapshot === null
         ? null
         : snapshot.sessions.filter(
-            (session) => session.taskId === taskId && session.role === "build",
+            (session) =>
+              session.workspaceId === workspaceId &&
+              session.taskId === taskId &&
+              session.role === "build",
           ),
-    [snapshot, taskId],
+    [snapshot, taskId, workspaceId],
   );
 };
 
@@ -115,7 +119,7 @@ export function useGitConflictActions({
   const running = useRef(false);
   const { workspaceId } = owner.workspace;
   const { repoPath, task, record } = owner;
-  const builderSessions = useTaskBuilderSessions(repoPath, task?.id ?? null);
+  const builderSessions = useTaskBuilderSessions(workspaceId, repoPath, task?.id ?? null);
   const runWorkflow = useSessionStartWorkflowRunner({ workspaceId, repoPath });
 
   const startConflictResolutionSession = useCallback(

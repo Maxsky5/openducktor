@@ -86,7 +86,7 @@ export function useKanbanPageModels({
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
   }, [refreshTasks]);
-  const mergedTargetByTaskId = useMergedTaskTargets(workspaceRepoPath, board.kanbanTasks);
+  const mergedTargetByTaskId = useMergedTaskTargets(activeWorkspace, board.kanbanTasks);
   const { onConfirmTaskAction } = actions;
   const onCloseTask = useCallback(
     (taskId: string): void => onConfirmTaskAction(taskId, "close"),

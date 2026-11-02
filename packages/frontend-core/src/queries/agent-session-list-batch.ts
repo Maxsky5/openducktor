@@ -1,3 +1,5 @@
+import { workspaceScopeKey } from "./workspace-scope";
+import { type WorkspaceRef } from "@openducktor/contracts";
 import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
 import { CancelledError, type QueryClient, replaceEqualDeep } from "@tanstack/react-query";
 import type { AgentSessionReadPort } from "./agent-sessions";
@@ -36,40 +38,40 @@ type WorkspaceQueue = {
 export type AgentSessionListBatch = {
   /** Read one task list. Reads of a workspace that start together share one host request. */
   load: (
-    repoPath: string,
+    repoPath: WorkspaceRef,
     taskId: string,
     readPort: AgentSessionReadPort,
   ) => Promise<AgentSessionRecord[]>;
   /** Advance the revisions of changed tasks. Reads already sent for them read again. */
-  markChanged: (repoPath: string, taskIds: string[]) => void;
+  markChanged: (repoPath: WorkspaceRef, taskIds: string[]) => void;
   /** The task revision, so a caller can later check that a read reflects it. */
-  revision: (repoPath: string, taskId: string) => number;
+  revision: (repoPath: WorkspaceRef, taskId: string) => number;
   /** True when a completed read or a committed update reflects the revision. */
-  isCurrent: (repoPath: string, taskId: string, revision: number) => boolean;
+  isCurrent: (repoPath: WorkspaceRef, taskId: string, revision: number) => boolean;
   /** Record a committed update. An older read cannot replace it. */
-  markCommitted: (repoPath: string, taskId: string) => void;
-  markDeleted: (repoPath: string, taskIds: string[]) => void;
-  isDeleted: (repoPath: string, taskId: string) => boolean;
+  markCommitted: (repoPath: WorkspaceRef, taskId: string) => void;
+  markDeleted: (repoPath: WorkspaceRef, taskIds: string[]) => void;
+  isDeleted: (repoPath: WorkspaceRef, taskId: string) => boolean;
   /** An authoritative creation or snapshot proves that these tasks exist. */
-  markExisting: (repoPath: string, taskIds: string[]) => void;
+  markExisting: (repoPath: WorkspaceRef, taskIds: string[]) => void;
   /** Cancel the pending reads of these tasks. */
-  drop: (repoPath: string, taskIds: string[]) => void;
+  drop: (repoPath: WorkspaceRef, taskIds: string[]) => void;
   /** Cancel every pending read and supersede the reads that already returned. */
   dropAll: () => void;
   /** Advances with each `dropAll`, so superseded work can stop. */
   epoch: () => number;
   /** Cancel every read of a workspace that closed and forget its state. */
-  release: (repoPath: string) => void;
+  release: (repoPath: WorkspaceRef) => void;
   /** Advances with each `release` of the workspace, so its superseded work can stop. */
-  workspaceEpoch: (repoPath: string) => number;
+  workspaceEpoch: (repoPath: WorkspaceRef) => number;
   /**
    * The tasks whose last read failed in one request with a deleted task. The deletion can
    * explain the failure, so their lists need another read.
    */
-  takeFailedWith: (repoPath: string, deletedTaskIds: string[]) => string[];
+  takeFailedWith: (repoPath: WorkspaceRef, deletedTaskIds: string[]) => string[];
   /** Track a public read operation until it settles. */
-  trackRead: (repoPath: string, taskId: string, read: Promise<AgentSessionRecord[]>) => void;
-  pendingReads: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>[];
+  trackRead: (repoPath: WorkspaceRef, taskId: string, read: Promise<AgentSessionRecord[]>) => void;
+  pendingReads: (repoPath: WorkspaceRef, taskId: string) => Promise<AgentSessionRecord[]>[];
 };
 
 const batches = new WeakMap<QueryClient, AgentSessionListBatch>();
@@ -119,8 +121,8 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
   const workspaceEpochs = new Map<string, number>();
   let epoch = 0;
 
-  const workspace = (repoPath: string): WorkspaceQueue => {
-    let queue = workspaces.get(repoPath);
+  const workspace = (repoPath: WorkspaceRef): WorkspaceQueue => {
+    let queue = workspaces.get(workspaceScopeKey(repoPath));
     if (!queue) {
       queue = {
         queued: new Set(),
@@ -130,7 +132,7 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
         deleted: new Set(),
         failedWith: new Map(),
       };
-      workspaces.set(repoPath, queue);
+      workspaces.set(workspaceScopeKey(repoPath), queue);
     }
     return queue;
   };
@@ -166,7 +168,7 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
     }
   };
 
-  const schedule = (repoPath: string, queue: WorkspaceQueue): void => {
+  const schedule = (repoPath: WorkspaceRef, queue: WorkspaceQueue): void => {
     if (queue.sendScheduled || queue.sent || queue.queued.size === 0) return;
     queue.sendScheduled = true;
     queueMicrotask(() => {
@@ -175,7 +177,7 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
     });
   };
 
-  const send = async (repoPath: string, queue: WorkspaceQueue): Promise<void> => {
+  const send = async (repoPath: WorkspaceRef, queue: WorkspaceQueue): Promise<void> => {
     const [first] = queue.queued;
     if (!first || queue.sent) return;
     // Reads with another read port wait for the next request.
@@ -254,13 +256,14 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
         commit(queue, taskId);
       }
     },
-    isDeleted: (repoPath, taskId) => workspaces.get(repoPath)?.deleted.has(taskId) ?? false,
+    isDeleted: (repoPath, taskId) =>
+      workspaces.get(workspaceScopeKey(repoPath))?.deleted.has(taskId) ?? false,
     markExisting: (repoPath, taskIds) => {
       const queue = workspace(repoPath);
       for (const taskId of taskIds) queue.deleted.delete(taskId);
     },
     drop: (repoPath, taskIds) => {
-      const queue = workspaces.get(repoPath);
+      const queue = workspaces.get(workspaceScopeKey(repoPath));
       if (queue) cancel(queue, new Set(taskIds));
     },
     dropAll: () => {
@@ -269,14 +272,17 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
     },
     epoch: () => epoch,
     release: (repoPath) => {
-      const queue = workspaces.get(repoPath);
+      const queue = workspaces.get(workspaceScopeKey(repoPath));
       if (queue) cancel(queue, null);
-      workspaces.delete(repoPath);
-      workspaceEpochs.set(repoPath, (workspaceEpochs.get(repoPath) ?? 0) + 1);
+      workspaces.delete(workspaceScopeKey(repoPath));
+      workspaceEpochs.set(
+        workspaceScopeKey(repoPath),
+        (workspaceEpochs.get(workspaceScopeKey(repoPath)) ?? 0) + 1,
+      );
     },
-    workspaceEpoch: (repoPath) => workspaceEpochs.get(repoPath) ?? 0,
+    workspaceEpoch: (repoPath) => workspaceEpochs.get(workspaceScopeKey(repoPath)) ?? 0,
     takeFailedWith: (repoPath, deletedTaskIds) => {
-      const queue = workspaces.get(repoPath);
+      const queue = workspaces.get(workspaceScopeKey(repoPath));
       if (!queue) return [];
       const deleted = new Set(deletedTaskIds);
       const failedTaskIds = [...queue.failedWith].flatMap(([taskId, requestTaskIds]) =>

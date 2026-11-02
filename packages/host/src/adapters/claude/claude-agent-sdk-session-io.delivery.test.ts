@@ -36,7 +36,7 @@ const messageInput = (overrides: MessageOverrides = {}): SendAgentUserMessageInp
   runtimeKind: "claude",
   workingDirectory: "/repo",
   runtimePolicy: { kind: "claude" },
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   delivery: "new_turn",
   parts: [{ kind: "text", text: "Continue" }],
   ...overrides,

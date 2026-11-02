@@ -4,6 +4,7 @@ import {
   type AgentModelDefault,
   type SettingsRepoConfig,
   type RepoPromptOverrides,
+  type WorkspaceSettingsPatch,
 } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
@@ -78,28 +79,27 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
 });
 
 describe("settings save transforms", () => {
-  test("only replaces custom roles when the role section was edited", () => {
-    const snapshot = createSettingsSnapshotFixture({
-      customAgentRoles: [{ id: "reviewer", name: "Reviewer", systemPrompt: "  Review code.\n" }],
+  test("sends keyed role edits and omits unchanged shared settings", () => {
+    const reviewer = { id: "reviewer", name: "Reviewer", systemPrompt: "Review." };
+    const retired = { id: "retired", name: "Old role", systemPrompt: "Old." };
+    const added = { id: "research", name: "Researcher", systemPrompt: "Research." };
+    const baseline = createSettingsSnapshotFixture({ customAgentRoles: [reviewer, retired] });
+    const draft = {
+      ...baseline,
+      customAgentRoles: [{ ...reviewer, name: "Code reviewer" }, added],
+    };
+    expect(prepareSettingsSnapshotForSave(draft, baseline).customAgentRoles).toEqual({
+      create: [added],
+      update: { reviewer: { name: "Code reviewer" } },
+      remove: ["retired"],
     });
-    expect(prepareSettingsSnapshotForSave(snapshot)).not.toHaveProperty("customAgentRoles");
-    expect(
-      prepareSettingsSnapshotForSave(snapshot, { saveCustomAgentRoles: true }).customAgentRoles,
-    ).toEqual(snapshot.customAgentRoles);
+    expect(prepareSettingsSnapshotForSave(baseline, baseline)).toEqual({});
     expect(
       prepareSettingsSnapshotForSave(
-        { ...snapshot, customAgentRoles: [] },
-        { saveCustomAgentRoles: true },
-      ).customAgentRoles,
-    ).toEqual([]);
-  });
-
-  test("only replaces Autopilot rules when the Autopilot section was edited", () => {
-    const snapshot = createSettingsSnapshotFixture();
-    expect(prepareSettingsSnapshotForSave(snapshot)).not.toHaveProperty("autopilot");
-    expect(prepareSettingsSnapshotForSave(snapshot, { saveAutopilot: true }).autopilot).toEqual(
-      prepareAutopilotSettingsForSave(snapshot.autopilot),
-    );
+        { ...baseline, autopilot: { ...baseline.autopilot, alwaysStartQaReviewsFresh: true } },
+        baseline,
+      ).autopilot,
+    ).toEqual({ alwaysStartQaReviewsFresh: true });
   });
 
   test("prepares prompt overrides for save", () => {
@@ -246,26 +246,65 @@ describe("settings save transforms", () => {
           }),
         },
       });
-      const saved = settingsSnapshotSaveInputSchema.parse(prepareSettingsSnapshotForSave(snapshot));
+      const baseline = {
+        ...snapshot,
+        workspaces: Object.fromEntries(
+          Object.entries(snapshot.workspaces).map(([id, repo]) => [
+            id,
+            prepareRepoConfigForSave({ ...repo, defaultModel: undefined, agentDefaults: {} }),
+          ]),
+        ),
+      };
+      const saved = settingsSnapshotSaveInputSchema.parse(
+        prepareSettingsSnapshotForSave(snapshot, baseline),
+      );
       const expected: AgentModelDefault = {
         runtimeKind,
         providerId: "openai",
         modelId: "model",
       };
       if (runtimeKind === "opencode") expected.profileId = "build";
-      expect(saved.workspaces["repo-a"]?.defaultModel).toEqual(expected);
-      expect(Object.values(saved.workspaces["repo-a"]?.agentDefaults ?? {})).toEqual([
+      const expectedDefault: Extract<
+        NonNullable<WorkspaceSettingsPatch["defaultModel"]>,
+        { type: "set" }
+      > = {
+        type: "set",
+        value: { runtimeKind, providerId: "openai", modelId: "model" },
+      };
+      if (runtimeKind === "opencode")
+        expectedDefault.value.profileId = { type: "set", value: "build" };
+      expect(saved.workspaces?.["repo-a"]?.defaultModel).toEqual(expectedDefault);
+      expect(Object.values(saved.workspaces?.["repo-a"]?.agentDefaults?.create ?? {})).toEqual([
         expected,
         expected,
         expected,
         expected,
       ]);
-      expect(saved.workspaces["repo-b"]?.defaultModel).toBeUndefined();
+      expect(saved.workspaces?.["repo-b"]?.defaultModel).toBeUndefined();
       expect(
-        Object.values(saved.workspaces["repo-b"]?.agentDefaults ?? {}).filter(Boolean),
+        Object.values(saved.workspaces?.["repo-b"]?.agentDefaults?.create ?? {}).filter(Boolean),
       ).toEqual([]);
     },
   );
+
+  test("keeps every workspace field that needs no normalization", () => {
+    const repo = createRepoConfig({
+      abbreviation: "RA",
+      tileColor: "#f08c00",
+      git: { provider: { id: "github", enabled: true, autoDetected: false } },
+    });
+    // SAFETY: The extra field stands for a future workspace field that the save step does not know.
+    const withUnknownField = { ...repo, futureField: { kept: true } } as SettingsRepoConfig;
+
+    const saveReady = prepareRepoConfigForSave(withUnknownField);
+
+    expect(Object.keys(saveReady).toSorted()).toEqual(Object.keys(withUnknownField).toSorted());
+    expect(saveReady).toMatchObject({
+      git: repo.git,
+      actions: repo.actions,
+      futureField: { kept: true },
+    });
+  });
 
   test("trims the abbreviation and drops a blank abbreviation and tile color", () => {
     const trimmed = prepareRepoConfigForSave(
@@ -329,47 +368,32 @@ describe("settings save transforms", () => {
     ).toThrow("Default Model runtime kind is required when provider and model are configured.");
   });
 
-  test("prepares autopilot settings in canonical event order", () => {
-    const saveReady = prepareAutopilotSettingsForSave({
+  test("deduplicates Autopilot actions and keeps each workflow's saved rules", () => {
+    const rules = [
+      {
+        workflowId: "other",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: ["startQa", "startQa"],
+      },
+      {
+        workflowId: "openducktor",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: ["startPlanner", "startPlanner"],
+      },
+      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+    ];
+    expect(prepareAutopilotSettingsForSave({ alwaysStartQaReviewsFresh: true, rules })).toEqual({
       alwaysStartQaReviewsFresh: true,
       rules: [
+        { workflowId: "other", eventId: "taskProgressedToSpecReady", actionIds: ["startQa"] },
         {
-          eventId: "taskProgressedToHumanReview",
-          actionIds: ["startGeneratePullRequest", "startGeneratePullRequest"],
-        },
-        {
+          workflowId: "openducktor",
           eventId: "taskProgressedToSpecReady",
-          actionIds: ["startPlanner", "startPlanner"],
+          actionIds: ["startPlanner"],
         },
+        { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
       ],
     });
-
-    expect(saveReady.alwaysStartQaReviewsFresh).toBe(true);
-    expect(saveReady.rules).toEqual([
-      { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
-      { eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { eventId: "taskProgressedToAiReview", actionIds: [] },
-      { eventId: "taskRejectedByQa", actionIds: [] },
-      { eventId: "taskProgressedToHumanReview", actionIds: ["startGeneratePullRequest"] },
-    ]);
-  });
-
-  test("preserves explicit empty autopilot actions for a configured event", () => {
-    const saveReady = prepareAutopilotSettingsForSave({
-      alwaysStartQaReviewsFresh: false,
-      rules: [
-        {
-          eventId: "taskProgressedToSpecReady",
-          actionIds: [],
-        },
-      ],
-    });
-
-    expect(saveReady.rules[0]).toEqual({
-      eventId: "taskProgressedToSpecReady",
-      actionIds: [],
-    });
-    expect(saveReady.alwaysStartQaReviewsFresh).toBe(false);
   });
 
   test("normalizes empty hook commands to empty arrays", () => {
@@ -381,63 +405,39 @@ describe("settings save transforms", () => {
     expect(saveReady.hooks).toEqual({ postComplete: [] });
   });
 
-  test("normalizes snapshot workspace map and global prompt overrides", () => {
-    const snapshot = prepareSettingsSnapshotForSave(
-      createSettingsSnapshotFixture({
-        agentModelFavorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
-        chat: {
-          showThinkingMessages: true,
+  test("normalizes changed editor values into sparse workspace and global edits", () => {
+    const repo = prepareRepoConfigForSave(createRepoConfig());
+    const baseline = createSettingsSnapshotFixture({ workspaces: { "repo-a": repo } });
+    const draft = {
+      ...baseline,
+      chat: { ...baseline.chat, showThinkingMessages: true },
+      reusablePrompts: [
+        {
+          id: " prompt-1 ",
+          name: " review ",
+          description: " Review context ",
+          content: " Review this. ",
         },
-        appearance: {
-          horizontalScrollbarVisibility: "hide",
-        },
-        reusablePrompts: [
-          {
-            id: " prompt-1 ",
-            name: " review ",
-            description: " Review context ",
-            content: " Review this. ",
-          },
-        ],
-        workspaces: {
-          "repo-a": createRepoConfig(),
-        },
-        globalPromptOverrides: {
-          "kickoff.spec_initial": {
-            template: " global ",
-            baseVersion: 2,
-            enabled: false,
-          },
-        },
-      }),
-    );
-
-    expect(snapshot.workspaces["repo-a"]?.hooks.postComplete).toEqual(["npm test"]);
-    expect("theme" in snapshot).toBe(false);
-    expect(snapshot.workspaces["repo-a"]?.actions).toEqual(createRepoConfig().actions);
-    expect(snapshot.chat.showThinkingMessages).toBe(true);
-    expect(snapshot.reusablePrompts).toEqual([
-      {
-        id: "prompt-1",
-        name: "review",
-        description: "Review context",
-        content: "Review this.",
+      ],
+      workspaces: { "repo-a": { ...repo, hooks: { postComplete: [" bun test ", ""] } } },
+      globalPromptOverrides: {
+        "kickoff.spec_initial": { template: " global ", baseVersion: 2, enabled: false },
       },
-    ]);
-    expect(snapshot.appearance).toEqual({
-      horizontalScrollbarVisibility: "hide",
-      sidebarSessionGrouping: "task",
+    };
+    const input = prepareSettingsSnapshotForSave(draft, baseline);
+    expect(input.workspaces?.["repo-a"]).toEqual({
+      expectedRepoPath: "/repo-a",
+      hooks: { postComplete: ["bun test"] },
     });
-    expect(snapshot.kanban.doneVisibleDays).toBe(1);
-    expect(snapshot.agentModelFavorites).toEqual([
-      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+    expect(input.global?.chat).toEqual({ showThinkingMessages: true });
+    expect(input.global?.reusablePrompts).toEqual([
+      { id: "prompt-1", name: "review", description: "Review context", content: "Review this." },
     ]);
-    expect(snapshot.globalPromptOverrides).toEqual({
-      "kickoff.spec_initial": {
-        template: "global",
-        baseVersion: 2,
-        enabled: false,
-      },
+    expect(input.global?.globalPromptOverrides).toEqual({
+      create: { "kickoff.spec_initial": { template: "global", baseVersion: 2, enabled: false } },
     });
+    expect(input.global?.kanban).toBeUndefined();
+    expect(input).not.toHaveProperty("theme");
+    expect(input).not.toHaveProperty("agentModelFavorites");
   });
 });

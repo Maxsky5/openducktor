@@ -1,5 +1,5 @@
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import type { TaskChangeSet } from "@openducktor/contracts";
+import type { TaskChangeSet, WorkspaceRef } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
 import { removedArtifactChanges, workflowArtifactChange } from "./artifact-changes";
@@ -63,7 +63,7 @@ export const createEventPublishingTaskService = ({
   const agentSessionUpdateModelDeferredPublication: EventPublishingTaskService["agentSessionUpdateModelDeferredPublication"] =
     (input) =>
       taskSyncService.runStatusMutation(
-        input.repoPath,
+        input,
         "agent-session-update-model",
         taskService.agentSessionUpdateModel(input),
         ({ result, statusChanges }) =>
@@ -75,7 +75,7 @@ export const createEventPublishingTaskService = ({
                   .runMutation(
                     input.repoPath,
                     taskSyncService.publishTasksUpdated(
-                      input.repoPath,
+                      input,
                       changeForTask(input.taskId),
                       "agent-session-update-model",
                       statusChanges,
@@ -93,17 +93,17 @@ export const createEventPublishingTaskService = ({
 
   const publishAfterConditionalMutation = <A>(
     operation: TaskMutationOperation,
-    repoPath: string,
+    workspace: WorkspaceRef,
     changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     mutated: (result: A) => boolean,
   ): Effect.Effect<A, TaskServiceError> =>
-    taskSyncService.runStatusMutation(repoPath, operation, mutation, ({ result, statusChanges }) =>
+    taskSyncService.runStatusMutation(workspace, operation, mutation, ({ result, statusChanges }) =>
       Effect.gen(function* () {
         if (result._tag === "Failure") {
           if (result.failure instanceof TaskMutationProgressFailure) {
             yield* taskSyncService.publishTasksUpdated(
-              repoPath,
+              workspace,
               result.failure.changes,
               operation,
               statusChanges,
@@ -117,7 +117,7 @@ export const createEventPublishingTaskService = ({
         if (!mutated(result.success)) {
           return result.success;
         }
-        yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation, statusChanges);
+        yield* taskSyncService.publishTasksUpdated(workspace, changes, operation, statusChanges);
         return result.success;
       }),
     );
@@ -126,6 +126,7 @@ export const createEventPublishingTaskService = ({
     ...createArtifactPublishingMethods(taskService, publishMutation),
     findTask: (input) => taskService.findTask(input),
     listTaskReferences: (input) => taskService.listTaskReferences(input),
+    searchTasks: (input) => taskService.searchTasks(input),
     listTasks: (input) => taskService.listTasks(input),
     listKanbanTasks: (input) => taskService.listKanbanTasks(input),
     listTaskIds: (input) => taskService.listTaskIds(input),
@@ -139,7 +140,7 @@ export const createEventPublishingTaskService = ({
     agentSessionsListForTasks: (input) => taskService.agentSessionsListForTasks(input),
     applyStartEventDeferredPublication: (input) =>
       taskSyncService.runStatusMutation(
-        input.repoPath,
+        input,
         "apply-task-event",
         taskService.applyStartEvent(input),
         ({ result, statusChanges }) =>
@@ -151,7 +152,7 @@ export const createEventPublishingTaskService = ({
                   .runMutation(
                     input.repoPath,
                     taskSyncService.publishTasksUpdated(
-                      input.repoPath,
+                      input,
                       changeForTask(input.taskId),
                       "apply-task-event",
                       statusChanges,
@@ -169,7 +170,7 @@ export const createEventPublishingTaskService = ({
               .runMutation(
                 input.repoPath,
                 taskSyncService.publishTasksUpdated(
-                  input.repoPath,
+                  input,
                   changeForTask(input.taskId),
                   "agent-session-create",
                   [],
@@ -185,12 +186,7 @@ export const createEventPublishingTaskService = ({
         taskService.agentSessionUpsert(input).pipe(
           Effect.tap(() =>
             taskSyncService
-              .publishTasksUpdated(
-                input.repoPath,
-                changeForTask(input.taskId),
-                "agent-session-create",
-                [],
-              )
+              .publishTasksUpdated(input, changeForTask(input.taskId), "agent-session-create", [])
               .pipe(
                 Effect.mapError(
                   (cause) =>
@@ -212,7 +208,7 @@ export const createEventPublishingTaskService = ({
     agentSessionDelete: (input) =>
       publishAfterMutation(
         "agent-session-delete",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.agentSessionDelete(input),
       ),
@@ -220,7 +216,7 @@ export const createEventPublishingTaskService = ({
     detectPullRequest: (input) =>
       publishAfterConditionalMutation(
         "detect-pull-request",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.detectPullRequest(input),
         (result) => result.outcome === "linked",
@@ -228,35 +224,35 @@ export const createEventPublishingTaskService = ({
     linkPullRequest: (input) =>
       publishAfterMutation(
         "link-pull-request",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.linkPullRequest(input),
       ),
     upsertPullRequest: (input) =>
       publishAfterMutation(
         "upsert-pull-request",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.upsertPullRequest(input),
       ),
     unlinkPullRequest: (input) =>
       publishAfterMutation(
         "unlink-pull-request",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.unlinkPullRequest(input),
       ),
     linkMergedPullRequest: (input) =>
       publishAfterMutation(
         "link-merged-pull-request",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.linkMergedPullRequest(input),
       ),
     directMerge: (input) =>
       publishAfterConditionalMutation(
         "direct-merge",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.directMerge(input),
         (result) => result.outcome === "completed",
@@ -264,30 +260,35 @@ export const createEventPublishingTaskService = ({
     completeDirectMerge: (input) =>
       publishAfterMutation(
         "complete-direct-merge",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.completeDirectMerge(input),
       ),
     createTask: (input) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.result(taskService.createTask(input));
-        if (result._tag === "Failure") {
-          if (result.failure instanceof TaskCreationProgressFailure) {
-            yield* taskSyncService.publishExternalTaskCreated(
-              input.repoPath,
-              result.failure.createdTask,
-            );
-            return yield* Effect.fail(result.failure.failure);
-          }
-          return yield* Effect.fail(result.failure);
-        }
-        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.success);
-        return result.success;
-      }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation)),
+      taskSyncService.runStatusMutation(
+        input,
+        "create-task",
+        taskService.createTask(input),
+        ({ result }) =>
+          Effect.gen(function* () {
+            if (result._tag === "Failure") {
+              if (result.failure instanceof TaskCreationProgressFailure) {
+                yield* taskSyncService.publishExternalTaskCreated(
+                  input,
+                  result.failure.createdTask,
+                );
+                return yield* Effect.fail(result.failure.failure);
+              }
+              return yield* Effect.fail(result.failure);
+            }
+            yield* taskSyncService.publishExternalTaskCreated(input, result.success);
+            return result.success;
+          }),
+      ),
     deleteTask: (input) =>
       publishAfterMutation(
         "delete-task",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.deleteTask(input),
         { changes: (result) => result.changes },
@@ -295,14 +296,14 @@ export const createEventPublishingTaskService = ({
     closeTask: (input) =>
       publishAfterMutation(
         "close-task",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.closeTask(input),
       ),
     resetImplementation: (input) =>
       publishAfterMutation(
         "reset-implementation",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.resetImplementation(input),
         {
@@ -315,7 +316,7 @@ export const createEventPublishingTaskService = ({
     resetTask: (input) =>
       publishAfterMutation(
         "reset-task",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.resetTask(input),
         {
@@ -326,69 +327,69 @@ export const createEventPublishingTaskService = ({
     updateTask: (input) =>
       publishAfterMutation(
         "update-task",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.updateTask(input),
       ),
     transitionTask: (input) =>
       publishAfterMutation(
         "transition-task",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.transitionTask(input),
       ),
     applyTaskEvent: (input) =>
       publishAfterMutation(
         "apply-task-event",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.applyTaskEvent(input),
       ),
     applyStartEvent: (input) =>
       publishAfterMutation(
         "apply-task-event",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.applyStartEvent(input),
       ),
     buildBlocked: (input) =>
       publishAfterMutation(
         "build-blocked",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.buildBlocked(input),
       ),
     buildStart: (input) =>
       publishAfterMutation(
         "build-start",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.buildStart(input),
       ),
     buildResumed: (input) =>
       publishAfterMutation(
         "build-resumed",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.buildResumed(input),
       ),
     buildCompleted: (input) =>
       publishAfterMutation(
         "build-completed",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.buildCompleted(input),
       ),
     humanRequestChanges: (input) =>
       publishAfterMutation(
         "human-request-changes",
-        input.repoPath,
+        input,
         changeForTask(input.taskId),
         taskService.humanRequestChanges(input),
       ),
     repoPullRequestSync: (input) =>
       taskSyncService
-        .syncRepoPullRequests(input.repoPath, input.expectedWorkspaceId)
+        .syncRepoPullRequests(input.repoPath, input.workspaceId)
         .pipe(
           Effect.map((result) =>
             result.ran

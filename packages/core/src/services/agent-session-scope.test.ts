@@ -10,19 +10,19 @@ describe("Agent Session scope policy", () => {
     expect(agentSessionScopesEqual({ kind: "repository" }, { kind: "repository" })).toBe(true);
     expect(
       agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "workflow", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       ),
     ).toBe(true);
     expect(
       agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "workflow", taskId: "task-2", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-2", role: "build" },
       ),
     ).toBe(false);
     expect(
       agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         { kind: "repository" },
       ),
     ).toBe(false);
@@ -30,9 +30,14 @@ describe("Agent Session scope policy", () => {
 
   test("describes repository and workflow scopes", () => {
     expect(describeAgentSessionScope({ kind: "repository" })).toBe("repository scope");
-    expect(describeAgentSessionScope({ kind: "workflow", taskId: "task-1", role: "qa" })).toBe(
-      "workflow scope for task 'task-1' and role 'qa'",
-    );
+    expect(
+      describeAgentSessionScope({
+        kind: "workflow",
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "qa",
+      }),
+    ).toBe("workflow scope for task 'task-1' and role 'qa'");
   });
 
   test("accepts initial, unbound, and matching association transitions", () => {
@@ -45,12 +50,12 @@ describe("Agent Session scope policy", () => {
     ).toEqual({ kind: "accepted", association: { kind: "repository" } });
     expect(
       resolveAgentSessionAssociationTransition(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "workflow", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       ),
     ).toEqual({
       kind: "accepted",
-      association: { kind: "workflow", taskId: "task-1", role: "build" },
+      association: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
     });
   });
 
@@ -58,17 +63,32 @@ describe("Agent Session scope policy", () => {
     expect(
       resolveAgentSessionAssociationTransition({ kind: "repository" }, { kind: "unbound" }),
     ).toEqual({ kind: "accepted", association: { kind: "repository" } });
+    expect(
+      resolveAgentSessionAssociationTransition(
+        { kind: "repository", workspaceId: "saved-workspace" },
+        { kind: "repository" },
+      ),
+    ).toEqual({
+      kind: "accepted",
+      association: { kind: "repository", workspaceId: "saved-workspace" },
+    });
   });
 
   test("reports conflicting bound associations without choosing one", () => {
     expect(
       resolveAgentSessionAssociationTransition(
-        { kind: "workflow", taskId: "task-1", role: "build" },
+        { kind: "workflow", workspaceId: "alpha", taskId: "same-id", role: "build" },
+        { kind: "workflow", workspaceId: "beta", taskId: "same-id", role: "build" },
+      ).kind,
+    ).toBe("conflict");
+    expect(
+      resolveAgentSessionAssociationTransition(
+        { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         { kind: "repository" },
       ),
     ).toEqual({
       kind: "conflict",
-      previous: { kind: "workflow", taskId: "task-1", role: "build" },
+      previous: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       incoming: { kind: "repository" },
     });
   });

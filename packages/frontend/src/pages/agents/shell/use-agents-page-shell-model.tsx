@@ -101,7 +101,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     repoPath: workspaceRepoPath,
     notifications: sessionStartNotifications,
   });
-  const sessions = useAgentSessionSummaries();
+  const sessionSummaries = useAgentSessionSummaries();
+  const sessions = useMemo(
+    () =>
+      activeWorkspaceId
+        ? sessionSummaries.filter((session) => session.workspaceId === activeWorkspaceId)
+        : [],
+    [activeWorkspaceId, sessionSummaries],
+  );
 
   const routeSession = useAgentsPageRouteSessionModel({
     activeWorkspaceId,
@@ -229,6 +236,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const chatFileLinkOwner = useMemo<ChatFileLinkOwner>(
     () => ({
+      workspaceId: activeWorkspace?.workspaceId ?? null,
       repoPath: workspaceRepoPath,
       taskId: selection.view.taskId || null,
       workingDirectory:
@@ -237,6 +245,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       onSelectFile: orchestration.onSelectTaskExecutionFile,
     }),
     [
+      activeWorkspace?.workspaceId,
       workspaceRepoPath,
       selection.view.taskId,
       orchestrationSelection.view.selectedSession.identity?.workingDirectory,
@@ -250,6 +259,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     () =>
       documentsModel
         ? {
+            workspaceId: documentsModel.workspaceId,
             repoPath: documentsModel.repoPath,
             taskId: documentsModel.taskId,
             ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",

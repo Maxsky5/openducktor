@@ -1,5 +1,6 @@
 import type {
   GitTargetBranch,
+  WorkspaceRef,
   TaskAssetDescriptionMutation,
   TaskCreateInput,
   TaskUpdatePatch,
@@ -27,8 +28,8 @@ export type UseTaskOperationsResult = TaskPullRequestOperations & {
   isLoadingTasks: boolean;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
+  loadWorkspaceTasks: (scope: WorkspaceRef) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
   createTask: (input: TaskCreateInput, assets?: TaskAssetDescriptionMutation) => Promise<void>;

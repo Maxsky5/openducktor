@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -13,7 +14,7 @@ import {
 export const createSystemDiagnosticsCommandHandlers = (service: SystemDiagnosticsService) =>
   ({
     path_check: (args) => service.pathCheck(parseForce(args)),
-    task_store_check: (args) => service.taskStoreCheck(parseRepoPath(args)),
+    task_store_check: (args) => service.taskStoreCheck(parseWorkspace(args)),
     git_check: () => service.gitCheck(),
   }) satisfies HostCommandHandlerDefinitions;
 
@@ -28,7 +29,13 @@ const parseForce = (args: HostCommandArgs): boolean | undefined => {
   );
 };
 
-const parseRepoPath = (args: HostCommandArgs): string => {
+const parseWorkspace = (args: HostCommandArgs): WorkspaceRef => {
   const record = requireRecord(commandInputRecordSchema.safeParse(args), "task_store_check input");
-  return requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  return {
+    workspaceId: requireString(
+      commandInputStringSchema.safeParse(record.workspaceId),
+      "workspaceId",
+    ),
+    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
+  };
 };

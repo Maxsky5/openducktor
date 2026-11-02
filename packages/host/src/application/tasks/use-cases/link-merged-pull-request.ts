@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
@@ -42,8 +43,8 @@ export const createTaskLinkMergedPullRequestUseCase = ({
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest, removeWorktree } = input;
 
-      const current = yield* taskStore.getTask({ repoPath, taskId });
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
+      const metadata = yield* taskStore.getTaskMetadata(input);
       const sameExistingPullRequest =
         metadata.pullRequest?.providerId === pullRequest.providerId &&
         metadata.pullRequest.number === pullRequest.number &&
@@ -55,8 +56,10 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           workspaceSettingsService,
         }),
       );
-      const repoConfig =
-        yield* providerDependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(
+        providerDependencies.workspaceSettingsService,
+        input,
+      );
       const provider = yield* providerDependencies.gitProviderResolver.resolve(repoConfig);
       const configuredProviderId = provider.getDescriptor().id;
       yield* requirePullRequestProviderMatch({
@@ -119,6 +122,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         repoPath,
         taskId,
         "Pull request linking",
+        input.workspaceId,
       );
       // The cleanup needs the task branch. A relink can find it already removed.
       let hasTaskBranch = false;
@@ -140,7 +144,12 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       if (hasTaskBranch) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
-      yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
+      yield* taskStore.setPullRequest({
+        workspaceId: input.workspaceId,
+        repoPath,
+        taskId,
+        pullRequest,
+      });
       const postLink = yield* Effect.result(
         Effect.gen(function* () {
           if (closure.kind === "denied") {
@@ -148,6 +157,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           }
           const cleanupEffect = hasTaskBranch
             ? cleanupConfirmedMergeClose({
+                workspaceId: input.workspaceId,
                 dependencies: { ...dependencies, taskActivityGuard },
                 taskStore,
                 lifecycle: taskSessionLifecycleCoordinator,
@@ -158,17 +168,20 @@ export const createTaskLinkMergedPullRequestUseCase = ({
                 worktreeCleanup: { remove: removeWorktree, force: true },
               })
             : runTaskRuntimeCleanup({
+                workspaceId: input.workspaceId,
                 progress: createTaskCleanupProgressState(),
                 repoPath,
                 taskIds: [taskId],
                 terminalService: dependencies.terminalService,
               });
           return yield* completeTaskClosure({
+            workspaceId: input.workspaceId,
             cleanup: cleanupEffect,
             gitPort: dependencies.gitPort,
             operation: "link merged pull request",
             repoPath,
-            decision: closure,
+            taskWorkflows,
+            effect: "pull_request.merged",
             taskId,
             taskSessionLifecycleCoordinator,
             taskStore,
@@ -180,9 +193,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           createTaskMutationProgressFailure("link-merged-pull-request", taskId, postLink.failure),
         );
       }
-      const task = postLink.success;
-
-      return enrichTask(workflow, task);
+      return enrichTask(workflow, postLink.success);
     });
   },
 });

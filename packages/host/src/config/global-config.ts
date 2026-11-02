@@ -1,12 +1,14 @@
 import {
   type GlobalConfig,
   globalConfigSchema,
+  HOST_PREFERENCE_FIELDS,
   type PersistedGlobalConfigV2,
   persistedGlobalConfigV2Schema,
   type PersistedGlobalConfigV3,
   persistedGlobalConfigV3Schema,
   persistedGlobalConfigV4Schema,
   repoActionCommandLines,
+  workspaceAgentStudioStateSchema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
@@ -191,6 +193,16 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
       }),
     );
   }
+  if (isPersistedConfigObject(migrated.autopilot) && Array.isArray(migrated.autopilot.rules)) {
+    migrated.autopilot = {
+      ...migrated.autopilot,
+      rules: migrated.autopilot.rules.map((rule) =>
+        isPersistedConfigObject(rule) && rule.workflowId === undefined
+          ? { ...rule, workflowId: "openducktor" }
+          : rule,
+      ),
+    };
+  }
   return migrateWorkspaces(
     migrateWorkspaces(migrateReusablePrompts(migrated), migrateRepositoryGitConfig),
     migrateRepositoryActions,
@@ -293,4 +305,67 @@ export const upgradePersistedGlobalConfigV3 = (
   }
 
   return parsed.data;
+};
+
+const preferenceFieldsSchema = globalConfigSchema.pick(HOST_PREFERENCE_FIELDS);
+
+export const hostPreferencesSchema = preferenceFieldsSchema
+  .extend({
+    version: z.literal(5),
+    workspaceUi: z
+      .record(z.string(), z.strictObject({ agentStudioState: workspaceAgentStudioStateSchema }))
+      .default({}),
+  })
+  .strict();
+export type HostPreferences = z.infer<typeof hostPreferencesSchema>;
+
+export const toHostPreferences = (config: GlobalConfig): HostPreferences =>
+  hostPreferencesSchema.parse({
+    ...preferenceFieldsSchema.parse(config),
+    version: 5,
+    workspaceUi: Object.fromEntries(
+      Object.entries(config.workspaces).map(([workspaceId, workspace]) => [
+        workspaceId,
+        { agentStudioState: workspace.agentStudioState },
+      ]),
+    ),
+  });
+
+export const parseHostPreferences = (payload: JSONType): HostPreferences => {
+  if (!isPersistedConfigObject(payload))
+    throw new HostValidationError({ message: "Config file must contain a JSON object." });
+  if (payload.version === 5) return hostPreferencesSchema.parse(payload);
+  readPersistedGlobalConfigVersion(payload);
+  const legacy = migrateReusablePrompts(payload);
+  const workspaceUi = isPersistedConfigObject(legacy.workspaces)
+    ? Object.fromEntries(
+        Object.entries(legacy.workspaces).flatMap(([workspaceId, workspace]) =>
+          isPersistedConfigObject(workspace) && workspace.agentStudioState !== undefined
+            ? [[workspaceId, { agentStudioState: workspace.agentStudioState }]]
+            : [],
+        ),
+      )
+    : {};
+  return hostPreferencesSchema.parse({
+    ...preferenceFieldsSchema.parse(legacy),
+    version: 5,
+    workspaceUi,
+  });
+};
+
+export const composeGlobalConfig = (
+  shared: GlobalConfig,
+  preferences: HostPreferences,
+): GlobalConfig => {
+  const { version: _version, workspaceUi, ...fields } = preferences;
+  return globalConfigSchema.parse({
+    ...shared,
+    ...fields,
+    workspaces: Object.fromEntries(
+      Object.entries(shared.workspaces).map(([workspaceId, workspace]) => [
+        workspaceId,
+        { ...workspace, ...workspaceUi[workspaceId] },
+      ]),
+    ),
+  });
 };

@@ -11,7 +11,12 @@ test("renders the readers of task session summaries only when those summaries ch
   const store = createAgentSessionsStore("/repo");
   const build = createAgentSessionFixture({
     externalSessionId: "build",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
     status: "idle",
   });
   const chat = createAgentSessionFixture({

@@ -1,3 +1,4 @@
+import { sqliteValues } from "./sqlite-parameters";
 import { type TaskMetadataArtifact, workflowArtifactId } from "@openducktor/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect } from "effect";
@@ -10,13 +11,14 @@ import {
 import {
   TASK_WORKFLOW_ARTIFACT_FORMAT_PLAIN_TEXT,
   type TaskArtifactInsert,
-  type TaskStoreSession,
+  type HostDatabaseSession,
   taskArtifacts,
-} from "./sqlite-task-store-schema";
+} from "./sqlite-host-database-schema";
 
 /** A new revision of a workflow artifact. The caller names its command and acting role. */
 export const insertWorkflowArtifact = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   input: {
     code: string;
     name: string;
@@ -30,9 +32,10 @@ export const insertWorkflowArtifact = (
 ): Effect.Effect<TaskMetadataArtifact, SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
     const { code, verdict } = input;
-    const revision = yield* nextWorkflowArtifactRevision(session, input.taskId, code);
+    const revision = yield* nextWorkflowArtifactRevision(session, workspaceId, input.taskId, code);
     const markdown = input.markdown.trim();
     const artifact: TaskArtifactInsert = {
+      workspaceId,
       artifactId: workflowArtifactId(input.taskId, code),
       classification: "workflow",
       code,
@@ -60,46 +63,55 @@ export const insertWorkflowArtifact = (
 
 /** Deletes every revision of the workflow artifacts with these codes. */
 export const clearWorkflowArtifacts = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
   repoPath: string,
   codes: readonly string[],
-): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
+): Effect.Effect<string[], SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireTaskRow(session, taskId, repoPath);
-    if (codes.length === 0) return true;
-    yield* session.execute(
+    yield* requireTaskRow(session, workspaceId, taskId, repoPath);
+    if (codes.length === 0) return [];
+    const deleted = yield* session.execute(
       (database) =>
         database
           .delete(taskArtifacts)
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, taskId),
               eq(taskArtifacts.classification, "workflow"),
-              inArray(taskArtifacts.code, [...codes]),
+              inArray(taskArtifacts.code, sqliteValues([...codes])),
             ),
-          ),
+          )
+          .returning({ artifactId: taskArtifacts.artifactId }),
       "sqliteTaskRepository.clearWorkflowArtifacts.deleteArtifacts",
     );
-    return true;
+    return [...new Set(deleted.map(({ artifactId }) => artifactId))];
   });
 
 export const clearTaskArtifacts = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
   repoPath: string,
-): Effect.Effect<boolean, SqliteTaskStoreWriteError> =>
+): Effect.Effect<string[], SqliteTaskStoreWriteError> =>
   Effect.gen(function* () {
-    yield* requireTaskRow(session, taskId, repoPath);
-    yield* session.execute(
-      (database) => database.delete(taskArtifacts).where(eq(taskArtifacts.taskId, taskId)),
+    yield* requireTaskRow(session, workspaceId, taskId, repoPath);
+    const deleted = yield* session.execute(
+      (database) =>
+        database
+          .delete(taskArtifacts)
+          .where(and(eq(taskArtifacts.workspaceId, workspaceId), eq(taskArtifacts.taskId, taskId)))
+          .returning({ artifactId: taskArtifacts.artifactId }),
       "sqliteTaskRepository.clearTaskArtifacts.deleteArtifacts",
     );
-    return true;
+    return [...new Set(deleted.map(({ artifactId }) => artifactId))];
   });
 
 const nextWorkflowArtifactRevision = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
   code: string,
 ): Effect.Effect<number, SqliteTaskStoreWriteError> =>
@@ -111,6 +123,7 @@ const nextWorkflowArtifactRevision = (
           .from(taskArtifacts)
           .where(
             and(
+              eq(taskArtifacts.workspaceId, workspaceId),
               eq(taskArtifacts.taskId, taskId),
               eq(taskArtifacts.classification, "workflow"),
               eq(taskArtifacts.code, code),

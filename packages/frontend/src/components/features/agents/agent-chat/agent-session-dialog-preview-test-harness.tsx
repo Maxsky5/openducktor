@@ -98,9 +98,12 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
   const client = connection.queryClient;
   client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
   for (const taskId of ["a", "b"])
-    client.setQueryData(taskWorktreeQueryOptions({ repoPath: "/repo", taskId }).queryKey, () => ({
-      workingDirectory: `/repo/${taskId}`,
-    }));
+    client.setQueryData(
+      taskWorktreeQueryOptions({ workspaceId: "workspace", repoPath: "/repo", taskId }).queryKey,
+      () => ({
+        workingDirectory: `/repo/${taskId}`,
+      }),
+    );
   // These file-preview cases start with cached transcript policies and complete histories.
   const policiesReady = Promise.all(
     Object.values(dialogTargets).map((target) =>
@@ -291,19 +294,19 @@ export const dialogTargets = {
     externalSessionId: "main",
     runtimeKind: "opencode",
     workingDirectory: "/repo/main",
-    sessionScope: { kind: "workflow", taskId: "a", role: "build" },
+    sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "a", role: "build" },
   },
   child: {
     externalSessionId: "child",
     runtimeKind: "codex",
     workingDirectory: "/repo/child",
-    sessionScope: { kind: "workflow", taskId: "a", role: "build" },
+    sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "a", role: "build" },
   },
   other: {
     externalSessionId: "other",
     runtimeKind: "opencode",
     workingDirectory: "/repo/other",
-    sessionScope: { kind: "workflow", taskId: "b", role: "build" },
+    sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "b", role: "build" },
   },
 } satisfies Record<string, AgentSessionTranscriptTarget>;
 

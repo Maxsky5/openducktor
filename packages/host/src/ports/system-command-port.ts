@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type {
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
@@ -40,8 +40,3 @@ export type SystemCommandPort = {
     options?: SystemCommandRunOptions,
   ): Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>;
 };
-
-export class SystemCommandPortTag extends Context.Service<
-  SystemCommandPortTag,
-  SystemCommandPort
->()("@openducktor/host/SystemCommandPort") {}

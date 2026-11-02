@@ -6,13 +6,18 @@ import {
 } from "./agent-session-schemas";
 
 describe("agent session scope contracts", () => {
-  test("keeps the workflow scope shape unchanged", () => {
-    const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+  test("includes workspace identity in the workflow scope", () => {
+    const workflowScope = {
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build",
+    } as const;
 
     expect(agentSessionWorkflowScopeSchema.parse(workflowScope)).toEqual(workflowScope);
     expect(agentSessionScopeSchema.parse(workflowScope)).toEqual(workflowScope);
     expect(JSON.stringify(agentSessionScopeSchema.parse(workflowScope))).toBe(
-      '{"kind":"workflow","taskId":"task-1","role":"build"}',
+      '{"kind":"workflow","workspaceId":"repo","taskId":"task-1","role":"build"}',
     );
   });
 
@@ -38,6 +43,14 @@ describe("agent session scope contracts", () => {
     expect(
       agentSessionScopeSchema.safeParse({
         kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      }).success,
+    ).toBe(false);
+    expect(
+      agentSessionScopeSchema.safeParse({
+        kind: "workflow",
+        workspaceId: "repo",
         taskId: " ",
         role: "build",
       }).success,
@@ -45,6 +58,7 @@ describe("agent session scope contracts", () => {
     expect(
       agentSessionScopeSchema.safeParse({
         kind: "workflow",
+        workspaceId: "repo",
         taskId: "task-1",
       }).success,
     ).toBe(false);

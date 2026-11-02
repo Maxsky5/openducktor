@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  artifactContentChunkSchema,
-  artifactReadMetadataSchema,
+  artifactReadResultSchema,
   artifactReadRequestSchema,
   freeArtifactContentInputSchema,
   TASK_ARTIFACT_MAX_FILE_BYTES,
@@ -102,34 +101,23 @@ describe("task artifact transport contracts", () => {
     }
   });
 
-  test("continued reads require a version and MCP budgets stay within the public limits", () => {
+  test("reads reject range and continuation options", () => {
     const input = { taskId: "task-1", codes: ["notes"] };
-    expect(ReadTaskArtifactsInputSchema.safeParse({ ...input, byteOffset: 4 }).success).toBe(false);
-    expect(
-      artifactReadRequestSchema.safeParse({
-        taskId: input.taskId,
-        artifactId: "free-1",
-        repoPath: "/repo",
-        byteOffset: 4,
-      }).success,
-    ).toBe(false);
-    expect(
-      ReadTaskArtifactsInputSchema.parse({
-        ...input,
-        byteOffset: 4,
-        expectedVersion: "v1",
-        maxBytes: 4,
-      }).maxBytes,
-    ).toBe(4);
-    for (const maxBytes of [0, 3, 1024 * 1024 + 1]) {
-      expect(ReadTaskArtifactsInputSchema.safeParse({ ...input, maxBytes }).success).toBe(false);
+    const hostInput = {
+      workspaceId: "ws",
+      repoPath: "/repo",
+      taskId: "task-1",
+      artifactId: "free-1",
+    };
+    expect(ReadTaskArtifactsInputSchema.parse(input)).toEqual(input);
+    expect(artifactReadRequestSchema.parse(hostInput)).toEqual(hostInput);
+    for (const field of [{ byteOffset: 0 }, { maxBytes: 4 }, { expectedVersion: "old" }]) {
+      expect(ReadTaskArtifactsInputSchema.safeParse({ ...input, ...field }).success).toBe(false);
+      expect(artifactReadRequestSchema.safeParse({ ...hostInput, ...field }).success).toBe(false);
     }
-    expect(
-      ReadTaskArtifactsInputSchema.safeParse({ ...input, maxBytes: 1024 * 1024 }).success,
-    ).toBe(true);
   });
 
-  test("reads select distinct codes and limit continuation to one artifact", () => {
+  test("reads select distinct codes", () => {
     const input = { taskId: "task-1" };
     for (const fields of [
       {},
@@ -147,7 +135,6 @@ describe("task artifact transport contracts", () => {
     const selection = {
       ...input,
       codes: ["spec", "plan", "qaReport", "notes", "preview"],
-      maxBytes: 4,
     };
     expect(ReadTaskArtifactsInputSchema.parse(selection)).toEqual(selection);
   });
@@ -156,10 +143,6 @@ describe("task artifact transport contracts", () => {
     const { artifactId: _artifactId, ...publicArtifact } = artifact;
     const chunk = {
       artifact: publicArtifact,
-      version: "v1",
-      byteOffset: 0,
-      nextByteOffset: null,
-      totalBytes: 5,
     };
     expect(
       readTaskArtifactsResultSchema.safeParse({
@@ -172,14 +155,12 @@ describe("task artifact transport contracts", () => {
         {
           ...chunk,
           artifact: { ...publicArtifact, byteSize: Buffer.byteLength(text) },
-          totalBytes: Buffer.byteLength(text),
           content: text,
         },
         chunk,
         {
           ...chunk,
           artifact: { ...publicArtifact, byteSize: 0 },
-          totalBytes: 0,
           content: "",
         },
       ],
@@ -207,41 +188,17 @@ describe("task artifact transport contracts", () => {
     ).toBe(false);
   });
 
-  test("read chunks validate offsets while metadata excludes original and preview bodies", () => {
-    const chunk = {
-      artifact,
-      version: "v1",
-      byteOffset: 0,
-      nextByteOffset: 4,
-      totalBytes: 5,
-      dataBase64: "aGVsbA==",
-    };
-    expect(artifactContentChunkSchema.safeParse(chunk).success).toBe(true);
-    for (const patch of [
-      { nextByteOffset: null },
-      { nextByteOffset: 3 },
-      { totalBytes: 3 },
-      { dataBase64: "" },
-    ]) {
-      expect(artifactContentChunkSchema.safeParse({ ...chunk, ...patch }).success).toBe(false);
+  test("reads require the complete bytes, including empty files", () => {
+    const full = { artifact, dataBase64: "aGVsbG8=" };
+    expect(artifactReadResultSchema.parse(full)).toEqual(full);
+    for (const dataBase64 of ["aGVsbA==", "", "aGVsbG8h"]) {
+      expect(artifactReadResultSchema.safeParse({ ...full, dataBase64 }).success).toBe(false);
     }
     expect(
-      artifactContentChunkSchema.safeParse({
-        ...chunk,
-        byteOffset: 4,
-        nextByteOffset: null,
-        dataBase64: "bw==",
-      }).success,
-    ).toBe(true);
-    expect(
-      artifactContentChunkSchema.safeParse({
-        ...chunk,
+      artifactReadResultSchema.safeParse({
         artifact: { ...artifact, byteSize: 0 },
-        totalBytes: 0,
-        nextByteOffset: null,
         dataBase64: "",
       }).success,
     ).toBe(true);
-    expect(artifactReadMetadataSchema.safeParse(chunk).success).toBe(false);
   });
 });

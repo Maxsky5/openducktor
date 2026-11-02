@@ -96,6 +96,7 @@ export function useAgentStudioSelectionController({
   );
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
+    workspaceId: activeWorkspaceId,
     workspaceRepoPath,
     selectedTask: navigationState.view.selectedTask,
     sessionSummaries: navigationState.view.sessionsForTask,

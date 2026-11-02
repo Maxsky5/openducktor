@@ -1,4 +1,4 @@
-import type { FreeTaskArtifact, TaskArtifact } from "@openducktor/contracts";
+import type { FreeTaskArtifact, TaskArtifact, WorkspaceRef } from "@openducktor/contracts";
 import { artifactQueryKeys, readTaskArtifact } from "@openducktor/frontend-core/queries/artifacts";
 import {
   artifactPreviewKind,
@@ -17,39 +17,34 @@ export type ArtifactPreview =
 /** A read of a saved file into a device file. The file goes away when its last view closes. */
 export type ArtifactFile = {
   artifact: TaskArtifact;
-  version: string;
   uri: string;
   preview: ArtifactPreview;
 };
 
-/**
- * Reads a saved file chunk by chunk into a device file with its stored file name, so the bytes
- * never enter JavaScript memory and the share sheet shows that name. Only a text format reads its
- * bytes back to show the text. Live artifact changes read the file again.
- */
+/** Read the complete file once, then keep its device URI in the query cache. */
 export const artifactFileQueryOptions = (
   queryClient: QueryClient,
   files: ResourceFiles,
-  repoPath: string,
+  scope: WorkspaceRef,
   artifact: FreeTaskArtifact,
 ) =>
   queryOptions({
-    queryKey: artifactQueryKeys.file(repoPath, artifact.taskId, artifact.artifactId),
+    queryKey: artifactQueryKeys.file(scope, artifact.taskId, artifact.artifactId),
     queryFn: async (context): Promise<ArtifactFile> => {
       const file = files.createPartFile(artifact.fileName);
       try {
         const read = await readTaskArtifact(
           queryClient,
-          { repoPath, taskId: artifact.taskId, artifactId: artifact.artifactId },
+          { ...scope, taskId: artifact.taskId, artifactId: artifact.artifactId },
           context,
-          ({ dataBase64 }) => file.appendBase64(dataBase64),
         );
+        await file.appendBase64(read.dataBase64);
         const kind = artifactPreviewKind(read.artifact.mediaType);
         if (kind === "image" || kind === "none")
-          return { ...read, uri: file.uri, preview: { kind } };
+          return { artifact: read.artifact, uri: file.uri, preview: { kind } };
         const text = decodeArtifactText(await files.readBytes(file.uri));
         return {
-          ...read,
+          artifact: read.artifact,
           uri: file.uri,
           preview: text === null ? { kind: "invalid-text" } : { kind, text },
         };

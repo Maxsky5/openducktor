@@ -1,18 +1,12 @@
 import {
   agentModelFavoritesSchema,
   customAgentRoleInputSchema,
-  globalGitConfigSchema,
   kanbanTaskCardViewSchema,
-  repoHooksSchema,
   settingsSnapshotSaveInputSchema,
   sidebarSessionGroupingSchema,
   themePreferenceSchema,
-  workspaceRepoConfigInputSchema,
-  workspaceRepoSettingsInputSchema,
   workspaceAgentStudioStateSchema,
   workspaceAgentStudioStateActionSchema,
-  type WorkspaceRepoConfigInput,
-  type WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
@@ -104,28 +98,6 @@ const parseRuntimeConfirmation = (record: CommandInputRecord): string | undefine
   });
 };
 
-const parseRepoConfigInput = (
-  result: z.ZodSafeParseResult<WorkspaceRepoConfigInput>,
-): WorkspaceRepoConfigInput => {
-  if (result.success) return result.data;
-  throw new HostValidationError({
-    message: `workspace_update_repo_config config is invalid: ${result.error.message}`,
-    field: "config",
-    cause: result.error,
-  });
-};
-
-const parseRepoSettingsInput = (
-  result: z.ZodSafeParseResult<WorkspaceRepoSettingsInput>,
-): WorkspaceRepoSettingsInput => {
-  if (result.success) return result.data;
-  throw new HostValidationError({
-    message: `workspace_save_repo_settings settings is invalid: ${result.error.message}`,
-    field: "settings",
-    cause: result.error,
-  });
-};
-
 const parseAgentStudioStateInput = (record: CommandInputRecord) => {
   const result = workspaceAgentStudioStateSchema.safeParse(record.state);
   if (result.success) return result.data;
@@ -150,15 +122,11 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "reorderWorkspaces"
     | "replaceAgentStudioState"
     | "applyAgentStudioStateAction"
-    | "saveRepoSettings"
     | "selectWorkspace"
     | "setTheme"
     | "updateAgentModelFavorites"
     | "updateKanbanTaskCardView"
     | "updateSidebarSessionGrouping"
-    | "updateGlobalGitConfig"
-    | "updateRepoConfig"
-    | "updateRepoHooks"
   >,
   hostRuntimeService: Pick<HostRuntimeService, "previewSettings" | "saveSettings">,
 ) =>
@@ -261,48 +229,6 @@ export const createWorkspaceSettingsCommandHandlers = (
           "workspaceId",
         ),
       ),
-    workspace_update_repo_config: (args) =>
-      workspaceSettingsService.updateRepoConfig(
-        requireString(
-          commandInputStringSchema.safeParse(
-            requireObjectArgs("workspace_update_repo_config", args, "workspaceId").workspaceId,
-          ),
-          "workspaceId",
-        ),
-        parseRepoConfigInput(
-          workspaceRepoConfigInputSchema.safeParse(
-            requireObjectArgs("workspace_update_repo_config", args, "config").config,
-          ),
-        ),
-      ),
-    workspace_save_repo_settings: (args) =>
-      workspaceSettingsService.saveRepoSettings(
-        requireString(
-          commandInputStringSchema.safeParse(
-            requireObjectArgs("workspace_save_repo_settings", args, "workspaceId").workspaceId,
-          ),
-          "workspaceId",
-        ),
-        parseRepoSettingsInput(
-          workspaceRepoSettingsInputSchema.safeParse(
-            requireObjectArgs("workspace_save_repo_settings", args, "settings").settings,
-          ),
-        ),
-      ),
-    workspace_update_repo_hooks: (args) =>
-      workspaceSettingsService.updateRepoHooks(
-        requireString(
-          commandInputStringSchema.safeParse(
-            requireObjectArgs("workspace_update_repo_hooks", args, "workspaceId").workspaceId,
-          ),
-          "workspaceId",
-        ),
-        requireParsedInput(
-          repoHooksSchema,
-          requireObjectArgs("workspace_update_repo_hooks", args, "hooks"),
-          "hooks",
-        ),
-      ),
     workspace_get_settings_snapshot: (args) => {
       requireNoArgs("workspace_get_settings_snapshot", args);
       return workspaceSettingsService.getSettingsSnapshot();
@@ -352,14 +278,6 @@ export const createWorkspaceSettingsCommandHandlers = (
           themePreferenceSchema,
           requireObjectArgs("set_theme", args, "theme"),
           "theme",
-        ),
-      ),
-    workspace_update_global_git_config: (args) =>
-      workspaceSettingsService.updateGlobalGitConfig(
-        requireParsedInput(
-          globalGitConfigSchema,
-          requireObjectArgs("workspace_update_global_git_config", args, "git"),
-          "git",
         ),
       ),
   }) satisfies HostCommandHandlerDefinitions;

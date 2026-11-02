@@ -42,7 +42,7 @@ type CodexContextUsageLoaderDeps = {
   prepareRuntime(runtimeId: string): Promise<void>;
   threadConfig(
     repoPath: string,
-    sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools">,
+    sessionPolicy: Pick<CodexSessionScopePolicy, "enabledTools" | "sessionScope">,
   ): Promise<CodexThreadConfig>;
   clearThreadInventory(runtimeId: string): void;
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;

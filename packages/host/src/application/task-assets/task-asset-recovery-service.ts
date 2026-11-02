@@ -38,6 +38,7 @@ export const createTaskAssetRecoveryService = ({
         const repoPath = yield* resolveRepoPath(quarantine.workspaceId);
         if (quarantine.operation === "delete") {
           const taskExists = yield* registry.taskExists({
+            workspaceId: quarantine.workspaceId,
             repoPath,
             taskId: quarantine.taskId,
           });
@@ -50,6 +51,7 @@ export const createTaskAssetRecoveryService = ({
         }
 
         const registered = yield* registry.listAssets({
+          workspaceId: quarantine.workspaceId,
           repoPath,
           taskId: quarantine.taskId,
           scope: "description",
@@ -96,11 +98,16 @@ export const createTaskAssetRecoveryService = ({
 
         if (quarantine.operation === "create") {
           const taskExists = yield* registry.taskExists({
+            workspaceId: quarantine.workspaceId,
             repoPath,
             taskId: quarantine.taskId,
           });
           if (taskExists) {
-            yield* taskStore.deleteTask({ repoPath, taskId: quarantine.taskId });
+            yield* taskStore.deleteTask({
+              workspaceId: quarantine.workspaceId,
+              repoPath,
+              taskId: quarantine.taskId,
+            });
           }
           if (existingPromotedAssetIds.length > 0) {
             yield* filePort.removeDurable({

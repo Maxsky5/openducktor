@@ -369,14 +369,16 @@ test("finishes history and projects launch results into an inactive open workspa
         .some(({ externalSessionId }) => externalSessionId === "autopilot-session"),
     ).toBe(true);
     await state.select(workspaceB);
-    await state.run(() => store.removeTaskSessions("/a", ["autopilot-task"]));
-    expect(store.listSessionTaskIds("/a")).toEqual([]);
+    await state.run(() =>
+      store.removeTaskSessions({ workspaceId: "a", repoPath: "/a" }, ["autopilot-task"]),
+    );
+    expect(store.listSessionTaskIds({ workspaceId: "a", repoPath: "/a" })).toEqual([]);
     expect(store.getSessionSource(a.ref)).not.toBeNull();
     expect(store.getWorkspaceStore("/a")?.listSessionSnapshots()).toHaveLength(1);
     expect(store.getWorkspaceStore("/b")?.listSessionSnapshots()).toHaveLength(1);
     await state.select(workspaceB, [workspaceB]);
     expect(state.stops.get("/a")).toBe(1);
-    expect(store.listSessionTaskIds("/a")).toEqual([]);
+    expect(store.listSessionTaskIds({ workspaceId: "a", repoPath: "/a" })).toEqual([]);
     expect(store.getWorkspaceStore("/a")).toBeNull();
     expect(store.getSessionSource(a.ref)).toBeNull();
   } finally {

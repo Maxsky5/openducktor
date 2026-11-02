@@ -17,7 +17,12 @@ test.each(["opencode", "codex", "claude"] as const)(
     const session = buildSession({
       runtimeKind,
       status: "stopped",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
     const sessionsRef = createSessionsRef([session]);
     let sends = 0;

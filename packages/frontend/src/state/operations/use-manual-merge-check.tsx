@@ -33,7 +33,7 @@ export function useManualMergeCheck(queryClient: QueryClient) {
         const results = await settleWithLimit(
           scope.targets,
           MANUAL_MERGE_CHECK_CONCURRENCY,
-          (target) => checkTaskMergeStatus(queryClient, target.repoPath),
+          (target) => checkTaskMergeStatus(queryClient, target),
         );
         const failedCount = results.filter((result) => result.status === "rejected").length;
         let title = `Merge check partially completed: ${scope.label}`;

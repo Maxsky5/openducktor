@@ -8,12 +8,13 @@ import {
   defaultCodexEffectivePolicy,
   expectedThreadConfig,
   RecordingTransport,
+  testManagedMcpServer,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest } from "./types";
 
 const THREAD_METHODS = new Set(["thread/start", "thread/resume", "thread/fork"]);
 const runtimePolicy = () => ({ kind: "codex" as const, policy: defaultCodexEffectivePolicy() });
-const buildScope = () => workflowAgentSessionScope("task-1", "build");
+const buildScope = () => workflowAgentSessionScope("repo", "task-1", "build");
 
 /** Reports each thread in the directory where the test opened it. */
 class DirectoryTransport extends RecordingTransport {
@@ -70,7 +71,14 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
     transport.cwdByThread.set("import-b", "/repo-b");
     transport.cwdByThread.set("detached-a", "/repo-a");
     transport.cwdByThread.set("thread-idle", "/repo-b");
-    const { adapter } = createHarness({ transportFactory: () => transport });
+    const resolved: Array<{ repoPath: string; workspaceId: string | undefined }> = [];
+    const { adapter } = createHarness({
+      transportFactory: () => transport,
+      resolveManagedMcpServer: async (repoPath, workspaceId) => {
+        resolved.push({ repoPath, workspaceId });
+        return testManagedMcpServer(repoPath);
+      },
+    });
     const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" };
     const repositoryScope = { kind: "repository" as const };
 
@@ -102,6 +110,15 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
     });
     await adapter.loadSessionContextUsage(sessionRef("/repo-b", "thread-idle"));
 
+    expect(resolved.map((scope) => scope.workspaceId)).toEqual([
+      "repo",
+      "repo",
+      "repo",
+      undefined,
+      undefined,
+      "repo",
+      "repo",
+    ]);
     const workflowA = expectedThreadConfig("/repo-a", AGENT_ROLE_TOOL_POLICY.build);
     const workflowB = expectedThreadConfig("/repo-b", AGENT_ROLE_TOOL_POLICY.build);
     expect(threadConfigs(transport)).toEqual([

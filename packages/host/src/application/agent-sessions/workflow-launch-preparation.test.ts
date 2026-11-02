@@ -286,6 +286,8 @@ test("automatic model and prompt selection uses role and repository overrides on
   expect(h.sends[0]).not.toHaveProperty("model");
   expect(h.sends[0]?.parts).toEqual([{ kind: "text", text: "Repository kickoff task" }]);
   expect(h.sends[0]?.systemPrompt).toContain("Repository system");
+  expect(h.settingsReads.global).toHaveBeenCalledTimes(1);
+  expect(h.settingsReads.snapshot).not.toHaveBeenCalled();
 });
 
 test("automatic Pull Request launch skips missing prerequisites and forks the latest Builder model", async () => {

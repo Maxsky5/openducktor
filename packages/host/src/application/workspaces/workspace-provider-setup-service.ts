@@ -211,9 +211,9 @@ export const createWorkspaceProviderSetupService = (input: {
               }
             }
             if (session.progress.workspace) {
-              const workspace = yield* input.settings.updateRepoConfig(
+              const workspace = yield* input.settings.updateRepoGitConfig(
                 session.progress.workspace.workspaceId,
-                { git: nextConfig.git },
+                nextConfig.git,
               );
               session.progress.workspace = workspace;
             }

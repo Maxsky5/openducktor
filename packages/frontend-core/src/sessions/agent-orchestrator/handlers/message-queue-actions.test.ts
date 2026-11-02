@@ -19,7 +19,12 @@ const target = {
   runtimeKind: "opencode" as const,
   workingDirectory: "/tmp/repo/worktree",
   externalSessionId: "session-1",
-  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build" as const,
+  },
 };
 
 const accepted: AcceptedAgentUserMessage = {

@@ -1,4 +1,5 @@
 import type { TaskEventStatusChange } from "@openducktor/contracts";
+import type { TaskStatusMetadata } from "../../ports/task-status-changes";
 
 /** Names the task mutation that published a task event or committed a status change. */
 export type TaskMutationOperation =
@@ -36,11 +37,12 @@ export type TaskMutationOperation =
 export type CommittedTaskStatusChange = {
   /** The mutation gate key of the mutation. */
   repoPath: string;
+  workspaceId: string;
   operation: TaskMutationOperation;
   statusChange: TaskEventStatusChange;
   /** The Autopilot signal of the workflow outcome behind the change. */
   signal?: string;
-};
+} & TaskStatusMetadata;
 
 /**
  * Receives each status change when it commits, in commit order, while the mutation holds its

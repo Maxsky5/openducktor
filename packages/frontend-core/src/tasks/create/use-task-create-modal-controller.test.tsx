@@ -1,3 +1,4 @@
+import type { ClientConnection } from "../../connection/client-connection";
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
@@ -91,6 +92,9 @@ type RenderOptions = {
   initialTitle?: string;
   documentState?: DocumentStateContextValue;
   client?: Partial<HostClient>;
+  connection?: ClientConnection;
+  collectAssetIds?: (markdown: string) => Set<string>;
+  revokePreviewUrl?: (url: string) => void;
 };
 
 const renderController = ({
@@ -101,10 +105,13 @@ const renderController = ({
   initialTitle = "",
   documentState = createDocumentState(),
   client = {},
+  connection: providedConnection,
+  collectAssetIds: readAssetIds = collectAssetIds,
+  revokePreviewUrl: releasePreview = revokePreviewUrl,
 }: RenderOptions = {}) => {
   let latest: Controller | null = null;
   const feedback = createFeedbackFake();
-  const connection = createTestClientConnection({ feedback, client });
+  const connection = providedConnection ?? createTestClientConnection({ feedback, client });
 
   const Probe = ({ current }: { current: TaskCard | null }): null => {
     latest = useTaskCreateModalController({
@@ -116,8 +123,8 @@ const renderController = ({
       initialTitle,
       readFileBase64,
       createPreviewUrl,
-      revokePreviewUrl,
-      collectAssetIds,
+      revokePreviewUrl: releasePreview,
+      collectAssetIds: readAssetIds,
     });
     return null;
   };
@@ -137,6 +144,7 @@ const renderController = ({
   const view = render(providers(<Probe current={task} />));
   return {
     feedback,
+    connection,
     getController: (): Controller => {
       if (!latest) {
         throw new Error("Controller did not render.");
@@ -212,7 +220,7 @@ describe("useTaskCreateModalController", () => {
     try {
       act(() => harness.getController().updateState({ title: "Draft" }));
       expect(harness.getController().footerError).toBe(
-        "This task is for Other workspace. Open Other workspace again to create it.",
+        "This task is for Other workspace. Open Other workspace again to save this task.",
       );
 
       await act(async () => {
@@ -315,8 +323,8 @@ describe("useTaskCreateModalController", () => {
     harness.unmount();
   });
 
-  test("keeps a dirty draft and blocks saving after a same-task external change", async () => {
-    const updateCalls: string[] = [];
+  test("keeps edited fields and submits only those fields after a saved task change", async () => {
+    const updateCalls: Array<{ taskId: string; patch: unknown }> = [];
     const original = createTaskCardFixture({
       id: "task-1",
       title: "Original",
@@ -324,12 +332,13 @@ describe("useTaskCreateModalController", () => {
     });
     const replacement = createTaskCardFixture(original, {
       description: "Changed elsewhere",
+      title: "New saved title",
       updatedAt: "2026-07-25T11:00:00.000Z",
     });
     const harness = renderController({
       task: original,
-      updateTask: async (taskId) => {
-        updateCalls.push(taskId);
+      updateTask: async (taskId, patch) => {
+        updateCalls.push({ taskId, patch });
       },
     });
 
@@ -341,14 +350,29 @@ describe("useTaskCreateModalController", () => {
     });
 
     expect(harness.getController().state.description).toBe("Local draft");
-    expect(harness.getController().footerError).toBe(
-      "This task changed while you were editing. Close and reopen it to load the latest version before saving.",
-    );
+    expect(harness.getController().state.title).toBe("New saved title");
+    expect(harness.getController().footerError).toBeNull();
     await act(async () => {
       await harness.getController().submit();
     });
-    expect(updateCalls).toEqual([]);
+    expect(updateCalls).toEqual([{ taskId: "task-1", patch: { description: "Local draft" } }]);
     harness.unmount();
+  });
+
+  test("restores a task draft after its editor unmounts without mixing hosts", () => {
+    const task = createTaskCardFixture({ id: "task-1", title: "Saved" });
+    const first = renderController({ task });
+    act(() => first.getController().updateState({ title: "Unsaved" }));
+    first.unmount();
+    const restored = renderController({ task, connection: first.connection });
+    const otherHost = renderController({ task });
+    try {
+      expect(restored.getController().state.title).toBe("Unsaved");
+      expect(otherHost.getController().state.title).toBe("Saved");
+    } finally {
+      restored.unmount();
+      otherHost.unmount();
+    }
   });
 
   test("marks a lost save result and keeps the edits", async () => {
@@ -440,6 +464,104 @@ describe("useTaskCreateModalController", () => {
       harness.unmount();
     }
   });
+
+  test.each(["save", "discard", "connection disposal"] as const)(
+    "retains a staged description image through unmount until %s",
+    async (finish) => {
+      const assetId = "550e8400-e29b-41d4-a716-446655440000";
+      const bytes = new Set<string>();
+      const releasePreview = mock((_url: string) => {});
+      const taskAssetStage = mock(async () => {
+        bytes.add(assetId);
+        return {
+          assetId,
+          scope: "description" as const,
+          originalName: "diagram.png",
+          verifiedMediaType: "image/png" as const,
+          byteSize: 3,
+        };
+      });
+      const taskAssetDiscardStaged = mock(
+        async ({ assetIds }: Parameters<HostClient["taskAssetDiscardStaged"]>[0]) => {
+          for (const id of assetIds) bytes.delete(id);
+        },
+      );
+      const connection = createTestClientConnection({
+        client: { taskAssetStage, taskAssetDiscardStaged },
+      });
+      const task = createTaskCardFixture({ id: "task-1" });
+      const readAssetIds = (markdown: string) =>
+        new Set(markdown.includes(assetId) ? [assetId] : []);
+      const updateTask = mock(
+        async (
+          _taskId: string,
+          _patch: Parameters<TasksStateContextValue["updateTask"]>[1],
+          assets?: Parameters<TasksStateContextValue["updateTask"]>[2],
+        ) => {
+          if (!bytes.has(assetId) || !assets?.stagedAssetIds.includes(assetId))
+            throw new Error("The staged image is missing.");
+        },
+      );
+      const original = renderController({
+        task,
+        connection,
+        collectAssetIds: readAssetIds,
+        revokePreviewUrl: releasePreview,
+      });
+      await act(async () => {
+        await original
+          .getController()
+          .stageDescriptionImage({ name: "diagram.png", type: "image/png", size: 3 });
+      });
+      act(() =>
+        original.getController().updateState({ description: `![Diagram](odt-asset://${assetId})` }),
+      );
+      original.unmount();
+      expect(bytes.has(assetId)).toBe(true);
+      expect(taskAssetDiscardStaged).not.toHaveBeenCalled();
+      expect(releasePreview).not.toHaveBeenCalled();
+      const restored = renderController({
+        task,
+        connection,
+        updateTask,
+        collectAssetIds: readAssetIds,
+        revokePreviewUrl: releasePreview,
+      });
+      let restoredMounted = true;
+      try {
+        expect(restored.getController().state.description).toContain(assetId);
+        expect(restored.getController().descriptionAssetPreviews.get(assetId)).toBe(
+          "preview:diagram.png",
+        );
+        await act(async () => {
+          if (finish === "save") await restored.getController().submit();
+          else if (finish === "discard") await restored.getController().close();
+          else {
+            restored.unmount();
+            restoredMounted = false;
+            await connection.dispose();
+          }
+        });
+        if (finish === "save") {
+          expect(updateTask).toHaveBeenCalledWith(
+            task.id,
+            expect.objectContaining({ description: expect.stringContaining(assetId) }),
+            { stagedAssetIds: [assetId] },
+          );
+          expect(restored.getController().footerError).toBeNull();
+          expect(bytes.has(assetId)).toBe(true);
+        } else {
+          expect(bytes.has(assetId)).toBe(false);
+          expect(updateTask).not.toHaveBeenCalled();
+        }
+      } finally {
+        if (restoredMounted) restored.unmount();
+      }
+      expect(taskAssetDiscardStaged).toHaveBeenCalledTimes(finish === "save" ? 0 : 1);
+      expect(releasePreview).toHaveBeenCalledWith("preview:diagram.png");
+      expect(releasePreview).toHaveBeenCalledTimes(1);
+    },
+  );
 
   test("shows a failed image discard on a document section and clears the discard request", async () => {
     const taskAssetStage = mock(async () => ({

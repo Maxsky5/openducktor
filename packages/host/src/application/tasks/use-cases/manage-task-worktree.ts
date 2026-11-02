@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { isMergeDetectionCandidate } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -38,7 +39,8 @@ export const createTaskWorktreeUseCases = ({
   TaskService,
   "getTaskWorktreeCleanupImpact" | "removeTaskWorktree"
 > => ({
-  getTaskWorktreeCleanupImpact({ repoPath, taskId }) {
+  getTaskWorktreeCleanupImpact(input) {
+    const { taskId } = input;
     return Effect.gen(function* () {
       const dependencies = yield* requireDependencies(() =>
         requireTaskWorktreeDependencies(
@@ -51,9 +53,9 @@ export const createTaskWorktreeUseCases = ({
       );
       const [task, metadata, repoConfig] = yield* Effect.all(
         [
-          taskStore.getTask({ repoPath, taskId }),
-          taskStore.getTaskMetadata({ repoPath, taskId }),
-          dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath),
+          taskStore.getTask(input),
+          taskStore.getTaskMetadata(input),
+          getScopedRepoConfig(dependencies.workspaceSettingsService, input),
         ],
         { concurrency: "unbounded" },
       );
@@ -71,6 +73,7 @@ export const createTaskWorktreeUseCases = ({
           taskWorkflows.forTask(task),
           task,
           metadata.agentSessions,
+          input.workspaceId,
         ),
         (path) =>
           Effect.gen(function* () {
@@ -108,9 +111,10 @@ export const createTaskWorktreeUseCases = ({
     });
   },
 
-  removeTaskWorktree({ repoPath, taskId }) {
+  removeTaskWorktree(input) {
+    const { repoPath, taskId } = input;
     return Effect.gen(function* () {
-      const task = yield* taskStore.getTask({ repoPath, taskId });
+      const task = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(task);
       if (!workflow.isTerminalState(task.status)) {
         return yield* new HostValidationError({
@@ -128,16 +132,16 @@ export const createTaskWorktreeUseCases = ({
           taskWorktreeService,
         ),
       );
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       yield* taskSessionLifecycleCoordinator.acquireLifecycle(
         effectiveRepoPath,
         [taskId],
         "remove task worktree",
       );
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const metadata = yield* taskStore.getTaskMetadata(input);
       const { worktreePaths, branchNames } = yield* collectTaskCleanupTargets({
+        workspaceId: input.workspaceId,
         dependencies,
         lifecycle: taskSessionLifecycleCoordinator,
         repoPath: effectiveRepoPath,
@@ -149,6 +153,7 @@ export const createTaskWorktreeUseCases = ({
       });
       const progress = createTaskCleanupProgressState();
       yield* runTaskLocalCleanup({
+        workspaceId: input.workspaceId,
         branchNames,
         gitPort: dependencies.gitPort,
         managedWorktreeBasePath: managedWorktreeBaseForRepoConfig(

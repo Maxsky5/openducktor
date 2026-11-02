@@ -87,12 +87,9 @@ test("MCP discovers task artifacts and reads their JSON content in two calls", a
     expect(result.content).toHaveLength(1);
     expect(result.structuredContent).toMatchObject({
       artifacts: [
-        { artifact: { code: "spec" }, nextByteOffset: null, content: "# Spec\n" },
+        { artifact: { code: "spec" }, content: "# Spec\n" },
         {
           artifact: { code: "notes", name: "Notes" },
-          version: "version-1",
-          totalBytes: 3,
-          nextByteOffset: null,
           content: "\ufeff",
         },
       ],
@@ -397,11 +394,7 @@ const artifactChunk = (
     mediaType,
     byteSize: bytes.byteLength,
   },
-  version: `version-${code}`,
   dataBase64: bytes.toString("base64"),
-  byteOffset: 0,
-  nextByteOffset: null,
-  totalBytes: bytes.byteLength,
 });
 
 test("MCP keeps artifact codes through rename, replacement, and deletion", async () => {
@@ -504,9 +497,7 @@ test("MCP reads mixed JSON text and native media with the same display name", as
       {
         type: "resource",
         resource: {
-          uri: expect.stringContaining(
-            "/artifacts/free/invalid-1?version=version-invalid-1&offset=0&length=2",
-          ),
+          uri: expect.stringContaining("/artifacts/free/invalid-1?revision=1"),
           mimeType: "text/plain",
           blob: "wyg=",
         },
@@ -550,7 +541,7 @@ test("MCP rejects an aggregate artifact response above 10 MiB without a partial 
     await client.connect(await createTransport(bridge.url, { workspaceId: "repo" }));
     const result = await client.callTool({
       name: "odt_read_task_artifacts",
-      arguments: { taskId: "task-1", codes: ["first", "second"], maxBytes: 1024 * 1024 },
+      arguments: { taskId: "task-1", codes: ["first", "second"] },
     });
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toBeUndefined();

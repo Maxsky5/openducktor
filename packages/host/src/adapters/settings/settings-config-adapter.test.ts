@@ -1,4 +1,8 @@
+import { withConfigCommit } from "../config/config-commit";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { repoConfigSchema, settingsSnapshotSaveInputSchema } from "@openducktor/contracts";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
+import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import { describe, expect, test } from "bun:test";
@@ -8,13 +12,13 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import {
   createDefaultGlobalConfig,
+  toHostPreferences,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import { HostValidationError } from "../../effect/host-errors";
-import {
-  createSettingsConfigAdapter,
-  findInvalidSettingsFileError,
-} from "./settings-config-adapter";
+import type { SharedSettingsDatabase } from "../../ports/settings-config-port";
+import { SettingsFileError } from "../../effect/host-errors";
+import { createSettingsConfigAdapter } from "./settings-config-adapter";
+import { loadLegacySettingsConfig, readSettingsConfigFile } from "./settings-config-file";
 
 const withTempConfig = async (run: (configPath: string) => Promise<void>): Promise<void> => {
   const root = await mkdtemp(join(tmpdir(), "odt-settings-config-"));
@@ -25,64 +29,182 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
   }
 };
 
-describe("settings config adapter initialization", () => {
-  test("saves global default steering and reads it after settings service restart", async () => {
+describe("settings config files", () => {
+  test("a shared write keeps a preference edit that another host saves during the write", async () => {
     await withTempConfig(async (configPath) => {
-      await writeFile(
-        configPath,
-        JSON.stringify({ version: 4, chat: { showThinkingMessages: true } }),
+      const shared = createDefaultGlobalConfig();
+      await writeFile(configPath, JSON.stringify(toHostPreferences(shared)));
+      const unexpected = () => Effect.die(new Error("Unexpected shared settings read."));
+      const sharedSettings: SharedSettingsDatabase = {
+        readGlobalConfig: unexpected,
+        readRepoConfig: unexpected,
+        readRepoConfigByRepoPath: unexpected,
+        readWorkspaceCatalogSnapshot: unexpected,
+        readAutopilotSettings: unexpected,
+        readConfig: unexpected,
+        updateConfig: (change) =>
+          Effect.promise(async () => {
+            // Another host saves its theme while this write waits for the database lock.
+            const preferences = JSON.parse(await readFile(configPath, "utf8"));
+            await writeFile(configPath, JSON.stringify({ ...preferences, theme: "dark" }));
+            return { current: shared, next: change(shared, []), changed: true };
+          }),
+      };
+      const adapter = createSettingsConfigAdapter({ configPath, sharedSettings });
+
+      const result = await Effect.runPromise(
+        adapter.applyConfigChange(
+          (current) => ({ ...current, chat: { ...current.chat, showThinkingMessages: true } }),
+          [],
+        ),
       );
-      const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
-      const draft = await Effect.runPromise(service.getSettingsSnapshot());
-      expect(draft.chat.steerMessagesByDefault).toBe(false);
-      draft.chat.steerMessagesByDefault = true;
-      await Effect.runPromise(saveSettingsSnapshot(service, draft));
-      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
-      const loaded = await Effect.runPromise(restarted.getSettingsSnapshot());
-      expect(loaded.chat.steerMessagesByDefault).toBe(true);
-      expect(loaded.chat.showThinkingMessages).toBe(true);
-      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(4);
+
+      const saved = JSON.parse(await readFile(configPath, "utf8"));
+      expect(saved.theme).toBe("dark");
+      expect(saved.chat.showThinkingMessages).toBe(true);
+      expect(result).toMatchObject({ preferences: "saved", config: { theme: "dark" } });
     });
   });
+
   test("round trips OpenCode rules through Settings and resolves detached role snapshots", async () => {
     await withTempConfig(async (configPath) => {
-      const adapter = createSettingsConfigAdapter({ configPath });
-      const service = createWorkspaceSettingsService(adapter);
-      const draft = await Effect.runPromise(service.getSettingsSnapshot());
-      const rules = [
-        { permission: "bash", pattern: "*", action: "deny" as const },
-        { permission: "bash", pattern: "git ?  *", action: "allow" as const },
-        { permission: "read", pattern: "~/private/*", action: "ask" as const },
-      ];
-      draft.agentRuntimes.opencode.defaults.rules = rules;
-      draft.agentRuntimes.opencode.roleOverrides = {
-        qa: { rules: [{ permission: "myserver_*", pattern: "*", action: "deny" }] },
-      };
-      await Effect.runPromise(saveSettingsSnapshot(service, draft));
-      const restartedAdapter = createSettingsConfigAdapter({ configPath });
-      const restartedService = createWorkspaceSettingsService(restartedAdapter);
-      const loaded = await Effect.runPromise(restartedService.getSettingsSnapshot());
-      expect(loaded.agentRuntimes.opencode).toEqual(draft.agentRuntimes.opencode);
-      const resolver = createOpenCodeCreationSettings(restartedAdapter);
-      const qa = await Effect.runPromise(
-        resolver.resolve({ kind: "workflow", taskId: "task", role: "qa" }),
-      );
-      expect(qa).toEqual({
-        defaults: rules,
-        role: draft.agentRuntimes.opencode.roleOverrides.qa!.rules,
-      });
-      const repository = await Effect.runPromise(resolver.resolve({ kind: "repository" }));
-      expect(repository).toEqual({ defaults: rules, role: [] });
-      loaded.agentRuntimes.opencode.defaults.rules = [];
-      loaded.agentRuntimes.opencode.executablePath = "/new/opencode";
-      loaded.agentRuntimes.opencode.enabled = false;
-      await Effect.runPromise(saveSettingsSnapshot(restartedService, loaded));
-      expect(qa.defaults).toEqual(rules);
-      const latest = await Effect.runPromise(
-        resolver.resolve({ kind: "workflow", taskId: "task", role: "qa" }),
-      );
-      expect(latest.defaults).toEqual([]);
-      expect(latest.role).toEqual(qa.role);
+      const fixture = await createSharedSettingsFixture({ configPath });
+      try {
+        const adapter = fixture.settingsConfig;
+        const service = createWorkspaceSettingsService(adapter, builtinTaskWorkflows);
+        const draft = await Effect.runPromise(service.getSettingsSnapshot());
+        const rules = [
+          { permission: "bash", pattern: "*", action: "deny" as const },
+          { permission: "bash", pattern: "git ?  *", action: "allow" as const },
+          { permission: "read", pattern: "~/private/*", action: "ask" as const },
+        ];
+        draft.agentRuntimes.opencode.defaults.rules = rules;
+        draft.agentRuntimes.opencode.roleOverrides = {
+          qa: { rules: [{ permission: "myserver_*", pattern: "*", action: "deny" }] },
+        };
+        await Effect.runPromise(
+          saveSettingsSnapshot(
+            service,
+            settingsSnapshotSaveInputSchema.parse({
+              global: {
+                agentRuntimes: {
+                  opencode: {
+                    defaults: { rules },
+                    roleOverrides: {
+                      create: {
+                        qa: { rules: [{ permission: "myserver_*", pattern: "*", action: "deny" }] },
+                      },
+                    },
+                  },
+                },
+              },
+            }),
+          ),
+        );
+        const restartedAdapter = createSettingsConfigAdapter({
+          configPath,
+          sharedSettings: fixture.database,
+        });
+        const restartedService = createWorkspaceSettingsService(
+          restartedAdapter,
+          builtinTaskWorkflows,
+        );
+        const loaded = await Effect.runPromise(restartedService.getSettingsSnapshot());
+        expect(loaded.agentRuntimes.opencode).toEqual(draft.agentRuntimes.opencode);
+        const resolver = createOpenCodeCreationSettings(restartedAdapter);
+        const qa = await Effect.runPromise(
+          resolver.resolve({
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task",
+            role: "qa",
+          }),
+        );
+        expect(qa).toEqual({
+          defaults: rules,
+          role: draft.agentRuntimes.opencode.roleOverrides.qa!.rules,
+        });
+        const repository = await Effect.runPromise(resolver.resolve({ kind: "repository" }));
+        expect(repository).toEqual({ defaults: rules, role: [] });
+        loaded.agentRuntimes.opencode.defaults.rules = [];
+        loaded.agentRuntimes.opencode.executablePath = "/new/opencode";
+        loaded.agentRuntimes.opencode.enabled = false;
+        await Effect.runPromise(
+          saveSettingsSnapshot(
+            restartedService,
+            settingsSnapshotSaveInputSchema.parse({
+              global: {
+                agentRuntimes: {
+                  opencode: {
+                    defaults: { rules: [] },
+                    executablePath: "/new/opencode",
+                    enabled: false,
+                  },
+                },
+              },
+            }),
+          ),
+        );
+        expect(qa.defaults).toEqual(rules);
+        const latest = await Effect.runPromise(
+          resolver.resolve({
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task",
+            role: "qa",
+          }),
+        );
+        expect(latest.defaults).toEqual([]);
+        expect(latest.role).toEqual(qa.role);
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+
+  test("scoped shared edits retain every other workspace preference", async () => {
+    await withTempConfig(async (configPath) => {
+      const config = createDefaultGlobalConfig();
+      for (const id of ["one", "two"])
+        config.workspaces[id] = repoConfigSchema.parse({
+          workspaceId: id,
+          workspaceName: id,
+          repoPath: `/${id}`,
+          agentStudioState: { openTaskIds: [`${id}-task`] },
+        });
+      const fixture = await createSharedSettingsFixture({ configPath, config });
+      try {
+        const observed: string[][] = [];
+        const adapter = withConfigCommit(fixture.settingsConfig, (config) =>
+          Effect.sync(() => {
+            observed.push(Object.keys(config.workspaces).sort());
+          }),
+        );
+        await Effect.runPromise(
+          adapter.updateConfig(
+            (current) => {
+              current.workspaces.one!.workspaceName = "Edited";
+              current.workspaces.one!.agentStudioState.openTaskIds = [];
+              return current;
+            },
+            ["one"],
+          ),
+        );
+        await Effect.runPromise(
+          adapter.updateConfig((current) => ({ ...current, theme: "dark" }), []),
+        );
+        const stored = await Effect.runPromise(adapter.readConfig());
+        expect(stored?.workspaces.one?.workspaceName).toBe("Edited");
+        expect(stored?.workspaces.one?.agentStudioState.openTaskIds).toEqual([]);
+        expect(stored?.workspaces.two?.agentStudioState.openTaskIds).toEqual(["two-task"]);
+        expect(stored?.theme).toBe("dark");
+        expect(observed).toEqual([
+          ["one", "two"],
+          ["one", "two"],
+        ]);
+      } finally {
+        await fixture.cleanup();
+      }
     });
   });
 
@@ -93,192 +215,69 @@ describe("settings config adapter initialization", () => {
         rules: [{ permission: "bash", pattern: " ", action: "ask" }],
       };
       await writeFile(configPath, JSON.stringify(config));
-      const adapter = createSettingsConfigAdapter({ configPath });
-      await expect(Effect.runPromise(adapter.readConfig())).rejects.toThrow(
+      await expect(Effect.runPromise(readSettingsConfigFile(configPath))).rejects.toThrow(
         "agentRuntimes.opencode.roleOverrides.qa.rules.0.pattern",
       );
-      await expect(
-        Effect.runPromise(createOpenCodeCreationSettings(adapter).resolve({ kind: "repository" })),
-      ).rejects.toThrow("Fix the values in this file");
+      await expect(Effect.runPromise(readSettingsConfigFile(configPath))).rejects.toThrow(
+        "Fix the values in this file",
+      );
     });
   });
 
-  test("uses the explicit config directory instead of the environment", async () => {
+  test("discovers runtime paths for a version 2 import without changing its source JSON", async () => {
     await withTempConfig(async (configPath) => {
-      const otherDir = join(configPath, "..", "other");
-      const adapter = createSettingsConfigAdapter({
-        configDir: join(configPath, ".."),
-        environment: { OPENDUCKTOR_CONFIG_DIR: otherDir },
-        initializeConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+      const payload = JSON.stringify({
+        version: 2,
+        agentRuntimes: { opencode: { enabled: false } },
       });
-
-      await Effect.runPromise(adapter.readConfig());
-
-      expect(await Bun.file(configPath).exists()).toBe(true);
-      expect(await Bun.file(join(otherDir, "config.json")).exists()).toBe(false);
-    });
-  });
-
-  test("initializes and writes a missing config only once across concurrent reads", async () => {
-    await withTempConfig(async (configPath) => {
+      await writeFile(configPath, payload);
       let calls = 0;
-      const adapter = createSettingsConfigAdapter({
-        configPath,
-        initializeConfig: () => {
-          calls += 1;
-          return Effect.succeed({
-            ...createDefaultGlobalConfig(),
-            agentRuntimes: {
-              ...createDefaultGlobalConfig().agentRuntimes,
-              opencode: {
-                defaults: { rules: [] },
-                roleOverrides: {},
-                enabled: true,
-                executablePath: "/tools/opencode",
-              },
-            },
-          });
-        },
-      });
-
-      const configs = await Effect.runPromise(
-        Effect.all([adapter.readConfig(), adapter.readConfig()], { concurrency: "unbounded" }),
+      const initializeConfig: Parameters<typeof loadLegacySettingsConfig>[1] = (legacy) => {
+        calls += 1;
+        if (!legacy) return Effect.die("Expected version 2 settings");
+        return Effect.succeed(
+          upgradePersistedGlobalConfigV2(legacy, { opencode: "/tools/opencode" }),
+        );
+      };
+      const config = await Effect.runPromise(
+        loadLegacySettingsConfig(configPath, initializeConfig),
       );
-
-      expect(calls).toBe(1);
-      expect(configs[0]?.agentRuntimes.opencode.executablePath).toBe("/tools/opencode");
-      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(4);
-    });
-  });
-
-  test("upgrades version 2 and preserves enabled choices", async () => {
-    await withTempConfig(async (configPath) => {
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          version: 2,
-          agentRuntimes: {
-            opencode: { enabled: false },
-            codex: { enabled: true },
-            claude: { enabled: false },
-          },
-        }),
-      );
-      const adapter = createSettingsConfigAdapter({
-        configPath,
-        initializeConfig: (legacy) => {
-          if (!legacy) return Effect.die("Expected legacy config");
-          return Effect.succeed(
-            upgradePersistedGlobalConfigV2(legacy, {
-              opencode: "/tools/opencode",
-              codex: "",
-              claude: "",
-            }),
-          );
-        },
-      });
-
-      const config = await Effect.runPromise(adapter.readConfig());
-
-      expect(config?.version).toBe(4);
       expect(config?.agentRuntimes.opencode).toMatchObject({
         enabled: false,
         executablePath: "/tools/opencode",
       });
-      expect(config?.agentRuntimes.codex.enabled).toBe(true);
-    });
-  });
-
-  test("reads version 2 for diagnostics without initialization or a write", async () => {
-    await withTempConfig(async (configPath) => {
-      const payload = JSON.stringify({
-        version: 2,
-        agentRuntimes: {
-          opencode: { enabled: false },
-          codex: { enabled: true },
-          claude: { enabled: false },
-        },
-      });
-      await writeFile(configPath, payload);
-      let calls = 0;
-      const adapter = createSettingsConfigAdapter({
-        configPath,
-        initializeConfig: () => {
-          calls += 1;
-          return Effect.succeed(createDefaultGlobalConfig());
-        },
-      });
-
-      const config = await Effect.runPromise(adapter.readConfig({ initialize: false }));
-
-      expect(config?.version).toBe(4);
-      expect(config?.agentRuntimes.codex).toMatchObject({ enabled: true, executablePath: "" });
-      expect(config?.agentRuntimes.opencode.enabled).toBe(false);
-      expect(calls).toBe(0);
+      expect(calls).toBe(1);
       expect(await readFile(configPath, "utf8")).toBe(payload);
     });
   });
 
-  test("shares initialization failures and permits a later retry", async () => {
+  test("discovers runtime paths for a new root import without creating config JSON", async () => {
     await withTempConfig(async (configPath) => {
+      const initialized = createDefaultGlobalConfig();
+      initialized.agentRuntimes.opencode.executablePath = "/tools/opencode";
       let calls = 0;
-      const adapter = createSettingsConfigAdapter({
-        configPath,
-        initializeConfig: () => {
-          calls += 1;
-          if (calls === 1) {
-            return Effect.sleep("10 millis").pipe(
-              Effect.andThen(
-                Effect.fail(new HostValidationError({ message: "Runtime discovery failed" })),
-              ),
-            );
-          }
-          return Effect.succeed(createDefaultGlobalConfig());
-        },
-      });
-
-      const firstResults = await Effect.runPromise(
-        Effect.all(
-          [adapter.readConfig().pipe(Effect.result), adapter.readConfig().pipe(Effect.result)],
-          { concurrency: "unbounded" },
-        ),
+      const initializeConfig: Parameters<typeof loadLegacySettingsConfig>[1] = (legacy) => {
+        calls += 1;
+        expect(legacy).toBeNull();
+        return Effect.succeed(initialized);
+      };
+      const config = await Effect.runPromise(
+        loadLegacySettingsConfig(configPath, initializeConfig),
       );
-
+      expect(config?.agentRuntimes.opencode.executablePath).toBe("/tools/opencode");
       expect(calls).toBe(1);
-      expect(firstResults.map((result) => result._tag)).toEqual(["Failure", "Failure"]);
-
-      const retried = await Effect.runPromise(adapter.readConfig());
-      expect(calls).toBe(2);
-      expect(retried?.version).toBe(4);
-    });
-  });
-
-  test("does not rerun initialization for the current config version", async () => {
-    await withTempConfig(async (configPath) => {
-      await writeFile(configPath, JSON.stringify(createDefaultGlobalConfig()));
-      let calls = 0;
-      const adapter = createSettingsConfigAdapter({
-        configPath,
-        initializeConfig: () => {
-          calls += 1;
-          return Effect.succeed(createDefaultGlobalConfig());
-        },
-      });
-
-      const config = await Effect.runPromise(adapter.readConfig());
-
-      expect(config?.version).toBe(4);
-      expect(calls).toBe(0);
+      await expect(readFile(configPath, "utf8")).rejects.toHaveProperty("code", "ENOENT");
     });
   });
 
   test("reports an invalid config file with its path, the bad field, and a recovery hint", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(configPath, JSON.stringify({ version: 3, theme: "blue" }));
-      const adapter = createSettingsConfigAdapter({ configPath });
 
-      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.result));
-      if (result._tag !== "Failure" || !(result.failure instanceof HostValidationError)) {
+      const result = await Effect.runPromise(
+        readSettingsConfigFile(configPath).pipe(Effect.result),
+      );
+      if (result._tag !== "Failure" || !(result.failure instanceof SettingsFileError)) {
         throw new Error("Expected a config validation failure");
       }
 
@@ -289,21 +288,18 @@ describe("settings config adapter initialization", () => {
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
         ].join("\n\n"),
       );
-      expect(result.failure.details).toEqual({ kind: "invalid-settings-file", path: configPath });
-      expect(findInvalidSettingsFileError({ cause: result.failure })).toBe(result.failure);
-      expect(
-        findInvalidSettingsFileError(new HostValidationError({ message: "Other failure" })),
-      ).toBeNull();
+      expect(result.failure).toMatchObject({ reason: "invalid", path: configPath });
     });
   });
 
   test("reports an unparsable config file with the path and a recovery hint", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(configPath, "{ not json");
-      const adapter = createSettingsConfigAdapter({ configPath });
 
-      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.result));
-      if (result._tag !== "Failure" || !(result.failure instanceof HostValidationError)) {
+      const result = await Effect.runPromise(
+        readSettingsConfigFile(configPath).pipe(Effect.result),
+      );
+      if (result._tag !== "Failure" || !(result.failure instanceof SettingsFileError)) {
         throw new Error("Expected an invalid settings failure");
       }
 
@@ -324,20 +320,16 @@ describe("settings config adapter initialization", () => {
       await withTempConfig(async (configPath) => {
         const payload = JSON.stringify({ version, theme: "dark", extra: true });
         await writeFile(configPath, payload);
-        const adapter = createSettingsConfigAdapter({ configPath });
 
         const result = await Effect.runPromise(
-          adapter.readConfig({ initialize: false }).pipe(Effect.result),
+          readSettingsConfigFile(configPath).pipe(Effect.result),
         );
 
         expect(result._tag).toBe("Failure");
         if (result._tag === "Failure") {
-          expect(result.failure).toBeInstanceOf(HostValidationError);
+          expect(result.failure).toBeInstanceOf(SettingsFileError);
           expect(result.failure.message).toContain("extra:");
-          expect(result.failure.details).toEqual({
-            kind: "invalid-settings-file",
-            path: configPath,
-          });
+          expect(result.failure).toMatchObject({ reason: "invalid", path: configPath });
         }
         expect(await readFile(configPath, "utf8")).toBe(payload);
       });
@@ -347,10 +339,11 @@ describe("settings config adapter initialization", () => {
   test("reports a config value that JSON cannot represent as a validation failure", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(configPath, '{"version": 3, "theme": 1e400}');
-      const adapter = createSettingsConfigAdapter({ configPath });
 
-      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.result));
-      if (result._tag !== "Failure" || !(result.failure instanceof HostValidationError)) {
+      const result = await Effect.runPromise(
+        readSettingsConfigFile(configPath).pipe(Effect.result),
+      );
+      if (result._tag !== "Failure" || !(result.failure instanceof SettingsFileError)) {
         throw new Error("Expected a config validation failure");
       }
 
@@ -362,56 +355,6 @@ describe("settings config adapter initialization", () => {
         ].join("\n\n"),
       );
       expect(result.failure.message).not.toContain('"code"');
-    });
-  });
-
-  test("round trips a legacy GitHub provider through only the canonical provider shape", async () => {
-    await withTempConfig(async (configPath) => {
-      await writeFile(
-        configPath,
-        JSON.stringify({
-          version: 3,
-          workspaces: {
-            repo: {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              repoPath: "/repo",
-              git: {
-                providers: {
-                  github: {
-                    enabled: true,
-                    autoDetected: true,
-                    repository: {
-                      host: "github.example.com",
-                      owner: "open-ducktor",
-                      name: "desktop",
-                    },
-                  },
-                },
-              },
-            },
-          },
-        }),
-      );
-      const adapter = createSettingsConfigAdapter({ configPath });
-
-      const config = await Effect.runPromise(adapter.readConfig());
-      if (!config) throw new Error("Expected persisted config");
-      await Effect.runPromise(adapter.writeConfig(config));
-
-      expect(config.workspaces.repo?.git.provider).toEqual({
-        id: "github",
-        enabled: true,
-        autoDetected: true,
-        repository: {
-          host: "github.example.com",
-          owner: "open-ducktor",
-          name: "desktop",
-        },
-      });
-      const persisted = JSON.parse(await readFile(configPath, "utf8"));
-      expect(persisted.workspaces.repo.git).toEqual(config.workspaces.repo?.git);
-      expect(persisted.workspaces.repo.git).not.toHaveProperty("providers");
     });
   });
 });

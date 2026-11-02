@@ -224,7 +224,10 @@ test.each(["root", "nested"])(
       };
       const session = createClaudeSession({
         externalSessionId: sessionId,
-        input: { ...input, sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+        input: {
+          ...input,
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
+        },
       });
       session.activity = "running";
       if (scope === "root") {
@@ -341,7 +344,15 @@ test.each([{ backgroundTaskId: null }, { backgroundTaskId: "old-bash" }])(
         };
         const session = createClaudeSession({
           externalSessionId: sessionId,
-          input: { ...input, sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+          input: {
+            ...input,
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
+          },
         });
         const liveContext = claudeLiveHistoryContext(session);
         const history = await Effect.runPromise(

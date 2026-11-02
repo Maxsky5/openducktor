@@ -18,7 +18,7 @@ const render = (element: ReactElement) =>
 const summary: TerminalSummary = {
   terminalId: "terminal-1",
   label: "Dev",
-  context: { repoPath: "/repo", taskId: "task-1" },
+  context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
   initialWorkingDir: "/repo",
   createdAt: "2026-10-14T00:00:00Z",
   lifecycle: "running",

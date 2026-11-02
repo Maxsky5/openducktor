@@ -71,8 +71,8 @@ describe("onboarding notifications", () => {
     await screen.findByRole("heading", { name: "Open your first workspace" });
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
     const savedSnapshot = saveSettingsSnapshot.mock.calls[1]?.[0];
-    expect(savedSnapshot?.notifications.kinds["agent.session_idle"].enabled).toBe(true);
-    expect(savedSnapshot?.agentRuntimes).toEqual(runtimes);
+    expect(savedSnapshot?.global?.notifications?.kinds?.["agent.session_idle"]?.enabled).toBe(true);
+    expect(savedSnapshot?.global?.agentRuntimes).toBeUndefined();
     // This flow renders onboarding stages and waits for settings updates.
   }, 2_500);
 

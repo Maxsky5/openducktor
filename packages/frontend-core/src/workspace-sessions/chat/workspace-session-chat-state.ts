@@ -65,6 +65,7 @@ export const canInteractWithWorkspaceSession = ({
 }): boolean => runtimeInteractionEnabled && observationReady && !recordsError && !targetFault;
 
 export function projectWorkspaceSessionChatState({
+  workspaceId,
   record,
   identity,
   session,
@@ -72,6 +73,7 @@ export function projectWorkspaceSessionChatState({
   runtimeReadinessState,
   fault,
 }: {
+  workspaceId: string;
   record: WorkspaceSession;
   identity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
@@ -113,7 +115,7 @@ export function projectWorkspaceSessionChatState({
           }
         : null,
     transcriptTarget: identity
-      ? { ...identity, sessionScope: { kind: "repository" as const } }
+      ? { ...identity, sessionScope: { kind: "repository" as const, workspaceId } }
       : null,
     canStopSession:
       isAgentSessionActivityWorking(observedActivity) || observedActivity === "waiting_input",

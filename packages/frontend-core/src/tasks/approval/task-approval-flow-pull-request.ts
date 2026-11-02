@@ -1,3 +1,4 @@
+import { requireWorkspaceRef } from "../operations/task-operations-model";
 import type { TaskApprovalFlowReadyState } from "./task-approval-flow-state";
 import type { HostClient } from "@openducktor/host-client";
 
@@ -5,6 +6,7 @@ type SubmitPullRequestApprovalArgs = {
   host: Pick<HostClient, "taskPullRequestUpsert">;
   approval: TaskApprovalFlowReadyState;
   repoPath: string;
+  workspaceId: string;
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
 };
@@ -21,6 +23,7 @@ export async function submitPullRequestApproval({
   host,
   approval,
   repoPath,
+  workspaceId,
   requestPullRequestGeneration,
   refreshTasks,
 }: SubmitPullRequestApprovalArgs): Promise<SubmitPullRequestApprovalResult> {
@@ -32,7 +35,7 @@ export async function submitPullRequestApproval({
   }
 
   const pullRequest = await host.taskPullRequestUpsert(
-    repoPath,
+    requireWorkspaceRef(repoPath, workspaceId),
     approval.taskId,
     approval.title,
     approval.body,

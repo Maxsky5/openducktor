@@ -15,31 +15,32 @@ export type TaskCompletionState = {
   keptWorktree?: true;
   observation: TaskCompletionObservation;
 };
+type TaskCompletionScope = Pick<TaskCompletionObservation, "workspaceId" | "repoPath" | "taskId">;
+const scopeKey = ({ workspaceId, repoPath, taskId }: TaskCompletionScope) =>
+  JSON.stringify([workspaceId, repoPath, taskId]);
 export const createTaskCompletionState = (
   publish: ((observation: TaskCompletionObservation) => Effect.Effect<void, HostError>) | undefined,
 ) => {
   const states = new Map<string, TaskCompletionState>();
   return {
-    discard: (repoPath: string, taskId: string) =>
+    discard: (scope: TaskCompletionScope) =>
       Effect.gen(function* () {
-        states.delete(`${repoPath}\u0000${taskId}`);
+        states.delete(scopeKey(scope));
         if (publish)
           yield* publish({
-            repoPath,
-            taskId,
+            ...scope,
             phase: "settled",
             confirmedDestinations: [],
             uncertainDestinations: [],
           });
       }),
-    ensure: (repoPath: string, taskId: string) => {
-      const key = `${repoPath}\u0000${taskId}`;
+    ensure: (scope: TaskCompletionScope) => {
+      const key = scopeKey(scope);
       let state = states.get(key);
       if (!state) {
         state = {
           observation: {
-            repoPath,
-            taskId,
+            ...scope,
             phase: "settled",
             confirmedDestinations: [],
             uncertainDestinations: [],

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workspaceRefSchema } from "./workspace-id-schemas";
 import { gitTargetBranchSchema } from "./git-schemas";
 
 /**
@@ -39,12 +40,11 @@ export type TaskMergeStatus = z.infer<typeof taskMergeStatusSchema>;
 
 /** The merge detection state of all candidate tasks of one workspace. */
 export const taskMergeStatusSnapshotSchema = z.object({
+  workspaceId: z.string().min(1),
   repoPath: z.string(),
   tasks: z.array(taskMergeStatusSchema),
 });
 export type TaskMergeStatusSnapshot = z.infer<typeof taskMergeStatusSnapshotSchema>;
 
-export const taskMergeStatusRequestSchema = z.strictObject({
-  repoPath: z.string().min(1),
-});
+export const taskMergeStatusRequestSchema = workspaceRefSchema;
 export type TaskMergeStatusRequest = z.infer<typeof taskMergeStatusRequestSchema>;

@@ -51,7 +51,12 @@ const taskInput = () => ({
   runtimeKind: "codex" as const,
   workingDirectory: "/repo",
   externalSessionId: "source",
-  sessionScope: { kind: "workflow" as const, taskId: "task", role: "build" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "workspace-1",
+    taskId: "task",
+    role: "build" as const,
+  },
   forkPoint: { messageId: "reply" },
 });
 const taskResult = (): AgentWorkflowSessionForkResult => ({
@@ -303,7 +308,11 @@ describe("session forks", () => {
     const queryClient = connection.queryClient;
     const store = createAgentSessionsStore("/repo");
     const source = {
-      ...fromPersistedSessionRecord({ taskId: "task", record: sourceRecord() }),
+      ...fromPersistedSessionRecord({
+        workspaceId: "workspace-1",
+        taskId: "task",
+        record: sourceRecord(),
+      }),
       status: "running" as const,
       pendingApprovals: [
         {
@@ -317,7 +326,10 @@ describe("session forks", () => {
       ]),
     };
     store.replaceSession(source);
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task"), [sourceRecord()]);
+    queryClient.setQueryData(
+      agentSessionQueryKeys.list({ workspaceId: "workspace-1", repoPath: "/repo" }, "task"),
+      [sourceRecord()],
+    );
     const first = forkTaskSession(queryClient, store, taskInput(), taskOptions);
     const second = forkTaskSession(queryClient, store, taskInput(), taskOptions);
     expect(second).toBe(first);
@@ -335,7 +347,9 @@ describe("session forks", () => {
     expect(child?.status).toBe("idle");
     expect(
       queryClient
-        .getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task"))
+        .getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list({ workspaceId: "workspace-1", repoPath: "/repo" }, "task"),
+        )
         ?.map((record) => record.externalSessionId),
     ).toEqual(["source", "child"]);
   });

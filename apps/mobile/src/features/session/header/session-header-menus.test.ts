@@ -25,7 +25,7 @@ const NOW = Date.parse("2026-10-02T12:00:00.000Z");
 describe("sessionHistoryItems", () => {
   test("names each session as the desktop selector, newest first, and checks the open one", () => {
     const groups = groupTaskSessions(
-      "TASK-1",
+      { workspaceId: "ws-1", taskId: "TASK-1" },
       [
         record("b-old", "build", "2026-10-02T09:00:00.000Z"),
         record("s-1", "spec", "2026-10-01T12:00:00.000Z"),

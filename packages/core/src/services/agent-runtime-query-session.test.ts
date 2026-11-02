@@ -8,7 +8,12 @@ const ref: AgentSessionLiveRef = {
   workingDirectory: "/repo/task",
   externalSessionId: "session-1",
 };
-const scope: AgentSessionScope = { kind: "workflow", taskId: "task-1", role: "build" };
+const scope: AgentSessionScope = {
+  kind: "workflow",
+  workspaceId: "repo",
+  taskId: "task-1",
+  role: "build",
+};
 
 test("passive validation leaves unbound discovery unchanged", () => {
   const association = Object.freeze({ kind: "unbound" } as const);
@@ -42,8 +47,8 @@ for (const [field, value] of [
 test("retains and checks bound scope claims", () => {
   for (const association of [
     { kind: "repository" },
-    { kind: "workflow", taskId: "task-2", role: "build" },
-    { kind: "workflow", taskId: "task-1", role: "qa" },
+    { kind: "workflow", workspaceId: "repo", taskId: "task-2", role: "build" },
+    { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
   ] as const) {
     expect(() =>
       assertAgentRuntimeQuerySession({ ...ref, sessionScope: scope }, ref, association),

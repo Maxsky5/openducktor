@@ -1,34 +1,33 @@
 import type { TaskCreateInput } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizeLabels } from "../../domain/task/task-labels";
-import { encodeJson } from "./sqlite-json-codecs";
+import { replaceTaskLabels } from "./sqlite-task-relations";
 import {
   firstTaskIdHashLength,
   taskIdCandidates,
   taskIdExhaustedError,
   taskIdPrefixForWorkspaceId,
 } from "./sqlite-task-ids";
-import type { TaskInsert, TaskStoreSession } from "./sqlite-task-store-schema";
+import type { TaskInsert, HostDatabaseSession } from "./sqlite-host-database-schema";
 import { insertTaskIfAbsent } from "./sqlite-task-writes";
 
-export const taskInsertFromCreateInput = (
+const taskInsertFromCreateInput = (
   task: TaskCreateInput,
   status: string,
   taskId: string,
   createdAt: Date,
+  workspaceId: string,
 ): TaskInsert => ({
-  agentSessionsJson: encodeJson([]),
+  workspaceId,
   createdAt,
   description: task.description ?? null,
-  directMergeJson: null,
   id: taskId,
   issueType: task.issueType,
-  labelsJson: encodeJson(normalizeLabels(task.labels ?? [])),
   priority: task.priority,
-  pullRequestJson: null,
   removeWorktreeOnClose: task.removeWorktreeOnClose ?? null,
   status,
-  targetBranchJson: null,
+  targetBranch: null,
+  targetRemote: null,
   title: task.title,
   updatedAt: createdAt,
 });
@@ -41,7 +40,7 @@ export const insertTaskFromCreateInput = ({
   workspaceId,
 }: {
   createdAt: Date;
-  session: TaskStoreSession;
+  session: HostDatabaseSession;
   status: string;
   task: TaskCreateInput;
   workspaceId: string;
@@ -60,9 +59,11 @@ export const insertTaskFromCreateInput = ({
       if (
         yield* insertTaskIfAbsent(
           session,
-          taskInsertFromCreateInput(task, status, taskId, createdAt),
+          workspaceId,
+          taskInsertFromCreateInput(task, status, taskId, createdAt, workspaceId),
         )
       ) {
+        yield* replaceTaskLabels(session, workspaceId, taskId, normalizeLabels(task.labels ?? []));
         return taskId;
       }
     }

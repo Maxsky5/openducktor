@@ -18,7 +18,12 @@ const sessionSummary: AgentSessionSummary = {
   externalSessionId: "external-started",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build",
+  },
   startedAt: "2026-02-22T09:00:00.000Z",
   status: "running",
 };
@@ -157,7 +162,12 @@ describe("agent runtime services", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
         externalSessionId: sessionSummary.externalSessionId,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       },
       revision: 2,
     });
@@ -186,7 +196,12 @@ describe("agent runtime services", () => {
       workingDirectory: "/repo/worktree",
       externalSessionId: sessionSummary.externalSessionId,
     };
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build" as const,
+    };
 
     await expect(
       agentEngine.startSession({

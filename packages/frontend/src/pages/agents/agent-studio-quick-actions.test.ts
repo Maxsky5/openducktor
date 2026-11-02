@@ -48,7 +48,12 @@ describe("agent-studio-quick-actions", () => {
       },
     });
     const builderSession = buildSession({
-      sessionAssociation: { kind: "workflow", taskId: task.id, role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: task.id,
+        role: "build",
+      },
     });
     return {
       selectedTask: task,
@@ -141,7 +146,12 @@ describe("agent-studio-quick-actions", () => {
     });
     const sessionsForTask = [
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         externalSessionId: "builder-1",
       }),
     ];
@@ -219,7 +229,12 @@ describe("agent-studio-quick-actions", () => {
       ],
     });
     const humanReviewBuilderSession = buildSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
 
       externalSessionId: "builder-1",
     });
@@ -262,7 +277,12 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: humanReviewTaskWithPullRequest,
       sessionsForTask: [
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           externalSessionId: "builder-1",
         }),
       ],
@@ -423,7 +443,12 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: aiReviewTaskWithoutPullRequest,
       sessionsForTask: [
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           externalSessionId: "builder-1",
         }),
       ],
@@ -447,7 +472,12 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: aiReviewTaskWithPullRequest,
       sessionsForTask: [
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           externalSessionId: "builder-1",
         }),
       ],
@@ -577,7 +607,12 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: nonReviewTask,
       sessionsForTask: [
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           externalSessionId: "builder-1",
         }),
       ],
@@ -604,7 +639,12 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: aiReviewTask,
       sessionsForTask: [
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           externalSessionId: "builder-1",
         }),
       ],
@@ -621,7 +661,12 @@ describe("agent-studio-quick-actions", () => {
       status: "human_review",
     });
     const humanReviewBuilderSession = buildSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
 
       externalSessionId: "builder-1",
     });
@@ -707,7 +752,12 @@ describe("agent-studio-quick-actions", () => {
       selectedTask: task,
       sessionsForTask: [
         buildSession({
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
           externalSessionId: "builder-1",
         }),
       ],

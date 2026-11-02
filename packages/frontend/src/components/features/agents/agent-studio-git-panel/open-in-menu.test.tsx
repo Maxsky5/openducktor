@@ -29,6 +29,8 @@ describe("OpenInMenu", () => {
   let system: SystemSettings = {};
   const saveSettings = mock(async (): Promise<SettingsSnapshotSaveResult> => ({
     type: "saved",
+    shared: "saved",
+    preferences: "saved",
     workspaces: [],
     runtimeApplications: [],
   }));

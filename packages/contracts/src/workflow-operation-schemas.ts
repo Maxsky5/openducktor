@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workspaceIdSchema } from "./workspace-id-schemas";
 import {
   acceptedAgentInputSchema,
   acceptedAgentCommandSchema,
@@ -42,6 +43,7 @@ export const submissionAcknowledgementSchema = z.discriminatedUnion("kind", [
 ]);
 export type SubmissionAcknowledgement = z.infer<typeof submissionAcknowledgementSchema>;
 export const taskCompletionObservationSchema = z.strictObject({
+  workspaceId: workspaceIdSchema,
   repoPath: text,
   taskId: text,
   phase: z.enum(["publishing", "cleanup", "settled"]),

@@ -10,21 +10,23 @@ export const RUNTIME_IMPACT_CHANGED_NOTICE =
 export const hasLiveSessions = (impact: RuntimeLifecycleImpact): boolean =>
   impact.workspaces.some((workspace) => workspace.sessions.length > 0);
 
-export type RuntimeImpactActionResult =
-  | { type: "completed" }
+type CompletedAction = { type: "completed" };
+
+export type RuntimeImpactActionResult<Completed extends CompletedAction = CompletedAction> =
+  | Completed
   /** The host rejected the confirmation. The review shows the new impact and asks again. */
   | { type: "impact_changed"; impact: RuntimeLifecycleImpact }
   /** The review stays open and shows the error. */
   | { type: "failed"; error: string };
 
 /** Runs the lifecycle action with the confirmation of the reviewed impact. */
-export type RuntimeImpactAction = (
+export type RuntimeImpactAction<Completed extends CompletedAction = CompletedAction> = (
   impact: RuntimeLifecycleImpact,
-) => Promise<RuntimeImpactActionResult>;
+) => Promise<RuntimeImpactActionResult<Completed>>;
 
-export type RuntimeImpactReviewRequest = {
+export type RuntimeImpactReviewRequest<Completed extends CompletedAction = CompletedAction> = {
   readImpact: () => Promise<RuntimeLifecycleImpact>;
-  run: RuntimeImpactAction;
+  run: RuntimeImpactAction<Completed>;
   /** Explains why the review opened. */
   notice?: string | null;
 };
@@ -46,10 +48,12 @@ export type RuntimeImpactReview = {
   review: RuntimeImpactReviewState | null;
   /**
    * Opens a new review. Confirm runs the action with the current impact. The promise resolves
-   * true when the action completes and false on cancel. It rejects when the action throws, and
-   * the review then closes.
+   * the completed result of the action, or null on cancel. It rejects when the action throws,
+   * and the review then closes.
    */
-  open: (request: RuntimeImpactReviewRequest) => Promise<boolean>;
+  open: <Completed extends CompletedAction>(
+    request: RuntimeImpactReviewRequest<Completed>,
+  ) => Promise<Completed | null>;
   confirm: () => void;
   cancel: () => void;
 };
@@ -63,10 +67,11 @@ type OpenReview = {
 };
 
 type ReviewDecision = {
+  /** Runs the action. A completed action closes the review and resolves it. */
   run: RuntimeImpactAction;
   /** The action runs. A second confirm waits for its result. */
   isRunning: boolean;
-  resolve: (completed: boolean) => void;
+  cancel: () => void;
   reject: (cause: unknown) => void;
 };
 
@@ -103,11 +108,28 @@ export const useRuntimeImpactReview = ({
   }, []);
 
   const open = useCallback(
-    ({ readImpact, run, notice = null }: RuntimeImpactReviewRequest): Promise<boolean> => {
-      const { promise, resolve, reject } = Promise.withResolvers<boolean>();
+    <Completed extends CompletedAction>({
+      readImpact,
+      run,
+      notice = null,
+    }: RuntimeImpactReviewRequest<Completed>): Promise<Completed | null> => {
+      const { promise, resolve, reject } = Promise.withResolvers<Completed | null>();
       // A new review replaces an open one. The earlier review ends as canceled.
-      decisionRef.current?.resolve(false);
-      decisionRef.current = { run, isRunning: false, resolve, reject };
+      decisionRef.current?.cancel();
+      const decision: ReviewDecision = {
+        run: async (impact) => {
+          const result = await run(impact);
+          if (result.type === "completed") {
+            close(decision);
+            resolve(result);
+          }
+          return result;
+        },
+        isRunning: false,
+        cancel: () => resolve(null),
+        reject,
+      };
+      decisionRef.current = decision;
       reviewKeyRef.current += 1;
       setOpenReview({
         key: reviewKeyRef.current,
@@ -118,7 +140,7 @@ export const useRuntimeImpactReview = ({
       });
       return promise;
     },
-    [],
+    [close],
   );
 
   const confirm = useCallback((): void => {
@@ -128,11 +150,7 @@ export const useRuntimeImpactReview = ({
     setOpenReview((current) => current && { ...current, isPending: true, error: null });
     decision.run(currentImpact).then(
       (result) => {
-        if (result.type === "completed") {
-          close(decision);
-          decision.resolve(true);
-          return;
-        }
+        if (result.type === "completed") return;
         decision.isRunning = false;
         if (decisionRef.current !== decision) return;
         if (result.type === "impact_changed") {
@@ -158,7 +176,7 @@ export const useRuntimeImpactReview = ({
     const decision = decisionRef.current;
     if (decision === null) return;
     close(decision);
-    decision.resolve(false);
+    decision.cancel();
   }, [close]);
 
   return {
