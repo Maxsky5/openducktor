@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { StartupOperationSnapshot, StartupStep } from "@openducktor/contracts";
 import type { StartupAttempt } from "./startup-attempt-store";
-import { startupFailureRows, startupTraceRows } from "./startup-trace";
+import { startupActiveStep, startupFailureRows, startupTraceRows } from "./startup-trace";
 
 const step = (id: string, extra: Partial<StartupStep> = {}): StartupStep => ({
   id,
@@ -96,6 +96,7 @@ test("projects only worktree setup in execution order", () => {
     "create:copies",
     "create:install",
     "create:cleanup",
+    "attempt:session",
   ]);
   expect(startup.operations.map((entry) => entry.steps.length)).toEqual([8, 2]);
 });
@@ -108,18 +109,58 @@ test.each(["pending", "completed", "failed"] as const)(
     );
 
     expect(rows.map((row) => row.id)).toEqual(
-      state === "failed" ? ["create:checkout", "create:copies"] : ["create:checkout"],
+      state === "failed"
+        ? ["create:checkout", "create:copies", "attempt:session"]
+        : ["create:checkout", "attempt:session"],
     );
   },
 );
 
-test.each(["pending", "not_run", "failed"] as const)(
+test.each(["pending", "running", "completed"] as const)(
+  "a %s worktree creation shows every planned setup step at once",
+  (state) => {
+    const startup = attempt([
+      operation("create", [
+        step("checkout", { state }),
+        step("upstream", { state: "pending" }),
+        step("copies", { state: "pending", details: [".env"] }),
+        step("install", {
+          state: "pending",
+          action: { actionId: "install", command: "bun install", waitBeforeAgentStart: true },
+        }),
+      ]),
+    ]);
+
+    expect(startupTraceRows(startup).map((row) => row.id)).toEqual([
+      "create:checkout",
+      "create:upstream",
+      "create:copies",
+      "create:install",
+      "attempt:session",
+    ]);
+  },
+);
+
+test("a running checkout of a reused worktree has no step trace", () => {
+  const startup = attempt([
+    operation("start", [
+      step("checkout", {
+        state: "running",
+        resources: [{ kind: "worktree", value: "/worktree", state: "reused" }],
+      }),
+    ]),
+  ]);
+
+  expect(startupTraceRows(startup)).toEqual([]);
+});
+
+test.each(["not_run", "failed"] as const)(
   "a %s worktree without confirmed creation has no step trace",
   (state) => {
     const startup = attempt([
       operation("create", [
         step("checkout", { state }),
-        step("copies", { state: state === "pending" ? "pending" : "not_run", details: [".env"] }),
+        step("copies", { state: "not_run", details: [".env"] }),
       ]),
     ]);
 
@@ -146,7 +187,9 @@ test.each(["completed", "failed"] as const)(
     );
 
     expect(rows.map((row) => row.id)).toEqual(
-      state === "failed" ? ["create:checkout", "start:checkout"] : ["create:checkout"],
+      state === "failed"
+        ? ["create:checkout", "start:checkout", "attempt:session"]
+        : ["create:checkout", "attempt:session"],
     );
   },
 );
@@ -204,7 +247,12 @@ test("keeps late action results and failure facts after creation is ready", () =
 
   const rows = startupTraceRows(startup);
 
-  expect(rows.map((row) => row.id)).toEqual(["create:checkout", "create:setup", "prepare:native"]);
+  expect(rows.map((row) => row.id)).toEqual([
+    "create:checkout",
+    "create:setup",
+    "prepare:native",
+    "attempt:session",
+  ]);
   expect(rows[1]?.step.action?.result).toEqual({
     type: "exited",
     exitCode: 1,
@@ -289,4 +337,155 @@ test("keeps unsettled resources and next actions without showing routine complet
     "start:unknown",
     "start:next-action",
   ]);
+});
+
+const sessionState = (
+  setup: StartupStep[],
+  status: StartupAttempt["status"],
+): StartupStep["state"] | undefined =>
+  startupTraceRows({ ...attempt([operation("create", setup)]), status }).at(-1)?.step.state;
+
+const running = { phase: "running", confirmation: "current" } as const;
+
+/** An action that runs on in its terminal exited with an error. The session start goes on. */
+const devServerFailed = (): StartupStep =>
+  step("dev", {
+    state: "failed",
+    failure: {
+      stage: "dev",
+      code: "action_failed",
+      message: "Dev server exited with code 1.",
+      nextAction: "Open the action terminal to inspect it.",
+    },
+    action: {
+      actionId: "dev",
+      command: "bun dev",
+      waitBeforeAgentStart: false,
+      result: { type: "exited", exitCode: 1, signal: null, outputTail: [] },
+    },
+  });
+
+test.each([
+  [
+    "a setup step runs",
+    [createdWorktree(), step("copies", { state: "running", details: [".env"] })],
+    running,
+    "pending",
+  ],
+  ["setup is complete", [createdWorktree()], running, "running"],
+  [
+    "only an action that continues in its terminal runs",
+    [
+      createdWorktree(),
+      step("dev", {
+        state: "running",
+        action: { actionId: "dev", command: "bun dev", waitBeforeAgentStart: false },
+      }),
+    ],
+    running,
+    "running",
+  ],
+  [
+    "a blocking action runs",
+    [
+      createdWorktree(),
+      step("install", {
+        state: "running",
+        action: { actionId: "install", command: "bun install", waitBeforeAgentStart: true },
+      }),
+    ],
+    running,
+    "pending",
+  ],
+  [
+    "the session is ready",
+    [createdWorktree()],
+    { phase: "ready", confirmation: "current" },
+    "completed",
+  ],
+  [
+    "the ready session is unconfirmed",
+    [createdWorktree()],
+    { phase: "ready", confirmation: "unconfirmed" },
+    "running",
+  ],
+  [
+    "a setup step failed",
+    [createdWorktree(), step("copies", { state: "failed", details: [".env"] })],
+    { phase: "failed", confirmation: "current" },
+    "not_run",
+  ],
+  [
+    "the session start failed",
+    [createdWorktree()],
+    { phase: "failed", confirmation: "current" },
+    "failed",
+  ],
+  [
+    "the successful start settles",
+    [createdWorktree()],
+    { phase: "settling", confirmation: "current" },
+    "running",
+  ],
+  [
+    "the start settles after a setup failure",
+    [createdWorktree(), step("copies", { state: "failed", details: [".env"] })],
+    { phase: "settling", confirmation: "current" },
+    "not_run",
+  ],
+  [
+    "the start settles after an action that continues in its terminal failed",
+    [createdWorktree(), devServerFailed()],
+    { phase: "settling", confirmation: "current" },
+    "running",
+  ],
+  [
+    "the session start failed after an action that continues in its terminal failed",
+    [createdWorktree(), devServerFailed()],
+    { phase: "failed", confirmation: "current" },
+    "failed",
+  ],
+  [
+    "the start was canceled",
+    [createdWorktree()],
+    { phase: "canceled", confirmation: "current" },
+    "not_run",
+  ],
+] as const)("the session row follows the attempt when %s", (_name, setup, status, expected) => {
+  expect(sessionState([...setup], status)).toBe(expected);
+});
+
+const activeStep = (steps: StartupStep[]) =>
+  startupActiveStep(startupTraceRows(attempt([operation("create", steps)])))?.id;
+
+test("the active step stays on the next pending step between two steps", () => {
+  expect(
+    activeStep([
+      createdWorktree(),
+      step("upstream", { state: "pending" }),
+      step("copies", { state: "pending", details: [".env"] }),
+    ]),
+  ).toBe("upstream");
+});
+
+test("the active step is the last step that runs or failed", () => {
+  const install = {
+    actionId: "install",
+    command: "bun install",
+    waitBeforeAgentStart: true,
+  } as const;
+  expect(
+    activeStep([
+      createdWorktree(),
+      step("install", { state: "running", action: install }),
+      step("dev", { state: "pending", action: { ...install, actionId: "dev" } }),
+    ]),
+  ).toBe("install");
+  expect(
+    activeStep([
+      createdWorktree(),
+      step("copies", { state: "failed", details: [".env"] }),
+      step("install", { state: "not_run", action: install }),
+    ]),
+  ).toBe("copies");
 });
