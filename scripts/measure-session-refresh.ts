@@ -13,6 +13,7 @@ import {
 import { createRequire } from "node:module";
 import { type AddressInfo, connect, createServer as createTcpServer, type Socket } from "node:net";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type {
   AgentSessionRecord,
   ExternalTaskSyncEvent,
@@ -243,7 +244,7 @@ const main = async (): Promise<void> => {
               repoPath,
               taskId,
             ]);
-            if (JSON.stringify(measuredSessions) !== JSON.stringify(hostSessions)) {
+            if (!isDeepStrictEqual(measuredSessions, hostSessions)) {
               throw new Error(
                 `The session list for task '${taskId}' does not match the host records. Expected ${JSON.stringify(hostSessions)} but received ${JSON.stringify(measuredSessions)}.`,
               );
