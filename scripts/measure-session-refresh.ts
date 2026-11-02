@@ -1,8 +1,7 @@
 // Compare task-change session refresh traffic before and after the batched session-list reads.
-// Run from packages/frontend, so the frontend test preload and path aliases apply:
-//   SESSION_REFRESH_BASELINE=<commit> bun test ../../scripts/measure-session-refresh.ts
+// Run from packages/frontend:
+//   SESSION_REFRESH_BASELINE=<commit> bun run ../../scripts/measure-session-refresh.ts
 // The baseline commit must contain the per-task refresh in agent-sessions.ts.
-import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import {
@@ -56,7 +55,7 @@ const listen = (server: Server | ReturnType<typeof createTcpServer>): Promise<nu
     });
   });
 
-test("measures task-change session refresh traffic against host records", async () => {
+const main = async (): Promise<void> => {
   if (!baselineCommit) {
     throw new Error("Set SESSION_REFRESH_BASELINE to the commit before the batched reads.");
   }
@@ -237,14 +236,18 @@ test("measures task-change session refresh traffic against host records", async 
           }
           const completionMs = performance.now() - started;
           for (const taskId of scope) {
-            expect(
-              queryClient.getQueryData<AgentSessionRecord[]>([
-                "agent-sessions",
-                "list",
-                repoPath,
-                taskId,
-              ]),
-            ).toEqual(expected.get(taskId)!);
+            const hostSessions = expected.get(taskId);
+            const measuredSessions = queryClient.getQueryData<AgentSessionRecord[]>([
+              "agent-sessions",
+              "list",
+              repoPath,
+              taskId,
+            ]);
+            if (JSON.stringify(measuredSessions) !== JSON.stringify(hostSessions)) {
+              throw new Error(
+                `The session list for task '${taskId}' does not match the host records. Expected ${JSON.stringify(hostSessions)} but received ${JSON.stringify(measuredSessions)}.`,
+              );
+            }
           }
           samples.push({ ...counts, completionMs: Number(completionMs.toFixed(2)) });
           for (const stop of stops) stop();
@@ -283,4 +286,6 @@ test("measures task-change session refresh traffic against host records", async 
     await fixture.cleanup();
     await rm(baselineDir, { recursive: true, force: true });
   }
-}, 120_000);
+};
+
+await main();
