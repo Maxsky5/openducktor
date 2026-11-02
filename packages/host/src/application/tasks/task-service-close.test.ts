@@ -1,5 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentSessionRecord,
   GitBranch,
@@ -14,11 +14,13 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
+import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
   createWorktreeFilePortTestDouble,
+  noWorktreeOwners,
 } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { TerminalServiceError } from "../terminals/terminal-service";
@@ -206,6 +208,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -233,6 +236,7 @@ describe("TaskService.closeTask", () => {
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -257,6 +261,7 @@ describe("TaskService.closeTask", () => {
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -281,6 +286,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(),
     });
 
@@ -332,6 +338,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(),
     });
 
@@ -366,6 +373,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -384,6 +392,63 @@ describe("TaskService.closeTask", () => {
       "delete-branch:odt/task-1",
       "transition:task-1:closed",
     ]);
+  });
+
+  test("keeps the task open while others still need its worktree", async () => {
+    const calls: string[] = [];
+    const readOwners = mock((_input: Parameters<TaskWorktreeOwnerReader["readOwners"]>[0]) =>
+      Effect.succeed({
+        historyReadErrors: [],
+        owners: {
+          checkoutWorkspaces: ["Other"],
+          tasks: [{ workspaceId: "repo", taskId: "task-2", title: "Other task" }],
+          chats: [{ workspaceId: "repo", sessionId: "chat-1", title: "Hi" }],
+          historyChats: [],
+        },
+      }),
+    );
+    const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
+      taskStore: createTaskStore([task()], calls),
+      gitPort: createGitPort({
+        calls,
+        branches: [
+          {
+            name: "odt/task-1",
+            isCurrent: false,
+            isRemote: false,
+            worktreePath: "/worktrees/repo/task-1",
+          },
+        ],
+      }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: { readOwners },
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(
+      run(
+        service.closeTask({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: true,
+        }),
+      ),
+    ).rejects.toThrow(
+      "Cannot close task task-1 because others still need its worktree. Workspaces use a removed worktree as their repository checkout: Other. Remove these workspaces first. Open tasks use a removed worktree: Other task (task-2). Close these tasks first. Saved chats work in a removed worktree: “Hi”. Archive these chats first.",
+    );
+    // A confirmed close warns about native history in its confirmation, so it does not read it.
+    expect(readOwners).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskIds: ["task-1"],
+      worktreePaths: ["/worktrees/repo/task-1"],
+      history: "none",
+    });
+    expect(calls).toEqual([]);
   });
 
   test("keeps the task worktree and branch when the close keeps the worktree", async () => {
@@ -405,6 +470,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
       terminalService: {
         acquireTaskCleanup: () =>
@@ -440,6 +506,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
     });
 
     await expect(
@@ -464,6 +531,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService("/repo"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -502,6 +570,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -533,6 +602,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -565,6 +635,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -592,6 +663,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -633,6 +705,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -666,6 +739,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
       taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -709,6 +783,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -746,6 +821,7 @@ describe("TaskService.closeTask", () => {
         },
       },
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -779,6 +855,7 @@ describe("TaskService.closeTask", () => {
           ).pipe(Effect.as({ closedTerminalIds: ["terminal-1"] })),
       },
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -827,6 +904,7 @@ describe("TaskService.closeTask", () => {
       taskSessionLifecycleCoordinator,
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(),
     });
 
@@ -895,6 +973,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/repo", "/worktrees/repo/planner-session"])),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -951,6 +1030,7 @@ describe("TaskService.closeTask", () => {
         },
       },
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 
@@ -995,6 +1075,7 @@ describe("TaskService.closeTask", () => {
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createWorktreeFiles(calls),
     });
 

@@ -21,6 +21,7 @@ import {
   taskHasSessionsForRoles,
   workflowRoleIds,
 } from "../support/task-cleanup-support";
+import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
@@ -34,6 +35,7 @@ export const createTaskDeleteUseCase = ({
   browserTabs,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
   taskSessionLifecycleCoordinator,
   completionState,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
@@ -86,7 +88,17 @@ export const createTaskDeleteUseCase = ({
         managedWorktreeBasePath,
         targetTaskSessions.map((entry) => ({ ...entry, workflow })),
       );
-      yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
+      const checkedWorktreePaths = yield* acquireRemovableWorktrees(
+        { lifecycle: taskSessionLifecycleCoordinator, worktreeOwners },
+        {
+          workspaceId: input.workspaceId,
+          repoPath: effectiveRepoPath,
+          taskId,
+          operationLabel: "delete",
+          lockedPaths: worktreePaths,
+          confirmed: true,
+        },
+      );
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,
@@ -120,7 +132,7 @@ export const createTaskDeleteUseCase = ({
           terminalService,
           worktreeCleanupOperation: "task_delete",
           worktreeFiles,
-          worktreePaths,
+          worktreePaths: checkedWorktreePaths,
         });
         yield* runTaskBrowserTabCleanup({
           browserTabs,

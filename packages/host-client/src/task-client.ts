@@ -42,6 +42,9 @@ import {
   type TaskMergeStatusSnapshot,
   taskMergeStatusSnapshotSchema,
   type TaskWorktreeCleanupImpact,
+  type TaskWorktreeOwners,
+  type TaskWorktreeOwnersRequest,
+  taskWorktreeOwnersSchema,
   taskWorktreeCleanupImpactSchema,
   type IssueItemsImportInput,
   type IssueItemsImportResult,
@@ -327,6 +330,11 @@ export class HostTaskClient {
       { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
       taskWorktreeCleanupImpactSchema,
     );
+  }
+
+  /** The others that need a worktree that a task action removes. Only a confirmation reads them. */
+  async taskWorktreeOwnersGet(input: TaskWorktreeOwnersRequest): Promise<TaskWorktreeOwners> {
+    return this.invokeFn("task_worktree_owners_get", input, taskWorktreeOwnersSchema);
   }
 
   /** Removes the worktree and local branches of a closed task. */

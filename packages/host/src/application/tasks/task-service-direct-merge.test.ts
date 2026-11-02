@@ -1,4 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { TaskCompletionObservation } from "@openducktor/contracts";
@@ -87,6 +88,7 @@ describe("createTaskService direct merge", () => {
         transitionTask: () => Effect.die("must not change task status"),
       },
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -217,6 +219,7 @@ describe("createTaskService direct merge", () => {
       ),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -369,6 +372,7 @@ describe("createTaskService direct merge", () => {
         systemCommands: createApprovalSystemCommands(),
         taskStore,
         taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        worktreeOwners: noWorktreeOwners,
         worktreeFiles: createBuildStartWorktreeFiles(calls),
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
@@ -496,6 +500,7 @@ describe("createTaskService direct merge", () => {
           systemCommands: createApprovalSystemCommands(),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          worktreeOwners: noWorktreeOwners,
           worktreeFiles: createBuildStartWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -600,6 +605,7 @@ describe("createTaskService direct merge", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -694,6 +700,7 @@ describe("createTaskService direct merge", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",

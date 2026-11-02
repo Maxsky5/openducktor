@@ -10,10 +10,15 @@ import type {
   WorktreeOwnershipChat,
 } from "../../ports/workspace-session-store-port";
 import {
+  createClaudeSessionMetadataTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
 } from "../../test-support/service-test-doubles";
-import { readWorktreeOwners, requireNoWorktreeOwners } from "./workspace-session-worktree-owners";
+import {
+  readWorktreeOwners,
+  readWorktreePathOwners,
+  requireNoWorktreeOwners,
+} from "./workspace-session-worktree-owners";
 
 const scope = { workspaceId: "workspace", repoPath: "/repo" };
 
@@ -80,19 +85,17 @@ const dependenciesFor = (
   }),
   store: chatStore((workspaceId) => (workspaceId === scope.workspaceId ? records : [])),
   taskOwnership: { listOpenTasksForWorktreeOwnership: () => Effect.succeed([]) },
-  claudeSessionMetadata: {
-    readWorkingDirectory: (externalSessionId: string) => {
-      const directory = nativeDirectories.get(externalSessionId);
-      return directory === undefined
-        ? Effect.fail(
-            new HostOperationError({
-              operation: "claude.session.metadata",
-              message: `Cannot read Claude session ${externalSessionId}. Restore access and retry.`,
-            }),
-          )
-        : Effect.succeed(directory);
-    },
-  },
+  claudeSessionMetadata: createClaudeSessionMetadataTestDouble((externalSessionId: string) => {
+    const directory = nativeDirectories.get(externalSessionId);
+    return directory === undefined
+      ? Effect.fail(
+          new HostOperationError({
+            operation: "claude.session.metadata",
+            message: `Cannot read Claude session ${externalSessionId}. Restore access and retry.`,
+          }),
+        )
+      : Effect.succeed(directory);
+  }),
 });
 
 /** The saved chats that need the worktree of the source chat. */
@@ -148,6 +151,57 @@ describe("workspace session worktree owners", () => {
     expect(
       await Effect.runPromise(chatOwners(dependenciesFor(records, nativeDirectories), middle)),
     ).toEqual([]);
+  });
+
+  test("keeps the history directory of an archived fork when cleanup also removes the fork directory", async () => {
+    const fork = { ...record("fork", "/worktrees/child"), archivedAt: 2 };
+    const own = { ...record("own", "/worktrees/child"), archivedAt: 3 };
+    const dependencies = dependenciesFor(
+      [fork, own],
+      new Map([
+        ["native-fork", "/worktrees/parent"],
+        ["native-own", "/worktrees/child"],
+      ]),
+    );
+
+    const owners = await Effect.runPromise(
+      readWorktreePathOwners(dependencies, scope, ["/worktrees/parent", "/worktrees/child"], {
+        source: { kind: "tasks", taskIds: ["task-1"] },
+        history: "required",
+      }),
+    );
+    expect(owners.owners.historyChats).toEqual([
+      { workspaceId: scope.workspaceId, sessionId: "fork", title: "fork" },
+    ]);
+  });
+
+  test("a confirmation reports an unreadable history, and a required read fails on it", async () => {
+    const readable = { ...record("readable", "/worktrees/child"), archivedAt: 2 };
+    const unreadable = { ...record("unreadable", "/worktrees/other"), archivedAt: 3 };
+    const dependencies = dependenciesFor(
+      [readable, unreadable],
+      new Map([["native-readable", "/worktrees/shared"]]),
+    );
+    const read = (history: "required" | "report") =>
+      readWorktreePathOwners(dependencies, scope, ["/worktrees/shared"], {
+        source: { kind: "tasks", taskIds: ["task-1"] },
+        history,
+      });
+    const message =
+      "Cannot check the native history of saved chat “unreadable” in workspace workspace. Cannot read Claude session native-unreadable. Restore access and retry.";
+
+    expect(await Effect.runPromise(read("report"))).toEqual({
+      owners: {
+        checkoutWorkspaces: [],
+        tasks: [],
+        chats: [],
+        historyChats: [
+          { workspaceId: scope.workspaceId, sessionId: "readable", title: "readable" },
+        ],
+      },
+      historyReadErrors: [message],
+    });
+    expect((await Effect.runPromise(Effect.flip(read("required")))).message).toBe(message);
   });
 
   test("does not keep an archived session's own execution directory through an alias", async () => {
@@ -239,7 +293,9 @@ describe("workspace session worktree owners", () => {
     const source = record("source", "/worktrees/source");
     const old = { ...record("old", "/repo"), archivedAt: 2 };
     const dependencies = dependenciesFor([source, old], new Map());
-    dependencies.claudeSessionMetadata.readWorkingDirectory = () => Effect.succeed(null);
+    dependencies.claudeSessionMetadata = createClaudeSessionMetadataTestDouble(() =>
+      Effect.succeed(null),
+    );
 
     expect(await Effect.runPromise(chatOwners(dependencies, source))).toEqual([]);
   });
@@ -302,9 +358,7 @@ describe("workspace session worktree task owners", () => {
           ),
         ),
     },
-    claudeSessionMetadata: {
-      readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
-    },
+    claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
   });
 
   test("reports open tasks whose worktree or session uses the directory, also in a closed workspace", async () => {
@@ -321,6 +375,87 @@ describe("workspace session worktree task owners", () => {
     ]);
   });
 
+  test("reads every owner of a task worktree except the task itself", async () => {
+    const chat = record("chat", "/aliases/shared");
+    const fork = { ...record("fork", "/worktrees/fork"), archivedAt: 2 };
+    const dependencies = {
+      ...dependenciesFor({
+        workspace: [openTask("shared"), openTask("builder", "/worktrees/shared")],
+      }),
+      claudeSessionMetadata: createClaudeSessionMetadataTestDouble((externalSessionId: string) =>
+        Effect.succeed(externalSessionId === "native-fork" ? "/worktrees/shared" : null),
+      ),
+    };
+    dependencies.settingsConfig.readConfig = () =>
+      Effect.succeed(
+        globalConfigSchema.parse({
+          ...config,
+          workspaces: {
+            ...config.workspaces,
+            checkout: {
+              workspaceId: "checkout",
+              workspaceName: "Checkout",
+              repoPath: "/aliases/shared",
+            },
+          },
+        }),
+      );
+    dependencies.store = chatStore((workspaceId) =>
+      workspaceId === scope.workspaceId ? [chat, fork] : [],
+    );
+
+    const owners = await Effect.runPromise(
+      readWorktreePathOwners(dependencies, scope, ["/worktrees/shared"], {
+        source: { kind: "tasks", taskIds: ["shared"] },
+        history: "required",
+      }),
+    );
+    expect(owners.owners).toEqual({
+      checkoutWorkspaces: ["Checkout"],
+      tasks: [{ workspaceId: "workspace", taskId: "builder", title: "Task builder" }],
+      chats: [{ workspaceId: scope.workspaceId, sessionId: "chat", title: "chat" }],
+      historyChats: [{ workspaceId: scope.workspaceId, sessionId: "fork", title: "fork" }],
+    });
+  });
+
+  test("reads native Claude history once for all chats, and only when asked", async () => {
+    const chats = [
+      { ...record("first", "/worktrees/first"), archivedAt: 2 },
+      { ...record("second", "/worktrees/second"), archivedAt: 3 },
+    ];
+    const batches: string[][] = [];
+    const dependencies = {
+      ...dependenciesFor({}),
+      claudeSessionMetadata: {
+        readWorkingDirectories: (ids: readonly string[]) =>
+          Effect.sync(() => {
+            batches.push([...ids]);
+            return new Map(
+              ids.map((id) => [id, { kind: "read", directory: "/worktrees/shared" }] as const),
+            );
+          }),
+      },
+    };
+    dependencies.store = chatStore((workspaceId) =>
+      workspaceId === scope.workspaceId ? chats : [],
+    );
+    const read = (history: "none" | "required") =>
+      Effect.runPromise(
+        readWorktreePathOwners(dependencies, scope, ["/worktrees/shared"], {
+          source: { kind: "tasks", taskIds: ["task-1"] },
+          history,
+        }),
+      );
+
+    expect((await read("none")).owners.historyChats).toEqual([]);
+    expect(batches).toEqual([]);
+    expect((await read("required")).owners.historyChats.map(({ sessionId }) => sessionId)).toEqual([
+      "first",
+      "second",
+    ]);
+    expect(batches).toEqual([["native-first", "native-second"]]);
+  });
+
   test("blocks removal and names each task and saved chat that needs the worktree", async () => {
     const source = record("source", "/worktrees/shared");
     const sibling = record("sibling", "/worktrees/shared");
@@ -332,7 +467,7 @@ describe("workspace session worktree task owners", () => {
     await expect(
       Effect.runPromise(requireNoWorktreeOwners(dependencies, scope, source)),
     ).rejects.toThrow(
-      "Cannot remove this worktree while tasks need it: Task shared (shared) and saved chats need it for files or history: sibling. Turn off worktree removal to archive this chat.",
+      "Cannot remove this worktree. Open tasks use a removed worktree: Task shared (shared). Close these tasks first. Saved chats work in a removed worktree: “sibling”. Archive these chats first. Turn off worktree removal to archive this chat.",
     );
   });
 });

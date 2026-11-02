@@ -28,6 +28,8 @@ import { startWorktreeSessionHint } from "./task-workflow-events";
 import { loadRemoveWorktreeOnClose } from "./task-workflow-helpers";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
 import { runTaskRuntimeCleanup, selectWorkflowCleanupSessionRecords } from "./task-cleanup-support";
+import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
+import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 
 type TaskWorktreeCleanupError =
   | GitPortError
@@ -111,6 +113,7 @@ type MergedTaskCleanupServices = {
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
   worktreeFiles?: WorktreeFilePort;
+  worktreeOwners: TaskWorktreeOwnerReader | undefined;
   /** The task workflow of the task. Its roles own the sessions and worktrees to clean. */
   workflow: TaskWorkflow;
 };
@@ -203,13 +206,6 @@ export const cleanupMergedTaskState = (
     if (!removeWorktree) {
       return yield* cleanupKeptTaskWorktree(dependencies, taskStore, repoPath, taskId, workspaceId);
     }
-    yield* runTaskRuntimeCleanup({
-      workspaceId,
-      progress: createTaskCleanupProgressState(),
-      repoPath,
-      taskIds: [taskId],
-      terminalService: dependencies.terminalService,
-    });
     const cleanupTarget = yield* findLatestCleanupTarget(
       { ...dependencies, worktreeRoles: dependencies.workflow.worktreeRoles },
       taskStore,
@@ -218,14 +214,33 @@ export const cleanupMergedTaskState = (
       sourceBranch,
       workspaceId,
     );
-    // Runtime reads of the worktree wait until the cleanup ends, so none restores a released session.
-    if (cleanupTarget) {
-      yield* dependencies.taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([cleanupTarget]);
-    }
+    // Runtime reads of the worktree wait until the cleanup ends, so none restores a released
+    // session. No user confirms this close, so the owner check also blocks on native history.
+    const [checkedTarget] = yield* acquireRemovableWorktrees(
+      {
+        lifecycle: dependencies.taskSessionLifecycleCoordinator,
+        worktreeOwners: dependencies.worktreeOwners,
+      },
+      {
+        workspaceId,
+        repoPath,
+        taskId,
+        operationLabel: "close",
+        lockedPaths: cleanupTarget ? [cleanupTarget] : [],
+        confirmed: false,
+      },
+    );
+    yield* runTaskRuntimeCleanup({
+      workspaceId,
+      progress: createTaskCleanupProgressState(),
+      repoPath,
+      taskIds: [taskId],
+      terminalService: dependencies.terminalService,
+    });
     yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId, workspaceId);
-    if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
+    if (checkedTarget && (yield* dependencies.settingsConfig.pathExists(checkedTarget))) {
       const worktreeFiles = yield* requireWorktreeFiles(dependencies.worktreeFiles);
-      const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
+      const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(checkedTarget);
       const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
       if (!canonicalPathsEqual(canonicalCleanupTarget, canonicalRepoPath, canonicalPathPlatform)) {
         yield* removeWorktreeAndFilesystemPath(
@@ -238,7 +253,7 @@ export const cleanupMergedTaskState = (
             force: false,
             missingOutsideManagedRootPathPolicy: "fail",
             repoPath,
-            worktreePath: cleanupTarget,
+            worktreePath: checkedTarget,
           },
         );
       }

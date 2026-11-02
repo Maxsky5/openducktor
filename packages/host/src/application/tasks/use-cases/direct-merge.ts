@@ -110,6 +110,7 @@ export const createTaskDirectMergeUseCase = (
                     completionState,
                     taskActivityGuard,
                     taskSessionLifecycleCoordinator,
+                    worktreeOwners: services.worktreeOwners,
                     workflow,
                     taskWorkflows,
                   },

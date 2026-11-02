@@ -12,6 +12,7 @@ export * from "./services/agent-session-ref-key";
 export * from "./services/agent-session-runtime-snapshot";
 export * from "./services/agent-session-scope";
 export * from "./services/agent-session-title";
+export * from "./services/worktree-owner-lines";
 export * from "./services/agent-session-todos";
 export * from "./services/agent-system-slash-commands";
 export * from "./services/agent-attachment-validation";

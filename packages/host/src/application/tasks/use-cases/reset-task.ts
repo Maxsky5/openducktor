@@ -21,6 +21,7 @@ import {
   workflowRoleIds,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
+import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
 import { requireEffectInput, decideEffectTransition } from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
@@ -34,6 +35,7 @@ export const createTaskFullResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
   taskSessionLifecycleCoordinator,
   completionState,
 }: TaskServiceUseCaseInput) => ({
@@ -61,6 +63,7 @@ export const createTaskFullResetUseCase = ({
       const currentSessions = yield* loadTaskSessions(taskStore, input);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+      const taskRef = { workspaceId: input.workspaceId, repoPath: effectiveRepoPath, taskId };
       const hasWorkflowSessions = taskHasSessionsForRoles(currentSessions, workflowRoles);
       if (hasWorkflowSessions && !activityGuard) {
         return yield* Effect.fail(
@@ -87,7 +90,15 @@ export const createTaskFullResetUseCase = ({
         workflowRoles,
         "reset task",
       );
-      yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
+      const checkedWorktreePaths = yield* acquireRemovableWorktrees(
+        { lifecycle: taskSessionLifecycleCoordinator, worktreeOwners },
+        {
+          ...taskRef,
+          operationLabel: "reset",
+          lockedPaths: worktreePaths,
+          confirmed: true,
+        },
+      );
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,
@@ -128,48 +139,23 @@ export const createTaskFullResetUseCase = ({
           terminalService,
           worktreeCleanupOperation: "task_reset",
           worktreeFiles,
-          worktreePaths,
+          worktreePaths: checkedWorktreePaths,
         });
-        yield* taskStore.clearTaskArtifacts({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskId,
-        });
+        yield* taskStore.clearTaskArtifacts(taskRef);
         taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("cleared task artifacts");
-        yield* taskStore.clearAgentSessionsByRoles({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskId,
-          roles: [...workflowRoles],
-        });
+        yield* taskStore.clearAgentSessionsByRoles({ ...taskRef, roles: [...workflowRoles] });
         cleanupProgress.completedSteps.push("cleared linked agent sessions");
-        yield* taskStore.setPullRequest({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskId,
-          pullRequest: null,
-        });
+        yield* taskStore.setPullRequest({ ...taskRef, pullRequest: null });
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* taskStore.setDirectMerge({
-              workspaceId: input.workspaceId,
-              repoPath: effectiveRepoPath,
-              taskId,
-              directMerge: null,
-            });
+            yield* taskStore.setDirectMerge({ ...taskRef, directMerge: null });
             cleanupProgress.completedSteps.push("cleared linked delivery metadata");
-            yield* completionState.discard({
-              workspaceId: input.workspaceId,
-              repoPath: effectiveRepoPath,
-              taskId,
-            });
+            yield* completionState.discard(taskRef);
           }),
         );
         const updated = yield* taskStore.transitionTask({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskId,
+          ...taskRef,
           decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), "task.reset", task),
         });
         const task = enrichTask(workflow, updated);

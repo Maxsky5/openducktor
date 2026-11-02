@@ -13,6 +13,8 @@ import {
   type TaskCleanupProgressState,
 } from "./task-cleanup-progress";
 import {
+  collectRelatedTaskBranches,
+  collectResetWorktreePaths,
   collectSessionsUsingCanonicalWorktree,
   isRelatedTaskBranch,
   managedWorktreeBaseForRepoConfig,
@@ -102,7 +104,7 @@ export const cleanupImplementationResetActivity = (
     recordStoppedAgentSessionCount(progress, stoppedSessionCount);
   });
 
-export const resolveCanonicalImplementationResetTarget = (
+const resolveCanonicalImplementationResetTarget = (
   gitPort: GitPort,
   workspaceSettingsService: WorkspaceSettingsService,
   task: TaskRecord,
@@ -149,7 +151,13 @@ export const resolveCanonicalImplementationResetTarget = (
     return { branch, restoreReference, worktreePath };
   });
 
-export const excludeCanonicalImplementationTargets = (
+/** The worktree paths without the canonical worktree, which Reset Implementation keeps. */
+const withoutWorktree = (worktreePaths: string[], keptWorktree: string): string[] => {
+  const kept = normalizePathForComparison(keptWorktree);
+  return worktreePaths.filter((path) => normalizePathForComparison(path) !== kept);
+};
+
+const excludeCanonicalImplementationTargets = (
   worktreePaths: string[],
   branchNames: string[],
   canonicalTarget: CanonicalImplementationResetTarget | null,
@@ -157,11 +165,108 @@ export const excludeCanonicalImplementationTargets = (
   if (!canonicalTarget) {
     return { branchNames, worktreePaths };
   }
-  const normalizedCanonical = normalizePathForComparison(canonicalTarget.worktreePath);
   return {
     branchNames: branchNames.filter((branch) => branch !== canonicalTarget.branch),
-    worktreePaths: worktreePaths.filter(
-      (worktreePath) => normalizePathForComparison(worktreePath) !== normalizedCanonical,
-    ),
+    worktreePaths: withoutWorktree(worktreePaths, canonicalTarget.worktreePath),
   };
 };
+
+/** Every worktree of the reset roles, including an existing canonical worktree. */
+const collectImplementationResetWorktreePaths = (
+  dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
+  input: {
+    repoPath: string;
+    managedWorktreeBasePath: string;
+    taskId: string;
+    sessions: AgentSessionRecord[];
+    workflow: TaskWorkflow;
+  },
+) =>
+  collectResetWorktreePaths(
+    dependencies,
+    input.repoPath,
+    input.managedWorktreeBasePath,
+    input.taskId,
+    input.sessions,
+    new Set(input.workflow.worktreeRoles),
+    "reset implementation",
+  );
+
+/**
+ * Collects the worktrees and branches of Reset Implementation. `worktreePaths` lists every task
+ * worktree, including an existing canonical worktree. The reset keeps that worktree and returns it
+ * to its start point, so `cleanupTargets` lists only what the reset removes.
+ */
+export const collectImplementationResetTargets = (
+  dependencies: {
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+    workspaceSettingsService: WorkspaceSettingsService;
+  },
+  input: {
+    workspaceId: string;
+    repoPath: string;
+    branchPrefix: string;
+    managedWorktreeBasePath: string;
+    /** The existing canonical worktree, or null when it does not exist. */
+    canonicalWorktree: string | null;
+    task: TaskRecord;
+    sessions: AgentSessionRecord[];
+    workflow: TaskWorkflow;
+  },
+) =>
+  Effect.gen(function* () {
+    const { repoPath, branchPrefix, task } = input;
+    const worktreePaths = yield* collectImplementationResetWorktreePaths(dependencies, {
+      ...input,
+      taskId: task.id,
+    });
+    const relatedBranches = yield* collectRelatedTaskBranches(
+      dependencies.gitPort,
+      repoPath,
+      branchPrefix,
+      [task.id],
+      worktreePaths,
+      "reset implementation",
+    );
+    const canonicalTarget = input.canonicalWorktree
+      ? yield* resolveCanonicalImplementationResetTarget(
+          dependencies.gitPort,
+          dependencies.workspaceSettingsService,
+          task,
+          repoPath,
+          input.canonicalWorktree,
+          branchPrefix,
+          input.workspaceId,
+        )
+      : null;
+    const cleanupTargets = excludeCanonicalImplementationTargets(
+      worktreePaths,
+      relatedBranches,
+      canonicalTarget,
+    );
+    return { worktreePaths, canonicalTarget, cleanupTargets };
+  });
+
+/**
+ * The worktrees that Reset Implementation removes, for its confirmation. It keeps the canonical
+ * worktree, so this read needs no branch check of that worktree.
+ */
+export const collectImplementationResetRemovedPaths = (
+  dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
+  repoPath: string,
+  target: { taskId: string; sessions: AgentSessionRecord[]; workflow: TaskWorkflow },
+  state: Effect.Success<ReturnType<typeof collectImplementationResetSessionState>>,
+) =>
+  Effect.gen(function* () {
+    const worktreePaths = yield* collectImplementationResetWorktreePaths(dependencies, {
+      ...target,
+      repoPath,
+      managedWorktreeBasePath: state.managedWorktreeBasePath,
+    });
+    if (!state.sessionState.canonicalExists) return worktreePaths;
+    return withoutWorktree(
+      worktreePaths,
+      yield* dependencies.gitPort.canonicalizePath(state.canonicalWorktree),
+    );
+  });

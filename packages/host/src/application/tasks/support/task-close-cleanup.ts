@@ -17,6 +17,8 @@ import {
   runTaskLocalCleanup,
   validateExistingTaskWorktreeCandidate,
 } from "./task-cleanup-support";
+import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
+import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 import { cleanupKeptTaskWorktree, releaseMergedTaskSessions } from "./task-worktree-cleanup";
 
 /** What a confirmed merge close does with the task worktree and its local branches. */
@@ -127,6 +129,7 @@ export const collectCloseWorktreePaths = (
 export const collectTaskCleanupTargets = ({
   dependencies,
   lifecycle,
+  worktreeOwners,
   repoPath,
   workspaceId,
   branchPrefix,
@@ -137,6 +140,7 @@ export const collectTaskCleanupTargets = ({
 }: {
   dependencies: Parameters<typeof collectCloseWorktreePaths>[0];
   lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
+  worktreeOwners: TaskWorktreeOwnerReader | undefined;
   repoPath: string;
   workspaceId: string;
   branchPrefix: string;
@@ -154,7 +158,18 @@ export const collectTaskCleanupTargets = ({
       sessions,
       workspaceId,
     );
-    yield* lifecycle.acquireWorktreeLifecycle(worktreePaths);
+    // Each caller runs after a confirmation that shows these owners.
+    const checkedWorktreePaths = yield* acquireRemovableWorktrees(
+      { lifecycle, worktreeOwners },
+      {
+        workspaceId,
+        repoPath,
+        taskId: task.id,
+        operationLabel,
+        lockedPaths: worktreePaths,
+        confirmed: true,
+      },
+    );
     const branchNames = yield* collectRelatedTaskBranches(
       dependencies.gitPort,
       repoPath,
@@ -163,7 +178,7 @@ export const collectTaskCleanupTargets = ({
       worktreePaths,
       operationLabel,
     );
-    return { worktreePaths, branchNames };
+    return { worktreePaths: checkedWorktreePaths, branchNames };
   });
 
 /**
@@ -184,6 +199,7 @@ export const cleanupConfirmedMergeClose = ({
 }: {
   dependencies: ReturnType<typeof requireMergedTaskCleanupDependencies> & {
     taskActivityGuard?: TaskActivityGuardPort | undefined;
+    worktreeOwners: TaskWorktreeOwnerReader | undefined;
   };
   taskStore: Pick<TaskStorePort, "getTaskMetadata">;
   lifecycle: Pick<TaskSessionLifecycleCoordinator, "acquireWorktreeLifecycle">;
@@ -215,6 +231,7 @@ export const cleanupConfirmedMergeClose = ({
       dependencies,
       lifecycle,
       workspaceId,
+      worktreeOwners: dependencies.worktreeOwners,
       repoPath,
       branchPrefix: repoConfig.branchPrefix,
       workflow,

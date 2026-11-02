@@ -36,26 +36,42 @@ export const workspaceSessionExecutionTargetSchema = z.discriminatedUnion("kind"
 ]);
 export type WorkspaceSessionExecutionTarget = z.infer<typeof workspaceSessionExecutionTargetSchema>;
 
+const worktreeChatOwnerSchema = z.strictObject({
+  workspaceId: identitySchema,
+  sessionId: identitySchema,
+  title: identitySchema,
+});
+const worktreeTaskOwnerSchema = z.strictObject({
+  workspaceId: identitySchema,
+  taskId: identitySchema,
+  title: z.string(),
+});
+
 export const workspaceSessionArchivePreviewSchema = z.strictObject({
   branchName: identitySchema.nullable(),
   worktreeExists: z.boolean(),
   hasUncommittedChanges: z.boolean(),
-  sharedWith: z.array(
-    z.strictObject({
-      workspaceId: identitySchema,
-      sessionId: identitySchema,
-      title: identitySchema,
-    }),
-  ),
-  taskOwners: z.array(
-    z.strictObject({
-      workspaceId: identitySchema,
-      taskId: identitySchema,
-      title: z.string(),
-    }),
-  ),
+  sharedWith: z.array(worktreeChatOwnerSchema),
+  taskOwners: z.array(worktreeTaskOwnerSchema),
 });
 export type WorkspaceSessionArchivePreview = z.infer<typeof workspaceSessionArchivePreviewSchema>;
+
+/**
+ * The others that still need worktrees that a task cleanup removes. The first three kinds stop the
+ * cleanup until the user releases them. `historyChats` only warns: a confirmed cleanup runs, and
+ * these chats cannot resume after it.
+ */
+export const worktreeOwnersSchema = z.strictObject({
+  /** The names of other workspaces that use a worktree as their repository checkout. */
+  checkoutWorkspaces: z.array(z.string()),
+  /** Other open tasks whose worktree or session uses a worktree. */
+  tasks: z.array(worktreeTaskOwnerSchema),
+  /** Saved chats that are not archived and work in a worktree. */
+  chats: z.array(worktreeChatOwnerSchema),
+  /** Saved Claude chats whose native history uses a worktree, also archived chats. */
+  historyChats: z.array(worktreeChatOwnerSchema),
+});
+export type WorktreeOwners = z.infer<typeof worktreeOwnersSchema>;
 
 export const customAgentRoleInputSchema = z.strictObject({
   name: z.string().trim().min(1),

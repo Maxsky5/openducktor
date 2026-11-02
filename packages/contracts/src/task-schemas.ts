@@ -8,6 +8,7 @@ import {
   sourceIssueReferenceSchema,
 } from "./git-schemas";
 import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
+import { worktreeOwnersSchema } from "./workspace-session-schemas";
 
 /** A state of the task workflow. The workflow of the task validates it. */
 export const taskStatusSchema = workflowIdSchema;
@@ -185,3 +186,31 @@ export const taskWorktreeCleanupImpactSchema = z.object({
   branchOid: z.string().nullable(),
 });
 export type TaskWorktreeCleanupImpact = z.infer<typeof taskWorktreeCleanupImpactSchema>;
+
+/** The task actions that can remove task worktrees. */
+export const taskWorktreeOwnersOperationSchema = z.enum([
+  "close",
+  "delete",
+  "reset_task",
+  "reset_implementation",
+  "remove_worktree",
+]);
+export type TaskWorktreeOwnersOperation = z.infer<typeof taskWorktreeOwnersOperationSchema>;
+
+export const taskWorktreeOwnersRequestSchema = z.strictObject({
+  ...workspaceRefSchema.shape,
+  taskIds: z.array(z.string().min(1)).min(1),
+  operation: taskWorktreeOwnersOperationSchema,
+});
+export type TaskWorktreeOwnersRequest = z.infer<typeof taskWorktreeOwnersRequestSchema>;
+
+/** The others that need a worktree that a task action removes. Only a confirmation reads them. */
+export const taskWorktreeOwnersSchema = z.strictObject({
+  owners: worktreeOwnersSchema,
+  /**
+   * The saved Claude chats whose native history the host could not read. A history owner only
+   * warns, so a failed read only warns too.
+   */
+  historyReadErrors: z.array(z.string()),
+});
+export type TaskWorktreeOwners = z.infer<typeof taskWorktreeOwnersSchema>;

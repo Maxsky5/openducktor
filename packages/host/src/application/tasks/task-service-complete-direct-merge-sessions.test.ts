@@ -1,4 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Deferred, Effect, Fiber } from "effect";
 import type {
   AgentSessionRecord,
@@ -87,6 +88,7 @@ const createHarness = ({
     ),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
     taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+    worktreeOwners: noWorktreeOwners,
     worktreeFiles: createBuildStartWorktreeFiles(calls),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",

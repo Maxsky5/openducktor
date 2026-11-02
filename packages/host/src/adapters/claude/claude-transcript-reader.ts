@@ -1,6 +1,6 @@
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { AgentRuntimeQueryError, type LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -86,15 +86,15 @@ const sourceError = (operation: string, path: string, cause: unknown): HostOpera
 
 const findTranscripts = async (
   directory: string,
-  filename: string,
+  matches: (filename: string) => boolean,
   recursive: boolean,
 ): Promise<string[]> => {
-  const matches: string[] = [];
+  const found: string[] = [];
   const visit = async (path: string): Promise<void> => {
     if (!(await lstat(path)).isDirectory())
       throw new Error("The transcript directory must be a regular directory, not a symbolic link.");
     for (const entry of await readdir(path, { withFileTypes: true })) {
-      if (entry.isFile() && entry.name === filename) matches.push(join(path, entry.name));
+      if (entry.isFile() && matches(entry.name)) found.push(join(path, entry.name));
       else if (recursive && entry.isDirectory()) await visit(join(path, entry.name));
     }
   };
@@ -104,25 +104,22 @@ const findTranscripts = async (
       if (entry.isDirectory()) await visit(join(directory, entry.name));
     }
   }
-  return matches;
+  return found;
 };
 
 /** The Claude folder that a Claude process with this environment uses. */
 const claudeConfigDirectory = (environment: NodeJS.ProcessEnv) =>
   resolve(environment.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")).normalize("NFC");
 
-/**
- * Lists the root transcripts of one Claude session. Claude deletes old transcripts after its
- * cleanup period, so a saved session can have none.
- */
-export const findClaudeSessionTranscripts = async (
+/** Lists the root transcripts in the project folders of the Claude folder that match. */
+const findRootTranscripts = async (
   environment: NodeJS.ProcessEnv,
-  sessionId: string,
+  matches: (filename: string) => boolean,
 ): Promise<string[]> => {
   try {
     return await findTranscripts(
       join(claudeConfigDirectory(environment), "projects"),
-      `${sessionId}.jsonl`,
+      matches,
       false,
     );
   } catch (cause) {
@@ -130,6 +127,29 @@ export const findClaudeSessionTranscripts = async (
     throw cause;
   }
 };
+
+/**
+ * Lists the root transcripts of one Claude session. Claude deletes old transcripts after its
+ * cleanup period, so a saved session can have none.
+ */
+const findClaudeSessionTranscripts = (
+  environment: NodeJS.ProcessEnv,
+  sessionId: string,
+): Promise<string[]> =>
+  findRootTranscripts(environment, (filename) => filename === `${sessionId}.jsonl`);
+
+/**
+ * Lists the session IDs that have a root transcript in the Claude folder. One scan serves the
+ * metadata reads of many sessions.
+ */
+export const listClaudeSessionTranscriptIds = async (
+  environment: NodeJS.ProcessEnv,
+): Promise<Set<string>> =>
+  new Set(
+    (await findRootTranscripts(environment, (filename) => filename.endsWith(".jsonl"))).map(
+      (path) => basename(path, ".jsonl"),
+    ),
+  );
 
 const resolveTranscriptPaths = (
   input: LoadAgentSessionHistoryInput,
@@ -154,9 +174,10 @@ const resolveTranscriptPaths = (
       const agentId = claudeSubagentAgentId(input.externalSessionId);
       if (!agentId) return { root, selected: root, sessionId: target.sessionId };
       if (!/^[A-Za-z0-9_-]+$/.test(agentId)) throw missingTranscript();
+      const childFilename = `agent-${agentId.replace(/^agent-/, "")}.jsonl`;
       const children = await findTranscripts(
         root.slice(0, -".jsonl".length) + "/subagents",
-        `agent-${agentId.replace(/^agent-/, "")}.jsonl`,
+        (filename) => filename === childFilename,
         true,
       );
       if (children.length === 0) throw missingTranscript();

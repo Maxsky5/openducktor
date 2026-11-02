@@ -60,6 +60,7 @@ import {
   WorktreeKeptForRunningActionsError,
 } from "../actions/worktree-action-runner";
 import {
+  createClaudeSessionMetadataTestDouble,
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
@@ -222,9 +223,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
-      claudeSessionMetadata: {
-        readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
-      },
+      claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
       browserTabs: { closeOwnerTabs: () => Effect.void },
@@ -2439,8 +2438,9 @@ describe("host-owned Workspace Session lifecycle", () => {
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     const child = await Effect.runPromise(saveArchivedClaudeChild(h, session, "Dependent child"));
     let nativeDirectory = child.executionTarget.workingDirectory;
-    h.dependencies.claudeSessionMetadata.readWorkingDirectory = () =>
-      Effect.sync(() => nativeDirectory);
+    h.dependencies.claudeSessionMetadata = createClaudeSessionMetadataTestDouble(() =>
+      Effect.sync(() => nativeDirectory),
+    );
     expect((await Effect.runPromise(h.service.archivePreview(ref))).sharedWith).toEqual([]);
 
     await Effect.runPromise(
@@ -2501,13 +2501,14 @@ describe("host-owned Workspace Session lifecycle", () => {
     const ref = { workspaceId: "fairnest", sessionId: session.id };
     const directory = session.executionTarget.workingDirectory;
     await Effect.runPromise(saveArchivedClaudeChild(h, session, "Unreadable child"));
-    h.dependencies.claudeSessionMetadata.readWorkingDirectory = () =>
+    h.dependencies.claudeSessionMetadata = createClaudeSessionMetadataTestDouble(() =>
       Effect.fail(
         new HostOperationError({
           operation: "claude.session.metadata",
           message: "Claude metadata is unavailable. Restore access and retry.",
         }),
-      );
+      ),
+    );
 
     await expect(Effect.runPromise(h.service.archivePreview(ref))).rejects.toThrow(
       "Restore access and retry",

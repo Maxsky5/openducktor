@@ -20,6 +20,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
   terminalService,
   workspaceSettingsService,
   worktreeFiles,
+  worktreeOwners,
   completionState,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "completeDirectMerge"> => ({
   completeDirectMerge(input) {
@@ -93,6 +94,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           completionState,
           taskActivityGuard,
           taskSessionLifecycleCoordinator,
+          worktreeOwners,
           workflow,
           taskWorkflows,
         },

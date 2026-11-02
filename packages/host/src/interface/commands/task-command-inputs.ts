@@ -12,6 +12,8 @@ import {
   type TaskStopImpactRequest,
   taskStopImpactRequestSchema,
   taskUpdatePatchSchema,
+  type TaskWorktreeOwnersRequest,
+  taskWorktreeOwnersRequestSchema,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import type {
@@ -88,6 +90,9 @@ export const parseTaskStopImpactInput = (input: HostCommandArgs): TaskStopImpact
     field: "input",
   });
 };
+
+export const parseTaskWorktreeOwnersInput = (input: HostCommandArgs): TaskWorktreeOwnersRequest =>
+  parseCommandInput(taskWorktreeOwnersRequestSchema, input, "task_worktree_owners_get");
 
 export const parseCloseTaskInput = (input: HostCommandArgs): CloseTaskInput =>
   parseCommandInput(taskCloseInputSchema, input, "task_close");

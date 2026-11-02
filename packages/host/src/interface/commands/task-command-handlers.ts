@@ -30,6 +30,7 @@ import {
   parseRepoPullRequestSyncInput,
   parseTaskIdInput,
   parseTaskStopImpactInput,
+  parseTaskWorktreeOwnersInput,
   parseTransitionTaskInput,
   parseUpdateTaskInput,
   parseWorkflowArtifactInput,
@@ -105,6 +106,8 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.getTaskWorktreeCleanupImpact(
         parseTaskIdInput(args, "task_worktree_cleanup_impact_get input"),
       ),
+    task_worktree_owners_get: (args) =>
+      taskService.getTaskWorktreeOwners(parseTaskWorktreeOwnersInput(args)),
     task_worktree_remove: (args) =>
       taskService.removeTaskWorktree(parseTaskIdInput(args, "task_worktree_remove input")),
     task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),

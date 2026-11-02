@@ -7,21 +7,17 @@ import {
   appendImplementationResetCleanupProgress,
   cleanupImplementationResetActivity as cleanupActivity,
   collectImplementationResetSessionState,
-  excludeCanonicalImplementationTargets,
+  collectImplementationResetTargets,
   requireImplementationResetActivityGuard as requireActivityGuard,
-  resolveCanonicalImplementationResetTarget,
 } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
   requireImplementationResetStoreDependencies,
   requireTaskDeleteDependencies,
 } from "../support/task-cleanup-dependencies";
-import {
-  collectRelatedTaskBranches,
-  collectResetWorktreePaths,
-  runTaskLocalCleanup,
-} from "../support/task-cleanup-support";
+import { runTaskLocalCleanup } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
+import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
 import { requireEffectInput, decideEffectTransition } from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
@@ -36,6 +32,7 @@ export const createTaskImplementationResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
   taskSessionLifecycleCoordinator: coordinator,
   completionState,
 }: TaskServiceUseCaseInput) => ({
@@ -78,41 +75,30 @@ export const createTaskImplementationResetUseCase = ({
         sessions: canonicalSessionState.guarded,
       };
       yield* requireActivityGuard(activity);
-      const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
-      const worktreePaths = yield* collectResetWorktreePaths(
-        dependencies,
-        effectiveRepoPath,
-        managedWorktreeBasePath,
-        current.id,
-        currentSessions,
-        new Set(workflow.worktreeRoles),
-        "reset implementation",
+      const { worktreePaths, canonicalTarget, cleanupTargets } =
+        yield* collectImplementationResetTargets(dependencies, {
+          workspaceId: input.workspaceId,
+          repoPath: effectiveRepoPath,
+          branchPrefix: repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX,
+          managedWorktreeBasePath,
+          canonicalWorktree: canonicalSessionState.canonicalExists ? canonicalWorktree : null,
+          task: current,
+          sessions: currentSessions,
+          workflow,
+        });
+      // The canonical worktree stays, so only the removed worktrees count.
+      const removedWorktreePaths = yield* acquireRemovableWorktrees(
+        { lifecycle: coordinator, worktreeOwners },
+        {
+          workspaceId: input.workspaceId,
+          repoPath: effectiveRepoPath,
+          taskId,
+          operationLabel: "reset the implementation of",
+          lockedPaths: worktreePaths,
+          removedPaths: cleanupTargets.worktreePaths,
+          confirmed: true,
+        },
       );
-      const relatedBranches = yield* collectRelatedTaskBranches(
-        dependencies.gitPort,
-        effectiveRepoPath,
-        branchPrefix,
-        [taskId],
-        worktreePaths,
-        "reset implementation",
-      );
-      const canonicalTarget = canonicalSessionState.canonicalExists
-        ? yield* resolveCanonicalImplementationResetTarget(
-            dependencies.gitPort,
-            dependencies.workspaceSettingsService,
-            current,
-            effectiveRepoPath,
-            canonicalWorktree,
-            branchPrefix,
-            input.workspaceId,
-          )
-        : null;
-      const cleanupTargets = excludeCanonicalImplementationTargets(
-        worktreePaths,
-        relatedBranches,
-        canonicalTarget,
-      );
-      yield* coordinator.acquireWorktreeLifecycle(worktreePaths);
       const cleanupProgress = createTaskCleanupProgressState();
       yield* cleanupActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;
@@ -130,7 +116,7 @@ export const createTaskImplementationResetUseCase = ({
           terminalService,
           worktreeCleanupOperation: "task_reset_implementation",
           worktreeFiles,
-          worktreePaths: cleanupTargets.worktreePaths,
+          worktreePaths: removedWorktreePaths,
         });
         if (canonicalTarget) {
           yield* dependencies.gitPort.restoreWorktreeToReference(

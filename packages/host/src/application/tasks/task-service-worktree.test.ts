@@ -7,11 +7,13 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitRefTip } from "../../ports/git-port";
+import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorkspaceSettingsServiceTestDouble,
   createWorktreeFilePortTestDouble,
+  noWorktreeOwners,
 } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
@@ -58,12 +60,14 @@ const createService = ({
   worktreeExists = true,
   otherExistingPaths = [],
   calls = [],
+  worktreeOwners = noWorktreeOwners,
 }: {
   current?: TaskCard;
   metadata?: Partial<TaskMetadataPayload>;
   worktreeExists?: boolean;
   otherExistingPaths?: string[];
   calls?: string[];
+  worktreeOwners?: TaskWorktreeOwnerReader;
 }) => {
   const existing = new Set([...(worktreeExists ? [worktreePath] : []), ...otherExistingPaths]);
   const branches: GitBranch[] = [
@@ -121,6 +125,7 @@ const createService = ({
           }),
         ),
     }),
+    worktreeOwners,
     worktreeFiles: createWorktreeFilePortTestDouble({
       resolveWorktreePath: (_repoPath: string, path: string) => path,
       resolvePathWithinRoot: (root: string, candidate: string) =>

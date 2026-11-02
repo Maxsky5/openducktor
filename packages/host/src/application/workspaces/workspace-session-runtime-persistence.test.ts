@@ -12,6 +12,7 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import {
+  createClaudeSessionMetadataTestDouble,
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
@@ -810,9 +811,7 @@ describe("Workspace Session persistence through the shared command module", () =
     });
     const workspace = createWorkspaceSessionService({
       taskOwnership: database.taskOwnership,
-      claudeSessionMetadata: {
-        readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
-      },
+      claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: h.live.runForkSourceOperation,
       browserTabs: { closeOwnerTabs: () => Effect.void },

@@ -11,7 +11,17 @@ import { createClaudeSessionMetadataAdapter } from "../claude-session-metadata-a
 
 const config = await realpath(process.env.CLAUDE_CONFIG_DIR!);
 const read = (id: string) =>
-  Effect.runPromise(createClaudeSessionMetadataAdapter(() => process.env).readWorkingDirectory(id));
+  Effect.runPromise(
+    createClaudeSessionMetadataAdapter(() => process.env)
+      .readWorkingDirectories([id])
+      .pipe(
+        Effect.flatMap((directories) => {
+          const read = directories.get(id);
+          if (read?.kind === "failed") return Effect.fail(read.error);
+          return Effect.succeed(read?.directory ?? null);
+        }),
+      ),
+  );
 const query = spyOn(sdk, "query").mockImplementation(() => {
   throw new Error("Metadata must not start a Claude runtime.");
 });
@@ -97,7 +107,7 @@ try {
         assert.equal(error.operation, "claude.session.metadata.readWorkingDirectory");
         assert.ok(error.message.includes(id));
         assert.match(error.message, reason);
-        assert.match(error.message, /then retry|Turn off worktree removal to archive the chat\./);
+        assert.match(error.message, /then retry\./);
         return true;
       });
     };

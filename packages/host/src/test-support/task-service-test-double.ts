@@ -26,6 +26,7 @@ const createTaskServiceDefaults = () =>
     buildStart: unexpectedTaskServiceCall("buildStart"),
     closeTask: unexpectedTaskServiceCall("closeTask"),
     getTaskWorktreeCleanupImpact: unexpectedTaskServiceCall("getTaskWorktreeCleanupImpact"),
+    getTaskWorktreeOwners: unexpectedTaskServiceCall("getTaskWorktreeOwners"),
     removeTaskWorktree: unexpectedTaskServiceCall("removeTaskWorktree"),
     completeDirectMerge: unexpectedTaskServiceCall("completeDirectMerge"),
     createTask: unexpectedTaskServiceCall("createTask"),

@@ -132,6 +132,7 @@ export const createEventPublishingTaskService = ({
     listTaskIds: (input) => taskService.listTaskIds(input),
     getTaskStopImpact: (input) => taskService.getTaskStopImpact(input),
     getTaskWorktreeCleanupImpact: (input) => taskService.getTaskWorktreeCleanupImpact(input),
+    getTaskWorktreeOwners: (input) => taskService.getTaskWorktreeOwners(input),
     // The task record does not change, so no task event follows.
     removeTaskWorktree: (input) =>
       taskSyncService.runMutation(input.repoPath, taskService.removeTaskWorktree(input)),

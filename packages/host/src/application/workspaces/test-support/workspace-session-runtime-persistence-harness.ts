@@ -36,6 +36,7 @@ import type {
 } from "../../../ports/agent-session-live-adapter-port";
 import {
   createAgentSessionRuntimeAdapterTestDouble,
+  createClaudeSessionMetadataTestDouble,
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
@@ -471,9 +472,7 @@ export const createPersistenceHarness = async (
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
     taskOwnership: database.taskOwnership,
-    claudeSessionMetadata: {
-      readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
-    },
+    claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
     runtimeAdmission: { admit: (_kind, work) => work },
     runForkSourceOperation: commands.runForkSourceOperation,
     browserTabs: { closeOwnerTabs: () => Effect.void },
