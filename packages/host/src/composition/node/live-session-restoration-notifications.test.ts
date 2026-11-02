@@ -36,7 +36,7 @@ test.each([
   { status: "in_progress", failure: "missing directory" },
   { status: "in_progress", failure: "native access" },
 ] as const)(
-  "$status task with $failure preserves notification health across renderer attachments",
+  "$status task with $failure keeps notification health clear across renderer attachments",
   async ({ status, failure }) => {
     const repoPath = await mkdtemp(path.join(tmpdir(), "odt-session-restoration-"));
     const db = await createSqliteTaskStoreHarness({ repoPath });
@@ -221,17 +221,10 @@ test.each([
       const faults = frames.filter(
         (frame) => frame.type === "health" && frame.health.message !== null,
       );
-      if (status === "closed") {
-        expect(faults).toEqual([]);
-        expect(directoryReads).toEqual([repoPath]);
-      } else {
-        expect(faults).toHaveLength(1);
-        expect(faults[0]).toMatchObject({ health: { source: "session", scope: repoPath } });
-      }
-      const message =
-        failure === "missing directory"
-          ? "Restore the linked worktree or directory"
-          : "Check OpenCode's reported error and retry";
+      // A failed session restore is a session fault. The session views show it, and
+      // notification observation keeps working.
+      expect(faults).toEqual([]);
+      if (status === "closed") expect(directoryReads).toEqual([repoPath]);
       for (let attachment = 0; attachment < 2; attachment++) {
         const reconnect = await Effect.runPromise(
           notifications.stream.subscribe({ cursor: null }).pipe(Stream.take(1), Stream.runCollect),
@@ -239,12 +232,7 @@ test.each([
         expect(reconnect[0]).toMatchObject({ type: "attached" });
         const attached = reconnect[0];
         if (attached?.type !== "attached") throw new Error("Expected notification attachment");
-        if (status === "closed") expect(attached.health).toEqual([]);
-        else {
-          expect(attached.health).toHaveLength(1);
-          expect(attached.health[0]?.message).toContain("ses_task");
-          expect(attached.health[0]?.message).toContain(message);
-        }
+        expect(attached.health).toEqual([]);
       }
       expect(nativeReads).toEqual(
         failure === "native access" ? ["ses_workspace", "ses_task"] : ["ses_workspace"],

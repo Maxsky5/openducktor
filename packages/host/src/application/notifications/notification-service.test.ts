@@ -490,6 +490,35 @@ test("delivers the state notifications of a custom workflow with its default set
     await Effect.runPromise(h.service.dispose());
   }
 });
+test("a session read fault is not a notification observation failure", async () => {
+  const h = harness({ baseline: [snapshot()] });
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    h.service.acceptLive(
+      {
+        type: "fault",
+        repoPath: "/alpha",
+        ref: ref(),
+        operation: "opencode-live-session.refresh-session",
+        message: "The linked working directory is unavailable.",
+        statusUnavailable: true,
+      },
+      "live",
+    );
+    h.service.acceptLive(
+      { type: "session_upsert", session: snapshot({ pendingQuestions: [question("after")] }) },
+      "live",
+    );
+    await flush();
+    expect(h.frames.filter((frame) => frame.type === "health" && frame.health.message)).toEqual([]);
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.kind)).toEqual([
+      "agent.question_asked",
+    ]);
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
 test.each(["baseline", "committed", "deferred"] as const)(
   "workspace notifications use saved titles from %s associations and later renames",
   async (source) => {

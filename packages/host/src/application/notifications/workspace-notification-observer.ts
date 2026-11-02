@@ -203,10 +203,8 @@ export const createWorkspaceNotificationObserver = ({
           return;
         }
         if (input.type === "live") {
-          if (input.envelope.type === "fault") {
-            failure(state.record.repoPath, "session", new Error(input.envelope.message));
-            return;
-          }
+          // A fault reports a session or runtime read, and the session views show it.
+          // The projector only marks the session status as unavailable.
           yield* publish(state.projector.accept(input.envelope, input.provenance));
           return;
         }
