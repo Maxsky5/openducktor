@@ -14,6 +14,7 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
+  type RepositoryGitProviderContext,
   type TaskMergeStatusSnapshot,
   type WorkspaceRecord,
   type WorkspaceSession,
@@ -59,6 +60,7 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeExecutableQueryOptions,
@@ -1501,6 +1503,29 @@ describe("AppShell command palette", () => {
     Reflect.deleteProperty(globalThis.navigator, "platform");
   };
 
+  const seedPaletteQueries = (queryClient: QueryClient): void => {
+    queryClient.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
+      tasks: [ownTask, closedTask],
+    });
+    queryClient.setQueryData(
+      agentSessionQueryKeys.list(workspaceRefFixture("/repo"), closedTask.id),
+      [{ ...builderSession, externalSessionId: "build-closed" }],
+    );
+    queryClient.setQueryData(
+      repoTaskDataQueryOptions(workspaceRefFixture("/fairnest", "workspace-2")).queryKey,
+      {
+        tasks: [fairnestTask],
+      },
+    );
+    queryClient.setQueryData(agentSessionQueryKeys.list(workspaceRefFixture("/repo"), ownTask.id), [
+      builderSession,
+    ]);
+    queryClient.setQueryData(
+      agentSessionQueryKeys.list(workspaceRefFixture("/fairnest", "workspace-2"), fairnestTask.id),
+      [],
+    );
+  };
+
   const renderPalette = (
     options: RenderAppShellForTestOptions = {},
     platform: "darwin" | "linux" = "darwin",
@@ -1509,35 +1534,30 @@ describe("AppShell command palette", () => {
     return renderAppShellForTest({
       extraWorkspaces: [fairnest],
       tasksByRepoPath: { "/repo": [ownTask, closedTask], "/fairnest": [fairnestTask] },
-      prepareQueryClient: (queryClient) => {
-        queryClient.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
-          tasks: [ownTask, closedTask],
-        });
-        queryClient.setQueryData(
-          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), closedTask.id),
-          [{ ...builderSession, externalSessionId: "build-closed" }],
-        );
-        queryClient.setQueryData(
-          repoTaskDataQueryOptions(workspaceRefFixture("/fairnest", "workspace-2")).queryKey,
-          {
-            tasks: [fairnestTask],
-          },
-        );
-        queryClient.setQueryData(
-          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), ownTask.id),
-          [builderSession],
-        );
-        queryClient.setQueryData(
-          agentSessionQueryKeys.list(
-            workspaceRefFixture("/fairnest", "workspace-2"),
-            fairnestTask.id,
-          ),
-          [],
-        );
-      },
+      prepareQueryClient: seedPaletteQueries,
       ...options,
     });
   };
+
+  /**
+   * Opens the sync chooser with checked Git providers. A chooser that must load them shows its
+   * loader for `MINIMUM_LOADER_MS`, which these tests do not cover.
+   */
+  const renderSyncPalette = (
+    context: RepositoryGitProviderContext | null,
+    options: RenderAppShellForTestOptions = {},
+  ) =>
+    renderPalette({
+      ...options,
+      prepareQueryClient: (queryClient) => {
+        seedPaletteQueries(queryClient);
+        for (const scope of [
+          workspaceRefFixture("/repo"),
+          workspaceRefFixture("/fairnest", "workspace-2"),
+        ])
+          queryClient.setQueryData(repositoryGitProviderContextQueryKeys.repo(scope), context);
+      },
+    });
 
   const pressShortcut = (modifier: "metaKey" | "ctrlKey" = "metaKey"): void => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "k", [modifier]: true });
@@ -1610,7 +1630,7 @@ describe("AppShell command palette", () => {
     async (query) => {
       const sync = mock(async () => ({ ok: true as const }));
       configurePaletteHost({ repoPullRequestSync: sync });
-      renderPalette();
+      renderSyncPalette(null);
       const palette = await openPalette();
       const input = search(palette, query);
       expect(selectedOption(palette)?.textContent).toContain("Sync pull requests");
@@ -1634,7 +1654,7 @@ describe("AppShell command palette", () => {
       repoPullRequestSync: sync,
       workspaceGetGitProviderContext: async () => createGitProviderContextFixture(),
     });
-    renderPalette();
+    renderSyncPalette(createGitProviderContextFixture());
     const palette = await openPalette();
     fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "ArrowDown", altKey: true });
     fireEvent.click(await screen.findByRole("option", { name: "Fairnest" }));
@@ -1665,7 +1685,7 @@ describe("AppShell command palette", () => {
         return scope.repoPath === "/repo" ? first.promise : { ok: true };
       },
     });
-    renderPalette({
+    renderSyncPalette(createGitProviderContextFixture(), {
       closedWorkspaces: [{ ...fairnest, workspaceId: "closed", repoPath: "/closed" }],
       incompleteRemovals: [
         {
