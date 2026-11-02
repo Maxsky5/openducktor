@@ -4,7 +4,10 @@ import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/t
 import { BUILTIN_ROLE_LABELS, builtinRoleId } from "@openducktor/workflows";
 import { basenameForPath } from "@openducktor/path-support";
 import { terminalCommandResultNotice } from "@/features/terminals/terminal-command-result";
-import { startupTraceRows } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import {
+  startupActiveStep,
+  startupTraceRows,
+} from "@openducktor/frontend-core/sessions/startup/startup-trace";
 
 export function startupIssue(attempt: StartupAttempt): string | undefined {
   const failed = attempt.operations
@@ -24,11 +27,7 @@ export function startupIssue(attempt: StartupAttempt): string | undefined {
 }
 
 export function startupActivity(attempt: StartupAttempt): string | undefined {
-  const current = startupTraceRows(attempt)
-    .map(({ step }) => step)
-    .findLast(
-      (step) => step.state === "running" || step.state === "waiting" || startupStepFailed(step),
-    );
+  const current = startupActiveStep(startupTraceRows(attempt));
   if (current) return current.label;
   switch (attempt.status.phase) {
     case "submitting":

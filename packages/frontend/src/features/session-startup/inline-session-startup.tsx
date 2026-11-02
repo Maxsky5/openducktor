@@ -143,20 +143,23 @@ function InlineTrace({ attempt }: { attempt: StartupAttempt }): ReactElement {
   const activity = startupActivity(attempt);
   const issue = startupIssue(attempt);
   return (
+    // The step rows reach 8px past the text column. The collapsible clips its content, so it
+    // reaches out too and pads its children back.
     <TraceCollapsible
+      className="-mx-2"
       open={expanded}
       onOpenChange={(open) => {
         presentation.detailsOpen = open;
         setExpanded(open);
       }}
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2 px-2">
         <TraceCollapsibleTrigger
           className="min-h-8 flex-1"
           aria-label={`${startupTitle(attempt)}. ${activity ? `${activity}. ` : ""}${expanded ? "Hide" : "View"} progress`}
         >
           <TraceLine className="min-w-0 w-full text-xs">
-            <TraceIcon>
+            <TraceIcon className="size-5">
               {pending ? (
                 <LoaderCircle className="size-3.5 motion-safe:animate-spin" />
               ) : (
@@ -182,11 +185,11 @@ function InlineTrace({ attempt }: { attempt: StartupAttempt }): ReactElement {
         ) : null}
       </div>
       {!expanded && issue ? (
-        <p role="alert" className="mt-1 line-clamp-2 text-xs text-destructive">
+        <p role="alert" className="mt-1 line-clamp-2 pr-2 pl-9 text-xs text-destructive">
           {issue}
         </p>
       ) : null}
-      <TraceCollapsibleContent className="m-0 border-0 p-0">
+      <TraceCollapsibleContent className="m-0 border-0 px-2 py-0">
         <InlineDetails attempt={attempt} />
       </TraceCollapsibleContent>
     </TraceCollapsible>

@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronUp, LoaderCircle, OctagonAlert } from "lucide-react";
-import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
@@ -11,8 +11,12 @@ import {
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { Button } from "@/components/ui/button";
 import { NotificationOpenLabel, Toaster } from "@/components/ui/sonner";
+import { ToastResizeContent } from "@/components/ui/toast-resize";
 import { notificationClassNames } from "@/lib/sonner-feedback";
+import { cn } from "@/lib/utils";
+import { STARTUP_TEXT_INSET } from "./constants";
 import { StartupRecoveryActions, StartupTrace } from "./session-startup-trace";
+import { TraceIcon } from "@/components/ui/trace";
 import { useOpenStartupSession } from "./use-open-startup-session";
 import { retainStartupPresentations, startupPresentation } from "./startup-presentation";
 import {
@@ -85,20 +89,7 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
   const [detailsOpen, setDetailsOpen] = useState(
     () => startupPresentation(connection, attempt.id).detailsOpen,
   );
-  const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
   const [contentHeight, setContentHeight] = useState(0);
-  const measuredHeight = useRef(0);
-  useEffect(() => {
-    if (!contentElement) return;
-    const observer = new ResizeObserver(() => {
-      const height = contentElement.getBoundingClientRect().height;
-      if (height === measuredHeight.current) return;
-      measuredHeight.current = height;
-      setContentHeight(height);
-    });
-    observer.observe(contentElement);
-    return () => observer.disconnect();
-  }, [contentElement]);
   const toastId = `session-startup:${attempt.id}`;
   useEffect(
     () => () => {
@@ -135,7 +126,7 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
     };
     toast(
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex shrink-0 items-center">{icon}</span>
+        <TraceIcon className="size-5">{icon}</TraceIcon>
         <span className="min-w-0 flex-1">{startupTitle(attempt)}</span>
         <div className="flex shrink-0 items-center gap-1">
           {hasTrace && (pending || !expanded) ? (
@@ -178,24 +169,29 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
             }
           : undefined,
         description: (
-          <div ref={setContentElement} className="flex min-w-0 flex-col gap-2">
-            <p className="break-words">{startupOrigin(attempt)}</p>
-            {activity && (!expanded || !hasTrace) ? <p>{activity}</p> : null}
-            {!expanded && attempt.status.confirmation === "unconfirmed" ? (
-              <p className="text-warning-surface-foreground">
-                Startup is not confirmed. Inspect the session before you try again.
-              </p>
-            ) : null}
-            {!expanded && issue ? (
-              <p role="alert" className="break-words text-destructive">
-                {issue}
-              </p>
-            ) : null}
+          <ToastResizeContent onResize={setContentHeight} className="flex min-w-0 flex-col gap-2">
+            {/* Text lines start under the title. Step rows keep their icons under the status icon. */}
+            <div className={cn("flex min-w-0 flex-col gap-1", STARTUP_TEXT_INSET)}>
+              <p className="break-words">{startupOrigin(attempt)}</p>
+              {activity && (!expanded || !hasTrace) ? <p>{activity}</p> : null}
+              {!expanded && attempt.status.confirmation === "unconfirmed" ? (
+                <p className="text-warning-surface-foreground">
+                  Startup is not confirmed. Inspect the session before you try again.
+                </p>
+              ) : null}
+              {!expanded && issue ? (
+                <p role="alert" className="break-words text-destructive">
+                  {issue}
+                </p>
+              ) : null}
+            </div>
             {expanded && canInspect ? (
               <div
-                className={
-                  hasTrace ? "max-h-52 min-h-0 overflow-hidden" : "max-h-52 overflow-y-auto"
-                }
+                className={cn(
+                  // The trace rows reach 8px past the text column. Keep that edge inside the clip.
+                  "-mx-2 max-h-52 px-2",
+                  hasTrace ? "min-h-0 overflow-hidden" : "overflow-y-auto",
+                )}
               >
                 <StartupTrace
                   attempt={attempt}
@@ -206,11 +202,11 @@ function StartupNotice({ attempt }: { attempt: StartupAttempt }): null {
             ) : null}
             {!expanded ? <StartupRecoveryActions attempt={attempt} /> : null}
             {openError ? (
-              <p role="alert" className="break-words text-destructive">
+              <p role="alert" className={cn("break-words text-destructive", STARTUP_TEXT_INSET)}>
                 {openError}
               </p>
             ) : null}
-          </div>
+          </ToastResizeContent>
         ),
       },
     );
