@@ -285,11 +285,7 @@ const TerminalViewport = memo(function TerminalViewport({
           />
         </Suspense>
       </div>
-      <TerminalViewportNotices
-        attention={attention}
-        onDismissAttention={() => setAttention(null)}
-        exitText={exitText}
-      />
+      <TerminalViewportNotices attention={attention} exitText={exitText} />
     </div>
   );
 });

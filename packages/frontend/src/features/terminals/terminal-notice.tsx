@@ -77,31 +77,30 @@ export function TerminalNoticeStrip({
 
 /**
  * The notices under a terminal: a terminal problem, then the exit status. A nonzero exit code is
- * normal shell behavior, so the exit status informs. The host sends the exit again on each attach,
- * so a dismissed exit status stays hidden while its text stays the same.
+ * normal shell behavior, so the exit status informs. The host sends its failure and the exit again
+ * on each attach, so a dismissed notice stays hidden while its text stays the same.
  */
 export function TerminalViewportNotices({
   attention,
-  onDismissAttention,
   exitText,
 }: {
   attention: string | null;
-  onDismissAttention: () => void;
   exitText: string | null;
 }): ReactElement {
+  const problem = useDismissibleNotice(attention);
   const exit = useDismissibleNotice(exitText);
   return (
     <>
-      {attention === null ? null : (
+      {problem.visible === null ? null : (
         <TerminalNoticeStrip
           tone="warning"
           role="alert"
           label="Terminal problem"
           className="border-t border-border"
           dismissLabel="Dismiss terminal problem"
-          onDismiss={onDismissAttention}
+          onDismiss={problem.dismiss}
         >
-          {attention}
+          {problem.visible}
         </TerminalNoticeStrip>
       )}
       {exit.visible === null ? null : (

@@ -80,16 +80,22 @@ export function TerminalNoticeStrip({
   );
 }
 
-/** Reads the terminal list again after a discovery failure. */
+/**
+ * Reads the terminal list again after a discovery failure. The discovery strip names the failure
+ * in its title, so it passes the short `Retry` label to keep room for the message.
+ */
 export function TerminalDiscoveryRetryButton({
   model,
+  label = "Retry terminal discovery",
 }: {
   model: Pick<TerminalSessionsModel, "isLoading" | "onRetryDiscovery">;
+  label?: string;
 }): ReactElement {
   const gate = useCommandGate();
   return (
     <Button
-      label="Retry terminal discovery"
+      label={label}
+      accessibilityLabel="Retry terminal discovery"
       size="sm"
       variant="outline"
       disabled={!gate.open || model.isLoading}

@@ -265,7 +265,7 @@ function TerminalList({
           edge="top"
           title="Terminal discovery failed."
           message={`${model.discoveryNotice} The list shows the last loaded terminals.`}
-          action={<TerminalDiscoveryRetryButton model={model} />}
+          action={<TerminalDiscoveryRetryButton model={model} label="Retry" />}
           onDismiss={model.onDismissDiscoveryError}
         />
       ) : null}

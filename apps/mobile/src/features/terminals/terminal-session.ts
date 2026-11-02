@@ -100,6 +100,8 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
   };
   let unsubscribe: (() => void) | null = null;
   let disposed = false;
+  // The host sends its failure again on each attach. A dismissed problem stays hidden.
+  let dismissedAttention: string | null = null;
 
   const update = (patch: Partial<TerminalSessionState>): void => {
     const next = { ...state, ...patch };
@@ -108,8 +110,11 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
     state = next;
     for (const listener of listeners) listener();
   };
+  const showAttention = (attention: string | null): void => {
+    if (attention === null || attention !== dismissedAttention) update({ attention });
+  };
   const reportAttention = (title: string) => (cause: unknown) => {
-    if (!disposed) update({ attention: `${title}: ${errorMessage(cause)}` });
+    if (!disposed) showAttention(`${title}: ${errorMessage(cause)}`);
   };
 
   let post: ((message: TerminalPageInbound) => void) | null = null;
@@ -151,7 +156,7 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
       return;
     }
     const handled = handleTerminalMetadataFrame(message, {
-      onAttention: (attention) => update({ attention }),
+      onAttention: showAttention,
       onLifecycle: (lifecycle, exit) => {
         update(exit === null ? { lifecycle } : { lifecycle, exit });
         options.onLifecycle(lifecycle);
@@ -161,7 +166,7 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
         update({ forgotten });
         options.onForgotten(forgotten);
       },
-      onFailure: (attention) => update({ attention }),
+      onFailure: showAttention,
     });
     if (handled || message.type !== "output") return;
     batcher.push({
@@ -235,7 +240,7 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
           options.onModifiersConsumed();
           return;
         case "terminal_error":
-          update({ attention: message.message });
+          showAttention(message.message);
           return;
         case "link":
           options.onLink(message.url);
@@ -250,6 +255,7 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
       update({ inputNotice: null });
     },
     dismissAttention(): void {
+      dismissedAttention = state.attention;
       update({ attention: null });
     },
     dispose(): void {
