@@ -90,7 +90,12 @@ export function HostPicker({
           }
         >
           {onCancel ? (
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start sm:self-auto"
+              onClick={onCancel}
+            >
               Cancel
             </Button>
           ) : null}

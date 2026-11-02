@@ -217,6 +217,9 @@ describe("SessionStartModal", () => {
       expect(view.queryByRole("button", { name: "Start session" })).toBeNull();
       expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
       expect(view.getByText("Create worktree")).toBeDefined();
+      const continueInBackground = view.getByRole("button", { name: "Continue in background" });
+      expect(continueInBackground.className).toContain("self-end");
+      expect(continueInBackground.className).toContain("sm:self-auto");
     } finally {
       view.unmount();
       await connection.dispose();
@@ -245,6 +248,17 @@ describe("SessionStartModal", () => {
       });
       const recovery = view.getByRole("region", { name: "Session startup details" });
       expect(view.getByRole("alert").textContent).toContain("The start request failed. Retry it.");
+      const close = view
+        .getAllByRole("button", { name: "Close" })
+        .find((button) => button.closest('[data-slot="dialog-footer"]') !== null);
+      if (!close) throw new Error("Expected the footer Close button.");
+      expect(close.className).toContain("self-start");
+      expect(close.className).toContain("sm:self-auto");
+      const footer = close.closest('[data-slot="dialog-footer"]');
+      const actionGroup = footer?.lastElementChild;
+      expect(actionGroup?.tagName).toBe("DIV");
+      expect(actionGroup?.className).toContain("self-end");
+      expect(actionGroup?.className).toContain("sm:self-auto");
       await act(async () => {
         await connection.startupAttempts.operation(startupAttemptId, async (context) => ({
           startupProgress: {

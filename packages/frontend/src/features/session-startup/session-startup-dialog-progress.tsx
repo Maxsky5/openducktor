@@ -99,7 +99,13 @@ function Footer({
     if (!onContinueInBackground) return null;
     return (
       <DialogFooter className="mt-0 min-h-13 items-center justify-end border-t border-border px-4 py-2">
-        <Button type="button" size="sm" variant="secondary" onClick={onContinueInBackground}>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="self-end sm:self-auto"
+          onClick={onContinueInBackground}
+        >
           <Layers data-icon="inline-start" />
           Continue in background
         </Button>
@@ -108,10 +114,16 @@ function Footer({
   }
   return (
     <DialogFooter className="mt-0 min-h-13 items-center justify-between border-t border-border px-4 py-2">
-      <Button type="button" size="sm" variant="outline" onClick={onClose}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="self-start sm:self-auto"
+        onClick={onClose}
+      >
         Close
       </Button>
-      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col items-start gap-2 self-end sm:flex-row sm:items-center sm:self-auto">
         {onEditChoices && attempt?.ownership.state === "not_saved" ? (
           <Button type="button" size="sm" variant="secondary" onClick={onEditChoices}>
             <Pencil data-icon="inline-start" />
