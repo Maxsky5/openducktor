@@ -36,6 +36,13 @@ import type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-fil
 
 enableReactActEnvironment();
 
+// Load the real editor before timed test bodies start.
+await Promise.all([
+  import("../task-description-editor/task-description-editor"),
+  import("../task-description-editor/task-description-markdown"),
+  import("../task-description-editor/task-description-visual-editor"),
+]);
+
 type PreviewComponent =
   (typeof import("./task-execution-file-preview"))["TaskExecutionSelectedFilePreview"];
 
