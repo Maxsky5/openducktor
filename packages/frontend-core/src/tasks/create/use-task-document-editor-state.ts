@@ -1,7 +1,7 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { TASK_DOCUMENT_STALE_TIME_MS, documentQueryKeys } from "../../queries/documents";
 import { byDocumentCode, type BuiltinDocumentCode } from "@openducktor/workflows";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type { DocumentEditorView } from "./task-composer-types";
 
 /** The workflow documents that the composer edits. */
@@ -104,24 +104,14 @@ type TaskDocumentEditorAction =
 
 const createInitialDocumentState = (context: TaskDocumentEditorContext): TaskDocumentEditorState =>
   byDocumentCode((code) => {
-    const query =
-      context.open && context.repoPath && context.taskId
-        ? context.queryClient.getQueryCache().find({
-            queryKey: documentQueryKeys.document(context.repoPath, context.taskId, code),
-            exact: true,
-          })
-        : undefined;
-    // Match fetchQuery: fresh documents need no read or preparation frame.
-    const cached =
-      query && !query.isStaleByTime(TASK_DOCUMENT_STALE_TIME_MS)
-        ? context.queryClient.getQueryData<TaskDocumentPayload>(query.queryKey)
-        : undefined;
+    const cached = freshDocument(context, code);
     return {
       serverMarkdown: cached?.markdown ?? "",
       draftMarkdown: cached?.markdown ?? "",
       updatedAt: cached?.updatedAt ?? null,
       isLoading: false,
-      loaded: cached !== undefined,
+      // Check freshness again when this section first opens.
+      loaded: false,
       error: cached?.error ?? null,
     };
   });
@@ -282,7 +272,7 @@ export function useTaskDocumentEditorState({
     >();
   }
 
-  // Loads read the latest context and documents. Layout effects run before the load effects.
+  // Update the context and documents before a section load starts.
   useLayoutEffect(() => {
     contextRef.current = editorContext;
     documentsRef.current = currentState.documents;
@@ -314,6 +304,17 @@ export function useTaskDocumentEditorState({
       const inFlightSections = getInFlightSectionsForContext(loadContext);
       const current = documentsRef.current[section];
       if (inFlightSections[section] || (!force && current.loaded)) {
+        return Promise.resolve();
+      }
+
+      const cached = force ? undefined : freshDocument(loadContext, section);
+      if (cached) {
+        dispatchLocalState({
+          type: "sectionLoadSucceeded",
+          context: loadContext,
+          payload: cached,
+          section,
+        });
         return Promise.resolve();
       }
 
@@ -353,7 +354,7 @@ export function useTaskDocumentEditorState({
     [getInFlightSectionsForContext, editorContext, loadDocument, loadTimeoutMs],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!activeSection) {
       return;
     }
@@ -417,4 +418,19 @@ export function useTaskDocumentEditorState({
     discardDraft,
     applySaved,
   };
+}
+
+/** Read only data that fetchQuery would treat as fresh. */
+function freshDocument(
+  context: TaskDocumentEditorContext,
+  code: TaskDocumentSection,
+): TaskDocumentPayload | undefined {
+  if (!context.open || !context.repoPath || !context.taskId) return undefined;
+  const query = context.queryClient.getQueryCache().find({
+    queryKey: documentQueryKeys.document(context.repoPath, context.taskId, code),
+    exact: true,
+  });
+  return query && !query.isStaleByTime(TASK_DOCUMENT_STALE_TIME_MS)
+    ? context.queryClient.getQueryData<TaskDocumentPayload>(query.queryKey)
+    : undefined;
 }

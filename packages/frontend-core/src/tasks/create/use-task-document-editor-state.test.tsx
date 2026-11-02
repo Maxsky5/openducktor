@@ -1,10 +1,14 @@
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
-import { documentQueryKeys, loadTaskDocumentFromQuery } from "../../queries/documents";
+import {
+  TASK_DOCUMENT_STALE_TIME_MS,
+  documentQueryKeys,
+  loadTaskDocumentFromQuery,
+} from "../../queries/documents";
 import { createHookHarness as createSharedHookHarness } from "../../test-support/react-hook-harness";
 import { useTaskDocumentEditorState } from "./use-task-document-editor-state";
 
@@ -81,6 +85,45 @@ describe("useTaskDocumentEditorState", () => {
       expect(view.result.current.documents.spec.draftMarkdown).toBe("# Cached spec");
       expect(loading).not.toContain(true);
       expect(read).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      await connection.dispose();
+    }
+  });
+
+  test("reads a cached document that expires before its section first opens", async () => {
+    const read = mock(async () => ({
+      markdown: "# Current plan",
+      updatedAt: "2026-10-31T13:00:00Z",
+    }));
+    const connection = createTestClientConnection({ client: { workflowArtifactGet: read } });
+    const key = documentQueryKeys.document("/repo", "task-1", "plan");
+    const cached = { markdown: "# Old plan", updatedAt: "2026-10-31T12:00:00Z" };
+    connection.queryClient.setQueryData(key, cached);
+    const props: HookArgs = {
+      ...createBaseProps(),
+      activeSection: null,
+      loadDocument: (taskId, code) =>
+        loadTaskDocumentFromQuery(connection.queryClient, "/repo", taskId, code),
+    };
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(ClientConnectionProvider, { connection }, children);
+    const view = renderHook((args: HookArgs) => useTaskDocumentEditorState(args), {
+      initialProps: props,
+      wrapper,
+    });
+    try {
+      expect(read).not.toHaveBeenCalled();
+      connection.queryClient.setQueryData(key, cached, {
+        updatedAt: Date.now() - TASK_DOCUMENT_STALE_TIME_MS - 1,
+      });
+      view.rerender({ ...props, activeSection: "plan" });
+      await waitFor(
+        () => expect(view.result.current.documents.plan.draftMarkdown).toBe("# Current plan"),
+        { timeout: 500 },
+      );
+      expect(view.result.current.documents.plan.updatedAt).toBe("2026-10-31T13:00:00Z");
+      expect(read).toHaveBeenCalledTimes(1);
     } finally {
       view.unmount();
       await connection.dispose();
