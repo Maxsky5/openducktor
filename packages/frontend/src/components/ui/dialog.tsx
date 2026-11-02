@@ -165,13 +165,14 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/** Puts the dismissal action on the left and the main action on the right. */
 function DialogFooter({ className, style, ...props }: React.ComponentProps<"div">) {
   const loading = useContext(DialogLoadingContext)?.loading === true;
   return (
     <div
       data-slot="dialog-footer"
       className={cn(
-        "sticky bottom-0 z-10 mt-6 flex shrink-0 flex-col-reverse justify-end gap-2 bg-popover [&_button]:min-h-11 sm:flex-row sm:[&_button]:min-h-9",
+        "sticky bottom-0 z-10 mt-6 flex shrink-0 flex-col-reverse justify-between gap-2 bg-popover [&_button]:min-h-11 sm:flex-row sm:[&_button]:min-h-9",
         className,
       )}
       {...props}

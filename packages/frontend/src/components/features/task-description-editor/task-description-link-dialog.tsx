@@ -99,19 +99,21 @@ export function TaskDescriptionLinkDialog({
             <p className="text-xs text-muted-foreground">Press Enter to save.</p>
           </DialogBody>
           <DialogFooter>
-            {editing ? (
-              <Button type="button" variant="destructive" disabled={disabled} onClick={onRemove}>
-                <Unlink data-icon="inline-start" />
-                Remove link
-              </Button>
-            ) : null}
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" disabled={disabled}>
-              {editing ? <Save data-icon="inline-start" /> : <Link data-icon="inline-start" />}
-              {editing ? "Save link" : "Insert link"}
-            </Button>
+            <div className="flex w-full flex-col gap-2 [&>button]:w-full sm:w-auto sm:flex-row sm:items-center sm:[&>button]:w-auto">
+              {editing ? (
+                <Button type="button" variant="destructive" disabled={disabled} onClick={onRemove}>
+                  <Unlink data-icon="inline-start" />
+                  Remove link
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={disabled}>
+                {editing ? <Save data-icon="inline-start" /> : <Link data-icon="inline-start" />}
+                {editing ? "Save link" : "Insert link"}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

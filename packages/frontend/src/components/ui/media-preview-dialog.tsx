@@ -126,7 +126,7 @@ export function MediaPreviewDialog({
             />
           ))}
         </DialogBody>
-        {actions ? <DialogFooter className="mt-0">{actions}</DialogFooter> : null}
+        {actions ? <DialogFooter className="mt-0 justify-end">{actions}</DialogFooter> : null}
       </DialogContent>
     </Dialog>
   );

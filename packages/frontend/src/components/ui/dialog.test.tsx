@@ -2,7 +2,14 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { Dialog, DialogBody, DialogContent, DialogTitle, useDialogPresence } from "./dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  useDialogPresence,
+} from "./dialog";
 import type { DialogMotion } from "./dialog-presence";
 
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -45,6 +52,27 @@ function installResizeObserver(): (width: number, height: number) => void {
 
 afterEach(() => {
   globalThis.ResizeObserver = originalResizeObserver;
+});
+
+describe("DialogFooter", () => {
+  test("puts the dismissal action left and the main action right", () => {
+    render(
+      <Dialog open>
+        <DialogContent>
+          <DialogTitle>Footer test</DialogTitle>
+          <DialogFooter>
+            <button type="button">Cancel</button>
+            <button type="button">Save</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const footer = screen.getByRole("button", { name: "Cancel" }).parentElement;
+    expect(footer?.getAttribute("data-slot")).toBe("dialog-footer");
+    expect(footer?.classList.contains("justify-between")).toBe(true);
+    expect(screen.getByRole("button", { name: "Save" }).parentElement).toBe(footer);
+  });
 });
 
 describe("DialogContent", () => {

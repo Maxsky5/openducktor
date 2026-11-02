@@ -28,7 +28,7 @@ export function SettingsModalFooter({
   });
 
   return (
-    <DialogFooter className="mt-0 flex-col items-stretch justify-start gap-2 border-t border-border px-6 py-4 sm:flex-row sm:items-center sm:gap-3">
+    <DialogFooter className="mt-0 flex-col items-stretch gap-2 border-t border-border px-6 py-4 sm:flex-row sm:items-center sm:gap-3">
       <div className="flex items-center gap-2 [&>button]:w-full sm:[&>button]:w-auto">
         <Button type="button" variant="outline" disabled={saveState.isSaving} onClick={onCancel}>
           Cancel
