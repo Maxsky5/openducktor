@@ -233,7 +233,7 @@ export function WorkspaceRail({
     reorderWorkspaces,
     isSwitchingWorkspace,
   } = useWorkspaceState();
-  const { workspaces, workspaceIds, showDropOrder } = useWorkspaceRailOrder(workspaceRecords);
+  const { workspaces, workspaceIds, commitDropOrder } = useWorkspaceRailOrder(workspaceRecords);
   const [lifecycleRequest, setLifecycleRequest] = useState<
     | { action: "close" | "remove"; workspace: WorkspaceRecord }
     | { action: "recovery"; removal: IncompleteWorkspaceRemoval }
@@ -288,12 +288,9 @@ export function WorkspaceRail({
       return;
     }
 
-    const nextWorkspaceIds = showDropOrder(draggedWorkspaceId, overWorkspaceId);
-    if (!nextWorkspaceIds) {
-      return;
-    }
-
-    void reorderWorkspaces(nextWorkspaceIds).catch(() => undefined);
+    commitDropOrder(draggedWorkspaceId, overWorkspaceId, (nextWorkspaceIds) => {
+      void reorderWorkspaces(nextWorkspaceIds).catch(() => undefined);
+    });
   };
 
   return (

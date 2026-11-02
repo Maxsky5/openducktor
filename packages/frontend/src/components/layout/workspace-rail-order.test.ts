@@ -25,15 +25,17 @@ const dropWorkspace = (
   draggedWorkspaceId: string,
   overWorkspaceId: string,
 ): string[] | null => {
-  let nextWorkspaceIds: string[] | null = null;
+  let committedWorkspaceIds: string[] | null = null;
   act(() => {
-    nextWorkspaceIds = view.result.current.showDropOrder(draggedWorkspaceId, overWorkspaceId);
+    view.result.current.commitDropOrder(draggedWorkspaceId, overWorkspaceId, (workspaceIds) => {
+      committedWorkspaceIds = workspaceIds;
+    });
   });
-  return nextWorkspaceIds;
+  return committedWorkspaceIds;
 };
 
 describe("useWorkspaceRailOrder", () => {
-  test("applies the drop order before the workspace store updates", () => {
+  test("applies and commits the drop order before the workspace store updates", () => {
     const view = renderOrder(workspaceList("alpha", "beta", "gamma"));
 
     expect(dropWorkspace(view, "alpha", "gamma")).toEqual(["beta", "gamma", "alpha"]);
@@ -48,8 +50,17 @@ describe("useWorkspaceRailOrder", () => {
     view.rerender({ workspaces: initialWorkspaces });
     expect(view.result.current.workspaceIds).toEqual(["beta", "gamma", "alpha"]);
 
-    view.rerender({ workspaces: workspaceList("alpha", "beta", "gamma") });
+    const replacement = workspaceList("alpha", "beta", "gamma").map((workspace) =>
+      workspace.workspaceId === "beta"
+        ? { ...workspace, workspaceName: "Beta Updated" }
+        : workspace,
+    );
+    view.rerender({ workspaces: replacement });
     expect(view.result.current.workspaceIds).toEqual(["alpha", "beta", "gamma"]);
+    expect(
+      view.result.current.workspaces.find((workspace) => workspace.workspaceId === "beta")
+        ?.workspaceName,
+    ).toBe("Beta Updated");
   });
 
   test("ignores a drop on a workspace that is not in the list", () => {

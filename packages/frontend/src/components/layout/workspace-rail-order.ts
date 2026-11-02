@@ -11,22 +11,33 @@ type WorkspaceRailOrder = {
   workspaces: WorkspaceRecord[];
   workspaceIds: string[];
   /**
-   * Shows the drop result before the workspace store catches up, so the drag end and the new
-   * order render in the same frame. Returns the new order, or null when the drop changes nothing.
+   * Shows the drop result before the workspace store catches up, then passes the new order to
+   * `commit`. Does not call `commit` when the drop cannot resolve or does not move a workspace.
    */
-  showDropOrder: (draggedWorkspaceId: string, overWorkspaceId: string) => string[] | null;
+  commitDropOrder: (
+    draggedWorkspaceId: string,
+    overWorkspaceId: string,
+    commit: (workspaceIds: string[]) => void,
+  ) => void;
 };
 
+/**
+ * Pass the workspace store list unchanged. The hook compares the list by reference.
+ */
 export const useWorkspaceRailOrder = (workspaces: WorkspaceRecord[]): WorkspaceRailOrder => {
   const [droppedOrder, setDroppedOrder] = useState<DroppedWorkspaceOrder | null>(null);
-  // A new workspace list is authoritative: the store has caught up with the drop.
+  // Any new store list replaces the preview.
   const orderedWorkspaces = droppedOrder?.source === workspaces ? droppedOrder.records : workspaces;
   const workspaceIds = useMemo(
     () => orderedWorkspaces.map((workspace) => workspace.workspaceId),
     [orderedWorkspaces],
   );
 
-  const showDropOrder = (draggedWorkspaceId: string, overWorkspaceId: string): string[] | null => {
+  const commitDropOrder = (
+    draggedWorkspaceId: string,
+    overWorkspaceId: string,
+    commit: (workspaceIds: string[]) => void,
+  ): void => {
     const draggedIndex = orderedWorkspaces.findIndex(
       (workspace) => workspace.workspaceId === draggedWorkspaceId,
     );
@@ -34,13 +45,13 @@ export const useWorkspaceRailOrder = (workspaces: WorkspaceRecord[]): WorkspaceR
       (workspace) => workspace.workspaceId === overWorkspaceId,
     );
     if (draggedIndex < 0 || overIndex < 0 || draggedIndex === overIndex) {
-      return null;
+      return;
     }
 
     const records = arrayMove(orderedWorkspaces, draggedIndex, overIndex);
     setDroppedOrder({ source: workspaces, records });
-    return records.map((workspace) => workspace.workspaceId);
+    commit(records.map((workspace) => workspace.workspaceId));
   };
 
-  return { workspaces: orderedWorkspaces, workspaceIds, showDropOrder };
+  return { workspaces: orderedWorkspaces, workspaceIds, commitDropOrder };
 };
