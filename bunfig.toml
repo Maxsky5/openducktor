@@ -1,2 +1,2 @@
 [test]
-preload = ["./scripts/bun-test-preload.ts"]
+preload = ["./tools/bun-test-preload.ts"]

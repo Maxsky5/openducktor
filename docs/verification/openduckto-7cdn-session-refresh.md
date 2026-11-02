@@ -22,7 +22,7 @@ The after version reads the affected tasks of a workspace through one `agentSess
 Run the measurement from `packages/frontend`:
 
 ```sh
-SESSION_REFRESH_BASELINE=88a965d1bf8125c99c0c2f186c3a81449ae6ef24 bun test ../../scripts/measure-session-refresh.ts
+SESSION_REFRESH_BASELINE=88a965d1bf8125c99c0c2f186c3a81449ae6ef24 bun run ../../scripts/measure-session-refresh.ts
 ```
 
 The script [measure-session-refresh.ts](../../scripts/measure-session-refresh.ts) copies the baseline `agent-sessions.ts` and `agent-session-view-sync.ts` from Git and removes the copies after the run.

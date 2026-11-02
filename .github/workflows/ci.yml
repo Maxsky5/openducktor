@@ -119,12 +119,6 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run --filter @openducktor/web worker:check
 
-      - name: Install Electron runtime for worker checks
-        run: node apps/electron/node_modules/electron/install.js
-
-      - name: Check built workers in Node, Bun, and Electron
-        run: bun run test:workers
-
   build-macos:
     name: Build (macOS)
     runs-on: macos-15
@@ -151,6 +145,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/setup
+
+      - name: Install Electron runtime for worker bundle tests
+        run: node apps/electron/node_modules/electron/install.js
 
       - name: Test workspaces
         run: bun run scripts/test-shard.ts ${{ matrix.shard }}/${{ strategy.job-total }}

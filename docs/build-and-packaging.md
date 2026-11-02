@@ -60,11 +60,7 @@ The change also removes the private `BrowserTabs` and `TaskSelector` modules, th
 
 Run the five full repository checks from [Contributing](../CONTRIBUTING.md#verification-commands). Also run the dependency gate from [Dependency hygiene](dependency-hygiene.md).
 
-Check the image worker bundles under Node, Bun, and Electron:
-
-```sh
-bun run test:workers
-```
+The full test suite builds the image and Claude transcript worker bundles and runs them under Node, Bun, and Electron. Run it with `bun run test`. The tests use the Electron runtime from `apps/electron` and download it on first use when it is missing.
 
 Before a web release, build the package and check its required files:
 
@@ -75,7 +71,7 @@ bun run scripts/prepare-web-publish-packages.ts 1.0.0-beta.2
 
 Use the actual release version for the second command. Pack the web workspace with `bun pm pack --ignore-scripts`, install that tarball in an isolated directory, and verify its Node CLI and MCP startup. The isolated package must work without workspace source or workspace dependencies.
 
-The local macOS arm64 package check verifies the compiled MCP sidecar and native file search after packaging. The image-worker check covers the minified worker code and the shared web chunks under Node. Windows, Linux, notarization, live agent sessions, and visual browser behavior still need their own platform or runtime checks.
+The local macOS arm64 package check verifies the compiled MCP sidecar and native file search after packaging. The worker bundle tests cover the worker protocol under Node, Bun, and Electron. Windows, Linux, notarization, live agent sessions, and visual browser behavior still need their own platform or runtime checks.
 
 ## Remaining costs
 
