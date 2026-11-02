@@ -6,6 +6,7 @@ import {
 } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
+import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
 import type { ActiveWorkspace } from "../../types/session-slices";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import { runTaskWorkflowAction } from "../workflow/run-task-workflow-action";
@@ -55,6 +56,7 @@ export type UseTaskDetailsSheetViewModelOptions = {
   onDelete?: TaskWorkflowActions["onDelete"] | undefined;
   taskCleanupImpactHook?: typeof useTaskCleanupImpact;
   taskStopImpactHook?: typeof useTaskStopImpact;
+  taskWorktreeOwnersHook?: typeof useTaskWorktreeOwners;
 };
 
 export function useTaskDetailsSheetViewModel({
@@ -77,6 +79,7 @@ export function useTaskDetailsSheetViewModel({
   onDelete,
   taskCleanupImpactHook = useTaskCleanupImpact,
   taskStopImpactHook = useTaskStopImpact,
+  taskWorktreeOwnersHook = useTaskWorktreeOwners,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
   const taskId = task.id;
   const taskLabels = useMemo(() => toTaskLabels(task.labels), [task.labels]);
@@ -87,6 +90,7 @@ export function useTaskDetailsSheetViewModel({
     onSucceeded: () => onOpenChange(false),
     taskCleanupImpactHook,
     taskStopImpactHook,
+    taskWorktreeOwnersHook,
   };
   const deleteConfirm = useTaskConfirmDialog({
     ...confirmOptions,

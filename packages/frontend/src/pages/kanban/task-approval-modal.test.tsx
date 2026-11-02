@@ -1,4 +1,6 @@
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { taskWorktreeOwnersQueryOptions } from "@openducktor/frontend-core/queries/task-worktree-owners";
+import { noTaskWorktreeOwners } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -50,6 +52,7 @@ const createLoadedConnection = () => {
   const connection = createTestClientConnection({
     client: {
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
       taskWorktreeCleanupImpactGet: async () => LOADED_IMPACT,
       terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
@@ -62,6 +65,15 @@ const createLoadedConnection = () => {
   queryClient.setQueryData(
     terminalListByFilterQueryOptions({ filter: { kind: "task", ...target } }).queryKey,
     { hostInstanceId: "host", revision: 1, terminals: [] },
+  );
+  queryClient.setQueryData(
+    taskWorktreeOwnersQueryOptions({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskIds: ["TASK-1"],
+      operation: "close",
+    }).queryKey,
+    noTaskWorktreeOwners,
   );
   queryClient.setQueryData(
     taskStopImpactQueryOptions({
@@ -305,6 +317,7 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: readImpact,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
@@ -398,6 +411,7 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: stopImpactGet,
@@ -452,6 +466,7 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: async () => readKeptWorktree(),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
@@ -510,6 +525,7 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: async () => ({
           worktreePaths: ["/worktrees/TASK-1"],
           branchNames: ["odt/TASK-1"],
@@ -573,6 +589,7 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),

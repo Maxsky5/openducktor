@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import {
@@ -30,6 +31,7 @@ const renderDialog = (
         terminalCount,
         activeSessionCount,
         activeSessionCountError,
+        worktreeOwners: worktreeOwnersRead(),
         error: null,
       }}
       operation={{ isPending: false, error: null, errorOutcomeUnknown: false }}

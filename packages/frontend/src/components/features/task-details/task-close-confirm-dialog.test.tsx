@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, mock, test } from "bun:test";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -17,6 +18,7 @@ const buildImpact = (overrides: Partial<TaskCloseImpact> = {}): TaskCloseImpact 
   branchNames: ["odt/TASK-1"],
   uncommittedFileCount: 3,
   terminalCount: 2,
+  worktreeOwners: worktreeOwnersRead(),
   activeSessionCount: 1,
   isLoading: false,
   isReady: true,
@@ -49,6 +51,49 @@ const renderDialog = (props: Partial<Parameters<typeof TaskCloseConfirmDialog>[0
   );
 
 describe("TaskCloseConfirmDialog", () => {
+  test("shows a failed owner read with a retry only when the close removes the worktree", () => {
+    const retry = mock(() => {});
+    const impact = buildImpact({
+      worktreeOwners: worktreeOwnersRead({ error: "Host unavailable.", retry }),
+    });
+    const message = "Unable to check who else needs the worktree: Host unavailable.";
+    const kept = renderDialog({ impact, removeWorktree: false });
+    expect(screen.queryByText(message)).toBeNull();
+    kept.unmount();
+
+    const { unmount } = renderDialog({ impact });
+    expect(screen.getByText(message)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test("names the others that need the worktree in the cleanup card", () => {
+    const { unmount } = renderDialog({
+      impact: buildImpact({
+        worktreeOwners: worktreeOwnersRead({
+          owners: {
+            checkoutWorkspaces: [],
+            tasks: [],
+            chats: [{ workspaceId: "repo", sessionId: "chat-1", title: "Hi" }],
+            historyChats: [{ workspaceId: "repo", sessionId: "fork-1", title: "Fork" }],
+          },
+        }),
+      }),
+    });
+
+    expect(
+      screen.getByText("Saved chats work in a removed worktree: “Hi”. Archive these chats first."),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Saved Claude chats keep their native history in a removed worktree: “Fork”. These chats cannot resume after this.",
+      ),
+    ).toBeDefined();
+
+    unmount();
+  });
+
   test("shows one loader in place of the content until the reads end", () => {
     const { unmount } = renderDialog({ isPreparing: true, confirmDisabled: true });
 

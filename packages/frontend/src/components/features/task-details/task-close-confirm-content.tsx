@@ -24,6 +24,11 @@ import {
   type TaskWorktreeImpact,
   useRemoveWorktreeSettingsRead,
 } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
+import {
+  worktreeOwnerLines,
+  worktreeOwnerLineTone,
+  worktreeOwnerReadErrorMessage,
+} from "@openducktor/frontend-core/tasks/details/task-worktree-owner-copy";
 import type { TaskMergeStatusView } from "@openducktor/frontend-core/tasks/presentation/task-merge-status";
 import { Button } from "@/components/ui/button";
 import { SwitchCard } from "@/components/ui/switch-card";
@@ -171,7 +176,12 @@ export function TaskCleanupTargets({
   const { worktreePaths, branchNames, uncommittedFileCount } = impact;
   if (impact.error) return null;
   if (worktreePaths.length === 0 && branchNames.length === 0) {
-    return <p className="text-sm text-muted-foreground">{TASK_CLOSE_COPY.noCleanupTargets}</p>;
+    return (
+      <>
+        <p className="text-sm text-muted-foreground">{TASK_CLOSE_COPY.noCleanupTargets}</p>
+        <TaskCleanupOwners owners={impact.worktreeOwners} removes={removes} />
+      </>
+    );
   }
   return (
     <div className="flex flex-col gap-2">
@@ -193,6 +203,7 @@ export function TaskCleanupTargets({
       ) : (
         <p className="text-xs leading-5 text-muted-foreground">No uncommitted changes.</p>
       )}
+      <TaskCleanupOwners owners={impact.worktreeOwners} removes={removes} />
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="group -ml-2 h-7 gap-1.5">
@@ -223,6 +234,49 @@ export function TaskCleanupTargets({
     </div>
   );
 }
+
+/**
+ * The others that need the worktree. Their color follows the choice, as the uncommitted files do.
+ * A failed owner read shows with its retry, but only a removal needs the owners.
+ */
+function TaskCleanupOwners({
+  owners,
+  removes,
+}: {
+  owners: TaskWorktreeImpact["worktreeOwners"];
+  removes: boolean;
+}): ReactElement {
+  const readError = worktreeOwnerReadErrorMessage(owners);
+  return (
+    <>
+      {worktreeOwnerLines(owners).map((line) => (
+        <p
+          key={line.text}
+          className={cn(
+            "flex items-start gap-2 text-xs leading-5",
+            OWNER_LINE_TONES[worktreeOwnerLineTone(line, removes)],
+          )}
+        >
+          {removes ? (
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          ) : null}
+          <span>{line.text}</span>
+        </p>
+      ))}
+      {removes && readError ? (
+        <TaskReadError
+          read={{ isLoading: owners.isLoading, error: readError, retry: owners.retry }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const OWNER_LINE_TONES = {
+  muted: "text-muted-foreground",
+  destructive: "text-destructive-muted",
+  warning: "text-warning-muted",
+} satisfies Record<ReturnType<typeof worktreeOwnerLineTone>, string>;
 
 function TaskCleanupTarget({ label, values }: { label: string; values: string[] }): ReactElement {
   return (

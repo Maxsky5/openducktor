@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -22,6 +23,7 @@ const renderDialog = (impact: Partial<TaskWorktreeImpact>, isPreparing = false) 
         branchNames: [],
         uncommittedFileCount: 0,
         terminalCount: 0,
+        worktreeOwners: worktreeOwnersRead(),
         isLoading: false,
         isReady: true,
         error: null,

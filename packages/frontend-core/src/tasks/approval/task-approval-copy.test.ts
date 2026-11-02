@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "../../test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import {
   directMergeCompletionButtonLabel,
@@ -23,6 +24,7 @@ const worktreeImpact = (overrides: Partial<TaskWorktreeImpact> = {}): TaskWorktr
   branchNames: ["odt/TASK-1"],
   uncommittedFileCount: 0,
   terminalCount: 0,
+  worktreeOwners: worktreeOwnersRead(),
   ...overrides,
 });
 

@@ -20,6 +20,14 @@ import {
   type TaskMergeStatusView,
 } from "../presentation/task-merge-status";
 import { runningTerminalCount } from "./task-cleanup-impact-model";
+import {
+  hasWorktreeOwnerReadResult,
+  isWorktreeOwnerReadBlocking,
+} from "./task-worktree-owner-copy";
+import {
+  type TaskWorktreeOwnersRead,
+  useTaskWorktreeOwners,
+} from "../../queries/use-task-worktree-owners";
 import { settingsReadErrorMessage } from "./task-close-copy";
 import { stopImpactReadErrorMessage } from "./task-confirm-copy";
 
@@ -44,6 +52,8 @@ export type TaskWorktreeImpact = TaskReadState & {
   branchNames: string[];
   uncommittedFileCount: number;
   terminalCount: number;
+  /** The others that need a removed worktree. A choice that keeps the worktree reads none. */
+  worktreeOwners: TaskWorktreeOwnersRead;
 };
 
 /** What a close confirmation shows about the task, its worktree, and its merge status. */
@@ -77,12 +87,23 @@ export const useTaskCloseLoader = (
 ): boolean => useMinimumLoader(useTaskCloseReadsPending(impact, removeWorktree));
 
 /** The reads are pending or one failed, so the confirmation cannot run yet. */
-export const isReadBlocked = (read: TaskReadState): boolean =>
-  read.isLoading || read.error !== null;
+const isReadBlocked = (read: TaskReadState): boolean => read.isLoading || read.error !== null;
 
-/** A confirmation that closes the task also waits for its cleanup choice. */
-export const isCloseBlocked = (read: TaskReadState, removeWorktree: boolean | null): boolean =>
-  removeWorktree === null || isReadBlocked(read);
+/**
+ * A confirmation that closes the task also waits for its cleanup choice. A worktree removal also
+ * waits until no other workspace, task, or chat needs the worktree.
+ */
+export const isCloseBlocked = (
+  impact: TaskReadState & Pick<TaskWorktreeImpact, "worktreeOwners">,
+  removeWorktree: boolean | null,
+): boolean =>
+  removeWorktree === null ||
+  (removeWorktree ? isWorktreeRemovalBlocked(impact) : isReadBlocked(impact));
+
+/** A worktree removal waits for its reads and until no other owner needs the worktree. */
+export const isWorktreeRemovalBlocked = (
+  impact: TaskReadState & Pick<TaskWorktreeImpact, "worktreeOwners">,
+): boolean => isReadBlocked(impact) || isWorktreeOwnerReadBlocking(impact.worktreeOwners);
 
 /**
  * The worktree reads of one confirmation. A confirmation enables them only while it shows. They
@@ -91,10 +112,21 @@ export const isCloseBlocked = (read: TaskReadState, removeWorktree: boolean | nu
 export const useTaskWorktreeImpact = ({
   taskId,
   enabled,
+  readsOwners,
 }: {
   taskId: string;
   enabled: boolean;
-}): TaskWorktreeImpact => useTaskWorktreeReads(taskId, enabled).impact;
+  /** Only a confirmation reads the others that need the worktree. */
+  readsOwners: boolean;
+}): TaskWorktreeImpact => {
+  const { impact } = useTaskWorktreeReads(taskId, enabled);
+  const worktreeOwners = useTaskWorktreeOwners({
+    taskIds: [taskId],
+    operation: "remove_worktree",
+    enabled: enabled && readsOwners,
+  });
+  return withOwnerRead(impact, worktreeOwners, enabled && readsOwners);
+};
 
 /** The worktree, session, and merge status reads of one close confirmation, as above. */
 export const useTaskCloseImpact = (args: {
@@ -113,7 +145,20 @@ export function useTaskApprovalImpact({
   task: Pick<TaskCard, "id" | "title">;
   enabled: boolean;
 }): TaskApprovalImpact {
-  const { scope, mergeCandidate, branchOid, impact } = useTaskWorktreeReads(task.id, enabled);
+  const {
+    scope,
+    mergeCandidate,
+    branchOid,
+    impact: reads,
+  } = useTaskWorktreeReads(task.id, enabled);
+  // The owners read with the other reads, so a change of the cleanup choice or of the approval
+  // mode shows them at once. Only a choice that removes the worktree uses them.
+  const worktreeOwners = useTaskWorktreeOwners({
+    taskIds: [task.id],
+    operation: "close",
+    enabled,
+  });
+  const impact = withOwnerRead(reads, worktreeOwners, enabled);
   const mergeStatusQuery = useQuery(workspaceTaskMergeStatusQueryOptions(scope));
   const stop = useTaskStopImpact({ taskIds: [task.id], operation: "close", enabled });
   const stopError = stop.error === null ? null : stopImpactReadErrorMessage(stop.error);
@@ -227,11 +272,22 @@ const useTaskWorktreeReads = (taskId: string, enabled: boolean) => {
   };
 };
 
+/** A confirmation shows its content when the owner read also has its first result. */
+const withOwnerRead = (
+  impact: Omit<TaskWorktreeImpact, "worktreeOwners">,
+  worktreeOwners: TaskWorktreeOwnersRead,
+  readsOwners: boolean,
+): TaskWorktreeImpact => ({
+  ...impact,
+  worktreeOwners,
+  isReady: impact.isReady && (!readsOwners || hasWorktreeOwnerReadResult(worktreeOwners)),
+});
+
 const worktreeImpactOf = (
   cleanup: TaskWorktreeCleanupImpact | undefined,
   terminals: TerminalListResponse | undefined,
   read: { isLoading: boolean; isReady: boolean; readError: Error | null; retry: () => void },
-): TaskWorktreeImpact => ({
+): Omit<TaskWorktreeImpact, "worktreeOwners"> => ({
   worktreePaths: cleanup?.worktreePaths ?? [],
   branchNames: cleanup?.branchNames ?? [],
   uncommittedFileCount: cleanup?.uncommittedFileCount ?? 0,

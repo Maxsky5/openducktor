@@ -1,3 +1,8 @@
+import {
+  noTaskWorktreeOwners,
+  worktreeOwnersRead,
+} from "@openducktor/frontend-core/test-support/worktree-owners-read";
+import * as worktreeOwnersModule from "@openducktor/frontend-core/queries/use-task-worktree-owners";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -53,6 +58,7 @@ const closeConfirmationHost = ({
   createTestClientConnection({
     client: {
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
       taskWorktreeCleanupImpactGet: async () => ({
         worktreePaths: ["/worktrees/odt-1"],
         branchNames: ["odt/odt-1"],
@@ -156,6 +162,9 @@ describe("TaskConfirmDialogHost", () => {
         error: null,
         retry: () => {},
       });
+      const ownersSpy = spyOn(worktreeOwnersModule, "useTaskWorktreeOwners").mockReturnValue(
+        worktreeOwnersRead(),
+      );
       try {
         const handlers = createHandlers();
         view = render(<Host workspaceIdentity={workspaceA} {...handlers} />);
@@ -171,6 +180,7 @@ describe("TaskConfirmDialogHost", () => {
         expect(handlers.onSucceeded).toHaveBeenCalledWith(task.id);
         expect(screen.queryByRole("dialog")).toBeNull();
       } finally {
+        ownersSpy.mockRestore();
         stopImpactSpy.mockRestore();
       }
     },

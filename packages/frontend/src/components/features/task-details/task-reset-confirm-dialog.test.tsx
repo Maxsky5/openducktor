@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { TaskResetConfirmDialog } from "./task-reset-confirm-dialog";
@@ -17,6 +18,7 @@ describe("TaskResetConfirmDialog", () => {
           hasManagedSessionCleanup: true,
           managedWorktreeCount: 2,
           terminalCount: 2,
+          worktreeOwners: worktreeOwnersRead(),
           activeSessionCount: 1,
           activeSessionCountError: null,
           error: null,
@@ -49,6 +51,7 @@ describe("TaskResetConfirmDialog", () => {
           hasManagedSessionCleanup: false,
           managedWorktreeCount: 0,
           terminalCount: 0,
+          worktreeOwners: worktreeOwnersRead(),
           activeSessionCount: 0,
           activeSessionCountError: null,
           error: null,
@@ -75,6 +78,7 @@ describe("TaskResetConfirmDialog", () => {
           hasManagedSessionCleanup: false,
           managedWorktreeCount: 0,
           terminalCount: 0,
+          worktreeOwners: worktreeOwnersRead(),
           activeSessionCount: null,
           activeSessionCountError: "host unavailable",
           error: null,

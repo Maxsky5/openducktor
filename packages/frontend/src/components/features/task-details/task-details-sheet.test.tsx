@@ -1,4 +1,8 @@
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import {
+  noTaskWorktreeOwners,
+  worktreeOwnersRead,
+} from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
@@ -366,6 +370,7 @@ describe("TaskDetailsSheet", () => {
         error: "host unavailable",
         retry: () => {},
       }),
+      taskWorktreeOwnersHook: () => worktreeOwnersRead(),
     });
 
     try {
@@ -584,6 +589,7 @@ describe("TaskDetailsSheet", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },

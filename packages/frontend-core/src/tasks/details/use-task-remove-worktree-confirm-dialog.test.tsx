@@ -1,3 +1,4 @@
+import { noTaskWorktreeOwners } from "../../test-support/worktree-owners-read";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { waitFor } from "@testing-library/react";
@@ -34,6 +35,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
     });
     const connection = createTestClientConnection({
       client: {
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       },
@@ -61,7 +63,10 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
       await harness.run(() => held.release());
 
       await waitFor(() => expect(harness.getLatest().dialog.impact.uncommittedFileCount).toBe(4));
-      expect(harness.getLatest().dialog.confirmDisabled).toBe(false);
+      // The loader also waits for the owner read, and it shows at least 500 ms.
+      await waitFor(() => expect(harness.getLatest().dialog.confirmDisabled).toBe(false), {
+        timeout: 1500,
+      });
       expect(harness.getLatest().isAvailable).toBe(true);
       expect(impactGet).toHaveBeenCalledTimes(2);
     } finally {
@@ -73,6 +78,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
     let failRead = false;
     const connection = createTestClientConnection({
       client: {
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: async () => {
           if (failRead) throw new Error("The worktree is not readable.");
           return {
@@ -113,6 +119,7 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
     let worktreePaths = ["/worktrees/TASK-1"];
     const connection = createTestClientConnection({
       client: {
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: async () => {
           if (failRead) throw new Error("Unable to read the kept worktree: permission denied.");
           return {

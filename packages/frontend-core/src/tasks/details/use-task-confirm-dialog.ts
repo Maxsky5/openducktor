@@ -1,6 +1,7 @@
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import { useMemo } from "react";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
+import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
 import type { TaskConfirmAction } from "../workflow/task-confirm-actions";
 import { buildTaskConfirmImpact } from "./task-cleanup-impact-model";
 import { collectSingleTaskCleanupImpactTaskIds } from "./task-details-sheet-model";
@@ -19,6 +20,7 @@ type UseTaskConfirmDialogOptions = {
   onSucceeded: () => void;
   taskCleanupImpactHook?: typeof useTaskCleanupImpact;
   taskStopImpactHook?: typeof useTaskStopImpact;
+  taskWorktreeOwnersHook?: typeof useTaskWorktreeOwners;
 };
 
 export type TaskConfirmDialog = {
@@ -36,6 +38,7 @@ export function useTaskConfirmDialog({
   onSucceeded,
   taskCleanupImpactHook = useTaskCleanupImpact,
   taskStopImpactHook = useTaskStopImpact,
+  taskWorktreeOwnersHook = useTaskWorktreeOwners,
 }: UseTaskConfirmDialogOptions): TaskConfirmDialog {
   const taskId = task?.id ?? null;
   const impactTaskIds = useMemo(() => collectSingleTaskCleanupImpactTaskIds(task), [task]);
@@ -53,9 +56,14 @@ export function useTaskConfirmDialog({
     operation: action,
     enabled: loadImpact,
   });
+  const owners = taskWorktreeOwnersHook({
+    taskIds: impactTaskIds,
+    operation: action,
+    enabled: loadImpact,
+  });
 
   return {
     openDialog,
-    dialog: { ...dialog, impact: buildTaskConfirmImpact(cleanup, stop) },
+    dialog: { ...dialog, impact: buildTaskConfirmImpact(cleanup, stop, owners) },
   };
 }

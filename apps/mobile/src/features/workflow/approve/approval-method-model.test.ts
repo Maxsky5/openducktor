@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import type { TaskApprovalApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import type {
@@ -15,6 +16,7 @@ const worktree: TaskWorktreeImpact = {
   branchNames: ["odt/TASK-1"],
   uncommittedFileCount: 0,
   terminalCount: 0,
+  worktreeOwners: worktreeOwnersRead(),
 };
 
 const impact: TaskApprovalImpact = {
