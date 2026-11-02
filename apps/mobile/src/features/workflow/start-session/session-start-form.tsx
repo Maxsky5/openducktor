@@ -174,10 +174,12 @@ const modelLoadingLabel = (model: SessionStartModalModel): string | null => {
  */
 export function SessionStartForm({
   model: shown,
+  blockedReason,
   branchesFailure,
   onEdit = NO_EDIT_REPORT,
 }: {
   model: SessionStartModalModel;
+  blockedReason: string | null;
   /** The failed branch list read, which the target branch choice needs. */
   branchesFailure: BranchesFailure | null;
   /** Runs when the user changes a choice. */
@@ -197,8 +199,9 @@ export function SessionStartForm({
   const selection = model.selectedModelSelection;
   const modelName = modelSummary(model.modelPickerRuntimes, selection).title;
   const busy = model.isStarting;
-  const { confirmDisabled, blockedReason } = availability;
+  const confirmDisabled = blockedReason !== null || availability.confirmDisabled;
   const confirm = (runInBackground: boolean) => {
+    if (confirmDisabled) return;
     model.onConfirm({
       runInBackground,
       ...buildSessionStartConfirmDraft({
@@ -219,7 +222,7 @@ export function SessionStartForm({
 
   return (
     <ActionForm
-      note={blockedReason}
+      note={blockedReason ?? availability.blockedReason}
       secondary={
         model.allowRunInBackground ? (
           <SessionStartBackgroundButton

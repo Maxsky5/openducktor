@@ -13,10 +13,7 @@ import { EmptyState } from "@/ui/states";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
-import {
-  RepoSettingsFailure,
-  RepoSettingsRefreshNotice,
-} from "../start-session/repo-settings-failure";
+import { RepoSettingsNotice } from "../start-session/repo-settings-notice";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
@@ -54,8 +51,8 @@ function RequestChangesContent({
   const feedback = flow.humanReviewFeedbackModal;
   const start = flow.sessionStartModal;
   // The sheet closes when neither step is open: after a start that stays, or a cancel.
-  const { triggered, loading } = useWorkflowSheetLifecycle({
-    ready: task !== null && settings.ready && settings.error === null,
+  useWorkflowSheetLifecycle({
+    ready: task !== null,
     run: () => {
       if (task) flow.onHumanRequestChanges(task.id);
     },
@@ -94,26 +91,20 @@ function RequestChangesContent({
     return (
       <SessionStartSheet
         model={start}
+        blockedReason={settings.blockedReason}
         branchesFailure={branchesFailure}
         notice={
-          settings.refreshError ? (
-            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
-          ) : null
+          <RepoSettingsNotice
+            error={settings.error}
+            refreshError={settings.refreshError}
+            onRetry={settings.retry}
+          />
         }
       />
     );
   }
-  if (settings.error && !triggered) {
-    return (
-      <GroupedSheet title={TITLE}>
-        <RepoSettingsFailure message={settings.error} onRetry={settings.retry} />
-      </GroupedSheet>
-    );
-  }
   if (!feedback) {
-    return (
-      <GroupedSheet title={TITLE} loading={loading} loadingLabel="Loading repository settings…" />
-    );
+    return <GroupedSheet title={TITLE} />;
   }
   const submitBlocked = isHumanReviewFeedbackConfirmDisabled(feedback);
   return (
@@ -139,9 +130,11 @@ function RequestChangesContent({
         }
       >
         <FormBody>
-          {settings.refreshError ? (
-            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
-          ) : null}
+          <RepoSettingsNotice
+            error={settings.error}
+            refreshError={settings.refreshError}
+            onRetry={settings.retry}
+          />
           <View style={styles.lead}>
             <FormLead text={COPY.description} />
             <Text variant="footnote" tone="secondary" numberOfLines={2}>

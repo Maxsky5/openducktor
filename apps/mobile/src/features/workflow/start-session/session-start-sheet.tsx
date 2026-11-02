@@ -12,12 +12,14 @@ import { SessionStartForm } from "./session-start-form";
 /** The same guarded start step serves quick actions, approvals, and review feedback. */
 export function SessionStartSheet({
   model,
+  blockedReason,
   branchesFailure,
   onClose,
   onEdit,
   notice,
 }: {
   model: SessionStartModalModel;
+  blockedReason: string | null;
   branchesFailure: BranchesFailure | null;
   onClose?: (() => void) | undefined;
   onEdit?: (() => void) | undefined;
@@ -49,6 +51,7 @@ export function SessionStartSheet({
       ) : (
         <SessionStartForm
           model={{ ...model, isStarting }}
+          blockedReason={blockedReason}
           branchesFailure={branchesFailure}
           onEdit={onEdit}
         />

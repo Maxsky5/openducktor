@@ -3,7 +3,6 @@ import type {
   RepositoryGitProviderContext,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
@@ -28,7 +27,6 @@ export function useWorkspaceRepoSettings(workspace: WorkspaceRecord) {
   const queryClient = useQueryClient();
   const { workspaceId, repoPath } = workspace;
   const config = useQuery({ ...repoConfigQueryOptions(workspaceId), refetchOnMount: "always" });
-  const preparing = useMinimumLoader(config.isPending);
   const branches = useQuery(repoBranchesQueryOptions(repoPath));
   const provider = useQuery(repositoryGitProviderContextQueryOptions(repoPath));
   const repoSettings = useMemo<RepoSettingsInput | null>(
@@ -57,7 +55,7 @@ export function useWorkspaceRepoSettings(workspace: WorkspaceRecord) {
   );
   return {
     repoSettings,
-    repoSettingsReady: !preparing,
+    repoSettingsReady: config.data !== undefined,
     repoSettingsError: config.data === undefined ? config.error : null,
     repoSettingsRefreshError: config.data !== undefined ? config.error : null,
     retryRepoSettings,

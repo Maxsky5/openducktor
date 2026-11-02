@@ -104,7 +104,12 @@ export function useSessionStartModalState({
   const loadRuntimeCatalog = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
-  const [selectedTargetBranch, setSelectedTargetBranch] = useState("");
+  const [targetBranch, setSelectedTargetBranch] = useState<string | null>(null);
+  const selectedTargetBranch =
+    targetBranch ??
+    targetBranchSelectionValue(
+      effectiveTaskTargetBranch(intent?.initialTargetBranch, repoSettings?.defaultTargetBranch),
+    );
   const [selectedStartModeForRuntime, setSelectedStartModeForRuntime] =
     useState<AgentSessionStartMode>("fresh");
   const activeRole = intent?.role ?? null;
@@ -123,6 +128,7 @@ export function useSessionStartModalState({
     setRequestedRuntimeKind,
   } = useSessionStartModalRuntimeState({
     initialCatalog,
+    defaultRuntimeKind: activeRoleDefaultSelection?.runtimeKind ?? null,
     isOpen: intent !== null,
     loadRuntimeCatalog,
     runtimeDefinitions: availableRuntimeDefinitions,
@@ -169,7 +175,7 @@ export function useSessionStartModalState({
 
   const closeStartModal = useCallback(() => {
     setIntent(null);
-    setSelectedTargetBranch("");
+    setSelectedTargetBranch(null);
     setSelectedStartModeForRuntime("fresh");
     resetSelection();
     resetStartState();
@@ -197,19 +203,25 @@ export function useSessionStartModalState({
       setSelectedStartModeForRuntime(initialStartMode);
       setIntent(nextIntent);
       setSelectedTargetBranch(
-        targetBranchSelectionValue(
-          effectiveTaskTargetBranch(
-            nextIntent.initialTargetBranch,
-            repoSettings?.defaultTargetBranch,
-          ),
-        ),
+        repoSettings
+          ? targetBranchSelectionValue(
+              effectiveTaskTargetBranch(
+                nextIntent.initialTargetBranch,
+                repoSettings.defaultTargetBranch,
+              ),
+            )
+          : null,
       );
       if (initialStartMode === "fresh") {
-        initializeSelection(
-          defaultSessionSelectionFor(repoSettings, nextIntent.role),
-          initialRuntimeKind,
-          nextIntent.selectedModel ?? null,
-        );
+        if (repoSettings || nextIntent.selectedModel) {
+          initializeSelection(
+            defaultSessionSelectionFor(repoSettings, nextIntent.role),
+            initialRuntimeKind,
+            nextIntent.selectedModel ?? null,
+          );
+        } else {
+          setSelection(null);
+        }
       }
     },
     [

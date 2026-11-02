@@ -98,17 +98,18 @@ export function useTaskStartFlow(workspace: WorkspaceRecord) {
   useEffect(() => {
     if (backgroundAttemptId) navigation.close();
   }, [backgroundAttemptId, navigation]);
-  // A start reads the role defaults and the target branch when its choices open, so it waits for
-  // the current repository settings.
-  const settings = useMemo(
-    () => ({
-      ready: repoSettingsReady,
-      error: repoSettingsError ? errorMessage(repoSettingsError) : null,
+  const settings = useMemo(() => {
+    const error = repoSettingsError ? errorMessage(repoSettingsError) : null;
+    let blockedReason: string | null = null;
+    if (error) blockedReason = "Repository settings did not load.";
+    else if (!repoSettingsReady) blockedReason = "Loading repository settings…";
+    return {
+      blockedReason,
+      error,
       refreshError: repoSettingsRefreshError ? errorMessage(repoSettingsRefreshError) : null,
       retry: retryRepoSettings,
-    }),
-    [repoSettingsError, repoSettingsRefreshError, repoSettingsReady, retryRepoSettings],
-  );
+    };
+  }, [repoSettingsError, repoSettingsRefreshError, repoSettingsReady, retryRepoSettings]);
   return {
     flow,
     navigation,

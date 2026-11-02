@@ -16,7 +16,7 @@ import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
-import { RepoSettingsFailure, RepoSettingsRefreshNotice } from "./repo-settings-failure";
+import { RepoSettingsNotice } from "./repo-settings-notice";
 import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { SessionStartSheet } from "./session-start-sheet";
@@ -96,8 +96,8 @@ function StartSessionContent({
     if (task) runStartRequest(request, task.id, flow, feedback);
   };
   // The sheet closes when the start choices close.
-  const { triggered, loading } = useWorkflowSheetLifecycle({
-    ready: task !== null && settings.ready && settings.error === null,
+  useWorkflowSheetLifecycle({
+    ready: task !== null,
     run,
     anyOpen: modal?.open === true,
     close: navigation.close,
@@ -116,25 +116,19 @@ function StartSessionContent({
       </GroupedSheet>
     );
   }
-  if (settings.error && !triggered) {
-    return (
-      <GroupedSheet title={TITLE}>
-        <RepoSettingsFailure message={settings.error} onRetry={settings.retry} />
-      </GroupedSheet>
-    );
-  }
   if (!modal) {
-    return (
-      <GroupedSheet title={TITLE} loading={loading} loadingLabel="Loading repository settings…" />
-    );
+    return <GroupedSheet title={TITLE} />;
   }
   return (
     <SessionStartSheet
       model={modal}
+      blockedReason={settings.blockedReason}
       notice={
-        settings.refreshError ? (
-          <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
-        ) : null
+        <RepoSettingsNotice
+          error={settings.error}
+          refreshError={settings.refreshError}
+          onRetry={settings.retry}
+        />
       }
       branchesFailure={branchesFailure}
       onClose={choicesClose.close}

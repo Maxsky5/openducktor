@@ -55,7 +55,7 @@ describe("useWorkspaceRepoSettings", () => {
     }
   });
 
-  test("waits for missing settings, then opens the form after preparation", async () => {
+  test("marks settings ready as soon as the read supplies them", async () => {
     const read = Promise.withResolvers<RepoConfig>();
     const connection = createTestClientConnection({
       client: { workspaceGetRepoConfig: () => read.promise },
@@ -71,8 +71,8 @@ describe("useWorkspaceRepoSettings", () => {
           repoConfigSchema.parse({ workspaceId: "repo", workspaceName: "Repo", repoPath: "/repo" }),
         ),
       );
-      await waitFor(() => expect(view.result.current.repoSettingsReady).toBe(true));
-      expect(view.result.current.repoSettings).not.toBeNull();
+      await waitFor(() => expect(view.result.current.repoSettings).not.toBeNull());
+      expect(view.result.current.repoSettingsReady).toBe(true);
     } finally {
       view.unmount();
       await connection.dispose();

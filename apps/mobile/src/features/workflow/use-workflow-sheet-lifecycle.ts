@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
  * action opens its first step, such as the start choices, in the same render. The sheet then
  * closes when no step is open: after a start that stays, a cancel, or a failure before a step
  * opened. A start that opens its session leaves the sheet first, so `close` does nothing after it.
- * Missing required data controls loading. Local setup opens the step before the sheet paints.
+ * Local setup opens the step before the sheet paints.
  */
 export function useWorkflowSheetLifecycle({
   ready,
@@ -17,7 +17,7 @@ export function useWorkflowSheetLifecycle({
   run: () => void;
   anyOpen: boolean;
   close: () => void;
-}) {
+}): void {
   const [triggered, setTriggered] = useState(false);
   useLayoutEffect(() => {
     if (triggered || !ready) return;
@@ -30,5 +30,4 @@ export function useWorkflowSheetLifecycle({
   useEffect(() => {
     if (triggered && !anyOpen) close();
   }, [anyOpen, close, triggered]);
-  return { triggered, loading: !ready };
 }

@@ -18,6 +18,7 @@ import {
 
 type UseSessionStartModalRuntimeStateArgs = {
   initialCatalog: AgentModelCatalog | null | undefined;
+  defaultRuntimeKind: RuntimeKind | null;
   isOpen: boolean;
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -40,6 +41,7 @@ const EMPTY_RUNTIME_KINDS: RuntimeKind[] = [];
 
 export function useSessionStartModalRuntimeState({
   initialCatalog,
+  defaultRuntimeKind,
   isOpen,
   loadRuntimeCatalog,
   runtimeDefinitions,
@@ -55,9 +57,9 @@ export function useSessionStartModalRuntimeState({
     () =>
       resolveRuntimeKindSelection({
         runtimeDefinitions: eligibleRuntimeDefinitions,
-        requestedRuntimeKind,
+        requestedRuntimeKind: requestedRuntimeKind ?? defaultRuntimeKind,
       }),
-    [requestedRuntimeKind, eligibleRuntimeDefinitions],
+    [requestedRuntimeKind, defaultRuntimeKind, eligibleRuntimeDefinitions],
   );
   const selectedRuntimeDescriptor = useMemo(
     () =>

@@ -20,10 +20,7 @@ import { FormLead } from "@/ui/form-rows";
 import { Text } from "@/ui/text";
 import { Callout } from "@/ui/callout";
 import { ResetImplementationConfirmation } from "../confirm/task-confirmations";
-import {
-  RepoSettingsFailure,
-  RepoSettingsRefreshNotice,
-} from "../start-session/repo-settings-failure";
+import { RepoSettingsNotice } from "../start-session/repo-settings-notice";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
@@ -113,10 +110,8 @@ function ApproveTaskContent({
   const start = flow.sessionStartModal;
   const conflict = approval.taskGitConflictDialog;
   const modal = approval.taskApprovalModal;
-  // The approval can start the pull request or conflict Builder, so it waits for the current
-  // repository settings. The sheet closes when no step stays open.
-  const { triggered, loading } = useWorkflowSheetLifecycle({
-    ready: task !== null && settings.ready && settings.error === null,
+  useWorkflowSheetLifecycle({
+    ready: task !== null,
     run: () => {
       if (task) approval.openTaskApproval(task.id);
     },
@@ -139,22 +134,18 @@ function ApproveTaskContent({
       </GroupedSheet>
     );
   }
-  if (settings.error && !triggered) {
-    return (
-      <GroupedSheet title={TITLE}>
-        <RepoSettingsFailure message={settings.error} onRetry={settings.retry} />
-      </GroupedSheet>
-    );
-  }
   if (start?.open) {
     return (
       <SessionStartSheet
         model={start}
+        blockedReason={settings.blockedReason}
         branchesFailure={branchesFailure}
         notice={
-          settings.refreshError ? (
-            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
-          ) : null
+          <RepoSettingsNotice
+            error={settings.error}
+            refreshError={settings.refreshError}
+            onRetry={settings.retry}
+          />
         }
       />
     );
@@ -173,14 +164,15 @@ function ApproveTaskContent({
   }
   return (
     <ApprovalFlowSheet
-      loading={loading}
       conflict={conflict}
       modal={modal}
       notice={
         <>
-          {settings.refreshError ? (
-            <RepoSettingsRefreshNotice message={settings.refreshError} onRetry={settings.retry} />
-          ) : null}
+          <RepoSettingsNotice
+            error={settings.error}
+            refreshError={settings.refreshError}
+            onRetry={settings.retry}
+          />
           {providerFailure ? (
             <ProviderFailureNotice
               description={providerFailure.description}
@@ -200,7 +192,6 @@ type ApprovalFlow = ReturnType<typeof useTaskApprovalFlow>;
 
 /** The conflict step while Git reports a conflict, else the approval steps once they load. */
 function ApprovalFlowSheet({
-  loading,
   conflict,
   modal,
   notice,
@@ -208,7 +199,6 @@ function ApprovalFlowSheet({
   conflict: ApprovalFlow["taskGitConflictDialog"];
   modal: ApprovalFlow["taskApprovalModal"];
   notice: ReactElement | null;
-  loading: boolean;
 }): ReactElement {
   if (conflict?.open && conflict.conflict) {
     return (
@@ -222,9 +212,7 @@ function ApprovalFlowSheet({
     );
   }
   if (!modal) {
-    return (
-      <GroupedSheet title={TITLE} loading={loading} loadingLabel="Loading repository settings…" />
-    );
+    return <GroupedSheet title={TITLE} />;
   }
   return <ApprovalStage modal={modal} notice={notice} />;
 }
