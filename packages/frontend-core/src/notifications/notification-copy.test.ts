@@ -84,6 +84,23 @@ describe("notification copy", () => {
     });
   });
 
+  test("names a task that the pull request sync could not close", () => {
+    const occurrence: NotificationOccurrence = {
+      occurrenceId: "task.auto_close_blocked:/repo:task-1:2026-11-03T10:00:00.000Z",
+      kind: "task.auto_close_blocked",
+      repoPath: "/repo",
+      repositoryLabel: "Repo",
+      task: { id: "task-1", title: "Build notifications" },
+      status: "Its pull request merged, but the task could not close. Open the task to see why.",
+      navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+    };
+
+    expect(buildNotificationCopy(occurrence)).toEqual({
+      title: "Task not closed - Build notifications",
+      body: "Its pull request merged, but the task could not close. Open the task to see why.",
+    });
+  });
+
   test("removes Markdown marks from native notification text", () => {
     const occurrence: NotificationOccurrence = {
       occurrenceId: "agent.session_idle:/repo:task-1:cycle-1",

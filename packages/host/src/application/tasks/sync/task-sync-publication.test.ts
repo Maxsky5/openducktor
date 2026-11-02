@@ -10,7 +10,8 @@ import {
 } from "./task-sync-service.test-support";
 
 const workspaceSettingsService = { listWorkspaces: () => Effect.succeed([syncWorkspace()]) };
-const noSync = () => Effect.succeed({ ran: true as const, changedTaskIds: [] });
+const noSync = () =>
+  Effect.succeed({ ran: true as const, changedTaskIds: [], autoCloseFailures: [] });
 
 describe("committed task event publication", () => {
   test.each([

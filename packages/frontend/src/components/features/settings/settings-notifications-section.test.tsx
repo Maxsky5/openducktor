@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   AGENT_NOTIFICATION_KIND_VALUES,
+  TASK_NOTIFICATION_KIND_VALUES,
   type NotificationSettings,
   type NotificationOsCapability,
 } from "@openducktor/contracts";
@@ -324,7 +325,9 @@ describe("SettingsNotificationsSection", () => {
     );
 
     expect(screen.getAllByRole("switch")).toHaveLength(
-      AGENT_NOTIFICATION_KIND_VALUES.length + BUILTIN_NOTIFICATION_KINDS.length,
+      AGENT_NOTIFICATION_KIND_VALUES.length +
+        TASK_NOTIFICATION_KIND_VALUES.length +
+        BUILTIN_NOTIFICATION_KINDS.length,
     );
     const delivery = screen.getByRole("radiogroup", {
       name: "Delivery for Permission request",

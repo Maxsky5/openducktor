@@ -1,5 +1,8 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
-import { useMergedTaskTargets } from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
+import {
+  useAutoCloseFailures,
+  useMergedTaskTargets,
+} from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
 import {
   DEFAULT_KANBAN_SETTINGS,
   type AgentSessionRecord,
@@ -40,6 +43,8 @@ export type BoardSessionLookup = {
   activityOf: (taskId: string) => KanbanTaskActivityState;
   /** The target that the task branch is merged into. The card then proposes Close Task. */
   mergedTargetOf: (taskId: string) => string | undefined;
+  /** Why the pull request sync could not close the task. */
+  autoCloseFailureOf: (taskId: string) => string | undefined;
 };
 
 export type TaskBoard = {
@@ -82,6 +87,10 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
     { workspaceId: workspace.workspaceId, repoPath: workspace.repoPath },
     board.kanbanTasks,
   );
+  const autoCloseFailureByTaskId = useAutoCloseFailures(
+    { workspaceId: workspace.workspaceId, repoPath: workspace.repoPath },
+    board.kanbanTasks,
+  );
   const allSummaries = useAgentSessionSummaries();
   const summaries = useMemo(
     () => allSummaries.filter((summary) => summary.workspaceId === workspace.workspaceId),
@@ -117,9 +126,11 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
       activeContextOf: (taskId) => activeContextByTaskId.get(taskId),
       activityOf: (taskId) => taskActivityStateByTaskId.get(taskId) ?? "idle",
       mergedTargetOf: (taskId) => mergedTargetByTaskId.get(taskId),
+      autoCloseFailureOf: (taskId) => autoCloseFailureByTaskId.get(taskId),
     }),
     [
       mergedTargetByTaskId,
+      autoCloseFailureByTaskId,
       activeContextByTaskId,
       historicalSessionsByTaskId,
       taskActivityStateByTaskId,

@@ -1747,7 +1747,7 @@ describe("AppShell command palette", () => {
     const check = createDeferred<TaskMergeStatusSnapshot>();
     const calls: string[] = [];
     configurePaletteHost({
-      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
       taskMergeStatusCheck: async (scope) => {
         calls.push(scope.repoPath);
         return check.promise;
@@ -1777,7 +1777,12 @@ describe("AppShell command palette", () => {
         "true",
       );
       await act(async () =>
-        check.resolve({ workspaceId: "workspace-1", repoPath: "/repo", tasks: [] }),
+        check.resolve({
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          tasks: [],
+          autoCloseFailures: [],
+        }),
       );
       await waitFor(() =>
         expect(toastSuccess).toHaveBeenCalledWith(
@@ -1786,7 +1791,12 @@ describe("AppShell command palette", () => {
         ),
       );
     } finally {
-      check.resolve({ workspaceId: "workspace-1", repoPath: "/repo", tasks: [] });
+      check.resolve({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        tasks: [],
+        autoCloseFailures: [],
+      });
       toastLoading.mockRestore();
       toastSuccess.mockRestore();
     }
@@ -1795,11 +1805,11 @@ describe("AppShell command palette", () => {
   test("checks all open workspaces and keeps the toast when one check fails", async () => {
     const calls: string[] = [];
     configurePaletteHost({
-      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
       taskMergeStatusCheck: async (scope) => {
         calls.push(scope.repoPath);
         if (scope.repoPath === "/fairnest") throw new Error("Workspace removal is incomplete.");
-        return { ...scope, tasks: [] };
+        return { ...scope, tasks: [], autoCloseFailures: [] };
       },
     });
     const toastLoading = spyOn(toast, "loading").mockReturnValue("merge-check");

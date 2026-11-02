@@ -472,6 +472,35 @@ describe("KanbanTaskCard merged task branch", () => {
     expect(html).toMatch(/<button[^>]*>.*Close Task<\/button>/s);
   });
 
+  test("shows why the pull request sync could not close the task, and proposes Close Task", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      status: "human_review",
+      availableActions: ["human_approve", "close_task"],
+    });
+
+    const html = renderCardMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          autoCloseFailure: "Pull request merged, but the task did not close. A chat needs it.",
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onOpenSession: noop,
+          onPlan: noop,
+          onHumanApprove: noop,
+          onCloseTask: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("Pull request merged, but the task did not close. A chat needs it.");
+    expect(html).toMatch(/<button[^>]*>.*Close Task<\/button>/s);
+  });
+
   test("shows no merged badge for a task branch that is not merged", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",

@@ -81,7 +81,7 @@ const closeConfirmationHost = ({
         };
         // A failed later check keeps the last successful result.
         if (failure) status.failure = failure;
-        return { ...scope, tasks: [status] };
+        return { ...scope, tasks: [status], autoCloseFailures: [] };
       },
     },
   });

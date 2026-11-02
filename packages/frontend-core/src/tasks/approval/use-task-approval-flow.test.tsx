@@ -202,7 +202,7 @@ const registerDependencySpies = (): void => {
       agentDefaults: {},
     }),
     workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-    taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+    taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
   };
 };
 
@@ -1125,6 +1125,7 @@ describe("useTaskApprovalFlow", () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
     hostClientFakes.taskMergeStatusGet = async (scope) => ({
       ...scope,
+      autoCloseFailures: [],
       tasks: [
         {
           taskId: "TASK-1",

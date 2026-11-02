@@ -2222,7 +2222,7 @@ describe("createTaskService pull requests", () => {
       Effect.runPromise(
         service.repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" }),
       ),
-    ).resolves.toEqual({ ran: true, changedTaskIds: [] });
+    ).resolves.toEqual({ ran: true, changedTaskIds: [], autoCloseFailures: [] });
     expect(setPullRequestCalls).toEqual([]);
   });
   test("reports deduplicated changed task ids when a later pull request write fails", async () => {
@@ -2402,17 +2402,19 @@ describe("createTaskService pull requests", () => {
         ),
       );
       if (closure === "fails validation") {
+        // The sync keeps the merged pull request and reports the close failure of the task.
         expect(result).toMatchObject({
-          _tag: "Failure",
-          failure: {
-            changes: { taskIds: ["task-1"], removedTaskIds: [] },
-            failure: mutationFailure,
+          _tag: "Success",
+          success: {
+            ran: true,
+            changedTaskIds: ["task-1"],
+            autoCloseFailures: [{ taskId: "task-1", failure: mutationFailure }],
           },
         });
       } else {
         expect(result).toMatchObject({
           _tag: "Success",
-          success: { ran: true, changedTaskIds: ["task-1"] },
+          success: { ran: true, changedTaskIds: ["task-1"], autoCloseFailures: [] },
         });
       }
     },

@@ -56,7 +56,7 @@ const createLoadedConnection = () => {
       taskWorktreeCleanupImpactGet: async () => LOADED_IMPACT,
       terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
     },
   });
   const { queryClient } = connection;
@@ -87,6 +87,7 @@ const createLoadedConnection = () => {
   queryClient.setQueryData(taskMergeStatusQueryOptions(workspaceRefFixture("/repo")).queryKey, {
     workspaceId: "workspace-1",
     repoPath: "/repo",
+    autoCloseFailures: [],
     tasks: [],
   });
   queryClient.setQueryData(
@@ -321,7 +322,7 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: readImpact,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
       },
     });
     return render(
@@ -415,7 +416,7 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: stopImpactGet,
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
       },
     });
     const panel = (mode: TaskApprovalApprovalModalModel["mode"]) =>
@@ -470,11 +471,15 @@ describe("TaskApprovalModal", () => {
         taskWorktreeCleanupImpactGet: async () => readKeptWorktree(),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [notMerged] }),
+        taskMergeStatusGet: async (scope) => ({
+          ...scope,
+          tasks: [notMerged],
+          autoCloseFailures: [],
+        }),
         // The check finds the same result, so the card must not change at all.
         taskMergeStatusCheck: (scope) =>
           new Promise((resolve) => {
-            finishCheck = () => resolve({ ...scope, tasks: [notMerged] });
+            finishCheck = () => resolve({ ...scope, tasks: [notMerged], autoCloseFailures: [] });
           }),
       },
     });
@@ -535,7 +540,7 @@ describe("TaskApprovalModal", () => {
         }),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
         taskMergeStatusCheck: async () => {
           throw new Error("git fetch origin failed.");
         },
@@ -595,12 +600,14 @@ describe("TaskApprovalModal", () => {
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskMergeStatusGet: async (scope) => ({
           ...scope,
+          autoCloseFailures: [],
           tasks: [
             status({ kind: "not_merged", checkedAt, branchOid: "old-tip", unmergedCommitCount: 1 }),
           ],
         }),
         taskMergeStatusCheck: async (scope) => ({
           ...scope,
+          autoCloseFailures: [],
           tasks: [status({ kind: "merged", checkedAt, branchOid: "new-tip" })],
         }),
       },

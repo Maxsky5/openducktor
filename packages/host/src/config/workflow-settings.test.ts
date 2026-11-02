@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type codexRuntimeConfigSchema,
   globalConfigSchema,
+  notificationSettingsSchema,
   workflowDefinitionSchema,
   repoConfigSchema,
 } from "@openducktor/contracts";
@@ -98,6 +99,20 @@ describe("applyTaskWorkflowSettings", () => {
       { workflowId: review.definition.id, eventId: "reviewAccepted", actionIds: [] },
       { workflowId: review.definition.id, eventId: "reviewRejected", actionIds: ["startRevision"] },
     ]);
+  });
+
+  test("adds the default of a task notification that a saved config lacks", () => {
+    const saved = config();
+    const { "task.auto_close_blocked": _removed, ...kinds } = saved.notifications.kinds;
+    // A parse keeps the missing kind missing, as for a config file from before the kind.
+    const notifications = notificationSettingsSchema.parse({ ...saved.notifications, kinds });
+    const applied = applyTaskWorkflowSettings({ ...saved, notifications }, reviewWorkflows);
+
+    expect(applied.notifications.kinds["task.auto_close_blocked"]).toEqual({
+      enabled: true,
+      target: "both",
+      sound: "inherit",
+    });
   });
 
   test("rejects settings keys outside the workflow", () => {

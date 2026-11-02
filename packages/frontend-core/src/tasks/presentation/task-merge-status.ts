@@ -58,6 +58,27 @@ export const mergedTaskTarget = (
     ? mergeTargetLabel(status)
     : null;
 
+/**
+ * The reason of each task that the pull request sync could not close, by task ID. A task shows it
+ * only while it can still close, so a task that the user closed shows nothing.
+ */
+export const buildAutoCloseFailures = (
+  tasks: readonly Pick<TaskCard, "id" | "availableActions">[],
+  snapshot: TaskMergeStatusSnapshot | undefined,
+): ReadonlyMap<string, string> => {
+  const failures = new Map<string, string>();
+  if (!snapshot) return failures;
+  const closable = new Set(
+    tasks.filter((task) => task.availableActions.includes("close_task")).map((task) => task.id),
+  );
+  for (const { taskId, message } of snapshot.autoCloseFailures)
+    if (closable.has(taskId)) failures.set(taskId, autoCloseFailureText(message));
+  return failures;
+};
+
+export const autoCloseFailureText = (message: string): string =>
+  `Pull request merged, but the task did not close. ${message}`;
+
 /** The merged proposals of a task list, by task ID. */
 export const buildMergedTaskTargets = (
   tasks: readonly TaskCard[],

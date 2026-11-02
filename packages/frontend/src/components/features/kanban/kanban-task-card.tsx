@@ -61,6 +61,8 @@ type CardProps = {
   onResetImplementation?: (taskId: string) => void;
   /** The target that the task branch is merged into. The card then proposes Close Task. */
   mergedTarget?: string | undefined;
+  /** Why the pull request sync could not close the task. The card shows it and proposes Close Task. */
+  autoCloseFailure?: string | undefined;
   onCloseTask?: ((taskId: string) => void) | undefined;
 };
 
@@ -82,6 +84,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onHumanRequestChanges,
   onResetImplementation,
   mergedTarget,
+  autoCloseFailure,
   onCloseTask,
 }: CardProps): ReactElement {
   const isActive =
@@ -132,6 +135,11 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           <TaskMeta task={task} mergedTarget={mergedTarget} />
         )}
         <SessionStatusNotes taskSessions={taskSessions} />
+        {autoCloseFailure ? (
+          <p role="status" className="mt-1 break-words text-xs text-warning-muted">
+            {autoCloseFailure}
+          </p>
+        ) : null}
         <TaskActions
           task={task}
           taskSessions={taskSessions}
@@ -149,6 +157,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
           {...(onResetImplementation ? { onResetImplementation } : {})}
           mergedTarget={mergedTarget}
+          autoCloseFailure={autoCloseFailure}
           onCloseTask={onCloseTask}
         />
       </div>
@@ -307,6 +316,7 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
     previous.onHumanRequestChanges === next.onHumanRequestChanges &&
     previous.onResetImplementation === next.onResetImplementation &&
     previous.mergedTarget === next.mergedTarget &&
+    previous.autoCloseFailure === next.autoCloseFailure &&
     previous.onCloseTask === next.onCloseTask
   );
 }
@@ -642,6 +652,7 @@ function TaskActions({
   onResetImplementation,
   onCloseTask,
   mergedTarget,
+  autoCloseFailure,
   taskSessions,
   historicalSessions,
   hasActiveSession,
@@ -663,6 +674,7 @@ function TaskActions({
     taskActivityState,
     pendingState,
     mergedTarget,
+    autoCloseFailure,
   });
   const { primaryActiveSession, primarySessionIsWaitingInput } = footer;
   if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0) return null;

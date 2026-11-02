@@ -13,6 +13,7 @@ import {
 } from "../support/close-synced-merged-task";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
+  AutoCloseFailure,
   RepoPullRequestSyncResult,
   TaskService,
   TaskServiceError,
@@ -73,7 +74,7 @@ export const createTaskPullRequestSyncUseCases = ({
           workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
         });
-        const closureFailures: { taskId: string; failure: TaskServiceError }[] = [];
+        const closureFailures: AutoCloseFailure[] = [];
         for (const task of tasks) {
           const pullRequest = task.pullRequest;
           if (!pullRequest) {
@@ -148,9 +149,11 @@ export const createTaskPullRequestSyncUseCases = ({
           }
         }
 
-        const failure = syncedMergedTaskFailure(closureFailures);
-        if (failure) return yield* Effect.fail(failure);
-        return { ran: true, changedTaskIds: [...changedTaskIds] };
+        return {
+          ran: true,
+          changedTaskIds: [...changedTaskIds],
+          autoCloseFailures: closureFailures,
+        };
       },
     );
     return Effect.gen(function* () {
@@ -180,9 +183,10 @@ export const createTaskPullRequestSyncUseCases = ({
             Effect.fail(partialFailure.failure),
           ),
         );
-        return result.ran
-          ? { ok: true }
-          : { ok: false, reason: result.reason, message: result.message };
+        if (!result.ran) return { ok: false, reason: result.reason, message: result.message };
+        const failure = syncedMergedTaskFailure(result.autoCloseFailures);
+        if (failure) return yield* Effect.fail(failure);
+        return { ok: true };
       });
     },
     repoPullRequestSyncDetailed,

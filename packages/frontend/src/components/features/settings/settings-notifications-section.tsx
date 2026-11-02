@@ -1,5 +1,6 @@
 import {
   AGENT_NOTIFICATION_KIND_VALUES,
+  TASK_NOTIFICATION_KIND_VALUES,
   notificationCueSchema,
   notificationSoundSchema,
   type NotificationCue,
@@ -444,6 +445,14 @@ export function SettingsNotificationsSection({
       <NotificationKindGroup
         title="Workflow changes"
         kinds={BUILTIN_NOTIFICATION_KINDS}
+        settings={notifications}
+        disabled={disabled}
+        onUpdate={onUpdateNotifications}
+        onPreview={previewCue}
+      />
+      <NotificationKindGroup
+        title="Pull request sync"
+        kinds={TASK_NOTIFICATION_KIND_VALUES}
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}

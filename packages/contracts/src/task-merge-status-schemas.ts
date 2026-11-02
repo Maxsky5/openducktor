@@ -38,11 +38,24 @@ export const taskMergeStatusSchema = z.object({
 });
 export type TaskMergeStatus = z.infer<typeof taskMergeStatusSchema>;
 
+/**
+ * A task whose pull request merged, but the pull request sync could not close it. The host keeps
+ * it in memory until a sync closes the task or no longer fails.
+ */
+export const taskAutoCloseFailureSchema = z.object({
+  taskId: z.string(),
+  message: z.string(),
+  failedAt: z.string(),
+});
+export type TaskAutoCloseFailure = z.infer<typeof taskAutoCloseFailureSchema>;
+
 /** The merge detection state of all candidate tasks of one workspace. */
 export const taskMergeStatusSnapshotSchema = z.object({
   workspaceId: z.string().min(1),
   repoPath: z.string(),
   tasks: z.array(taskMergeStatusSchema),
+  /** Hosts older than this field omit it. */
+  autoCloseFailures: z.array(taskAutoCloseFailureSchema).default([]),
 });
 export type TaskMergeStatusSnapshot = z.infer<typeof taskMergeStatusSnapshotSchema>;
 

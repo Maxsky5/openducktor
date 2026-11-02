@@ -242,7 +242,8 @@ describe("committed task cards", () => {
     const events: ExternalTaskSyncEvent[] = [];
     const sync = createTaskSyncServiceForTest({
       taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+        repoPullRequestSyncDetailed: () =>
+          Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
       },
       workspaceSettingsService: { listWorkspaces: () => Effect.succeed([syncWorkspace()]) },
       eventBus: { publish: (event) => events.push(event) },

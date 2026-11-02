@@ -1384,8 +1384,10 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.taskMergeStatusGet(workspace)).toEqual(snapshot);
-    expect(await client.taskMergeStatusCheck(workspace)).toEqual(snapshot);
+    // A host older than the close failures omits them, so the client reads an empty list.
+    const parsed = { ...snapshot, autoCloseFailures: [] };
+    expect(await client.taskMergeStatusGet(workspace)).toEqual(parsed);
+    expect(await client.taskMergeStatusCheck(workspace)).toEqual(parsed);
     expect(calls.map((call) => call.command)).toEqual([
       "task_merge_status_get",
       "task_merge_status_check",

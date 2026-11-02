@@ -7,6 +7,7 @@ import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import {
   createTaskSyncServiceForTest,
   createEventBus,
+  noMergeDetection,
   task,
 } from "./task-sync-service.test-support";
 
@@ -30,7 +31,8 @@ describe("task mutation gate and pull request sync", () => {
     const service = createTaskSyncServiceForTest({
       eventBus,
       taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+        repoPullRequestSyncDetailed: () =>
+          Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
         listTasks: (input) => Effect.succeed(input.doneVisibleDays === undefined ? [closed] : []),
       },
       workspaceSettingsService: { listWorkspaces: () => Effect.succeed([workspace("/repo")]) },
@@ -60,7 +62,7 @@ describe("task mutation gate and pull request sync", () => {
           repoPullRequestSyncDetailed: () =>
             Effect.sync(() => {
               attempts++;
-              return { ran: true, changedTaskIds: [] };
+              return { ran: true, changedTaskIds: [], autoCloseFailures: [] };
             }),
         },
         workspaceSettingsService: {
@@ -107,7 +109,7 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed: () =>
           Effect.sync(() => {
             attempts++;
-            return { ran: true, changedTaskIds: [] };
+            return { ran: true, changedTaskIds: [], autoCloseFailures: [] };
           }),
       },
       workspaceSettingsService: {
@@ -161,7 +163,7 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed: () =>
           Effect.sync(() => {
             attempts++;
-            return { ran: true, changedTaskIds: [] };
+            return { ran: true, changedTaskIds: [], autoCloseFailures: [] };
           }),
       },
       workspaceSettingsService: {
@@ -185,6 +187,7 @@ describe("task mutation gate and pull request sync", () => {
     expect(await Effect.runPromise(service.syncRepoPullRequests("/repo", "repo"))).toEqual({
       ran: true,
       changedTaskIds: [],
+      autoCloseFailures: [],
     });
     expect(attempts).toBe(1);
   });
@@ -252,7 +255,8 @@ describe("task mutation gate and pull request sync", () => {
           }),
       },
       taskService: {
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+        repoPullRequestSyncDetailed: () =>
+          Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
       },
       workspaceSettingsService: {
         listWorkspaces: () => Effect.succeed([workspace("/repo")]),
@@ -263,11 +267,80 @@ describe("task mutation gate and pull request sync", () => {
       {
         ran: true,
         changedTaskIds: [],
+        autoCloseFailures: [],
       },
     );
 
     expect(events).toEqual([]);
     expect(reports).toEqual([]);
+  });
+
+  test("keeps the merged tasks that a sync cannot close, and notifies each one once", async () => {
+    const { eventBus, events } = createEventBus();
+    const blocked = new HostOperationError({
+      operation: "close",
+      message: "Saved chats work in a removed worktree.",
+    });
+    const recorded: unknown[] = [];
+    const notified: unknown[] = [];
+    let known = false;
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: {
+        repoPullRequestSyncDetailed: () =>
+          Effect.succeed({
+            ran: true,
+            changedTaskIds: ["task-1"],
+            autoCloseFailures: [{ taskId: "task-1", failure: blocked }],
+          }),
+      },
+      mergeDetection: {
+        ...noMergeDetection,
+        recordAutoCloseFailures: (scope, failures) =>
+          Effect.sync(() => {
+            recorded.push({ scope, failures });
+            const failure = { ...failures[0]!, failedAt: "2026-11-03T10:00:00.000Z" };
+            // Only the first failure of a task is new.
+            const fresh = known ? [] : [failure];
+            known = true;
+            return fresh;
+          }),
+      },
+      notifyAutoCloseBlocked: (scope, failure) => notified.push({ scope, failure }),
+      workspaceSettingsService: {
+        listWorkspaces: () => Effect.succeed([workspace("/repo")]),
+      },
+    });
+
+    for (let run = 0; run < 2; run += 1) {
+      // The sync still fails, so a manual sync shows why.
+      expect(
+        await Effect.runPromise(service.syncRepoPullRequests("/repo", "repo").pipe(Effect.flip)),
+      ).toBe(blocked);
+    }
+
+    // The merged pull request is saved, so each sync publishes the task.
+    expect(events).toHaveLength(2);
+    expect(recorded).toEqual([
+      {
+        scope: { workspaceId: "repo", repoPath: "/repo" },
+        failures: [{ taskId: "task-1", message: "Saved chats work in a removed worktree." }],
+      },
+      {
+        scope: { workspaceId: "repo", repoPath: "/repo" },
+        failures: [{ taskId: "task-1", message: "Saved chats work in a removed worktree." }],
+      },
+    ]);
+    expect(notified).toEqual([
+      {
+        scope: { workspaceId: "repo", repoPath: "/repo" },
+        failure: {
+          taskId: "task-1",
+          message: "Saved chats work in a removed worktree.",
+          failedAt: "2026-11-03T10:00:00.000Z",
+        },
+      },
+    ]);
   });
 
   test.each([true, false])(
@@ -281,7 +354,7 @@ describe("task mutation gate and pull request sync", () => {
           repoPullRequestSyncDetailed(input) {
             return Effect.sync(() => {
               calls.push(input);
-              return { ran: true, changedTaskIds: ["task-1", "task-2"] };
+              return { ran: true, changedTaskIds: ["task-1", "task-2"], autoCloseFailures: [] };
             });
           },
         },
@@ -324,16 +397,17 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed: ({ repoPath }) =>
           Effect.sync(() => {
             steps.push(`sync:${repoPath}`);
-            return { ran: true, changedTaskIds: [] };
+            return { ran: true, changedTaskIds: [], autoCloseFailures: [] };
           }),
       },
       mergeDetection: {
+        ...noMergeDetection,
         runPass: ({ workspaceId, repoPath }) =>
           Effect.suspend(() => {
             steps.push(`detect:${repoPath}`);
             return repoPath === "/first"
               ? Effect.fail(new HostOperationError({ operation: "test", message: "Git failed." }))
-              : Effect.succeed({ workspaceId, repoPath, tasks: [] });
+              : Effect.succeed({ workspaceId, repoPath, tasks: [], autoCloseFailures: [] });
           }),
       },
       workspaceSettingsService: {
@@ -358,14 +432,15 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed: ({ repoPath }) =>
           Effect.sync(() => {
             steps.push(`sync:${repoPath}`);
-            return { ran: true, changedTaskIds: [] };
+            return { ran: true, changedTaskIds: [], autoCloseFailures: [] };
           }),
       },
       mergeDetection: {
+        ...noMergeDetection,
         runPass: ({ workspaceId, repoPath }) =>
           Effect.sync(() => {
             steps.push(`detect:${repoPath}`);
-            return { workspaceId, repoPath, tasks: [] };
+            return { workspaceId, repoPath, tasks: [], autoCloseFailures: [] };
           }),
       },
       workspaceSettingsService: {
@@ -523,7 +598,7 @@ describe("task mutation gate and pull request sync", () => {
                     message: "provider unavailable",
                   });
                 }
-                return { ran: true, changedTaskIds: ["task-2"] };
+                return { ran: true, changedTaskIds: ["task-2"], autoCloseFailures: [] };
               }),
           },
           workspaceSettingsService: {
@@ -567,7 +642,7 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed(input) {
           return Effect.sync(() => {
             calls.push(input);
-            return { ran: true, changedTaskIds: [] };
+            return { ran: true, changedTaskIds: [], autoCloseFailures: [] };
           });
         },
       },
@@ -715,7 +790,7 @@ describe("task mutation gate and pull request sync", () => {
           onBackgroundFailure: () => Effect.void,
           taskService: {
             repoPullRequestSyncDetailed() {
-              return Effect.succeed({ ran: true, changedTaskIds: [] });
+              return Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] });
             },
           },
           workspaceSettingsService: {
@@ -780,7 +855,7 @@ describe("task mutation gate and pull request sync", () => {
             }),
           taskService: {
             repoPullRequestSyncDetailed() {
-              return Effect.succeed({ ran: true, changedTaskIds: [] });
+              return Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] });
             },
           },
           workspaceSettingsService: {
@@ -842,7 +917,7 @@ describe("task mutation gate and pull request sync", () => {
                   yield* Deferred.succeed(syncStarted, undefined);
                   yield* Deferred.await(releaseSync);
                   yield* Deferred.succeed(syncFinished, undefined);
-                  return { ran: true, changedTaskIds: ["task-1"] };
+                  return { ran: true, changedTaskIds: ["task-1"], autoCloseFailures: [] };
                 }),
               );
             },

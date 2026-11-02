@@ -7,7 +7,10 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useTasksState, useWorkspaceState } from "@/state";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
 import { showsHorizontalScrollbars } from "@/lib/horizontal-scrollbars";
-import { useMergedTaskTargets } from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
+import {
+  useAutoCloseFailures,
+  useMergedTaskTargets,
+} from "@openducktor/frontend-core/tasks/board/use-merged-task-targets";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardData } from "@openducktor/frontend-core/tasks/board/use-kanban-board-data";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
@@ -87,6 +90,7 @@ export function useKanbanPageModels({
     void refreshTasks();
   }, [refreshTasks]);
   const mergedTargetByTaskId = useMergedTaskTargets(activeWorkspace, board.kanbanTasks);
+  const autoCloseFailureByTaskId = useAutoCloseFailures(activeWorkspace, board.kanbanTasks);
   const { onConfirmTaskAction } = actions;
   const onCloseTask = useCallback(
     (taskId: string): void => onConfirmTaskAction(taskId, "close"),
@@ -104,6 +108,7 @@ export function useKanbanPageModels({
     filter,
     historicalSessionsByTaskId: board.historicalSessionsByTaskId,
     mergedTargetByTaskId,
+    autoCloseFailureByTaskId,
     pendingState: actions.kanbanPendingState,
     taskSessionsByTaskId: actions.taskSessionsByTaskId,
     activeTaskSessionContextByTaskId: actions.activeTaskSessionContextByTaskId,

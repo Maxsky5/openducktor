@@ -4,6 +4,7 @@ import {
   builtinRoleId,
 } from "@openducktor/workflows";
 import type { NotificationKind, NotificationOccurrence } from "@openducktor/contracts";
+import { NOTIFICATION_KIND_LABELS } from "./catalogue";
 
 export type NotificationCopy = {
   title: string;
@@ -30,7 +31,11 @@ export const buildNotificationCopy = (occurrence: NotificationOccurrence): Notif
   const agentLabel = occurrence.role
     ? BUILTIN_ROLE_LABELS[builtinRoleId(occurrence.role)]
     : occurrence.sessionLabel;
-  const label = workflowCopy?.title ?? toPlainNotificationText(agentLabel ?? "Agent");
+  const label =
+    workflowCopy?.title ??
+    (occurrence.kind === "task.auto_close_blocked"
+      ? NOTIFICATION_KIND_LABELS["task.auto_close_blocked"]
+      : toPlainNotificationText(agentLabel ?? "Agent"));
   const taskTitle = toPlainNotificationText(occurrence.task?.title ?? "");
   const body =
     workflowCopy?.body ??

@@ -478,7 +478,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
-            return { ran: true as const, changedTaskIds: [] };
+            return { ran: true as const, changedTaskIds: [], autoCloseFailures: [] };
           },
           catch: (cause) =>
             new HostOperationError({

@@ -176,6 +176,7 @@ function renderColumn(column: Column, model: KanbanPageContentModel): ReactEleme
       taskSessionsByTaskId={model.taskSessionsByTaskId}
       historicalSessionsByTaskId={model.historicalSessionsByTaskId}
       mergedTargetByTaskId={model.mergedTargetByTaskId}
+      autoCloseFailureByTaskId={model.autoCloseFailureByTaskId}
       activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
       taskActivityStateByTaskId={model.taskActivityStateByTaskId}
       onOpenDetails={model.onOpenDetails}

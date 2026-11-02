@@ -144,6 +144,8 @@ A saved Claude chat whose native history the host cannot read only warns in a co
 
 Pull request sync closes a merged task without a confirmation. It also blocks on a Claude history owner, so the user must close that task. A task that cannot close does not stop the sync of the other tasks. The sync then fails with the reason for each task.
 
+The host keeps each task that the last pull request sync could not close in memory, and does not save it. The merge status snapshot lists these tasks in `autoCloseFailures`. The task card shows the reason and proposes Close Task. The first failure of a task since the host started sends one `task.auto_close_blocked` notification, which opens the task on the board. A later sync that fails again sends no notification. A sync that closes the task, or no longer fails, removes the failure.
+
 A worktree that no longer exists has nothing to remove, so its owners do not count.
 
 ## Merge detection

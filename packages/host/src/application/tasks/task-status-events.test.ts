@@ -207,7 +207,7 @@ test.each([false, true])(
             repoPath,
             taskId: task.id,
             status: "ready_for_dev",
-          }).pipe(Effect.as({ ran: true, changedTaskIds: [task.id] })),
+          }).pipe(Effect.as({ ran: true, changedTaskIds: [task.id], autoCloseFailures: [] })),
         transitionTask: (input) =>
           Effect.gen(function* () {
             const result = yield* transition(store, input);
@@ -392,7 +392,7 @@ test("captures transitions made by pull request synchronization", async () => {
     const { sync, events, failures } = createServices(harness, {
       repoPullRequestSyncDetailed: () =>
         transition(store, { workspaceId, repoPath, taskId: task.id, status: "closed" }).pipe(
-          Effect.as({ ran: true, changedTaskIds: [task.id] }),
+          Effect.as({ ran: true, changedTaskIds: [task.id], autoCloseFailures: [] }),
         ),
     });
     await Effect.runPromise(sync.syncRepoPullRequests(repoPath, workspaceId));

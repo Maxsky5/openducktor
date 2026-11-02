@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
-import { taskMergeCheckResultText } from "./task-merge-status";
+import { buildAutoCloseFailures, taskMergeCheckResultText } from "./task-merge-status";
 
 const status = (overrides: Partial<TaskMergeStatus> = {}): TaskMergeStatus => ({
   taskId: "task-1",
@@ -13,12 +13,18 @@ const status = (overrides: Partial<TaskMergeStatus> = {}): TaskMergeStatus => ({
 describe("taskMergeCheckResultText", () => {
   test("counts the merged task branches", () => {
     expect(
-      taskMergeCheckResultText({ workspaceId: "workspace-1", repoPath: "/repo", tasks: [] }),
+      taskMergeCheckResultText({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        tasks: [],
+        autoCloseFailures: [],
+      }),
     ).toBe("No task branch is merged.");
     expect(
       taskMergeCheckResultText({
         workspaceId: "workspace-1",
         repoPath: "/repo",
+        autoCloseFailures: [],
         tasks: [status(), status({ taskId: "t2" })],
       }),
     ).toBe("2 task branches are merged. Close the tasks from the board.");
@@ -35,8 +41,36 @@ describe("taskMergeCheckResultText", () => {
       taskMergeCheckResultText({
         workspaceId: "workspace-1",
         repoPath: "/repo",
+        autoCloseFailures: [],
         tasks: [status(), failed],
       }),
     ).toBe("1 task branch is merged. Close the task from the board. 1 check failed.");
+  });
+});
+
+describe("buildAutoCloseFailures", () => {
+  test("shows the failure only for a task that can still close", () => {
+    const failure = (taskId: string) => ({
+      taskId,
+      message: "Archive the chat first.",
+      failedAt: "2026-11-03T10:00:00.000Z",
+    });
+
+    const failures = buildAutoCloseFailures(
+      [
+        { id: "open", availableActions: ["close_task"] },
+        { id: "closed", availableActions: [] },
+      ],
+      {
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        tasks: [],
+        autoCloseFailures: [failure("open"), failure("closed"), failure("unknown")],
+      },
+    );
+
+    expect([...failures]).toEqual([
+      ["open", "Pull request merged, but the task did not close. Archive the chat first."],
+    ]);
   });
 });

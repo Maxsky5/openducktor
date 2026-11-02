@@ -278,8 +278,10 @@ export type TaskServiceWithMutationProgress = Omit<
     input: UpdateTaskInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
 };
+/** A merged task that the pull request sync could not close. */
+export type AutoCloseFailure = { taskId: string; failure: TaskServiceError };
 export type RepoPullRequestSyncResult =
-  | { ran: true; changedTaskIds: string[] }
+  | { ran: true; changedTaskIds: string[]; autoCloseFailures: AutoCloseFailure[] }
   | { ran: false; changedTaskIds: []; reason: RepoPullRequestSyncSkipReason; message: string };
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type {

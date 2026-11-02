@@ -536,7 +536,7 @@ describe("createOdtMcpBridgeService", () => {
         });
       },
       syncRepoPullRequests() {
-        return Effect.succeed({ ran: true, changedTaskIds: [] });
+        return Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] });
       },
     };
     const service = createOdtMcpBridgeServiceForTest({

@@ -32,7 +32,7 @@ describe("useTaskCloseConfirmDialog", () => {
     { choice: false, mergePending: true },
   ])("only waits for required close data: %j", async ({ choice, mergePending }) => {
     const settings = createDeferred<ReturnType<typeof createSettingsSnapshotFixture>>();
-    const mergeStatus = createDeferred<WorkspaceRef & { tasks: [] }>();
+    const mergeStatus = createDeferred<WorkspaceRef & { tasks: []; autoCloseFailures: [] }>();
     const connection = createTestClientConnection({
       client: {
         taskWorktreeCleanupImpactGet: async () => ({
@@ -46,7 +46,7 @@ describe("useTaskCloseConfirmDialog", () => {
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskMergeStatusGet: async (scope: WorkspaceRef) =>
-          mergePending ? mergeStatus.promise : { ...scope, tasks: [] },
+          mergePending ? mergeStatus.promise : { ...scope, tasks: [], autoCloseFailures: [] },
         workspaceGetSettingsSnapshot: () => settings.promise,
       },
     });
@@ -78,6 +78,7 @@ describe("useTaskCloseConfirmDialog", () => {
         workspaceId: TEST_ACTIVE_WORKSPACE.workspaceId,
         repoPath: TEST_ACTIVE_WORKSPACE.repoPath,
         tasks: [],
+        autoCloseFailures: [],
       });
       await harness.unmount();
       await connection.dispose();
@@ -98,7 +99,11 @@ describe("useTaskCloseConfirmDialog", () => {
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskWorktreeOwnersGet: () => owners.promise,
-        taskMergeStatusGet: async (scope: WorkspaceRef) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope: WorkspaceRef) => ({
+          ...scope,
+          tasks: [],
+          autoCloseFailures: [],
+        }),
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       },
     });
@@ -149,7 +154,11 @@ describe("useTaskCloseConfirmDialog", () => {
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 1 }),
-        taskMergeStatusGet: async (scope: WorkspaceRef) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope: WorkspaceRef) => ({
+          ...scope,
+          tasks: [],
+          autoCloseFailures: [],
+        }),
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       },
     });

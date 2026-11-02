@@ -200,7 +200,8 @@ const createDatabaseSync = (
         harness.store
           .listTasks(input)
           .pipe(Effect.map((records) => enrichTasks(builtinTaskWorkflows, records))),
-      repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      repoPullRequestSyncDetailed: () =>
+        Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
     },
     mergeDetection: noMergeDetection,
     taskEventStream: {

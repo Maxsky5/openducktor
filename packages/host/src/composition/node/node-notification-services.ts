@@ -35,6 +35,8 @@ export const createNodeNotificationServices = (
       service?.acceptLive(...args),
     acceptTask: (...args: Parameters<NotificationService["acceptTask"]>) =>
       service?.acceptTask(...args),
+    acceptAutoCloseBlocked: (...args: Parameters<NotificationService["acceptAutoCloseBlocked"]>) =>
+      service?.acceptAutoCloseBlocked(...args),
     attach(
       dependencies: Pick<
         Parameters<typeof createNotificationService>[0],

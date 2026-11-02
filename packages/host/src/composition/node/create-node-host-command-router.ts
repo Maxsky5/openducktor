@@ -274,6 +274,7 @@ export const assembleNodeEffectHostCommandRouter = (
     },
     eventServiceInput: {
       acceptNotificationInput: notificationComposition.acceptTask,
+      notifyAutoCloseBlocked: notificationComposition.acceptAutoCloseBlocked,
       observeStatusChanges: (change) => autopilot?.observe(change),
       lifecycleLogger,
       onBackgroundFailure,

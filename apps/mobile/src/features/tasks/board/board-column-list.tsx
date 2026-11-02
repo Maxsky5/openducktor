@@ -60,6 +60,7 @@ export const BoardColumnList = memo(function BoardColumnList({
           activeSessionRole={sessions.activeContextOf(item.id)?.role}
           taskActivityState={sessions.activityOf(item.id)}
           mergedTarget={sessions.mergedTargetOf(item.id)}
+          autoCloseFailure={sessions.autoCloseFailureOf(item.id)}
           selected={item.id === selectedTaskId}
           onOpenDetails={onOpenDetails}
           onAction={onAction}
