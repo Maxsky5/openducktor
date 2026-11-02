@@ -309,7 +309,7 @@ function ForkFooter({
   onClose: () => void;
 }): ReactElement {
   return (
-    <DialogFooter className="mt-0 flex-col border-t border-border px-6 py-4">
+    <DialogFooter className="mt-0 flex-col border-t border-border px-6 py-4 sm:flex-col">
       {error ? (
         <p role="alert" className="break-words text-sm text-destructive">
           {error.message}

@@ -235,6 +235,25 @@ test("Fork chat opens and keeps worktree edits while repository defaults load", 
   }
 });
 
+test("keeps the fork footer in one column so its actions separate", async () => {
+  const { view } = await renderFork(async () => {
+    throw new Error("Forking is not part of the layout check");
+  });
+  try {
+    const cancel = view.getByRole("button", { name: "Cancel" });
+    const submit = view.getByRole("button", { name: "Fork chat" });
+    const row = cancel.parentElement;
+    expect(row).toBe(submit.parentElement);
+    const footer = row?.parentElement;
+    expect(footer?.getAttribute("data-slot")).toBe("dialog-footer");
+    expect(footer?.className).toContain("flex-col");
+    expect(footer?.className).toContain("sm:flex-col");
+    expect(footer?.className).not.toContain("sm:flex-row");
+  } finally {
+    view.unmount();
+  }
+});
+
 test("opening a saved failed same-folder fork retains feedback and session inspection", async () => {
   const child = { ...source, id: "saved-child", externalSessionId: "native-child" };
   const fork = mock(
