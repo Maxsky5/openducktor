@@ -1,5 +1,5 @@
-import { useIsFocused } from "expo-router";
-import { memo, type ReactElement, useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { type LayoutChangeEvent, View } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -29,6 +29,10 @@ type Size = { width: number; height: number };
  * segments that follow the edge. Only their transforms change on each frame, on the UI thread,
  * so the ray draws no picture again. It runs only while its screen has focus. With reduced
  * motion, the ray stays still, as on desktop.
+ *
+ * A blur stops the ray and a focus starts it again, with no render. A sheet that opens or closes
+ * over the screen then mounts no segments: React Native shows the sheet only after the
+ * JavaScript work of that change ends.
  */
 export const BorderRay = memo(function BorderRay({
   color,
@@ -40,8 +44,7 @@ export const BorderRay = memo(function BorderRay({
   radius: number;
   turnMs?: number | undefined;
   strokeWidth?: number | undefined;
-}): ReactElement | null {
-  const focused = useIsFocused();
+}): ReactElement {
   const [size, setSize] = useState<Size | null>(null);
   const onLayout = (event: LayoutChangeEvent): void => {
     const { width, height } = event.nativeEvent.layout;
@@ -51,7 +54,6 @@ export const BorderRay = memo(function BorderRay({
         : { width, height },
     );
   };
-  if (!focused) return null;
   return (
     <View
       style={styles.fill}
@@ -85,18 +87,22 @@ function RaySegments({
 }): ReactElement {
   const reducedMotion = useReducedMotion();
   const head = useSharedValue(0);
-  useEffect(() => {
-    head.set(0);
-    if (reducedMotion) return;
-    head.set(
-      withRepeat(
-        withTiming(path.perimeter, { duration: turnMs, easing: Easing.linear }),
-        -1,
-        false,
-      ),
-    );
-    return () => cancelAnimation(head);
-  }, [head, path.perimeter, reducedMotion, turnMs]);
+  useFocusEffect(
+    useCallback(() => {
+      // The ray starts again at the start of the edge. Reading where it stopped would make the
+      // JavaScript thread wait for the UI thread, which is busy while a sheet closes.
+      head.set(0);
+      if (reducedMotion) return;
+      head.set(
+        withRepeat(
+          withTiming(path.perimeter, { duration: turnMs, easing: Easing.linear }),
+          -1,
+          false,
+        ),
+      );
+      return () => cancelAnimation(head);
+    }, [head, path.perimeter, reducedMotion, turnMs]),
+  );
   const count = Math.min(MAX_SEGMENTS, Math.max(1, Math.ceil(path.rayLength / SEGMENT_LENGTH)));
   const step = path.rayLength / count;
   const segments = useMemo(() => Array.from({ length: count }, (_, index) => index), [count]);

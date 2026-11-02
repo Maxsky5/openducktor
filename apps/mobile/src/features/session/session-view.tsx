@@ -19,7 +19,7 @@ import { SessionLoaders } from "./session-loaders";
 import { useFocusPendingInput, useSessionTarget } from "./session-target";
 import { LiveSessionTranscript, ReadOnlySessionTranscript } from "./session-transcript-source";
 import { createJumpToLatestSignal } from "./transcript/jump-to-latest-signal";
-import { usePublishVisibleSession } from "./use-publish-visible-session";
+import { PublishVisibleSession } from "./publish-visible-session";
 import { useSessionFork } from "./fork/session-fork";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { StartupTrace } from "@/features/session-startup/startup-trace";
@@ -47,7 +47,6 @@ export const SessionView = memo(function SessionView(): ReactElement {
   const compact = useCompactHeight();
   const side = wide || compact;
   const [latestSignal] = useState(createJumpToLatestSignal);
-  usePublishVisibleSession(target);
   const { workspaceId } = workspace;
   const openSubagent = useCallback(
     (identity: AgentSessionIdentity) =>
@@ -59,6 +58,7 @@ export const SessionView = memo(function SessionView(): ReactElement {
 
   return (
     <Screen>
+      <PublishVisibleSession target={target} />
       <View style={styles.row}>
         <View style={styles.main}>
           <SessionHeader showsRail={!side} />
