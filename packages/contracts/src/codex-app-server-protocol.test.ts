@@ -715,6 +715,45 @@ describe("Codex app-server protocol", () => {
     ).toBe(false);
   });
 
+  test.each([
+    "rateLimitExceeded",
+    "flexUnavailable",
+    "modelNotFound",
+    "policyCapacityUnavailable",
+    "tooManyDenials",
+  ])("preserves Codex 0.166.0 failed-turn error %s", (codexErrorInfo) => {
+    const notification = {
+      method: "turn/completed",
+      params: {
+        threadId: "child-thread",
+        turn: {
+          id: "turn-1",
+          status: "failed",
+          items: [],
+          itemsView: "full",
+          startedAt: null,
+          completedAt: null,
+          durationMs: null,
+          error: { message: "Native turn failure", codexErrorInfo, additionalDetails: null },
+        },
+      },
+    };
+
+    expect(codexAppServerRuntimeNotificationSchema.parse(notification)).toEqual(notification);
+    expect(
+      codexAppServerRuntimeNotificationSchema.safeParse({
+        ...notification,
+        params: {
+          ...notification.params,
+          turn: {
+            ...notification.params.turn,
+            error: { ...notification.params.turn.error, codexErrorInfo: "unknownError" },
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("parses the supported turn diff notification payload", () => {
     expect(
       codexAppServerRuntimeNotificationSchema.parse({
