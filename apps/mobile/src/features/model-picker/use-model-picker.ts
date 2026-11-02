@@ -33,21 +33,6 @@ export type ModelPicker = {
   rows: ModelPickerListRow[];
 };
 
-/** The selection as a picker value, with a saved alias resolved to its catalog model. */
-const selectedPickerValue = (
-  runtimes: readonly ModelPickerRuntime[],
-  selection: AgentModelSelection | null,
-  fallbackRuntimeKind: RuntimeKind | null,
-): ModelPickerValue | null => {
-  // A session selection can omit its runtime. It then belongs to the one runtime of the picker.
-  const runtimeKind = selection?.runtimeKind ?? fallbackRuntimeKind;
-  if (!selection || !runtimeKind) return null;
-  const runtime = runtimes.find((entry) => entry.descriptor.kind === runtimeKind);
-  const catalog = selectableModelPickerCatalog(runtime?.resource);
-  const resolved = catalog ? resolveSavedModelAlias(catalog, selection) : selection;
-  return { runtimeKind, providerId: resolved.providerId, modelId: resolved.modelId };
-};
-
 /**
  * The state of a model picker, with the desktop rules: it opens on Favorites when a runtime has a
  * favorite model, else on the runtime of the selection. A search covers every runtime that the
@@ -67,7 +52,6 @@ export function useModelPicker({
   lock: ModelPickerLock | null;
 }): ModelPicker {
   const lockedRuntimeKind = lock?.runtimeKind ?? null;
-  const singleRuntimeKind = runtimes.length === 1 ? (runtimes[0]?.descriptor.kind ?? null) : null;
   const selectionRuntimeKind = selection?.runtimeKind ?? null;
   const [state, setState] = useState(() => ({
     visible,
@@ -113,11 +97,11 @@ export function useModelPicker({
     selectionRuntimeKind,
   });
   if (shownView !== view) setView(shownView);
-  const selectedValue = useMemo(
-    () => selectedPickerValue(runtimes, selection, lockedRuntimeKind ?? singleRuntimeKind),
-    [lockedRuntimeKind, runtimes, selection, singleRuntimeKind],
-  );
+  // Forms mount their picker while it is closed. Build its list only when first needed, then
+  // keep it while an iOS sheet slides out.
+  const needsRows = visible || state.prepared;
   const rows = useMemo(() => {
+    if (!needsRows) return [];
     const items = buildModelPickerItems({
       runtimes,
       favorites,
@@ -125,8 +109,9 @@ export function useModelPicker({
       searchQuery: query,
       lockedRuntimeKind,
     });
+    const selectedValue = selectedPickerValue(runtimes, selection, lockedRuntimeKind);
     return buildModelPickerRows({ items, view, searching, selectedValue });
-  }, [favorites, lockedRuntimeKind, query, runtimes, searching, selectedValue, view]);
+  }, [favorites, lockedRuntimeKind, needsRows, query, runtimes, searching, selection, view]);
   const shownRuntimes = useMemo(
     () =>
       runtimes.filter((runtime) => {
@@ -154,3 +139,22 @@ export function useModelPicker({
     rows,
   };
 }
+
+/** The selection as a picker value, with a saved alias resolved to its catalog model. */
+const selectedPickerValue = (
+  runtimes: readonly ModelPickerRuntime[],
+  selection: AgentModelSelection | null,
+  lockedRuntimeKind: RuntimeKind | null,
+): ModelPickerValue | null => {
+  if (!selection) return null;
+  // A session selection can omit its runtime. It then belongs to the one runtime of the picker.
+  const runtimeKind =
+    selection.runtimeKind ??
+    lockedRuntimeKind ??
+    (runtimes.length === 1 ? runtimes[0]?.descriptor.kind : null);
+  if (!runtimeKind) return null;
+  const runtime = runtimes.find((entry) => entry.descriptor.kind === runtimeKind);
+  const catalog = selectableModelPickerCatalog(runtime?.resource);
+  const resolved = catalog ? resolveSavedModelAlias(catalog, selection) : selection;
+  return { runtimeKind, providerId: resolved.providerId, modelId: resolved.modelId };
+};

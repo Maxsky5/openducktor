@@ -241,7 +241,7 @@ const openCreated = ({
 
 /** Back and swipe keep pending starts open and ask before discarding filled choices. */
 const useClose = (edited: boolean, running: boolean) => {
-  const router = useRouter();
+  const navigation = useNavigation();
   const confirmDiscard = useConfirmDiscard();
   const [closing, setClosing] = useState(false);
   const closed = useRef(false);
@@ -253,8 +253,8 @@ const useClose = (edited: boolean, running: boolean) => {
     closed.current = true;
     setClosing(true);
     allowRemoval();
-    router.back();
-  }, [allowRemoval, router]);
+    navigation.goBack();
+  }, [allowRemoval, navigation]);
   const requestClose = useCallback(() => {
     if (running) return;
     if (!edited) {

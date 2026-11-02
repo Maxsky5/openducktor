@@ -8,15 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Modal, Pressable, View } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { ModalFeedbackHost } from "@/feedback/feedback-host";
 import { sansWeight } from "@/theme/tokens";
 import { Button } from "./button";
 import { createQuestionSlot } from "./confirm-question";
 import type { IconName } from "./icon";
 import { Text } from "./text";
+import { ModalWindow } from "./modal-window";
 
 type ConfirmOptions = {
   title: string;
@@ -75,7 +74,7 @@ export function ConfirmDialogHost({
   return (
     <Context value={confirm}>
       {children}
-      <Modal
+      <ModalWindow
         visible={question !== null}
         transparent
         animationType="fade"
@@ -83,18 +82,8 @@ export function ConfirmDialogHost({
         navigationBarTranslucent
         onRequestClose={() => answer(false)}
       >
-        {/* A modal is its own native window, so its buttons need their own gesture root. */}
-        <GestureHandlerRootView style={styles.fill}>
-          {/* A closing dialog gives its toasts back to the root at once, so they do not fade out
-              with its window. */}
-          {question ? (
-            <>
-              <ConfirmDialog question={question} onAnswer={answer} />
-              <ModalFeedbackHost />
-            </>
-          ) : null}
-        </GestureHandlerRootView>
-      </Modal>
+        {question ? <ConfirmDialog question={question} onAnswer={answer} /> : null}
+      </ModalWindow>
     </Context>
   );
 }
@@ -148,7 +137,6 @@ function ConfirmDialog({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  fill: { flex: 1 },
   root: { flex: 1, alignItems: "center", justifyContent: "center", padding: theme.space.xxl },
   backdrop: {
     position: "absolute",

@@ -47,6 +47,34 @@ const pending = (runtime: ModelPickerRuntime): ModelPickerRuntime => ({
 });
 
 describe("useModelPicker", () => {
+  test("does not read model entries before opening and keeps the list through close", async () => {
+    const input = inputs();
+    input.visible = false;
+    const resource = input.runtimes[0]?.resource;
+    if (resource?.status !== "ready") throw new Error("The fixture needs a ready catalog.");
+    const models = resource.catalog.models;
+    let reads = 0;
+    Object.defineProperty(resource.catalog, "models", {
+      get: () => {
+        reads++;
+        return models;
+      },
+    });
+    const harness = createHookHarness(useModelPicker, input);
+    try {
+      await harness.mount();
+      expect(reads).toBe(0);
+      await harness.update({ ...input, visible: true });
+      const rows = harness.getLatest().rows;
+      expect(rows.some((row) => row.type === "model")).toBe(true);
+      expect(reads).toBeGreaterThan(0);
+      await harness.update(input);
+      expect(harness.getLatest().rows).toEqual(rows);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test.each([false, true])(
     "shows a ready model without waiting for another runtime, locked=%s",
     async (locked) => {

@@ -16,7 +16,7 @@ import {
   removeWorktreeOnCloseChoices,
 } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import { taskDescriptionImageError } from "@openducktor/frontend-core/tasks/operations/use-task-description-asset-operations";
-import { usePreventRemove, useRouter } from "expo-router";
+import { usePreventRemove, useNavigation } from "expo-router";
 import {
   memo,
   type ReactElement,
@@ -218,7 +218,7 @@ export function TaskEditorSheet({
   workspace: WorkspaceRecord;
   task: TaskCard | null;
 }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const gate = useCommandGate();
   const confirmDiscard = useConfirmDiscard();
   const { tasks } = useRequiredContext(TasksStateContext, "TaskEditorSheet");
@@ -233,9 +233,9 @@ export function TaskEditorSheet({
     (open: boolean) => {
       if (open) return;
       allowRemoval.current();
-      router.back();
+      navigation.goBack();
     },
-    [router],
+    [navigation],
   );
   const controller = useTaskCreateModalController<DeviceFileReference>({
     open: true,

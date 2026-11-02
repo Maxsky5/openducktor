@@ -1,6 +1,6 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useWorkspaceActivity } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { memo, type ReactElement, useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -85,7 +85,7 @@ const matchesWorkspace = (workspace: WorkspaceRecord, term: string): boolean =>
   );
 
 function WorkspaceOptions(): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { workspaces, selectedWorkspace, error, selectWorkspace, refreshWorkspaces } =
     useMobileWorkspaces();
   const { pulling, pull } = usePullRefresh(refreshWorkspaces);
@@ -100,9 +100,9 @@ function WorkspaceOptions(): ReactElement {
     (workspaceId: string) => {
       if (workspaceId !== selectedId) haptics.selection();
       selectWorkspace(workspaceId);
-      router.back();
+      navigation.goBack();
     },
-    [router, selectWorkspace, selectedId],
+    [navigation, selectWorkspace, selectedId],
   );
 
   if (workspaces.length === 0 && error) {

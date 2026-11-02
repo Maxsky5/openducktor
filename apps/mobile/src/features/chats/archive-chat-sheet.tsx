@@ -17,7 +17,7 @@ import {
   isWorktreeChat,
 } from "@openducktor/frontend-core/workspace-sessions/workspace-session-archive-plan";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -204,7 +204,7 @@ function ArchiveChatForm({
   onConfirm: (input: ArchiveWorkspaceSessionInput) => void;
 }): ReactElement {
   const { workspace, record } = target;
-  const router = useRouter();
+  const navigation = useNavigation();
   // Worktree removal starts turned on, as on desktop.
   const [wantsWorktreeRemoval, setWantsWorktreeRemoval] = useState(true);
   const preview = useQuery({
@@ -260,7 +260,7 @@ function ArchiveChatForm({
             fill
             style={styles.action}
             disabled={archive.isPending}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           />
           <Button
             label={archive.isPending ? ARCHIVE_CHAT_TEXT.confirming : ARCHIVE_CHAT_TEXT.confirm}
@@ -281,7 +281,7 @@ function ArchiveChatForm({
 }
 
 function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { feedback } = useClientConnection();
   const mounted = useMountedRef();
   const read = useChatRecord(params.workspaceId, params.sessionId);
@@ -289,7 +289,7 @@ function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement 
   // The sheet owns the command, so its result still closes the sheet after the form changes.
   const archive = useArchiveWorkspaceSession(() => {
     feedback.show("success", "Chat archived.");
-    if (mounted.current) router.back();
+    if (mounted.current) navigation.goBack();
   });
   // An archived chat leaves the active list while the sheet closes; show nothing in that time.
   if (archive.isSuccess) return <SheetFrame title={TITLE} closable={false} />;

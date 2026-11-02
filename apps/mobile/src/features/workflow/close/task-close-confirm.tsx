@@ -17,8 +17,10 @@ import { TaskCloseContent } from "./task-close-content";
  */
 export function TaskCloseConfirm({
   dialog,
+  onDismiss,
 }: {
   dialog: TaskCloseConfirmDialogModel;
+  onDismiss?: (() => void) | undefined;
 }): ReactElement {
   const { operation, impact } = dialog;
   return (
@@ -55,6 +57,7 @@ export function TaskCloseConfirm({
       }
       icon="circle-check-big"
       onCancel={dialog.onCancel}
+      onDismiss={onDismiss}
       onConfirm={dialog.onConfirm}
     >
       <TaskCloseContent

@@ -35,7 +35,7 @@ import {
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation } from "expo-router";
 import {
   Fragment,
   type ReactElement,
@@ -143,7 +143,7 @@ function IssueImportFlow({
   workspace: WorkspaceRecord;
   provider: IssueImportProvider;
 } & Pick<IssueImportReads, "query" | "search">): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const gate = useCommandGate();
   const { feedback } = useClientConnection();
   const openLink = useLinkOpener(undefined);
@@ -163,7 +163,7 @@ function IssueImportFlow({
     providerScope: provider.config,
     onComplete: (createdCount) => {
       feedback.show("success", issueImportCreatedMessage(createdCount));
-      router.back();
+      navigation.goBack();
     },
     onRefreshed: selection.replaceItem,
   });

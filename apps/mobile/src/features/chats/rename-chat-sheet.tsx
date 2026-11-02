@@ -15,7 +15,7 @@ import {
   useRenameWorkspaceSession,
   workspaceSessionRenameInitialTitle,
 } from "@openducktor/frontend-core/workspace-sessions/workspace-session-rename";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -40,7 +40,7 @@ function RenameChatForm({
   record: WorkspaceSession;
   focus: SheetFieldFocus;
 }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { feedback } = useClientConnection();
   const mounted = useMountedRef();
   const initialTitle = workspaceSessionRenameInitialTitle(record);
@@ -50,7 +50,7 @@ function RenameChatForm({
     sessionId: record.id,
     onRenamed: () => {
       feedback.show("success", "Chat renamed.");
-      if (mounted.current) router.back();
+      if (mounted.current) navigation.goBack();
     },
   });
   const canSave = canSaveWorkspaceSessionRename({
@@ -98,7 +98,7 @@ function RenameChatForm({
             fill
             style={styles.action}
             disabled={rename.isPending}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           />
           <Button
             label={RENAME_CHAT_TEXT.save}

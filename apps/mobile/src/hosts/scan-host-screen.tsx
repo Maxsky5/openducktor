@@ -1,5 +1,5 @@
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useNavigation } from "expo-router";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { Linking, useWindowDimensions, View } from "react-native";
 import { AppSystemBars } from "@/ui/app-system-bars";
@@ -59,7 +59,7 @@ function CloseButton({
  * address, so the app treats the text as typed input. The camera starts only on this screen.
  */
 export function ScanHostScreen(): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const [permission, requestPermission, readPermission] = useCameraPermissions();
   // The user can allow the camera in the system settings and come back, so the screen reads the
   // permission again on each return to the app.
@@ -72,14 +72,14 @@ export function ScanHostScreen(): ReactElement {
   );
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scanned = useRef(false);
-  const close = () => router.back();
+  const close = () => navigation.goBack();
 
   const onScanned = (result: BarcodeScanningResult) => {
     if (scanned.current) return;
     scanned.current = true;
     haptics.success();
     scannedAddress.setState({ value: result.data.trim() });
-    router.back();
+    navigation.goBack();
   };
 
   const live = permission?.granted === true && cameraError === null;

@@ -238,12 +238,12 @@ const useForkChatCommand = (
   const close = useCallback(() => {
     if (closed.current) return;
     closed.current = true;
-    // Expo Router needs the guard off until its queued Back action runs.
+    // Keep the guard off while the native close transition runs.
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setClosing(true);
     allowRemoval();
-    router.back();
-  }, [allowRemoval, router]);
+    navigation.goBack();
+  }, [allowRemoval, navigation]);
   useStartupSheetClose(attemptId, close);
   useRepairedStartupHandoff(attempt);
   useEffect(() => {

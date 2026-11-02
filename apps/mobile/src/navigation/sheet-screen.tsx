@@ -1,4 +1,4 @@
-import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
+import { type NativeStackNavigationOptions, Stack, useNavigation } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import {
@@ -96,7 +96,7 @@ export function SheetScreen({
   loadingLabel,
   children,
 }: SheetScreenProps): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const focused = useIsFocused();
   const feedback = useFeedbackStore();
   useLayoutEffect(() => (focused ? feedback.coverStartup() : undefined), [feedback, focused]);
@@ -110,8 +110,8 @@ export function SheetScreen({
   const close = useCallback(() => {
     const handler = closeHandler.current;
     if (handler) handler();
-    else router.back();
-  }, [router]);
+    else navigation.goBack();
+  }, [navigation]);
   const [footers, setFooters] = useState(0);
   const claimFooter = useCallback(() => {
     setFooters((count) => count + 1);
@@ -122,9 +122,11 @@ export function SheetScreen({
     [claimFooter, closable, close],
   );
   const headerClose = footers === 0 || isLoading;
+  // Android draws this header itself. A footer claim must not update the whole native navigator.
+  const nativeHeaderClose = Platform.OS === "ios" && headerClose;
   const options = useMemo<NativeStackNavigationOptions>(() => {
     if (Platform.OS !== "ios") return { title, gestureEnabled: closable };
-    if (!headerClose) {
+    if (!nativeHeaderClose) {
       return {
         title,
         headerShown: true,
@@ -152,7 +154,7 @@ export function SheetScreen({
       headerLeft: () => <TextAction label={closeLabel} onPress={close} disabled={!closable} />,
       headerRight: () => null,
     };
-  }, [closable, close, closeLabel, headerClose, title]);
+  }, [closable, close, closeLabel, nativeHeaderClose, title]);
   useBlockBack(!closable);
   styles.useVariants({ background });
   const content = (

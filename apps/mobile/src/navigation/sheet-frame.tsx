@@ -1,4 +1,4 @@
-import { Stack, useRouter } from "expo-router";
+import { Stack, useNavigation } from "expo-router";
 import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { Platform, View } from "react-native";
@@ -30,7 +30,7 @@ export function SheetFrame({
   closable?: boolean | undefined;
   loading?: boolean | undefined;
 }>): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const isLoading = useMinimumLoader(loading);
   const insets = useSafeAreaInsets();
   // A new options object renders the whole navigator again, so it changes only with `closable`.
@@ -57,7 +57,7 @@ export function SheetFrame({
           variant="filled"
           accessibilityLabel="Close"
           disabled={!closable}
-          onPress={() => router.back()}
+          onPress={() => navigation.goBack()}
         />
       </View>
       <ModalLoadingContent loading={isLoading} style={styles.content}>

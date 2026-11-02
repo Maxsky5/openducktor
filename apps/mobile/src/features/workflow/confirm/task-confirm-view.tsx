@@ -1,5 +1,5 @@
 import type { TaskConfirmCopy } from "@openducktor/frontend-core/tasks/details/task-confirm-copy";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -23,6 +23,7 @@ export function TaskConfirmFrame({
   failure,
   icon,
   onCancel,
+  onDismiss,
   onConfirm,
   children,
 }: {
@@ -36,15 +37,25 @@ export function TaskConfirmFrame({
   failure: CommandFailure | null;
   icon?: IconName | undefined;
   onCancel: () => void;
+  onDismiss?: (() => void) | undefined;
   onConfirm: () => void;
   children: ReactNode;
 }): ReactElement {
+  const [closing, setClosing] = useState(false);
+  const cancel = () => setClosing(true);
+  const dismissed = () => {
+    // Reset implementation clears its whole model on Cancel. Let the sheet leave first.
+    if (closing) onCancel();
+    setClosing(false);
+    onDismiss?.();
+  };
   return (
     <InPlaceSheet
-      visible={visible}
+      visible={visible && !closing}
       title={title}
       intro={intro}
-      onClose={onCancel}
+      onClose={cancel}
+      onDismiss={dismissed}
       dismissible={!isPending}
       loading={loading && !isPending}
       loadingLabel="Loading task details…"
@@ -56,7 +67,7 @@ export function TaskConfirmFrame({
             variant="outline"
             size="lg"
             disabled={isPending}
-            onPress={onCancel}
+            onPress={cancel}
             fill
             style={styles.action}
           />
