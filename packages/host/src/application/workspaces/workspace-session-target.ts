@@ -9,7 +9,7 @@ import {
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { startupStep, updateStartup } from "../agent-sessions/session-startup-progress";
-import { worktreeActionStep } from "../actions/worktree-action-runner";
+import { planWorktreeSetup } from "../agent-sessions/worktree-setup-plan";
 import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -238,29 +238,6 @@ export const withWorkspaceSessionTarget = <A, E>(
           : settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
       const namespace = settingsConfig.join(base, "workspace-sessions");
       const workingDirectory = settingsConfig.join(namespace, worktree.name);
-      yield* updateStartup((progress) => {
-        progress.step({
-          id: "checkout",
-          label: "Create workspace worktree",
-          state: "pending",
-          details: [workingDirectory, branch],
-        });
-        if (newBranch?.upstreamRemote)
-          progress.step({
-            id: "upstream",
-            label: "Set branch upstream",
-            state: "pending",
-            details: [newBranch.upstreamRemote],
-          });
-        progress.step({
-          id: "copies",
-          label: "Copy configured files",
-          state: "pending",
-          details: repoConfig.worktreeCopyPaths,
-        });
-        for (const action of repoConfig.actions.items.filter((item) => item.runOnWorktreeCreate))
-          progress.step({ ...worktreeActionStep(action), state: "pending" });
-      });
       // A restore of this directory holds its guard. Check the directory after it finishes.
       yield* dependencies.lifecycle.acquireWorktreeRead(
         yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
@@ -274,6 +251,13 @@ export const withWorkspaceSessionTarget = <A, E>(
         );
       }
       yield* worktreeFiles.ensureDirectory(namespace);
+      yield* planWorktreeSetup({
+        label: "Create workspace worktree",
+        worktreePath: workingDirectory,
+        branch,
+        upstreamRemote: newBranch?.upstreamRemote,
+        repoConfig,
+      });
       let acquired = false;
       let retained = false;
       let createdTrackingRef: string | null = null;

@@ -125,6 +125,38 @@ test("startup reports saved ownership, native preparation and accepted instructi
   );
 });
 
+test("startup publishes every setup step of a new task worktree in one snapshot", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setWorktreeExists(false);
+  const snapshots: StartupOperationSnapshot[] = [];
+  const progress = createStartupProgressRecorder(
+    {
+      context: { startupAttemptId: "attempt", operationId: "operation" },
+      hostInstanceId: "host",
+      workspaceId: "workspace",
+      repoPath: "/repo",
+      scope: { kind: "task", taskId: "task", role: "build" },
+    },
+    (snapshot) => snapshots.push(startupOperationSnapshotSchema.parse(snapshot)),
+    h.runtime.finalizeStartupPreparation,
+    () => Effect.void,
+  );
+  await Effect.runPromise(
+    h.service
+      .launch(requestFor("codex"))
+      .pipe(Effect.provideService(CurrentStartupProgress, progress)),
+  );
+
+  const planned = snapshots.find((snapshot) =>
+    snapshot.steps.some((step) => step.id === "checkout"),
+  );
+  expect(planned?.steps.filter((step) => step.state === "pending").map((step) => step.id)).toEqual([
+    "checkout",
+    "upstream",
+    "copies",
+  ]);
+});
+
 test("startup keeps a new task checkout when native Stop is acknowledged but remains unconfirmed", async () => {
   const h = await createLaunchHarness("codex");
   h.setWorktreeExists(false);

@@ -10,9 +10,13 @@ import type {
 import { Context, Effect } from "effect";
 import { errorMessage, type HostError } from "../../effect/host-errors";
 
+type StartupStepUpdate = Pick<StartupStep, "id" | "label" | "state"> & Partial<StartupStep>;
+
 export type StartupProgressRecorder = {
   snapshot(): StartupOperationSnapshot;
-  step(step: Pick<StartupStep, "id" | "label" | "state"> & Partial<StartupStep>): void;
+  step(step: StartupStepUpdate): void;
+  /** Adds the planned steps in one snapshot, so a client shows them together. */
+  plan(steps: StartupStepUpdate[]): void;
   ownership(ownership: StartupOwnership): void;
   instruction(instruction: StartupInstruction): void;
   phase(phase: StartupOperationSnapshot["phase"]): void;
@@ -26,6 +30,31 @@ export const CurrentStartupProgress = Context.Reference<StartupProgressRecorder 
   "@openducktor/host/CurrentStartupProgress",
   { defaultValue: () => undefined },
 );
+
+const mergeStep = (steps: StartupStep[], step: StartupStepUpdate): StartupStep[] => {
+  const previous = steps.find((item) => item.id === step.id);
+  const next: StartupStep = {
+    details: [],
+    ...previous,
+    ...step,
+  };
+  if (previous?.action && step.action) next.action = { ...previous.action, ...step.action };
+  if (previous?.state === "failed") {
+    next.state = "failed";
+    if (previous.failure) next.failure = previous.failure;
+  }
+  if (previous?.action?.result && !step.action?.result) {
+    next.state = previous.state;
+    next.details = previous.details;
+  }
+  return (
+    previous ? steps.map((item) => (item.id === step.id ? next : item)) : [...steps, next]
+  ).map((item) =>
+    item.id === "request" && step.id !== "request" && item.state === "running"
+      ? { ...item, state: "completed" as const }
+      : item,
+  );
+};
 
 export const createStartupProgressRecorder = (
   initial: Omit<StartupOperationSnapshot, "revision" | "steps" | "ownership" | "phase">,
@@ -50,33 +79,8 @@ export const createStartupProgressRecorder = (
   };
   return {
     snapshot: () => structuredClone(snapshot),
-    step: (step) => {
-      const previous = snapshot.steps.find((item) => item.id === step.id);
-      const next: StartupStep = {
-        details: [],
-        ...previous,
-        ...step,
-      };
-      if (previous?.action && step.action) next.action = { ...previous.action, ...step.action };
-      if (previous?.state === "failed") {
-        next.state = "failed";
-        if (previous.failure) next.failure = previous.failure;
-      }
-      if (previous?.action?.result && !step.action?.result) {
-        next.state = previous.state;
-        next.details = previous.details;
-      }
-      commit({
-        steps: (previous
-          ? snapshot.steps.map((item) => (item.id === step.id ? next : item))
-          : [...snapshot.steps, next]
-        ).map((item) =>
-          item.id === "request" && step.id !== "request" && item.state === "running"
-            ? { ...item, state: "completed" as const }
-            : item,
-        ),
-      });
-    },
+    step: (step) => commit({ steps: mergeStep(snapshot.steps, step) }),
+    plan: (steps) => commit({ steps: steps.reduce(mergeStep, snapshot.steps) }),
     ownership: (ownership) => {
       if (snapshot.ownership.state === "saved" && ownership.state !== "saved") return;
       commit({ ownership });

@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import { startupStep, updateStartup } from "../../agent-sessions/session-startup-progress";
-import { worktreeActionStep } from "../../actions/worktree-action-runner";
+import { planWorktreeSetup } from "../../agent-sessions/worktree-setup-plan";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 import {
@@ -60,14 +60,6 @@ export const prepareNewTaskWorktree = (
   branch: string,
 ) =>
   Effect.gen(function* () {
-    yield* updateStartup((progress) => {
-      progress.step({
-        id: "checkout",
-        label: "Create task worktree",
-        state: "pending",
-        details: [worktreePath, branch],
-      });
-    });
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
 
     let createdTrackingRef: string | null = null;
@@ -122,22 +114,12 @@ export const prepareNewTaskWorktree = (
           targetBranch,
           task.targetBranch === undefined,
         );
-        yield* updateStartup((progress) => {
-          if (startPoint.upstreamRemote)
-            progress.step({
-              id: "upstream",
-              label: "Set branch upstream",
-              state: "pending",
-              details: [startPoint.upstreamRemote],
-            });
-          progress.step({
-            id: "copies",
-            label: "Copy configured files",
-            state: "pending",
-            details: repoConfig.worktreeCopyPaths,
-          });
-          for (const action of repoConfig.actions.items.filter((item) => item.runOnWorktreeCreate))
-            progress.step({ ...worktreeActionStep(action), state: "pending" });
+        yield* planWorktreeSetup({
+          label: "Create task worktree",
+          worktreePath,
+          branch,
+          upstreamRemote: startPoint.upstreamRemote,
+          repoConfig,
         });
         yield* startupStep(
           { id: "checkout", label: "Create task worktree", details: [worktreePath, branch] },
