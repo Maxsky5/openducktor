@@ -16,8 +16,8 @@ tester.run("anti-slop/no-test-imports-in-scripts", noTestImportsInScriptsRule, {
       code: 'import { expect, test } from "bun:test";',
     },
     {
-      filename: "/repo/scripts/check.test.mjs",
-      code: 'import assert from "node:assert/strict";',
+      filename: "/repo/scripts/dynamic.ts",
+      code: 'const { readFile } = await import("node:fs/promises");',
     },
     {
       filename: "/repo/src/check.ts",
@@ -56,6 +56,21 @@ tester.run("anti-slop/no-test-imports-in-scripts", noTestImportsInScriptsRule, {
     {
       filename: "/repo/apps/electron/scripts/build.ts",
       code: 'import { deepEqual } from "node:assert";',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/check.test.mjs",
+      code: 'import assert from "node:assert/strict";',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/dynamic-assert.ts",
+      code: 'const { default: assert } = await import("node:assert/strict");',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/dynamic-test.ts",
+      code: 'const { test } = await import("bun:test");',
       errors: [error],
     },
   ],

@@ -10,7 +10,7 @@ const packageManifestSchema = z.object({
 });
 
 const ROOT = path.resolve(import.meta.dir, "..");
-const PRELOAD_PATH = "../../scripts/bun-test-preload.ts";
+const PRELOAD_PATH = "../../tools/bun-test-preload.ts";
 
 const workspacePackagePaths = (): string[] =>
   ["apps", "packages", "tools/oxlint"]
@@ -49,7 +49,7 @@ describe("Bun test preload", () => {
         process.execPath,
         "test",
         "--preload",
-        path.join(ROOT, "scripts/bun-test-preload.ts"),
+        path.join(ROOT, "tools/bun-test-preload.ts"),
         path.join(ROOT, "scripts/test-support/bun-test-preload-fixture.test.ts"),
       ],
       cwd: ROOT,
