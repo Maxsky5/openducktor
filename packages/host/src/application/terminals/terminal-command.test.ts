@@ -115,7 +115,8 @@ describe("TerminalService command terminals", () => {
           outputTail: ["$ bun install", "$ bun test", "tests failed"],
         },
       ]);
-      expect(listed?.initialCommandResult).toEqual(results[0]);
+      // The command owner gets the result. Terminal lists do not carry its output tail.
+      expect(listed?.initialCommandResult).toBeUndefined();
       await Effect.runPromise(service.write(response.ref.terminalId, new Uint8Array([3])));
       expect(pty.operations).toContain("write:\u0003");
     } finally {

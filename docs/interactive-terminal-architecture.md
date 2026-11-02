@@ -75,7 +75,7 @@ Other supported shells keep the command-process flow:
 
 When the terminal closes or its process fails before the command ends, the result is `closed` or `failed`. The `failed` result has the process error. Both results have the last 20 lines of parsed output.
 
-The terminal keeps its initial command result in `TerminalSummary.initialCommandResult` until the terminal is forgotten. The command owner observes settlement even when its startup caller has left. Startup traces show each action, its result, and its available output without opening a terminal panel. A non-waiting action can finish after startup is ready; its result remains visible in the trace.
+The command owner receives the initial command result through `StartedCommandTerminal.result` and `onResult`. It observes settlement even when its startup caller has left. Terminal summaries do not carry the result, so list frames stay small. `TerminalSummary.initialCommandResult` stays optional only so that current clients accept lists from older hosts. Startup traces show each action, its result, and its available output without opening a terminal panel. A non-waiting action can finish after startup is ready; its result remains visible in the trace.
 
 The terminal view does not show the command result. A non-zero exit code, Ctrl+C, and Restart are normal shell behavior, and the terminal output already shows them.
 

@@ -107,6 +107,10 @@ export const terminalSummarySchema = z
      * worktree-creation action. The terminal panel does not open for it.
      */
     startedBy: z.enum(["user", "host"]),
+    /**
+     * Older hosts send the result of the initial command. Current hosts do not, and clients do not
+     * read it. The field stays so that current clients accept terminal lists from older hosts.
+     */
     initialCommandResult: terminalCommandResultSchema.optional(),
   })
   .strict();
