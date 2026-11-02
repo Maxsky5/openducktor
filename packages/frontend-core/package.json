@@ -18,10 +18,10 @@
     "@openducktor/host-client": "workspace:*",
     "@openducktor/path-support": "workspace:*",
     "@openducktor/workflows": "workspace:*",
-    "@tanstack/react-query": "^5.104.4",
+    "@tanstack/react-query": "^5.105.0",
     "react": "^19.3.1",
     "zod": "^4.6.7",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^21.0.4",
