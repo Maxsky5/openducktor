@@ -31,7 +31,7 @@ describe("TaskDescriptionLinkDialog", () => {
       />,
     );
 
-    const input = view.getByRole("textbox", { name: "Link destination" });
+    const input = view.getByRole("textbox", { name: "Web address" });
     fireEvent.change(input, { target: { value: "https://x.test/a b" } });
     fireEvent.click(view.getByRole("button", { name: "Insert link" }));
 
@@ -53,12 +53,12 @@ describe("TaskDescriptionLinkDialog", () => {
         />,
       );
 
-      fireEvent.change(view.getByRole("textbox", { name: "Link destination" }), {
+      fireEvent.change(view.getByRole("textbox", { name: "Web address" }), {
         target: { value: destination },
       });
       fireEvent.click(view.getByRole("button", { name: "Insert link" }));
 
-      expect((await view.findByRole("alert")).textContent).toContain("absolute http or https");
+      expect((await view.findByRole("alert")).textContent).toContain("full web address");
       expect(onSubmit).not.toHaveBeenCalled();
     },
   );
@@ -75,7 +75,7 @@ describe("TaskDescriptionLinkDialog", () => {
       />,
     );
 
-    const input = view.getByRole("textbox", { name: "Link destination" });
+    const input = view.getByRole("textbox", { name: "Web address" });
     fireEvent.change(input, { target: { value: "https://example.com/docs" } });
     pressEnter(input);
 
@@ -95,7 +95,7 @@ describe("TaskDescriptionLinkDialog", () => {
       />,
     );
 
-    const input = view.getByRole("textbox", { name: "Link destination" });
+    const input = view.getByRole("textbox", { name: "Web address" });
     if (!(input instanceof HTMLInputElement)) {
       throw new TypeError("Expected link destination to be an input.");
     }

@@ -16,7 +16,7 @@ import { useTaskConfirmDialog } from "@openducktor/frontend-core/tasks/details/u
 import { useLastKnownTask } from "@openducktor/frontend-core/tasks/details/use-last-known-task";
 import type { TaskConfirmAction } from "@openducktor/frontend-core/tasks/workflow/task-confirm-actions";
 import type { TaskResetImplementationModalModel } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import type { IconName } from "@/ui/icon";
 import { toFlowFailure } from "@/host-session/command-outcome";
 import { TaskCloseConfirm } from "../close/task-close-confirm";
@@ -36,7 +36,7 @@ export type TaskConfirmationRequest = {
 type TaskConfirmationsProps = {
   request: TaskConfirmationRequest | null;
   tasks: TaskCard[];
-  /** The confirmation closed, after a cancel or a success. It runs after the close rendered. */
+  /** The confirmation window closed, after a cancel or a success. */
   onClosed: (requestId: number) => void;
   /** The user confirmed the action, and it runs. */
   onStarted: (request: TaskConfirmationRequest) => void;
@@ -47,7 +47,7 @@ type TaskConfirmationsProps = {
 /** The desktop icon of each confirm button. */
 const CONFIRM_ICONS = {
   reset_task: "rotate-ccw",
-  delete: "trash",
+  delete: "trash-2",
 } as const satisfies Record<TaskConfirmAction, IconName>;
 
 const FAILURE_TITLES = {
@@ -85,10 +85,7 @@ function RequestedCloseConfirm({
     run,
     onSucceeded: () => onSucceeded(request),
   });
-  useEffect(() => {
-    if (!dialog.open) onClosed(request.id);
-  }, [dialog.open, onClosed, request.id]);
-  return <TaskCloseConfirm dialog={dialog} />;
+  return <TaskCloseConfirm dialog={dialog} onDismiss={() => onClosed(request.id)} />;
 }
 
 function RequestedTaskConfirm({
@@ -120,12 +117,8 @@ function RequestedTaskConfirm({
     run,
     onSucceeded: () => onSucceeded(request),
   });
-  useEffect(() => {
-    if (!dialog.open) onClosed(request.id);
-  }, [dialog.open, onClosed, request.id]);
-  // After Confirm, the sheet keeps the impact that the user confirmed until it closes. The action
-  // changes the task and its worktrees, so the impact reads again while it runs, and each new read
-  // changed the text and the button of the sheet. A failure shows the current impact again.
+  // Keep the confirmed impact while the command changes task data. A failed command shows the
+  // current impact.
   const [confirmed, setConfirmed] = useState<typeof dialog.impact | null>(null);
   const { error, errorOutcomeUnknown } = dialog.operation;
   const impact = confirmed && error === null ? confirmed : dialog.impact;
@@ -141,10 +134,11 @@ function RequestedTaskConfirm({
       copy={copy}
       confirm={confirm}
       isPending={dialog.operation.isPending}
-      impactError={impact.error}
+      loading={impact.isLoading || impact.isLoadingStopImpact}
       failure={error ? toFlowFailure(error, errorOutcomeUnknown, FAILURE_TITLES[action]) : null}
       icon={CONFIRM_ICONS[action]}
       onCancel={dialog.onCancel}
+      onDismiss={() => onClosed(request.id)}
       onConfirm={() => {
         setConfirmed(dialog.impact);
         dialog.onConfirm();
@@ -167,7 +161,7 @@ export function ResetImplementationConfirmation({
       copy={copy}
       confirm={confirm}
       isPending={model.isSubmitting}
-      impactError={model.impactError}
+      loading={model.isLoadingImpact}
       failure={
         model.errorMessage
           ? toFlowFailure(model.errorMessage, model.errorOutcomeUnknown, "Reset failed")

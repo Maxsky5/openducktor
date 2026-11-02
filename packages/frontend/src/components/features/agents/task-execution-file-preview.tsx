@@ -1,3 +1,4 @@
+import { Check, Loader2, Trash2 } from "lucide-react";
 import type {
   WorkspaceFileScope,
   WorkspaceSessionRefInput,
@@ -350,7 +351,8 @@ function FileConflictReviewDialog({
         <DialogHeader>
           <DialogTitle>Review latest file</DialogTitle>
           <DialogDescription>
-            Review the latest contents below. Your draft stays unchanged.
+            Review the file as it is on disk. Your draft stays the same. If you allow it, your next
+            save will replace this version with your draft.
           </DialogDescription>
         </DialogHeader>
         <section aria-label="Latest file contents">
@@ -360,10 +362,11 @@ function FileConflictReviewDialog({
         </section>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
-            Keep current baseline
+            Keep editing
           </Button>
           <Button type="button" onClick={onAccept}>
-            Use latest as baseline
+            <Check data-icon="inline-start" />
+            Allow overwrite on save
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -551,7 +554,12 @@ function FileDiscardDialog({
             disabled={isApplyingTransition}
             onClick={discard}
           >
-            {isApplyingTransition ? "Working..." : "Discard"}
+            {isApplyingTransition ? (
+              <Loader2 data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <Trash2 data-icon="inline-start" />
+            )}
+            {isApplyingTransition ? "Working…" : "Discard"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -627,7 +635,7 @@ function resolveFilePreviewPresentation({
   if (isFileError && !hasActiveEditorSession) {
     message = errorMessage(fileError);
   } else if ((isFileLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
-    message = "Loading file...";
+    message = "Loading file…";
   } else if (visibleSnapshot?.result.kind === "unsupported") {
     message = visibleSnapshot.result.message;
   }

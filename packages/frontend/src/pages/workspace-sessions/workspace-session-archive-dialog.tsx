@@ -4,7 +4,7 @@ import type {
   WorkspaceSessionArchivePreview,
 } from "@openducktor/contracts";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { Archive, FolderGit2, LoaderCircle } from "lucide-react";
+import { Archive, ChevronDown, FolderGit2, LoaderCircle } from "lucide-react";
 import { useState, type ReactElement, type ReactNode } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SwitchCard } from "@/components/ui/switch-card";
-import { useMinimumLoading } from "@/lib/use-minimum-loading";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { workspaceSessionArchivePreviewQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-archive";
@@ -33,9 +33,6 @@ import {
   worktreeArchiveNotice,
 } from "@openducktor/frontend-core/workspace-sessions/workspace-session-archive-plan";
 import { WorktreeArchivePreview } from "./worktree-archive-preview";
-
-/** A shorter loader reads as a flash before the final content. */
-const WORKTREE_CHECK_MINIMUM_MS = 500;
 
 type Props = {
   open: boolean;
@@ -73,9 +70,8 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
     ...workspaceSessionArchivePreviewQueryOptions(workspaceId, record.id),
     enabled: props.open,
   });
-  // The dialog shows one loader, then the content and buttons of the finished check together.
-  const isChecking = useMinimumLoading(preview.isFetching, WORKTREE_CHECK_MINIMUM_MS);
-  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview, isChecking);
+  const isChecking = preview.isFetching;
+  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview);
   const sharedNotice = sharedWorktreeNotice(preview);
   const taskNotice = taskWorktreeNotice(preview);
   const canArchive = canArchiveWorkspaceSession({
@@ -90,6 +86,7 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
       {...props}
       record={record}
       canArchive={canArchive}
+      loading={isChecking && preview.data === undefined && !props.isArchiving}
       removeWorktree={removeWorktree}
       onConfirm={() =>
         props.onArchive(
@@ -98,28 +95,23 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
         )
       }
     >
-      {isChecking ? (
-        <div
-          role="status"
-          className="flex min-h-28 items-center justify-center gap-2 rounded-lg border border-border p-3 text-sm text-muted-foreground"
-        >
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+      {isChecking && (
+        <p role="status" className="text-sm text-muted-foreground">
           {ARCHIVE_CHAT_TEXT.checkingWorktree}
-        </div>
-      ) : (
-        <SwitchCard
-          icon={FolderGit2}
-          label={ARCHIVE_CHAT_TEXT.removeWorktree}
-          checked={removeWorktree}
-          onCheckedChange={setWantsWorktreeRemoval}
-          disabled={props.isArchiving || sharedNotice !== null || taskNotice !== null}
-        >
-          {sharedNotice && <p className="text-sm text-muted-foreground">{sharedNotice}</p>}
-          {taskNotice && <p className="text-sm text-muted-foreground">{taskNotice}</p>}
-          <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
-          <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
-        </SwitchCard>
+        </p>
       )}
+      <SwitchCard
+        icon={FolderGit2}
+        label={ARCHIVE_CHAT_TEXT.removeWorktree}
+        checked={removeWorktree}
+        onCheckedChange={setWantsWorktreeRemoval}
+        disabled={props.isArchiving || sharedNotice !== null || taskNotice !== null}
+      >
+        {sharedNotice && <p className="text-sm text-muted-foreground">{sharedNotice}</p>}
+        {taskNotice && <p className="text-sm text-muted-foreground">{taskNotice}</p>}
+        <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
+        <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
+      </SwitchCard>
     </ArchiveDialog>
   );
 }
@@ -134,11 +126,13 @@ function ArchiveDialog({
   onConfirm,
   canArchive,
   removeWorktree = false,
+  loading = false,
   children,
 }: Omit<Props, "workspaceId" | "onArchive"> & {
   onConfirm: () => void;
   canArchive: boolean;
   removeWorktree?: boolean;
+  loading?: boolean;
   children: ReactNode;
 }): ReactElement {
   return (
@@ -149,6 +143,8 @@ function ArchiveDialog({
       }}
     >
       <DialogContent
+        loading={loading}
+        loadingLabel="Loading worktree details…"
         className="p-0 sm:max-w-lg"
         closeButton={isArchiving ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}
@@ -163,22 +159,29 @@ function ArchiveDialog({
           <DialogHeader className="border-b border-border px-5 py-4 pr-12">
             <DialogTitle>{ARCHIVE_CHAT_TEXT.title}</DialogTitle>
             <DialogDescription>{ARCHIVE_CHAT_TEXT.description}</DialogDescription>
+            <div className="flex min-w-0 items-center gap-2 pt-2 text-sm font-medium">
+              <AgentRuntimeIcon runtimeKind={record.runtimeKind} className="size-4 shrink-0" />
+              <span className="break-words">{workspaceSessionTitle(record)}</span>
+            </div>
           </DialogHeader>
           <fieldset disabled={isArchiving} className="flex min-h-0 flex-1 flex-col border-0 p-0">
             <DialogBody className="flex flex-col gap-4 px-5 py-4">
-              <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background">
-                  <AgentRuntimeIcon runtimeKind={record.runtimeKind} className="size-4" />
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <p className="break-words text-sm font-medium text-foreground">
-                    {workspaceSessionTitle(record)}
-                  </p>
-                  <p className="break-all font-mono text-xs leading-5 text-muted-foreground">
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="group -ml-2 gap-1.5">
+                    <ChevronDown
+                      className="transition-transform group-data-[state=open]:rotate-180"
+                      aria-hidden="true"
+                    />
+                    Working folder
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <p className="break-all pt-2 font-mono text-xs leading-5 text-muted-foreground">
                     {record.executionTarget.workingDirectory}
                   </p>
-                </div>
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
               <p className="text-sm text-muted-foreground">{ARCHIVE_CHAT_TEXT.stopsWork}</p>
               {children}
               {error && (

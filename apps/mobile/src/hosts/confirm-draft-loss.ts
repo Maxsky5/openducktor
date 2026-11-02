@@ -13,9 +13,10 @@ export const useConfirmDraftLoss = (): ((
   return useCallback(
     (cause: DraftSaveBeforeSwitchError) =>
       confirm({
-        title: "Drafts Not Saved",
+        title: "Drafts not saved",
         message: cause.message,
-        confirmLabel: "Switch and Lose Changes",
+        confirmLabel: "Switch and discard drafts",
+        icon: "arrow-right-left",
         destructive: true,
       }),
     [confirm],

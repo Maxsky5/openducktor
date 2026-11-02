@@ -9,7 +9,6 @@ import { StyleSheet } from "react-native-unistyles";
 import { toFlowFailure } from "@/host-session/command-outcome";
 import { Text } from "@/ui/text";
 import { TaskConfirmFrame } from "../confirm/task-confirm-view";
-import { TaskReadsLoading } from "../confirm/task-reads-loading";
 import { TaskCloseContent } from "./task-close-content";
 
 /**
@@ -18,14 +17,31 @@ import { TaskCloseContent } from "./task-close-content";
  */
 export function TaskCloseConfirm({
   dialog,
+  onDismiss,
 }: {
   dialog: TaskCloseConfirmDialogModel;
+  onDismiss?: (() => void) | undefined;
 }): ReactElement {
   const { operation, impact } = dialog;
   return (
     <TaskConfirmFrame
       visible={dialog.open}
       title={COPY.title}
+      intro={
+        <View style={styles.task}>
+          <Text variant="subhead" tone="secondary">
+            {COPY.description}
+          </Text>
+          {impact.taskTitle ? (
+            <Text variant="headline" numberOfLines={2} selectable>
+              {impact.taskTitle}
+            </Text>
+          ) : null}
+          <Text variant="caption2" tone="tertiary" selectable>
+            {impact.taskId}
+          </Text>
+        </View>
+      }
       tone="warning"
       confirm={{
         label: taskCloseConfirmLabel(operation.isPending),
@@ -33,6 +49,7 @@ export function TaskCloseConfirm({
         disabled: dialog.confirmDisabled,
       }}
       isPending={operation.isPending}
+      loading={dialog.isPreparing}
       failure={
         operation.error
           ? toFlowFailure(operation.error, operation.errorOutcomeUnknown, COPY.failureTitle)
@@ -40,33 +57,19 @@ export function TaskCloseConfirm({
       }
       icon="circle-check-big"
       onCancel={dialog.onCancel}
+      onDismiss={onDismiss}
       onConfirm={dialog.onConfirm}
     >
-      <View style={styles.task}>
-        {impact.taskTitle ? (
-          <Text variant="body" weight="medium" selectable>
-            {impact.taskTitle}
-          </Text>
-        ) : null}
-        <Text variant="mono" selectable style={styles.muted}>
-          {impact.taskId}
-        </Text>
-      </View>
-      {dialog.isPreparing ? (
-        <TaskReadsLoading />
-      ) : (
-        <TaskCloseContent
-          impact={impact}
-          removeWorktree={dialog.removeWorktree}
-          onRemoveWorktreeChange={dialog.onRemoveWorktreeChange}
-          disabled={operation.isPending}
-        />
-      )}
+      <TaskCloseContent
+        impact={impact}
+        removeWorktree={dialog.removeWorktree}
+        onRemoveWorktreeChange={dialog.onRemoveWorktreeChange}
+        disabled={operation.isPending}
+      />
     </TaskConfirmFrame>
   );
 }
 
-const styles = StyleSheet.create((theme) => ({
-  muted: { color: theme.desktop.mutedForeground },
+const styles = StyleSheet.create({
   task: { gap: 2 },
-}));
+});

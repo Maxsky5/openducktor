@@ -1,6 +1,6 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useWorkspaceActivity } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { memo, type ReactElement, useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -11,17 +11,15 @@ import { Button } from "@/ui/button";
 import { haptics } from "@/ui/haptics";
 import { Screen } from "@/ui/screen";
 import { SearchField } from "@/ui/search-field";
-import { SkeletonFrame } from "@/ui/placeholders";
 import { ErrorState } from "@/ui/states";
 import { Callout } from "@/ui/callout";
-import { ListRow, ListRowPlaceholder, ListSection } from "@/ui/surfaces";
+import { ListRow, ListSection } from "@/ui/surfaces";
 import { Text } from "@/ui/text";
 import { ListRefreshControl } from "@/ui/refresh-control";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { NoOpenWorkspaceState } from "./no-open-workspace";
 import { workspaceBadgePresentations } from "./workspace-activity-badges";
 import { WorkspaceTile } from "./workspace-tile";
-import { TILE_SIZES } from "./workspace-tile-sizes";
 
 const WorkspaceOption = memo(function WorkspaceOption({
   workspace,
@@ -77,35 +75,6 @@ const WorkspaceOption = memo(function WorkspaceOption({
 
 const LIST_FOOTER = "Your choice changes only this device. Other clients keep their workspace.";
 
-/**
- * The workspaces for their first load, in the layout of the loaded list: the section title, the
- * rows with their tile, name, and path, and the footer. The list then takes the place of each part.
- */
-function WorkspaceOptionsSkeleton(): ReactElement {
-  return (
-    <ScrollView
-      scrollEnabled={false}
-      contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
-    >
-      <SkeletonFrame label="Loading workspaces">
-        <ListSection title="Open workspaces" footer={LIST_FOOTER}>
-          <ListRowPlaceholder
-            leadingSize={TILE_SIZES.lg}
-            titleWidth="38%"
-            detail={{ variant: "monoSmall", width: "72%" }}
-          />
-          <ListRowPlaceholder
-            leadingSize={TILE_SIZES.lg}
-            titleWidth="30%"
-            detail={{ variant: "monoSmall", width: "64%" }}
-          />
-        </ListSection>
-      </SkeletonFrame>
-    </ScrollView>
-  );
-}
-
 /** The list shows a search field from this many workspaces, as the desktop repository selector. */
 const SEARCH_THRESHOLD = 7;
 
@@ -116,8 +85,8 @@ const matchesWorkspace = (workspace: WorkspaceRecord, term: string): boolean =>
   );
 
 function WorkspaceOptions(): ReactElement {
-  const router = useRouter();
-  const { workspaces, selectedWorkspace, isLoading, error, selectWorkspace, refreshWorkspaces } =
+  const navigation = useNavigation();
+  const { workspaces, selectedWorkspace, error, selectWorkspace, refreshWorkspaces } =
     useMobileWorkspaces();
   const { pulling, pull } = usePullRefresh(refreshWorkspaces);
   const [query, setQuery] = useState("");
@@ -131,12 +100,11 @@ function WorkspaceOptions(): ReactElement {
     (workspaceId: string) => {
       if (workspaceId !== selectedId) haptics.selection();
       selectWorkspace(workspaceId);
-      router.back();
+      navigation.goBack();
     },
-    [router, selectWorkspace, selectedId],
+    [navigation, selectWorkspace, selectedId],
   );
 
-  if (isLoading) return <WorkspaceOptionsSkeleton />;
   if (workspaces.length === 0 && error) {
     return (
       <ErrorState title="Workspaces did not load" message={error} onRetry={refreshWorkspaces} />
@@ -156,7 +124,7 @@ function WorkspaceOptions(): ReactElement {
             tone="warning"
             title="Workspaces could not refresh"
             message={staleReason}
-            action={<Button label="Try Again" size="sm" variant="gray" onPress={pull} />}
+            action={<Button icon="refresh" label="Retry" size="sm" variant="gray" onPress={pull} />}
           />
         </View>
       ) : null}
@@ -198,8 +166,14 @@ function WorkspaceOptions(): ReactElement {
  * workspace they show.
  */
 export function WorkspaceSwitcherSheet(): ReactElement {
+  const { isLoading } = useMobileWorkspaces();
   return (
-    <SheetScreen title="Workspaces" draggable>
+    <SheetScreen
+      title="Workspaces"
+      draggable
+      loading={isLoading}
+      loadingLabel="Loading workspaces…"
+    >
       <Screen background="sheet">
         <WorkspaceOptions />
       </Screen>

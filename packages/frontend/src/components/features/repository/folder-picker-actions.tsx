@@ -32,7 +32,7 @@ export function FolderPickerConfirmAction({
       disabled={!controller.isCurrentPathSelectable || controller.isSubmitting}
       onClick={() => void controller.confirm()}
     >
-      {controller.isSubmitting ? "Confirming..." : confirmLabel}
+      {controller.isSubmitting ? "Confirming…" : confirmLabel}
     </Button>
   );
 }

@@ -29,7 +29,7 @@ const EMPTY_COLUMN_DISPLAY_OPTIONS: ComboboxOption[] = [
   {
     value: "collapsed",
     label: "Collapsed",
-    description: "Show a compact themed marker for each empty column.",
+    description: "Show a small marker for each empty column.",
   },
 ];
 
@@ -44,9 +44,9 @@ export function SettingsKanbanSection({
   return (
     <div className="grid gap-4 p-4">
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Kanban Settings</h3>
+        <h3 className="text-sm font-semibold text-foreground">Kanban settings</h3>
         <p className="text-xs text-muted-foreground">
-          Control completed-task visibility and how empty columns appear on the board.
+          Choose when to hide completed tasks and how empty columns appear.
         </p>
       </div>
 
@@ -84,7 +84,7 @@ export function SettingsKanbanSection({
             options={EMPTY_COLUMN_DISPLAY_OPTIONS}
             disabled={disabled}
             triggerAriaLabelledBy="kanban-empty-column-display-label"
-            searchPlaceholder="Search display modes..."
+            searchPlaceholder="Search display modes…"
             emptyText="No display mode found."
             onValueChange={(value) => {
               if (disabled) {
@@ -102,7 +102,7 @@ export function SettingsKanbanSection({
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Choose whether empty lanes stay visible, disappear, or collapse to a themed marker.
+            Show empty columns, hide them, or collapse them to a small marker.
           </p>
         </div>
       </div>

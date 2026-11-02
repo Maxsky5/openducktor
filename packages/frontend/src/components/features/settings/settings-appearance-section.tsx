@@ -124,7 +124,7 @@ export function SettingsAppearanceSection({
       </div>
       <div className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
         <div className="grid gap-2">
-          <Label id={labelId}>Horizontal Scrollbars</Label>
+          <Label id={labelId}>Horizontal scrollbars</Label>
           <p id={descriptionId} className="text-xs text-muted-foreground">
             System default shows horizontal scrollbars on Windows and Linux, and hides them on
             macOS. Choose Show or Hide to override it on every platform.
@@ -137,7 +137,7 @@ export function SettingsAppearanceSection({
             options={horizontalScrollbarVisibilityOptions}
             disabled={disabled}
             placeholder="Select visibility"
-            searchPlaceholder="Search visibility..."
+            searchPlaceholder="Search visibility options…"
             emptyText="No visibility option found."
             triggerAriaLabelledBy={labelId}
             triggerAriaDescribedBy={descriptionId}

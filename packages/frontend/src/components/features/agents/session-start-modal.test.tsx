@@ -176,7 +176,7 @@ describe("SessionStartModal", () => {
         </QueryProvider>,
       );
       expect(view.getByRole("dialog")).toBe(dialog);
-      expect(view.getByRole("button", { name: "Starting..." })).toBe(submit);
+      expect(view.getByRole("button", { name: "Starting…" })).toBe(submit);
       expect(submit.closest("form")).toBe(form);
       expect(submit.hasAttribute("disabled")).toBe(true);
       expect(submit.getAttribute("aria-busy")).toBe("true");
@@ -504,33 +504,45 @@ describe("SessionStartModal", () => {
     },
   );
 
-  test("disables fresh-session selection and confirm while the catalog loads", () => {
-    const onConfirm = mock(() => {});
-    const { unmount } = render(
-      createElement(SessionStartModal, {
-        model: createModel({
-          isSelectionCatalogLoading: true,
-          modelPickerRuntimes: [],
-          onConfirm,
-        }),
-      }),
-    );
-
-    expect(getFieldButton("session-start-runtime-profile-field").hasAttribute("disabled")).toBe(
-      true,
-    );
-    const modelPicker = getFieldButton("session-start-model-picker-field");
-    expect(modelPicker.hasAttribute("disabled")).toBe(false);
-    expect(modelPicker.textContent).toContain("Loading models...");
-    expect(getFieldButton("session-start-variant-field").hasAttribute("disabled")).toBe(true);
-
-    const confirmButton = screen.getByRole("button", { name: /start session/i });
-    expect(confirmButton.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(confirmButton);
-    expect(onConfirm).not.toHaveBeenCalled();
-
-    unmount();
-  });
+  test.each([
+    ["models", { isSelectionCatalogLoading: true, modelPickerRuntimes: [] }],
+    [
+      "runtimes",
+      {
+        isRuntimeDefinitionsLoading: true,
+        modelPickerRuntimes: [],
+        selectedModelSelection: null,
+        selectedRuntimeKind: null,
+      },
+    ],
+    ["settings", { hasRuntimeSettingsSnapshot: false, isRuntimeSettingsLoading: true }],
+    ["first message", { isKickoffPromptLoading: true }],
+  ] satisfies [string, Partial<SessionStartModalModel>][])(
+    "opens session choices immediately while %s load and blocks starting",
+    (read, pending) => {
+      const onConfirm = mock(() => {});
+      const view = render(
+        createElement(SessionStartModal, { model: createModel({ ...pending, onConfirm }) }),
+      );
+      try {
+        expect(screen.getByRole("dialog").hasAttribute("aria-busy")).toBe(false);
+        expect(screen.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
+        const start = screen.getByRole("button", { name: /^Start session$/i });
+        expect(start.hasAttribute("disabled")).toBe(true);
+        fireEvent.click(start);
+        const form = start.closest("form");
+        if (!form) throw new Error("Expected the session start form");
+        fireEvent.submit(form);
+        expect(onConfirm).not.toHaveBeenCalled();
+        if (read === "runtimes") {
+          expect(screen.getByRole("status")).toBeDefined();
+          expect(screen.queryByText("No agent runtimes are available.")).toBeNull();
+        }
+      } finally {
+        view.unmount();
+      }
+    },
+  );
 
   test("shows reuse helper text even when catalog is loading", () => {
     const { unmount } = render(
@@ -611,31 +623,11 @@ describe("SessionStartModal", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Runtime definitions unavailable: Runtime definitions failed",
+      "Could not load runtimes: Runtime definitions failed",
     );
     expect(screen.queryByText("No agent runtimes are available.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetryRuntimeDefinitions).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
-      true,
-    );
-    unmount();
-  });
-
-  test("shows runtime-definition loading apart from an empty runtime list", () => {
-    const { unmount } = render(
-      createElement(SessionStartModal, {
-        model: createModel({
-          isRuntimeDefinitionsLoading: true,
-          modelPickerRuntimes: [],
-          selectedModelSelection: null,
-          selectedRuntimeKind: null,
-        }),
-      }),
-    );
-
-    expect(screen.getByRole("status").textContent).toContain("Loading agent runtimes...");
-    expect(screen.queryByText("No agent runtimes are available.")).toBeNull();
     expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
       true,
     );
@@ -740,10 +732,10 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    expect(screen.getByText("Session Mode")).toBeTruthy();
+    expect(screen.getByText("Session mode")).toBeTruthy();
     expect(screen.getByRole("button", { name: /reuse existing/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /fork existing/i })).toBeTruthy();
-    expect(screen.getByText("Existing Session")).toBeTruthy();
+    expect(screen.getByText("Existing session")).toBeTruthy();
 
     const sourceCombobox = getFieldButton("session-start-source-field");
     const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
@@ -786,7 +778,7 @@ describe("kickoff customization", () => {
     "hides customization for absent prompt %j",
     (kickoffPrompt) => {
       const view = render(<SessionStartModal model={createModel({ kickoffPrompt })} />);
-      expect(screen.queryByRole("switch", { name: "Customize kickoff prompt" })).toBeNull();
+      expect(screen.queryByRole("switch", { name: "Customize first message" })).toBeNull();
       view.unmount();
     },
   );
@@ -795,26 +787,24 @@ describe("kickoff customization", () => {
     const model = createModel({ requestId: "one", kickoffPrompt: "Default\ntext", onConfirm });
     const view = render(<SessionStartModal model={model} />);
     const toggle = () =>
-      fireEvent.click(screen.getByRole("switch", { name: "Customize kickoff prompt" }));
-    expect(screen.queryByLabelText("Kickoff prompt")).toBeNull();
+      fireEvent.click(screen.getByRole("switch", { name: "Customize first message" }));
+    expect(screen.queryByLabelText("First message")).toBeNull();
     toggle();
-    expect(screen.getByLabelText<HTMLTextAreaElement>("Kickoff prompt").value).toBe(
-      "Default\ntext",
-    );
-    fireEvent.change(screen.getByLabelText("Kickoff prompt"), {
+    expect(screen.getByLabelText<HTMLTextAreaElement>("First message").value).toBe("Default\ntext");
+    fireEvent.change(screen.getByLabelText("First message"), {
       target: { value: "  Edited\ntext " },
     });
     toggle();
     toggle();
     view.rerender(<SessionStartModal model={{ ...model, kickoffPrompt: "New default" }} />);
-    expect(screen.getByLabelText<HTMLTextAreaElement>("Kickoff prompt").value).toBe(
+    expect(screen.getByLabelText<HTMLTextAreaElement>("First message").value).toBe(
       "  Edited\ntext ",
     );
     fireEvent.click(screen.getByRole("button", { name: "Run in background" }));
     expect(onConfirm).toHaveBeenCalledWith(
       expect.objectContaining({ kickoffPrompt: "  Edited\ntext ", runInBackground: true }),
     );
-    fireEvent.change(screen.getByLabelText("Kickoff prompt"), { target: { value: " \n" } });
+    fireEvent.change(screen.getByLabelText("First message"), { target: { value: " \n" } });
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Start session" }).disabled).toBe(
       true,
     );
@@ -822,11 +812,9 @@ describe("kickoff customization", () => {
       screen.getByRole<HTMLButtonElement>("button", { name: "Run in background" }).disabled,
     ).toBe(true);
     view.rerender(<SessionStartModal model={{ ...model, requestId: "two" }} />);
-    expect(screen.queryByLabelText("Kickoff prompt")).toBeNull();
+    expect(screen.queryByLabelText("First message")).toBeNull();
     toggle();
-    expect(screen.getByLabelText<HTMLTextAreaElement>("Kickoff prompt").value).toBe(
-      "Default\ntext",
-    );
+    expect(screen.getByLabelText<HTMLTextAreaElement>("First message").value).toBe("Default\ntext");
     view.unmount();
   });
 });

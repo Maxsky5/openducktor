@@ -88,7 +88,11 @@ export function RuntimeImpactDialog({
         if (!nextOpen && !isPending) onCancel();
       }}
     >
-      <DialogContent className="max-w-xl overflow-hidden p-0">
+      <DialogContent
+        className="max-w-xl overflow-hidden p-0"
+        loading={isLoadingImpact && impact === null}
+        loadingLabel="Loading affected sessions…"
+      >
         <DialogHeader className="border-b border-border px-6 py-5 pr-14">
           <DialogTitle className="text-lg">{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
@@ -98,13 +102,6 @@ export function RuntimeImpactDialog({
           {notice ? (
             <p className="rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-surface-foreground">
               {notice}
-            </p>
-          ) : null}
-          {/* A later read keeps the shown sessions in place. Only the confirm button waits. */}
-          {isLoadingImpact && impact === null ? (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading affected sessions.
             </p>
           ) : null}
           {impactError !== null ? (
@@ -151,7 +148,7 @@ const ACTIVITY_BADGES = {
 
 function ConfirmButtonIcon({
   isPending,
-  icon: Icon,
+  icon: Icon = CircleCheck,
 }: {
   isPending: boolean;
   icon: LucideIcon | undefined;

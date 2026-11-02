@@ -34,14 +34,13 @@ import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import type { BranchesFailure } from "../use-workspace-repo-settings";
-import { FormBody, FormField, FormLead, MenuSelect, SelectTrigger } from "@/ui/form-rows";
+import { FormBody, FormField, MenuSelect, SelectTrigger } from "@/ui/form-rows";
 import {
   optionLabel,
   reportingChoices,
   reportingSpeed,
   startFormSections,
   startModeOptions,
-  titleCase,
 } from "./start-form-model";
 
 const NO_EDIT_REPORT = (): void => {};
@@ -73,7 +72,13 @@ function StartNotices({
           title="Branches did not load"
           message={branchesFailure.message}
           action={
-            <Button label="Try Again" size="sm" variant="gray" onPress={branchesFailure.retry} />
+            <Button
+              icon="refresh"
+              label="Retry"
+              size="sm"
+              variant="gray"
+              onPress={branchesFailure.retry}
+            />
           }
         />
       ) : null}
@@ -84,7 +89,8 @@ function StartNotices({
           message={model.runtimeDefinitionsError}
           action={
             <Button
-              label="Try Again"
+              icon="refresh"
+              label="Retry"
               size="sm"
               variant="gray"
               onPress={model.onRetryRuntimeDefinitions}
@@ -99,7 +105,8 @@ function StartNotices({
           message={model.runtimeSettingsError}
           action={
             <Button
-              label="Try Again"
+              icon="refresh"
+              label="Retry"
               size="sm"
               variant="gray"
               onPress={model.onRetryRuntimeSettings}
@@ -117,12 +124,13 @@ function StartNotices({
       {model.kickoffPromptError ? (
         <Callout
           tone="destructive"
-          title="The kickoff prompt did not load"
+          title="Could not load the first message"
           message={model.kickoffPromptError}
           action={
             model.onRetryKickoffPrompt ? (
               <Button
-                label="Try Again"
+                label="Retry"
+                icon="refresh"
                 size="sm"
                 variant="gray"
                 onPress={model.onRetryKickoffPrompt}
@@ -166,10 +174,12 @@ const modelLoadingLabel = (model: SessionStartModalModel): string | null => {
  */
 export function SessionStartForm({
   model: shown,
+  blockedReason,
   branchesFailure,
   onEdit = NO_EDIT_REPORT,
 }: {
   model: SessionStartModalModel;
+  blockedReason: string | null;
   /** The failed branch list read, which the target branch choice needs. */
   branchesFailure: BranchesFailure | null;
   /** Runs when the user changes a choice. */
@@ -189,8 +199,9 @@ export function SessionStartForm({
   const selection = model.selectedModelSelection;
   const modelName = modelSummary(model.modelPickerRuntimes, selection).title;
   const busy = model.isStarting;
-  const { confirmDisabled, blockedReason } = availability;
+  const confirmDisabled = blockedReason !== null || availability.confirmDisabled;
   const confirm = (runInBackground: boolean) => {
+    if (confirmDisabled) return;
     model.onConfirm({
       runInBackground,
       ...buildSessionStartConfirmDraft({
@@ -211,7 +222,7 @@ export function SessionStartForm({
 
   return (
     <ActionForm
-      note={blockedReason}
+      note={blockedReason ?? availability.blockedReason}
       secondary={
         model.allowRunInBackground ? (
           <SessionStartBackgroundButton
@@ -223,7 +234,8 @@ export function SessionStartForm({
       }
       primary={
         <Button
-          label={titleCase(model.confirmLabel)}
+          label={model.confirmLabel}
+          icon="play"
           variant="filled"
           size="lg"
           loading={busy}
@@ -237,9 +249,8 @@ export function SessionStartForm({
     >
       <StartNotices model={model} branchesFailure={choosesTargetBranch ? branchesFailure : null} />
       <FormBody>
-        <FormLead text={model.description} />
         {modes.length > 0 ? (
-          <FormField label="Session Mode">
+          <FormField label="Session mode">
             <SegmentedControl
               label="Session mode"
               options={modes}
@@ -288,7 +299,7 @@ export function SessionStartForm({
             />
           </FormField>
         ) : null}
-        {model.isKickoffPromptLoading ? <LoadingLine label="Loading kickoff prompt…" /> : null}
+        {model.isKickoffPromptLoading ? <LoadingLine label="Loading first message…" /> : null}
         {kickoff.hasPrompt ? (
           <KickoffPromptField kickoff={kickoff} busy={busy} onEdit={onEdit} />
         ) : null}
@@ -348,7 +359,7 @@ function SourceSessionField({
   const empty = options.length === 0;
   return (
     <FormField
-      label="Existing Session"
+      label="Existing session"
       hint={empty ? "This task has no session to start from." : null}
     >
       <SelectTrigger
@@ -362,7 +373,7 @@ function SourceSessionField({
       />
       <OptionPickerSheet
         visible={open}
-        title="Existing Session"
+        title="Existing session"
         searchPlaceholder="Search sessions"
         choices={options.map((option) => ({
           value: option.value,
@@ -394,7 +405,7 @@ function TargetBranchField({
   return (
     <FormField
       label="Target branch"
-      hint="The Builder merges into this branch."
+      hint="Use this branch as the merge target."
       error={model.targetBranchError}
     >
       <SelectTrigger
@@ -409,7 +420,7 @@ function TargetBranchField({
       />
       <BranchPickerSheet
         visible={open}
-        title="Target Branch"
+        title="Target branch"
         choices={branchOptions}
         selected={model.selectedTargetBranch}
         onSelect={onSelect}
@@ -465,7 +476,7 @@ function KickoffPromptField({
     <View style={styles.kickoff}>
       <View style={styles.switch}>
         <SwitchRow
-          label="Customize kickoff prompt"
+          label="Customize first message"
           description="Replace the first message that this action sends to the agent."
           value={kickoff.enabled}
           onValueChange={(enabled) => {
@@ -478,7 +489,7 @@ function KickoffPromptField({
       {kickoff.enabled ? (
         <Animated.View entering={FadeIn.duration(motion.base)}>
           <TextField
-            label="Kickoff prompt"
+            label="First message"
             value={kickoff.text}
             onChangeText={(text) => {
               onEdit();

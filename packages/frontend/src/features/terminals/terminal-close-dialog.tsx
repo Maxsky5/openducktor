@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, Square } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,13 +30,13 @@ export function TerminalCloseDialog({ model }: { model: TerminalCloseDialogModel
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            Terminate and close {candidate ? terminalTabLabel(candidate) : "terminal"}?
+            Stop and close {candidate ? terminalTabLabel(candidate) : "terminal"}?
           </DialogTitle>
           <DialogDescription>
-            This stops the running process tree. This action cannot be undone.
+            Stops the terminal and the processes it started. Unfinished work may be lost.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="flex-row justify-between border-t border-border pt-5 sm:justify-between">
+        <DialogFooter className="justify-between border-t border-border pt-5">
           <Button type="button" variant="outline" onClick={model.onCancel} disabled={isConfirming}>
             Cancel
           </Button>
@@ -46,8 +46,12 @@ export function TerminalCloseDialog({ model }: { model: TerminalCloseDialogModel
             onClick={model.onConfirm}
             disabled={isConfirming}
           >
-            {isConfirming ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-            Terminate and close
+            {isConfirming ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Square data-icon="inline-start" />
+            )}
+            Stop and close
           </Button>
         </DialogFooter>
       </DialogContent>

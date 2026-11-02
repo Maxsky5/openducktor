@@ -31,7 +31,7 @@ export function TaskArtifactPreviewDialog({
           <DialogTitle className="truncate text-sm font-medium">
             {content.artifact.name}
           </DialogTitle>
-          <DialogDescription className="sr-only">Expanded artifact preview.</DialogDescription>
+          <DialogDescription className="sr-only">View the full artifact.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <TaskArtifactPreview artifact={content.artifact} bytes={content.bytes} />

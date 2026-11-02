@@ -89,7 +89,7 @@ export function RepositoryDefaultModelBlock({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="grid gap-1">
-          <h3 className="text-sm font-semibold text-foreground">Default Model</h3>
+          <h3 className="text-sm font-semibold text-foreground">Default model</h3>
           <p className="text-xs text-muted-foreground">
             Used for new chats and for workflow sessions that have no role default.
           </p>
@@ -136,7 +136,7 @@ export function RepositoryDefaultModelBlock({
         />
 
         <div className="grid min-w-0 gap-1">
-          <Label className="text-xs">Agent Profile</Label>
+          <Label className="text-xs">Agent profile</Label>
           <Combobox
             value={value.profileId}
             options={controls.profile.options}

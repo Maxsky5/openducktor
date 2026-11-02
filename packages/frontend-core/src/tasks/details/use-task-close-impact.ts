@@ -62,14 +62,19 @@ export type TaskApprovalImpact = { close: TaskCloseImpact; worktree: TaskWorktre
  * A confirmation shows one loader until each read has its first result and the default cleanup
  * choice is known. Its content then shows at once, and no part of it moves as the reads end.
  */
-export const useTaskCloseReadsPending = (impact: Pick<TaskWorktreeImpact, "isReady">): boolean => {
+export const useTaskCloseReadsPending = (
+  impact: Pick<TaskWorktreeImpact, "isReady">,
+  removeWorktree: boolean | null,
+): boolean => {
   const settings = useGlobalRemoveWorktreeOnClose();
-  return !impact.isReady || settings.isPending;
+  return !impact.isReady || (removeWorktree === null && settings.isPending);
 };
 
 /** The loader of a close confirmation: it shows while the reads run, and at least 500 ms. */
-export const useTaskCloseLoader = (impact: Pick<TaskWorktreeImpact, "isReady">): boolean =>
-  useMinimumLoader(useTaskCloseReadsPending(impact));
+export const useTaskCloseLoader = (
+  impact: Pick<TaskWorktreeImpact, "isReady">,
+  removeWorktree: boolean | null,
+): boolean => useMinimumLoader(useTaskCloseReadsPending(impact, removeWorktree));
 
 /** The reads are pending or one failed, so the confirmation cannot run yet. */
 export const isReadBlocked = (read: TaskReadState): boolean =>
@@ -128,7 +133,9 @@ export function useTaskApprovalImpact({
       activeSessionCount: stop.stoppableSessionCount,
       // The session read blocks the close too, so it shares the read state of the worktree reads.
       isLoading: impact.isLoading || stop.isLoading,
-      isReady: impact.isReady && (!enabled || (stopReady && mergeStatusQuery.status !== "pending")),
+      isReady:
+        impact.isReady &&
+        (!enabled || (stopReady && (!mergeCandidate || mergeStatusQuery.status !== "pending"))),
       error: impact.error ?? stopError,
       retry: () => {
         impact.retry();

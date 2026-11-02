@@ -6,7 +6,7 @@ import {
   WorkspaceSessionExternal,
 } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { MessageSquare, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
@@ -234,6 +234,7 @@ function RuntimeSessionResults({
                 setAttempt((value) => value + 1);
               }}
             >
+              <RefreshCw data-icon="inline-start" />
               Retry
             </Button>
           </div>
@@ -269,6 +270,7 @@ function RuntimeSessionResults({
           <p className="text-sm text-destructive">{errorMessage(mutation.error)}</p>
           {selected && (
             <Button variant="outline" onClick={() => submit(selected)}>
+              <RefreshCw data-icon="inline-start" />
               Retry import
             </Button>
           )}
@@ -288,6 +290,7 @@ function RuntimeSessionResults({
               }
             }}
           >
+            <MessageSquare data-icon="inline-start" />
             Open saved chat
           </Button>
         </div>

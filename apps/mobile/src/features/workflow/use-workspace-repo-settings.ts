@@ -20,8 +20,8 @@ export type BranchesFailure = { message: string; retry: () => void };
 /**
  * The repository settings, branches, and Git provider of a workspace for its task workflows. The
  * host sends no event when its settings change, so each workflow sheet reads the repository
- * settings again when it opens. A start then uses the current default runtimes, models, efforts,
- * and target branch, also after a change in another client.
+ * settings again when it opens. Cached settings let the form open at once while the read checks
+ * for changes in another client.
  */
 export function useWorkspaceRepoSettings(workspace: WorkspaceRecord) {
   const queryClient = useQueryClient();
@@ -55,9 +55,9 @@ export function useWorkspaceRepoSettings(workspace: WorkspaceRecord) {
   );
   return {
     repoSettings,
-    /** True once the read that the sheet started has settled, with the settings or a failure. */
-    repoSettingsReady: config.isFetchedAfterMount && !config.isFetching,
-    repoSettingsError: config.error,
+    repoSettingsReady: config.data !== undefined,
+    repoSettingsError: config.data === undefined ? config.error : null,
+    repoSettingsRefreshError: config.data !== undefined ? config.error : null,
     retryRepoSettings,
     branches: branches.data ?? EMPTY_BRANCHES,
     branchesFailure,

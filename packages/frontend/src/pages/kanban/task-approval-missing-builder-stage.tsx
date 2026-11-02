@@ -1,4 +1,4 @@
-import { LoaderCircle } from "lucide-react";
+import { CircleCheckBig, LoaderCircle, RotateCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import {
   TASK_APPROVAL_COPY as COPY,
@@ -8,7 +8,6 @@ import type { TaskApprovalMissingBuilderWorktreeModalModel } from "@openducktor/
 import type { TaskCloseMergeCheck } from "@openducktor/frontend-core/tasks/approval/use-task-approval-merge-check";
 import { taskCloseConfirmLabel } from "@openducktor/frontend-core/tasks/details/task-close-copy";
 import type { TaskCloseImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
-import { TaskReadsLoading } from "@/components/features/task-details/task-reads-loading";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { TaskCloseConfirmContent } from "@/components/features/task-details/task-close-confirm-content";
@@ -34,26 +33,21 @@ export function TaskApprovalMissingBuilderWorktreeStage({
   return (
     <>
       <DialogBody className={STAGE_BODY_CLASS}>
-        {isPreparing ? (
-          <TaskReadsLoading className="h-full min-h-56 px-6 py-6 sm:px-8" />
-        ) : (
-          // The header names the missing worktree and the two next steps.
-          <div className={STAGE_CONTENT_CLASS}>
-            {model.errorMessage ? (
-              <div className="grid gap-1 rounded-lg border border-destructive-border bg-destructive-surface p-3 text-sm text-destructive-surface-foreground">
-                <p className="font-semibold">{COPY.recoveryFailedTitle}</p>
-                <p className="text-destructive-muted">{model.errorMessage}</p>
-              </div>
-            ) : null}
-            <TaskCloseConfirmContent
-              impact={impact}
-              removeWorktree={model.removeWorktree}
-              onRemoveWorktreeChange={model.onRemoveWorktreeChange}
-              disabled={model.isSubmitting}
-              mergeCheck={mergeCheck}
-            />
-          </div>
-        )}
+        <div className={STAGE_CONTENT_CLASS}>
+          {model.errorMessage ? (
+            <div className="grid gap-1 rounded-lg border border-destructive-border bg-destructive-surface p-3 text-sm text-destructive-surface-foreground">
+              <p className="font-semibold">{COPY.recoveryFailedTitle}</p>
+              <p className="text-destructive-muted">{model.errorMessage}</p>
+            </div>
+          ) : null}
+          <TaskCloseConfirmContent
+            impact={impact}
+            removeWorktree={model.removeWorktree}
+            onRemoveWorktreeChange={model.onRemoveWorktreeChange}
+            disabled={model.isSubmitting}
+            mergeCheck={mergeCheck}
+          />
+        </div>
       </DialogBody>
 
       <DialogFooter className={STAGE_ACTIONS_FOOTER_CLASS}>
@@ -65,13 +59,14 @@ export function TaskApprovalMissingBuilderWorktreeStage({
         >
           {COPY.cancel}
         </Button>
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex w-full flex-col-reverse gap-2 [&>button]:w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:[&>button]:w-auto">
           <Button
             type="button"
-            variant="outline"
+            variant="destructive"
             disabled={model.isSubmitting}
             onClick={model.onResetMissingBuilderWorktree}
           >
+            <RotateCcw data-icon="inline-start" />
             {COPY.resetImplementation}
           </Button>
           <Button
@@ -80,7 +75,11 @@ export function TaskApprovalMissingBuilderWorktreeStage({
             disabled={missingBuilderWorktreeConfirmDisabled(model, impact, isPreparing)}
             onClick={model.onCloseMissingBuilderWorktree}
           >
-            {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {model.isSubmitting ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <CircleCheckBig data-icon="inline-start" />
+            )}
             {taskCloseConfirmLabel(model.isSubmitting)}
           </Button>
         </div>

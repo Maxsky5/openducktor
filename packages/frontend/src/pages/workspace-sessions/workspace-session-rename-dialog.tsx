@@ -2,7 +2,7 @@ import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Save } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,7 +102,15 @@ export function WorkspaceSessionRenameDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={!canSave}>
-                {rename.isPending && <LoaderCircle className="animate-spin" aria-hidden="true" />}
+                {rename.isPending ? (
+                  <LoaderCircle
+                    className="animate-spin"
+                    data-icon="inline-start"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Save data-icon="inline-start" aria-hidden="true" />
+                )}
                 {rename.isPending ? RENAME_CHAT_TEXT.saving : RENAME_CHAT_TEXT.save}
               </Button>
             </DialogFooter>

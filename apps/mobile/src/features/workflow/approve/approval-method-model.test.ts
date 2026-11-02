@@ -73,17 +73,17 @@ describe("approvalChoices", () => {
   test("offers Direct Merge methods and merges locally", () => {
     const choices = approvalChoices(model({}));
     expect(choices.modes.map((mode) => mode.label)).toEqual([
-      "Direct Merge",
-      "Pull Request",
-      "Close Task",
+      "Direct merge",
+      "Pull request",
+      "Close task",
     ]);
     expect(choices.mergeMethods?.map((method) => method.label)).toEqual([
-      "Merge Commit",
+      "Merge commit",
       "Squash",
       "Rebase",
     ]);
     expect(choices.draftModes).toBeNull();
-    expect(choices.confirmLabel).toBe("Merge Locally");
+    expect(choices.confirmLabel).toBe("Merge locally");
     expect(choices.confirmDisabled).toBe(false);
     expect(choices.confirmBlockedReason).toBeNull();
   });
@@ -100,16 +100,13 @@ describe("approvalChoices", () => {
 
   test("a pull request is written manually or generated with AI", () => {
     const manual = approvalChoices(model({ mode: "pull_request", pullRequestDraftMode: "manual" }));
-    expect(manual.draftModes?.map((mode) => mode.label)).toEqual([
-      "Write Manually",
-      "Generate With AI",
-    ]);
+    expect(manual.draftModes?.map((mode) => mode.label)).toEqual(["Write manually", "Ask Builder"]);
     expect(manual.showPullRequestFields).toBe(true);
-    expect(manual.confirmLabel).toBe("Create Pull Request");
+    expect(manual.confirmLabel).toBe("Create pull request");
     expect(manual.confirmDisabled).toBe(true);
     expect(manual.confirmBlockedReason).toBe("Write the pull request title and description.");
     const generated = approvalChoices(model({ mode: "pull_request" }));
-    expect(generated.confirmLabel).toBe("Start PR Generation");
+    expect(generated.confirmLabel).toBe("Choose Builder session");
     expect(generated.confirmDisabled).toBe(false);
   });
 
@@ -124,7 +121,7 @@ describe("approvalChoices", () => {
     const close = approvalChoices(
       model({ mode: "close_task", hasUncommittedChanges: true, uncommittedFileCount: 2 }),
     );
-    expect(close.confirmLabel).toBe("Close Task");
+    expect(close.confirmLabel).toBe("Close task");
     expect(close.confirmDisabled).toBe(false);
     expect(close.mergeMethods).toBeNull();
   });
@@ -135,9 +132,7 @@ describe("approvalChoices", () => {
       "close_task",
     ]);
     expect(choices.confirmDisabled).toBe(true);
-    expect(choices.confirmBlockedReason).toBe(
-      "Close Task does not merge code, so it stays available.",
-    );
+    expect(choices.confirmBlockedReason).toBe("You can still close the task without merging code.");
   });
 
   test("gives no blocked reason while the approval loads or submits", () => {

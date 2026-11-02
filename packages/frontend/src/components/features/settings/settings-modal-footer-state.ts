@@ -89,7 +89,7 @@ export function resolveSettingsModalFooter({
   ) {
     messages.push({
       id: "catalog",
-      text: `Runtime definitions unavailable: ${errors.catalogError}`,
+      text: `Could not load runtimes: ${errors.catalogError}`,
     });
   }
   if (errors.runtimeExecutablesError && location.section === "runtimes") {

@@ -74,7 +74,7 @@ const LoadingNotice = ({
   return (
     <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground" role="status">
       <LoaderCircle className="animate-spin" aria-hidden="true" />
-      Loading {subject}...
+      Loading {subject}…
     </div>
   );
 };

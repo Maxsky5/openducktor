@@ -44,9 +44,7 @@ export function MarkdownPreviewModal({
           <DialogTitle className={title ? "text-xl font-semibold" : "sr-only"}>
             {title ?? "Artifact preview"}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            Fullscreen Markdown artifact preview.
-          </DialogDescription>
+          <DialogDescription className="sr-only">Read the full artifact.</DialogDescription>
         </DialogHeader>
         <DialogBody className="min-h-0 flex-1 overflow-hidden">
           <div className="relative max-h-[calc(100dvh-12rem)] overflow-y-auto px-6 pt-4 pb-6">

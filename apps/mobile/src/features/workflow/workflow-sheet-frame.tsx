@@ -58,7 +58,7 @@ export function WorkflowSheetFrame({
       <GroupedSheet title={title}>
         <EmptyState
           icon="link-off"
-          title="Incomplete Link"
+          title="Incomplete task link"
           message="It does not name a task. Open the action again from its task."
         />
       </GroupedSheet>

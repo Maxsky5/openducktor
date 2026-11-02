@@ -23,13 +23,13 @@ export default function NewChatRoute(): ReactElement {
     content = (
       <EmptyState
         icon="message-square-off"
-        title="Workspace Not Open"
+        title="Workspace not open"
         message="Open the workspace on the host, then create the chat from Sessions."
       />
     );
   }
   return (
-    <SheetScreen title="New Chat">
+    <SheetScreen title="New chat">
       <Screen background="sheet">{content}</Screen>
     </SheetScreen>
   );

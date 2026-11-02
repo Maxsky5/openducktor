@@ -1,5 +1,6 @@
 import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
-import { Save } from "lucide-react";
+import { RefreshCw, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { RuntimeImpactDialog } from "@/components/features/runtimes/runtime-impact-dialog";
 import { runtimeImpactPathChanges } from "./settings-save/runtime-settings-application";
 import {
@@ -8,7 +9,6 @@ import {
 } from "./use-settings-modal-requests";
 import type { RuntimeKind } from "@openducktor/contracts";
 import {
-  createContext,
   type PropsWithChildren,
   type ReactElement,
   type ReactNode,
@@ -19,6 +19,7 @@ import {
 } from "react";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -35,6 +36,9 @@ import { SettingsModalOpenButton, SettingsModalTrigger } from "./settings-modal-
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
+import { SettingsModalContext } from "./settings-modal-context";
+
+export { useSettingsModal } from "./settings-modal-context";
 export type { SettingsDeepLink } from "./settings-deep-link";
 
 type SettingsModalProps = {
@@ -45,12 +49,6 @@ type SettingsModalProps = {
   deepLink?: SettingsDeepLink;
   onOpenChange?: (open: boolean) => void;
 };
-
-type SettingsModalContextValue = {
-  openSettings(request?: SettingsModalOpenRequest): void;
-};
-
-const SettingsModalContext = createContext<SettingsModalContextValue | null>(null);
 
 export function SettingsModal(props: SettingsModalProps): ReactElement {
   const context = useContext(SettingsModalContext);
@@ -102,12 +100,6 @@ export function SettingsModalProvider({ children }: PropsWithChildren): ReactEle
       ) : null}
     </SettingsModalContext.Provider>
   );
-}
-
-export function useSettingsModal(): SettingsModalContextValue {
-  const value = useContext(SettingsModalContext);
-  if (!value) throw new Error("useSettingsModal must be used inside SettingsModalProvider.");
-  return value;
 }
 
 function LocalSettingsModal({
@@ -175,6 +167,7 @@ function SettingsDialog({
     workspaceSelectionPolicy,
     onRuntimeAvailabilityError: handleRuntimeAvailabilityError,
   });
+  const isPreparing = open && controller.isLoadingSettings && controller.snapshotDraft === null;
   const isInteractionDisabled = isSettingsInteractionDisabled(controller);
   const { runtimeReview } = controller;
 
@@ -236,18 +229,27 @@ function SettingsDialog({
       {children}
 
       <DialogContent
+        loading={isPreparing}
+        loadingLabel="Loading settings…"
         className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0"
         onCloseAutoFocus={onCloseAutoFocus}
       >
-        <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
+        <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6 pr-14">
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>
-            Configure global defaults, repository settings, and prompt overrides.
-          </DialogDescription>
+          <DialogDescription>Manage your agents, workspaces and app preferences.</DialogDescription>
+          {controller.settingsError && controller.snapshotDraft ? (
+            <p role="alert" className="text-sm text-destructive">
+              Settings could not refresh: {controller.settingsError}
+              <Button variant="outline" size="sm" onClick={controller.retrySettings}>
+                <RefreshCw data-icon="inline-start" />
+                Retry settings
+              </Button>
+            </p>
+          ) : null}
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] grid-rows-1">
+        <DialogBody className="min-h-0 flex-1 overflow-hidden">
+          <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[220px_minmax(0,1fr)] sm:grid-rows-1">
             <SettingsSidebar
               section={navigation.section}
               disabled={isInteractionDisabled}
@@ -276,7 +278,7 @@ function SettingsDialog({
               />
             </div>
           </div>
-        </div>
+        </DialogBody>
 
         <SettingsModalFooter
           saveState={{

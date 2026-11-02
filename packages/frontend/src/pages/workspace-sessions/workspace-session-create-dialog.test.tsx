@@ -40,7 +40,7 @@ import {
 import { AppToaster, StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 
-function renderCreation(
+function mountCreation(
   create: (
     input: WorkspaceSessionCreateInput,
     startup: StartupOperationContext | undefined,
@@ -50,6 +50,7 @@ function renderCreation(
     throw new Error("Unexpected successful creation");
   },
   clientOverrides: Partial<HostClient> = {},
+  runtimeOverrides: Partial<ComponentProps<typeof RuntimeDefinitionsContext>["value"]> = {},
 ) {
   const snapshot = createSettingsSnapshotFixture();
   const workspace = createWorkspaceRecordFixture({
@@ -134,6 +135,7 @@ function renderCreation(
     refreshRuntimeSettings: async () => {},
     loadRepoRuntimeCatalog: async () => createRuntimeCatalogFixture({ models: catalog }),
     loadRepoRuntimeFileSearch: async () => [],
+    ...runtimeOverrides,
   };
   let publishProgress: (snapshot: StartupOperationSnapshot) => void = () => {
     throw new Error("Startup progress is not subscribed.");
@@ -295,6 +297,87 @@ function renderCreation(
   };
 }
 
+async function renderCreation(...args: Parameters<typeof mountCreation>) {
+  const view = mountCreation(...args);
+  await view.findByRole("textbox", { name: /^Name/ });
+  return view;
+}
+
+test.each(["roles", "branches", "defaults", "models"] as const)(
+  "New chat opens immediately and keeps the draft while %s load",
+  async (read) => {
+    const pending = Promise.withResolvers<void>();
+    const close = mock(() => {});
+    const create = mock(async () => {
+      throw new Error("Creating a chat is not part of opening the form");
+    });
+    const view = mountCreation(
+      create,
+      close,
+      undefined,
+      {
+        ...(read === "roles" && {
+          customAgentRoleList: async () => {
+            await pending.promise;
+            return [];
+          },
+        }),
+        ...(read === "branches" && {
+          gitGetBranches: async () => {
+            await pending.promise;
+            return [{ name: "main", isRemote: false, isCurrent: true }];
+          },
+        }),
+        ...(read === "defaults" && {
+          workspaceGetRepoConfig: async () => {
+            await pending.promise;
+            return repoConfigSchema.parse({
+              workspaceId: "A",
+              workspaceName: "A",
+              repoPath: "/repo",
+              branchPrefix: "odt",
+            });
+          },
+        }),
+      },
+      read === "models"
+        ? {
+            loadRepoRuntimeCatalog: async () => {
+              await pending.promise;
+              return createRuntimeCatalogFixture();
+            },
+          }
+        : {},
+    );
+    try {
+      const dialog = view.getByRole("dialog", { name: "New chat" });
+      expect(dialog.hasAttribute("aria-busy")).toBe(false);
+      const name = view.getByRole("textbox", { name: /^Name/ });
+      fireEvent.change(name, { target: { value: "My new chat" } });
+      if (read === "defaults") {
+        const picker = view.getByRole("button", { name: "Select model, Select a model" });
+        fireEvent.click(picker);
+        fireEvent.click(await view.findByRole("button", { name: "Select Test model model" }));
+        await waitFor(() => expect(document.activeElement === picker).toBe(true), { timeout: 800 });
+      }
+      name.focus();
+      expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+      expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
+      await act(async () => pending.resolve());
+      await waitFor(() => expect(view.queryClient.isFetching()).toBe(0), { timeout: 800 });
+      expect(dialog.hasAttribute("aria-busy")).toBe(false);
+      expect(view.getByDisplayValue("My new chat")).toBe(name);
+      expect(document.activeElement === name).toBe(true);
+      fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve();
+      view.unmount();
+    }
+  },
+);
+
 test("opening a saved failed current-checkout creation retains feedback and session inspection", async () => {
   const session: WorkspaceSession = {
     id: "retained-created",
@@ -313,7 +396,7 @@ test("opening a saved failed current-checkout creation retains feedback and sess
   const create = mock(async () => ({ session }));
   let starts = 0;
   let closes = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     create,
     () => {
       closes += 1;
@@ -400,7 +483,7 @@ function worktreeOf(input: WorkspaceSessionCreateInput | undefined) {
   return input?.location === "local_worktree" ? input.worktree : undefined;
 }
 
-async function selectModel(view: ReturnType<typeof renderCreation>) {
+async function selectModel(view: Awaited<ReturnType<typeof renderCreation>>) {
   fireEvent.click(view.getByRole("button", { name: "Select model, Select a model" }));
   const choice = await view.findByRole(
     "button",
@@ -417,13 +500,13 @@ async function selectModel(view: ReturnType<typeof renderCreation>) {
   );
 }
 
-async function selectTarget(view: ReturnType<typeof renderCreation>, name: RegExp) {
+async function selectTarget(view: Awaited<ReturnType<typeof renderCreation>>, name: RegExp) {
   fireEvent.click(view.getByRole("button", { name: "Target branch" }));
   fireEvent.click(await view.findByRole("option", { name }, { timeout: 800 }));
 }
 
 /** Opens the Target branch list, runs the checks, and closes the list. */
-function inTargetOptions(view: ReturnType<typeof renderCreation>, check: () => void) {
+function inTargetOptions(view: Awaited<ReturnType<typeof renderCreation>>, check: () => void) {
   fireEvent.click(view.getByRole("button", { name: "Target branch" }));
   try {
     check();
@@ -434,7 +517,7 @@ function inTargetOptions(view: ReturnType<typeof renderCreation>, check: () => v
 
 test("preselects the repository default target, marks it, and sends it", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
@@ -458,7 +541,7 @@ test("preselects the repository default target, marks it, and sends it", async (
 
 test("New worktree hides Tracked upstream and returns an upstream pick to the default", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
@@ -487,7 +570,7 @@ test("New worktree hides Tracked upstream and returns an upstream pick to the de
 
 test("sends a picked local target and keeps it across a location change", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
@@ -504,8 +587,8 @@ test("sends a picked local target and keeps it across a location change", async 
   }
 });
 
-test("matches the task modal width and footer surface, separates actions and disables name autocomplete", () => {
-  const view = renderCreation(async () => {
+test("matches the task modal width and footer surface, separates actions and disables name autocomplete", async () => {
+  const view = await renderCreation(async () => {
     throw new Error("Unexpected creation");
   });
   try {
@@ -524,8 +607,8 @@ test("matches the task modal width and footer surface, separates actions and dis
   }
 });
 
-test("omits checkout help text for both work locations", () => {
-  const view = renderCreation(async () => {
+test("omits checkout help text for both work locations", async () => {
+  const view = await renderCreation(async () => {
     throw new Error("Unexpected creation");
   });
   try {
@@ -539,7 +622,7 @@ test("omits checkout help text for both work locations", () => {
 });
 
 test("uses the task modal label-to-control gap for every form field", async () => {
-  const view = renderCreation(async () => {
+  const view = await renderCreation(async () => {
     throw new Error("Unexpected creation");
   });
   try {
@@ -575,7 +658,7 @@ test("a current-checkout creation keeps disabled choices pending and failure fee
   let rejectCreation!: (cause: Error) => void;
   let created = 0;
   let closed = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     () =>
       new Promise<never>((_resolve, reject) => {
         rejectCreation = reject;
@@ -647,7 +730,7 @@ test("retries preparation of the saved draft and waits for native live evidence 
   const starts: WorkspaceSessionStartInput[] = [];
   const handedOff: WorkspaceSession[] = [];
   const prepared = Promise.withResolvers<WorkspaceSessionStartResult>();
-  const view = renderCreation(
+  const view = await renderCreation(
     create,
     () => {},
     (record) => {
@@ -761,7 +844,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     startup: StartupOperationContext | undefined;
   }[] = [];
   let closed = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     async (input, startup) => {
       requests.push({ input, startup });
       return new Promise<never>(() => {});
@@ -852,7 +935,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
 
 test("shows the repository defaults read failure, keeps a target pick usable and retries", async () => {
   let readAttempts = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     async () => {
       throw new Error("Unexpected creation");
     },
@@ -893,7 +976,7 @@ test("shows the repository defaults read failure, keeps a target pick usable and
 test("creates a worktree chat with one request and no confirmation step", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
   let created = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     async (input) => {
       requests.push(input);
       return {
@@ -946,7 +1029,7 @@ test("creates a worktree chat with one request and no confirmation step", async 
 
 test("requires a safe worktree name and sends an optional custom branch from Advanced", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
@@ -981,7 +1064,7 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
 
 test("Existing branch accepts slash-separated worktree names and submits a safe directory name", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
@@ -1032,7 +1115,7 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
 
 test("blocks submission when refreshed data shows the selected branch is now checked out", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Unexpected creation");
   });
@@ -1080,7 +1163,7 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
         ? "Worktree directory already exists. Choose another name."
         : "Branch already exists. Choose another name or use Existing branch.";
     const requests: WorkspaceSessionCreateInput[] = [];
-    const view = renderCreation(async (input) => {
+    const view = await renderCreation(async (input) => {
       requests.push(input);
       throw new HostInvokeError(message, { kind: "workspace_session_validation", field });
     });
@@ -1114,7 +1197,7 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
 
 test("returning to Current checkout omits all worktree options", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
-  const view = renderCreation(async (input) => {
+  const view = await renderCreation(async (input) => {
     requests.push(input);
     throw new Error("Keep form open");
   });
@@ -1135,7 +1218,7 @@ test("returning to Current checkout omits all worktree options", async () => {
 test("Existing worktree requires an explicit pick and sends only the selected directory", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
   let reads = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     async (input) => {
       requests.push(input);
       throw new Error("Keep form open");
@@ -1209,7 +1292,7 @@ test("Existing worktree requires an explicit pick and sends only the selected di
 test("Existing worktree shows the loading, failed, and empty states, and retries", async () => {
   const reads: Array<{ resolve: (worktrees: string[]) => void; reject: (cause: Error) => void }> =
     [];
-  const view = renderCreation(
+  const view = await renderCreation(
     async () => {
       throw new Error("Unexpected creation");
     },
@@ -1264,7 +1347,7 @@ test("Existing worktree shows the loading, failed, and empty states, and retries
 test("a failed creation reads the worktrees again and marks a removed choice as unavailable", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
   let reads = 0;
-  const view = renderCreation(
+  const view = await renderCreation(
     async (input) => {
       requests.push(input);
       throw new Error("The directory is not a registered worktree of this repository.");

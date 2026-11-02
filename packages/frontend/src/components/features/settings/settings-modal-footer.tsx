@@ -1,5 +1,7 @@
+import { LoaderCircle, Save } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { DialogFooter } from "@/components/ui/dialog";
 import {
   resolveSettingsModalFooter,
   type SettingsModalFooterState,
@@ -26,14 +28,14 @@ export function SettingsModalFooter({
   });
 
   return (
-    <div className="mt-0 flex shrink-0 items-center justify-start border-t border-border px-6 pb-4 pt-4">
-      <div className="flex items-center gap-2">
-        <Button type="button" variant="secondary" disabled={saveState.isSaving} onClick={onCancel}>
+    <DialogFooter className="mt-0 flex-col items-stretch justify-start gap-2 border-t border-border px-6 py-4 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex items-center gap-2 [&>button]:w-full sm:[&>button]:w-auto">
+        <Button type="button" variant="outline" disabled={saveState.isSaving} onClick={onCancel}>
           Cancel
         </Button>
       </div>
 
-      <div className="flex grow items-center gap-2 text-sm">
+      <div className="-order-2 flex min-w-0 grow flex-col gap-1 text-sm empty:hidden sm:order-none sm:flex-row">
         {messages.map((message) => (
           <span key={message.id} className="whitespace-pre-wrap break-words text-destructive-muted">
             {message.text}
@@ -41,11 +43,16 @@ export function SettingsModalFooter({
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="-order-1 flex items-center justify-end gap-2 [&>button]:w-full sm:order-none sm:[&>button]:w-auto">
         <Button type="button" disabled={isSaveDisabled} onClick={onSave}>
-          {saveState.isSaving ? "Saving..." : "Save Settings"}
+          {saveState.isSaving ? (
+            <LoaderCircle className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <Save data-icon="inline-start" />
+          )}
+          {saveState.isSaving ? "Saving…" : "Save settings"}
         </Button>
       </div>
-    </div>
+    </DialogFooter>
   );
 }

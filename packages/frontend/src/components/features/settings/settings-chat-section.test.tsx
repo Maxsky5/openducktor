@@ -62,8 +62,8 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expect(screen.getByText("Chat Settings")).toBeDefined();
-    expect(screen.getByText("Show Thinking Messages")).toBeDefined();
+    expect(screen.getByText("Chat settings")).toBeDefined();
+    expect(screen.getByText("Show thinking messages")).toBeDefined();
     expect(screen.getByText(/Thinking messages are hidden by default/)).toBeDefined();
     expect(
       screen.getByText(
@@ -72,11 +72,11 @@ describe("settings chat section", () => {
     ).toBeDefined();
     expect(screen.getByText("Expand file diffs by default")).toBeDefined();
     expect(screen.getByText(/File diffs in session transcripts will start expanded/)).toBeDefined();
-    expect(screen.getByText("Diff Style")).toBeDefined();
-    expect(screen.getByText("Diff Indicators")).toBeDefined();
-    expect(screen.getByText("Diff Height")).toBeDefined();
-    expect(screen.getByText("Line Overflow")).toBeDefined();
-    expect(screen.getByText("Hunk Separators")).toBeDefined();
+    expect(screen.getByText("Diff style")).toBeDefined();
+    expect(screen.getByText("Diff indicators")).toBeDefined();
+    expect(screen.getByText("Diff height")).toBeDefined();
+    expect(screen.getByText("Line overflow")).toBeDefined();
+    expect(screen.getByText("Hunk separators")).toBeDefined();
   });
 
   test("renders switch as unchecked when showThinkingMessages is false", () => {
@@ -143,11 +143,11 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expectSegmentedOptions("Diff Style", ["Split", "Unified"]);
-    expectSegmentedOptions("Diff Indicators", ["Bars", "Classic", "None"]);
-    expectSegmentedOptions("Diff Height", ["Full", "Scroll"]);
-    expectSegmentedOptions("Line Overflow", ["Wrap", "Scroll"]);
-    expectSegmentedOptions("Hunk Separators", [
+    expectSegmentedOptions("Diff style", ["Split", "Unified"]);
+    expectSegmentedOptions("Diff indicators", ["Bars", "Classic", "None"]);
+    expectSegmentedOptions("Diff height", ["Full", "Scroll"]);
+    expectSegmentedOptions("Line overflow", ["Wrap", "Scroll"]);
+    expectSegmentedOptions("Hunk separators", [
       "Line info",
       "Line info basic",
       "Metadata",
@@ -160,8 +160,8 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expect(screen.getByRole("group", { name: "Diff Indicators" }).className).toContain("flex-wrap");
-    expect(screen.getByRole("group", { name: "Hunk Separators" }).className).toContain("flex-wrap");
+    expect(screen.getByRole("group", { name: "Diff indicators" }).className).toContain("flex-wrap");
+    expect(screen.getByRole("group", { name: "Hunk separators" }).className).toContain("flex-wrap");
   });
 
   test("marks saved transcript diff setting values as active", () => {
@@ -176,27 +176,27 @@ describe("settings chat section", () => {
     renderSettingsChatSection(chatSettings);
 
     expect(
-      within(screen.getByRole("group", { name: "Diff Style" }))
+      within(screen.getByRole("group", { name: "Diff style" }))
         .getByRole("button", { name: "Unified" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      within(screen.getByRole("group", { name: "Diff Indicators" }))
+      within(screen.getByRole("group", { name: "Diff indicators" }))
         .getByRole("button", { name: "None" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      within(screen.getByRole("group", { name: "Diff Height" }))
+      within(screen.getByRole("group", { name: "Diff height" }))
         .getByRole("button", { name: "Scroll" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      within(screen.getByRole("group", { name: "Line Overflow" }))
+      within(screen.getByRole("group", { name: "Line overflow" }))
         .getByRole("button", { name: "Scroll" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      within(screen.getByRole("group", { name: "Hunk Separators" }))
+      within(screen.getByRole("group", { name: "Hunk separators" }))
         .getByRole("button", { name: "Simple" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
@@ -216,7 +216,7 @@ describe("settings chat section", () => {
     const chatSettings = createChatSettings();
     const { getLatestChat, onUpdateChat } = renderSettingsChatSectionWithUpdates(chatSettings);
 
-    clickSegmentedOption("Diff Style", "Split");
+    clickSegmentedOption("Diff style", "Split");
 
     expect(onUpdateChat).not.toHaveBeenCalled();
     expect(getLatestChat()).toEqual(chatSettings);
@@ -229,11 +229,11 @@ describe("settings chat section", () => {
     });
     const { getLatestChat, onUpdateChat } = renderSettingsChatSectionWithUpdates(chatSettings);
 
-    clickSegmentedOption("Diff Style", "Unified");
-    clickSegmentedOption("Diff Indicators", "Classic");
-    clickSegmentedOption("Diff Height", "Scroll");
-    clickSegmentedOption("Line Overflow", "Scroll");
-    clickSegmentedOption("Hunk Separators", "Metadata");
+    clickSegmentedOption("Diff style", "Unified");
+    clickSegmentedOption("Diff indicators", "Classic");
+    clickSegmentedOption("Diff height", "Scroll");
+    clickSegmentedOption("Line overflow", "Scroll");
+    clickSegmentedOption("Hunk separators", "Metadata");
 
     expect(onUpdateChat).toHaveBeenCalledTimes(5);
     expect(getLatestChat()).toEqual({

@@ -6,7 +6,6 @@ import {
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { RESULT_UNKNOWN_TITLE } from "@openducktor/frontend-core/lib/command-outcome";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { collectKnownLabels } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import {
   ISSUE_IMPORT_INCOMPLETE_RESULTS_TEXT,
@@ -15,7 +14,6 @@ import {
   issueImportCreatedMessage,
   issueImportEmptyText,
   issueImportHasPages,
-  issueImportListQueryOptions,
   issueImportLoadingText,
   issueImportPageSummary,
   issueImportSearchField,
@@ -29,16 +27,15 @@ import {
 import {
   type IssueImportProvider,
   issueImportSourceLabel,
-  toIssueImportState,
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
 import {
-  useIssueImportSearch,
+  type useIssueImportSearch,
   useIssueImportSubmission,
   useIssueSelectionState,
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
-import { keepPreviousData, type UseQueryResult, useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { useLocalSearchParams, useNavigation } from "expo-router";
 import {
   Fragment,
   type ReactElement,
@@ -67,7 +64,7 @@ import { Chip } from "@/ui/chip";
 import { Screen } from "@/ui/screen";
 import { SearchField } from "@/ui/search-field";
 import { SkeletonFrame } from "@/ui/placeholders";
-import { EmptyState, ErrorState, LoadingState } from "@/ui/states";
+import { EmptyState, ErrorState } from "@/ui/states";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { KEYBOARD_DISMISS_ON_DRAG } from "@/ui/keyboard-dismiss";
@@ -75,11 +72,12 @@ import { ToolbarButton } from "../edit/form-parts";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { IssueReviewCard } from "./issue-review-card";
 import { IssueRow, IssueRowPlaceholder } from "./issue-row";
+import { type IssueImportReads, useIssueImportReads } from "./use-issue-import-reads";
 
 /** Mobile has no repository settings, so the texts tell where they are. */
 const SETTINGS_ELSEWHERE = "The repository settings are in the desktop or web app.";
 
-const SHEET_TITLE = "Import Issues";
+const SHEET_TITLE = "Import issues";
 const keyOf = (item: SourceIssue): string => item.sourceId;
 
 /** Import issues of the selected workspace: select, review, and import, as on desktop. */
@@ -100,22 +98,17 @@ export function ImportIssuesRoute(): ReactElement {
 }
 
 function ImportIssuesContent({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const provider = useQuery(repositoryGitProviderContextQueryOptions(workspace.repoPath));
-  const state = toIssueImportState(provider.data, provider.error);
+  const { providerQuery, state, query, search, loading } = useIssueImportReads(workspace.repoPath);
+  if (loading || state.kind === "loading")
+    return <GroupedSheet title={SHEET_TITLE} loading loadingLabel="Loading items to import…" />;
   switch (state.kind) {
-    case "loading":
-      return (
-        <GroupedSheet title={SHEET_TITLE}>
-          <LoadingState label="Loading the Git provider" />
-        </GroupedSheet>
-      );
     case "read_failed":
       return (
         <GroupedSheet title={SHEET_TITLE}>
           <ErrorState
-            title="The Git Provider Did Not Load"
+            title="Could not load the Git provider"
             message={state.reason}
-            onRetry={() => void provider.refetch()}
+            onRetry={() => void providerQuery.refetch()}
           />
         </GroupedSheet>
       );
@@ -124,24 +117,33 @@ function ImportIssuesContent({ workspace }: { workspace: WorkspaceRecord }): Rea
         <GroupedSheet title={SHEET_TITLE}>
           <EmptyState
             icon="settings"
-            title="No Issue Provider"
+            title="No issue provider"
             message={`Turn on GitHub or Azure DevOps with issue access in the repository settings. Then open Import Issues again. ${SETTINGS_ELSEWHERE}`}
           />
         </GroupedSheet>
       );
     case "ready":
-      return <IssueImportFlow workspace={workspace} provider={state.provider} />;
+      return (
+        <IssueImportFlow
+          workspace={workspace}
+          provider={state.provider}
+          query={query}
+          search={search}
+        />
+      );
   }
 }
 
 function IssueImportFlow({
   workspace,
   provider,
+  query,
+  search,
 }: {
   workspace: WorkspaceRecord;
   provider: IssueImportProvider;
-}): ReactElement {
-  const router = useRouter();
+} & Pick<IssueImportReads, "query" | "search">): ReactElement {
+  const navigation = useNavigation();
   const gate = useCommandGate();
   const { feedback } = useClientConnection();
   const openLink = useLinkOpener(undefined);
@@ -149,20 +151,8 @@ function IssueImportFlow({
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
   const { repoPath } = workspace;
   const [step, setStep] = useState<IssueImportStep>("select");
-  const search = useIssueImportSearch();
   const selection = useIssueSelectionState();
   const unavailableReason = issueImportUnavailableReason(provider);
-  const query = useQuery({
-    ...issueImportListQueryOptions({
-      repoPath,
-      provider,
-      search: search.search,
-      cursor: search.cursors[search.pageIndex],
-    }),
-    enabled: unavailableReason === null && !search.searchPending,
-    // The last page stays visible while a search or another page loads.
-    placeholderData: keepPreviousData,
-  });
   const items = query.data?.items ?? EMPTY_ITEMS;
   const selectedItems = selectedItemsWithCurrentLinks(selection.selected, items);
   const submission = useIssueImportSubmission({
@@ -173,7 +163,7 @@ function IssueImportFlow({
     providerScope: provider.config,
     onComplete: (createdCount) => {
       feedback.show("success", issueImportCreatedMessage(createdCount));
-      router.back();
+      navigation.goBack();
     },
     onRefreshed: selection.replaceItem,
   });
@@ -503,7 +493,7 @@ function IssueList({
     case "failed":
       return (
         <ErrorState
-          title="The Items Did Not Load"
+          title="Could not load items"
           message={errorMessage(query.error)}
           onRetry={() => void query.refetch()}
         />
@@ -514,7 +504,7 @@ function IssueList({
       return (
         <EmptyState
           icon="search-x"
-          title="No Open Items"
+          title="No open items"
           message={issueImportEmptyText(search.searchText)}
         />
       );

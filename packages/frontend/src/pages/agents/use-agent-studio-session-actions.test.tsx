@@ -728,7 +728,9 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.waitFor((state) => state.sessionStartModal !== null);
-    expect(harness.getLatest().sessionStartModal?.description).toContain("Generate Pull Request");
+    expect(harness.getLatest().sessionStartModal?.description).toBe(
+      "Choose how to start this session.",
+    );
     expect(harness.getLatest().sessionStartModal?.selectedStartMode).toBe("reuse");
     expect(harness.getLatest().sessionStartModal?.selectedSourceSessionValue).toBe("builder-1");
 

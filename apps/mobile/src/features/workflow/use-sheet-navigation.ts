@@ -1,4 +1,5 @@
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
+import { StackActions } from "expo-router/react-navigation";
 import { useCallback, useMemo, useRef } from "react";
 import { routes, sessionParams } from "@/navigation/routes";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
@@ -6,14 +7,15 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 /** Leaves a workflow sheet, and opens a session or a task in the tab below it. */
 export function useSheetNavigation(workspaceId: string) {
   const router = useRouter();
+  const navigation = useNavigation();
   // A sheet leaves once, also when two flows finish in the same moment.
   const left = useRef(false);
   const close = useCallback(() => {
     if (left.current) return;
     left.current = true;
     // Dismiss the sheet instead of following the focused tab's back history.
-    router.dismiss();
-  }, [router]);
+    navigation.dispatch(StackActions.pop(1));
+  }, [navigation]);
   const openSession = useCallback(
     (identity: AgentSessionIdentity) => {
       close();

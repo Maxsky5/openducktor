@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import { Laptop, LoaderCircle, Server, Unplug } from "lucide-react";
+import { ArrowRightLeft, Laptop, LoaderCircle, Server, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -96,20 +96,37 @@ export function HostPicker({
           ) : null}
           <div className={cn("flex gap-2", onCancel ? "flex-wrap justify-end" : "flex-col")}>
             <HostActions selection={selection} pending={pending} run={run} />
-            <Button type="submit" disabled={!endpoint.trim()}>
-              {pending === "connect" ? (
-                <LoaderCircle data-icon="inline-start" className="animate-spin" />
-              ) : null}
-              {pending === "connect"
-                ? "Connecting…"
-                : currentHost
-                  ? "Switch host"
-                  : "Connect to host"}
-            </Button>
+            <ConnectButton
+              currentHost={currentHost}
+              connecting={pending === "connect"}
+              disabled={!endpoint.trim()}
+            />
           </div>
         </Footer>
       </fieldset>
     </form>
+  );
+}
+
+function ConnectButton({
+  currentHost,
+  connecting,
+  disabled,
+}: {
+  currentHost: boolean;
+  connecting: boolean;
+  disabled: boolean;
+}) {
+  const Icon = currentHost ? ArrowRightLeft : Server;
+  return (
+    <Button type="submit" disabled={disabled}>
+      {connecting ? (
+        <LoaderCircle data-icon="inline-start" className="animate-spin" />
+      ) : (
+        <Icon data-icon="inline-start" />
+      )}
+      {connecting ? "Connecting…" : currentHost ? "Switch host" : "Connect to host"}
+    </Button>
   );
 }
 

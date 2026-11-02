@@ -20,7 +20,6 @@ import {
   taskApprovalSquashCommitHint,
   taskApprovalUncommittedChangesMessage,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
-import { getTaskApprovalModalHeader } from "@openducktor/frontend-core/tasks/approval/task-approval-modal-header";
 import type { TaskCloseMergeCheck } from "@openducktor/frontend-core/tasks/approval/use-task-approval-merge-check";
 import { taskCloseConfirmLabel } from "@openducktor/frontend-core/tasks/details/task-close-copy";
 import type {
@@ -49,14 +48,13 @@ import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead, FormPanel, OptionCard, SectionLabel } from "@/ui/form-rows";
 import { TaskCleanupChoice, TaskCloseContent } from "../close/task-close-content";
-import { TaskReadsLoading } from "../confirm/task-reads-loading";
 import { type ApprovalChoices, approvalChoices } from "./approval-method-model";
 
-/** The note of a stage that needs one, as under the desktop modal title. */
-function StageLead({ model }: { model: TaskApprovalModalModel }): ReactElement | null {
-  const { description } = getTaskApprovalModalHeader(model);
-  return description ? <FormLead text={description} /> : null;
-}
+const APPROVAL_ICONS = {
+  close_task: "circle-check-big",
+  direct_merge: "git-merge",
+  pull_request: "git-pull-request",
+} as const satisfies Record<TaskApprovalApprovalModalModel["mode"], IconName>;
 
 /** A sentence with a branch or path in the code font, as the desktop approval text. */
 function CodeText({
@@ -184,6 +182,8 @@ export function ApprovalStep({
       primary={
         <Button
           label={choices.confirmLabel}
+          variant={model.mode === "close_task" ? "warning" : "filled"}
+          icon={APPROVAL_ICONS[model.mode]}
           size="lg"
           loading={busy}
           command
@@ -214,16 +214,12 @@ export function ApprovalStep({
         {errorNotice(model, COPY.approvalFailedTitle)}
       </Notices>
       <FormBody>
-        {isPreparing ? (
-          <TaskReadsLoading />
-        ) : (
-          <ApprovalChoiceForm
-            model={model}
-            choices={choices}
-            impact={impact}
-            mergeCheck={mergeCheck}
-          />
-        )}
+        <ApprovalChoiceForm
+          model={model}
+          choices={choices}
+          impact={impact}
+          mergeCheck={mergeCheck}
+        />
       </FormBody>
     </ActionForm>
   );
@@ -283,7 +279,7 @@ function ApprovalChoiceForm({
       ) : null}
       {pullRequestUrl ? (
         <Button
-          label="Open Existing Pull Request"
+          label="Open existing pull request"
           variant="plain"
           icon="external-link"
           accessibilityHint="Opens the pull request in the browser."
@@ -415,7 +411,8 @@ export function MissingWorktreeStep({
       secondary={
         <Button
           label={COPY.resetImplementation}
-          variant="outline"
+          icon="rotate-ccw"
+          variant="destructive"
           size="lg"
           disabled={busy}
           accessibilityHint="Asks you to confirm the reset first."
@@ -426,6 +423,8 @@ export function MissingWorktreeStep({
       primary={
         <Button
           label={taskCloseConfirmLabel(busy)}
+          variant="warning"
+          icon="circle-check-big"
           size="lg"
           loading={busy}
           command
@@ -437,18 +436,13 @@ export function MissingWorktreeStep({
     >
       <Notices>{errorNotice(model, COPY.recoveryFailedTitle)}</Notices>
       <FormBody>
-        <StageLead model={model} />
-        {isPreparing ? (
-          <TaskReadsLoading />
-        ) : (
-          <TaskCloseContent
-            impact={impact}
-            mergeCheck={mergeCheck}
-            removeWorktree={model.removeWorktree}
-            onRemoveWorktreeChange={model.onRemoveWorktreeChange}
-            disabled={busy}
-          />
-        )}
+        <TaskCloseContent
+          impact={impact}
+          mergeCheck={mergeCheck}
+          removeWorktree={model.removeWorktree}
+          onRemoveWorktreeChange={model.onRemoveWorktreeChange}
+          disabled={busy}
+        />
       </FormBody>
     </ActionForm>
   );
@@ -555,6 +549,8 @@ export function CompletionStep({
       primary={
         <Button
           label={directMergeCompletionButtonLabel(model)}
+          variant="warning"
+          icon="circle-check-big"
           size="lg"
           loading={busy}
           command
@@ -573,8 +569,6 @@ export function CompletionStep({
         ) : null}
       </Notices>
       <FormBody>
-        <StageLead model={model} />
-        {isPreparing ? <TaskReadsLoading /> : null}
         {contextError || isPreparing ? null : (
           <>
             <TonePanel tone="info" icon="check" title={COPY.localMergeReadyTitle}>

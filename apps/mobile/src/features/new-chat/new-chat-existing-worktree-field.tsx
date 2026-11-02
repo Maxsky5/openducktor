@@ -71,7 +71,7 @@ export function ExistingWorktreeField({
           message={errorMessage(worktrees.error)}
           action={
             <Button
-              label="Try Again"
+              label="Retry"
               variant="gray"
               size="sm"
               disabled={disabled || worktrees.isFetching}

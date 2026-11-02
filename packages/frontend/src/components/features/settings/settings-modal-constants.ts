@@ -46,11 +46,11 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "remote-access", label: "Remote control", icon: Radio },
   { id: "git", label: "Git", icon: FolderGit2 },
-  { id: "runtimes", label: "Agent Runtimes", icon: Cpu },
+  { id: "runtimes", label: "Agent runtimes", icon: Cpu },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
-  { id: "prompts", label: "System Prompts", icon: MessageSquareText },
-  { id: "reusable-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },
-  { id: "custom-agent-roles", label: "Custom Agent Roles", icon: MessageSquareText },
+  { id: "prompts", label: "System prompts", icon: MessageSquareText },
+  { id: "reusable-prompts", label: "Reusable prompts", icon: MessageSquarePlus },
+  { id: "custom-agent-roles", label: "Custom agent roles", icon: MessageSquareText },
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "kanban", label: "Kanban", icon: Columns3 },
@@ -65,7 +65,7 @@ export const REPOSITORY_SECTIONS: ReadonlyArray<{
   { id: "scripts", label: "Scripts" },
   { id: "git", label: "Git" },
   { id: "agents", label: "Agents" },
-  { id: "prompts", label: "Repo Prompts" },
+  { id: "prompts", label: "Repository prompts" },
 ];
 
 export const BUILTIN_PROMPTS_BY_ID: ReadonlyMap<AgentPromptTemplateId, BuiltinPromptDefinition> =

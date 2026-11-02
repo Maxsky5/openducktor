@@ -66,7 +66,7 @@ function RuntimeStatusMessage({
     return (
       <span className="inline-flex items-center gap-1.5">
         <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-        Validating saved executable path...
+        Checking executable path…
       </span>
     );
   }
@@ -104,7 +104,7 @@ function CheckAgainButton({
   return (
     <Button type="button" variant="outline" disabled={disabled} onClick={onCheckAgain}>
       <RefreshCw data-icon="inline-start" />
-      {isChecking ? "Checking..." : "Check again"}
+      {isChecking ? "Checking…" : "Check again"}
     </Button>
   );
 }

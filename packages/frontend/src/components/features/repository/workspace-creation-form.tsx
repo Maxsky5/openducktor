@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, FolderOpen } from "lucide-react";
+import { ArrowLeft, ArrowRight, FolderOpen, LoaderCircle } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { ensureDraftAgentDefault } from "@/components/features/repository/model-defaults/model-defaults-model";
 import { RepositoryModelDefaultsFields } from "@/components/features/repository/model-defaults/repository-model-defaults-fields";
@@ -155,12 +155,19 @@ export function WorkspaceCreationSubmitAction({
   if (controller.progress === "creating") progressLabel = "Creating workspace...";
   else if (controller.progress === "saving") progressLabel = "Saving model defaults...";
   else if (controller.progress === "finishing") progressLabel = "Opening repository...";
+  const isSubmitting = controller.progress !== "idle";
   return (
     <Button
       type="button"
       disabled={controller.busy || controller.validationError !== null}
+      aria-busy={isSubmitting}
       onClick={() => void controller.submit()}
     >
+      {isSubmitting ? (
+        <LoaderCircle data-icon="inline-start" className="animate-spin" aria-hidden="true" />
+      ) : (
+        <FolderOpen data-icon="inline-start" aria-hidden="true" />
+      )}
       {progressLabel}
     </Button>
   );

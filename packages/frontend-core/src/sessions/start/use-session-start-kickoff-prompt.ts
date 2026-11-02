@@ -1,65 +1,72 @@
-import type { GitTargetBranch } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { mergePromptOverrides } from "@openducktor/workflows";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import { errorMessage } from "../../lib/errors";
 import { targetBranchFromSelection } from "../../lib/target-branch";
+import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "../../queries/workspace";
+import {
+  buildSessionStartKickoffPrompt,
+  type SessionStartKickoffInput,
+} from "./session-start-kickoff";
 
-type PromptRequest = {
-  requestId: string | undefined;
-  resolveKickoffPrompt: ((targetBranch?: GitTargetBranch) => Promise<string>) | undefined;
-  selectedTargetBranch: string;
-};
-
-type KickoffPromptState = {
-  kickoffPrompt: string | undefined;
-  isKickoffPromptLoading: boolean;
-  kickoffPromptError: string | null;
-  onRetryKickoffPrompt: () => void;
-};
-
+/** Builds the preview from cached settings. Only missing settings need preparation. */
 export function useSessionStartKickoffPrompt({
-  requestId,
-  resolveKickoffPrompt,
+  kickoff,
   selectedTargetBranch,
-}: PromptRequest): KickoffPromptState {
-  const [retryVersion, setRetryVersion] = useState(0);
-  // Returning to an earlier branch still needs a new read; equal inputs cannot revive its old result.
-  const request = useMemo(
-    () => ({ requestId, resolveKickoffPrompt, selectedTargetBranch, retryVersion }),
-    [requestId, resolveKickoffPrompt, selectedTargetBranch, retryVersion],
-  );
-  const [result, setResult] = useState<{
-    request: typeof request;
-    text?: string;
-    error?: string;
-  } | null>(null);
-
-  useEffect(() => {
-    const resolve = request.resolveKickoffPrompt;
-    if (!resolve) return;
-    let active = true;
-    void (async () => {
-      try {
-        const branch = request.selectedTargetBranch
-          ? targetBranchFromSelection(request.selectedTargetBranch)
-          : undefined;
-        const text = await resolve(branch);
-        if (active) setResult({ request, text });
-      } catch (cause) {
-        if (active) setResult({ request, error: errorMessage(cause) });
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [request]);
-
-  const retry = useCallback(() => setRetryVersion((version) => version + 1), []);
-  const currentResult = resolveKickoffPrompt && result?.request === request ? result : null;
-
+}: {
+  kickoff: SessionStartKickoffInput | undefined;
+  selectedTargetBranch: string;
+}) {
+  const workspaceId = kickoff?.workspaceId ?? null;
+  const enabled = kickoff !== undefined && workspaceId !== null;
+  const config = useQuery({ ...repoConfigQueryOptions(workspaceId ?? ""), enabled });
+  const settings = useQuery({ ...settingsSnapshotQueryOptions(), enabled });
+  const isKickoffPromptLoading = enabled && (config.isPending || settings.isPending);
+  const result = useMemo(() => {
+    if (!kickoff || isKickoffPromptLoading) return {};
+    const readError = enabled
+      ? ((config.data ? null : config.error) ?? (settings.data ? null : settings.error))
+      : null;
+    if (readError) return { error: errorMessage(readError) };
+    try {
+      const intent = { ...kickoff.request };
+      if (selectedTargetBranch)
+        intent.targetBranch = targetBranchFromSelection(selectedTargetBranch);
+      return {
+        text: buildSessionStartKickoffPrompt({
+          intent,
+          task: kickoff.task,
+          repoDefaultTargetBranch: enabled ? (config.data?.defaultTargetBranch ?? null) : null,
+          overrides: enabled
+            ? mergePromptOverrides({
+                globalOverrides: settings.data?.globalPromptOverrides ?? {},
+                repoOverrides: config.data?.promptOverrides ?? {},
+              })
+            : {},
+        }),
+      };
+    } catch (cause) {
+      return { error: errorMessage(cause) };
+    }
+  }, [
+    kickoff,
+    selectedTargetBranch,
+    enabled,
+    isKickoffPromptLoading,
+    config.data,
+    config.error,
+    settings.data,
+    settings.error,
+  ]);
+  const { refetch: retryConfig } = config;
+  const { refetch: retrySettings } = settings;
+  const retry = useCallback(() => {
+    if (enabled) void Promise.all([retryConfig(), retrySettings()]);
+  }, [enabled, retryConfig, retrySettings]);
   return {
-    kickoffPrompt: currentResult?.text,
-    isKickoffPromptLoading: Boolean(resolveKickoffPrompt) && currentResult === null,
-    kickoffPromptError: currentResult?.error ?? null,
+    kickoffPrompt: result.text,
+    isKickoffPromptLoading,
+    kickoffPromptError: result.error ?? null,
     onRetryKickoffPrompt: retry,
   };
 }

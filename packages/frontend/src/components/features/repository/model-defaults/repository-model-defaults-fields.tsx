@@ -94,7 +94,7 @@ export function RepositoryModelDefaultsFields({
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-foreground">
-            {isCreation ? "Role defaults" : "Agent Defaults (Per Role)"}
+            {isCreation ? "Role defaults" : "Agent defaults by role"}
           </h3>
           {isLoadingCatalog || isLoadingRuntimeDefinitions ? (
             <span role="status" className="whitespace-nowrap text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ export function RepositoryModelDefaultsFields({
 
       {runtimeDefinitionsError ? (
         <p className="text-xs text-warning-muted">
-          Failed to load runtime definitions: {runtimeDefinitionsError}
+          Could not load runtimes: {runtimeDefinitionsError}
         </p>
       ) : null}
       {modelWarnings.length > 0 ? (
@@ -200,7 +200,7 @@ export function RepositoryModelDefaultsFields({
                 </div>
 
                 <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Agent Profile</Label>
+                  <Label className="text-xs">Agent profile</Label>
                   <Combobox
                     value={value.profileId}
                     options={controls.profile.options}

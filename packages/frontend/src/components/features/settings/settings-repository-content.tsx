@@ -231,7 +231,7 @@ export function SettingsRepositoryContent({
   const providerState = getProviderState(providerDirty, loadProviderContext, providerContextQuery);
 
   return (
-    <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
+    <div className="grid min-h-full min-w-0 grid-cols-1 grid-rows-[auto_1fr] lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-1">
       <RepositorySidebar
         workspaces={controller.workspaces}
         selectedWorkspaceId={selectedWorkspaceId}
@@ -311,7 +311,7 @@ export function SettingsRepositoryContent({
 
         {selectedRepoConfig && repositorySection === "prompts" ? (
           <PromptOverridesSection
-            title="Repository Prompt Overrides"
+            title="Repository prompt overrides"
             description="Repository overrides take precedence over global overrides when enabled."
             tab={repoPromptRoleTab}
             errorCountsByTab={selectedRepoPromptRoleTabErrorCounts}

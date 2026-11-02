@@ -1,4 +1,4 @@
-import { LoaderCircle } from "lucide-react";
+import { CircleCheckBig, GitMerge, GitPullRequest, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import {
   getTaskApprovalSubmitState,
@@ -10,7 +10,6 @@ import {
 import type { TaskApprovalApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import type { TaskCloseMergeCheck } from "@openducktor/frontend-core/tasks/approval/use-task-approval-merge-check";
 import type { TaskApprovalImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
-import { TaskReadsLoading } from "@/components/features/task-details/task-reads-loading";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -38,21 +37,22 @@ export function TaskApprovalApprovalStage({
   isPreparing: boolean;
   mergeCheck: TaskCloseMergeCheck | undefined;
 }): ReactElement {
+  const ConfirmIcon = {
+    close_task: CircleCheckBig,
+    direct_merge: GitMerge,
+    pull_request: GitPullRequest,
+  }[model.mode];
   const submit = getTaskApprovalSubmitState(model, impact, isPreparing);
 
   return (
     <>
       <DialogBody className={STAGE_BODY_CLASS}>
-        {isPreparing ? (
-          <TaskReadsLoading className="h-full min-h-56 px-6 py-6 sm:px-8" />
-        ) : (
-          <TaskApprovalApprovalContent
-            model={model}
-            impact={impact}
-            mergeCheck={mergeCheck}
-            showSquashCommitMessageValidationError={submit.showSquashCommitMessageValidationError}
-          />
-        )}
+        <TaskApprovalApprovalContent
+          model={model}
+          impact={impact}
+          mergeCheck={mergeCheck}
+          showSquashCommitMessageValidationError={submit.showSquashCommitMessageValidationError}
+        />
       </DialogBody>
 
       <DialogFooter className={STAGE_ACTIONS_FOOTER_CLASS}>
@@ -70,7 +70,11 @@ export function TaskApprovalApprovalStage({
           disabled={submit.confirmDisabled}
           onClick={model.onConfirm}
         >
-          {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          {model.isSubmitting ? (
+            <LoaderCircle className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <ConfirmIcon data-icon="inline-start" />
+          )}
           {submit.confirmLabel}
         </Button>
       </DialogFooter>

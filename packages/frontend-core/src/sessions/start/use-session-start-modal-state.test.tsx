@@ -319,6 +319,88 @@ const createExistingSessionWithModel = ({
 });
 
 describe("useSessionStartModalState", () => {
+  test.each([
+    ["same runtime", "opencode", false],
+    ["other runtime", "codex", false],
+    ["edited choices", "codex", true],
+  ] as const)("loads late repository defaults with %s", async (_name, runtimeKind, edited) => {
+    const { initialCatalog: _initialCatalog, ...props } = createBaseProps({
+      repoSettings: null,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      loadCatalog: async (ref) =>
+        runtimeCatalogFor(ref.runtimeKind === "codex" ? CODEX_CATALOG : CATALOG),
+    });
+    const harness = createHookHarness(props);
+    await harness.mount();
+    try {
+      await harness.run((state) =>
+        state.openStartModal({
+          source: "task_action",
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          initialStartMode: "fresh",
+          postStartAction: "kickoff",
+          title: "Start Builder session",
+        }),
+      );
+      await harness.waitFor((state) =>
+        state.modelPickerRuntimes.every((runtime) => runtime.resource.status === "ready"),
+      );
+      if (edited) {
+        await harness.run((state) => {
+          state.handleSelectModelPair({
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+          });
+          state.handleSelectTargetBranch("main");
+        });
+      }
+      const model =
+        runtimeKind === "codex"
+          ? { providerId: "codex", modelId: "gpt-5.4-mini", variant: "medium", profileId: "" }
+          : {
+              providerId: "anthropic",
+              modelId: "claude-sonnet",
+              variant: "default",
+              profileId: "build-agent",
+            };
+      await harness.update({
+        ...props,
+        repoSettings: createRepoSettings(
+          { build: { runtimeKind, ...model } },
+          { defaultTargetBranch: { remote: "origin", branch: "release/2026.04" } },
+        ),
+      });
+      expect(harness.getLatest().isOpen).toBe(true);
+      if (edited) {
+        expect(harness.getLatest().selection).toMatchObject({
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        });
+        expect(harness.getLatest().selectedTargetBranch).toBe("main");
+      } else {
+        expect(harness.getLatest().selectedRuntimeKind).toBe(runtimeKind);
+        expect(harness.getLatest().selection).toMatchObject({
+          runtimeKind,
+          providerId: model.providerId,
+          modelId: model.modelId,
+          variant: model.variant,
+        });
+        expect(harness.getLatest().selection?.profileId).toBe(
+          runtimeKind === "opencode" ? "build-agent" : undefined,
+        );
+        expect(harness.getLatest().selectedTargetBranch).toBe(
+          "refs/remotes/origin/release/2026.04",
+        );
+      }
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps runtime-definition failures distinct and exposes retry", async () => {
     const refreshRuntimeDefinitions = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
     const runtimeDefinitionsContextRef = {
@@ -1391,6 +1473,42 @@ describe("useSessionStartModalState", () => {
 
     await harness.unmount();
     queryClient.clear();
+  });
+
+  test("shows cached model choices while host status loads", async () => {
+    const props = createBaseProps();
+    delete props.initialCatalog;
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      }),
+      runtimeCatalogFor(CATALOG),
+    );
+    const harness = createHookHarness(props, {
+      queryClient,
+      hostRuntimeStatusContext: createHostRuntimeStatusContextValue({ isLoading: true }),
+    });
+    try {
+      await harness.mount();
+      await harness.run((state) =>
+        state.openStartModal({
+          source: "task_action",
+          taskId: "TASK-CACHED-CATALOG",
+          role: "spec",
+          launchActionId: "spec_initial",
+          postStartAction: "kickoff",
+          title: "Start Spec Session",
+        }),
+      );
+      expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
+      expect(harness.getLatest().isCatalogLoading).toBe(false);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
   });
 
   test("allows a workflow model choice while a stale catalog refreshes", async () => {

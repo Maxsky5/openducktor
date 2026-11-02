@@ -37,14 +37,17 @@ test("workspace close uses the standard layout and eye-off icon", () => {
   render(<WorkspaceCloseDialog workspace={workspace} onOpenChange={() => {}} />);
 
   const dialog = screen.getByRole("dialog", { name: "Close workspace" });
-  expect(within(dialog).getByText("Hide OpenDucktor from the workspace rail?")).toBeTruthy();
+  expect(within(dialog).getByText("Close OpenDucktor?")).toBeTruthy();
   expect(within(dialog).getByText("Repository")).toBeTruthy();
   expect(within(dialog).getByText("/repos/openducktor")).toBeTruthy();
-  expect(within(dialog).getByText("Only the workspace rail entry is hidden.")).toBeTruthy();
+  expect(
+    within(dialog).getByText("Hide this workspace from the sidebar. You can reopen it later."),
+  ).toBeTruthy();
 
   const repositoryIconSurface = dialog.querySelector(".lucide-folder-git-2")?.parentElement;
-  const closeInfoIconSurface = within(dialog).getByText("Only the workspace rail entry is hidden.")
-    .parentElement?.previousElementSibling;
+  const closeInfoIconSurface = within(dialog).getByText(
+    "Hide this workspace from the sidebar. You can reopen it later.",
+  ).parentElement?.previousElementSibling;
   expect(repositoryIconSurface?.className).toContain("bg-muted");
   expect(repositoryIconSurface?.className).toContain("text-foreground");
   expect(closeInfoIconSurface?.className).toContain("bg-muted");

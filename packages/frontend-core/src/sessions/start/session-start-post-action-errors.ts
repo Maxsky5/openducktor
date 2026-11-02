@@ -2,6 +2,6 @@ import type { SessionStartPostAction } from "./session-start-workflow";
 
 export const sessionStartPostActionErrorTitle = (action: SessionStartPostAction): string => {
   return action === "kickoff"
-    ? "Session started, but the kickoff prompt failed to send."
+    ? "The session started, but its first message could not be sent."
     : "Session started, but feedback message failed.";
 };

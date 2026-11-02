@@ -102,8 +102,9 @@ function ConflictNotice({
     onAbort: () => {
       void confirm({
         title: copy.abortLabel,
-        message: `This stops the ${copy.operationLabel} and puts the branch back as it was before it.`,
+        message: `This cancels the ${copy.operationLabel} and restores the branch to its earlier state.`,
         confirmLabel: copy.abortLabel,
+        icon: "rotate-ccw",
         destructive: true,
       }).then((confirmed) => {
         if (confirmed) void actions.abort();
@@ -114,6 +115,7 @@ function ConflictNotice({
         title: `Ask the ${recipientLabel} to resolve the conflict?`,
         message: actions.askDescription,
         confirmLabel: "Send request",
+        icon: "send",
       }).then((confirmed) => {
         if (confirmed) void actions.askAgent();
       });

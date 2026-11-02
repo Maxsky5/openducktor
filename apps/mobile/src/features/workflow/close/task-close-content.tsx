@@ -15,7 +15,7 @@ import {
   useRemoveWorktreeSettingsRead,
 } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 import type { TaskMergeStatusView } from "@openducktor/frontend-core/tasks/presentation/task-merge-status";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -49,6 +49,14 @@ export function TaskCloseContent({
       ) : null}
       <TaskCleanupCard impact={impact} {...choice} />
       <View style={styles.lines}>
+        <Text variant="subhead" weight="medium" tone="secondary">
+          After closing
+        </Text>
+        {COPY.closeNotes.map((line) => (
+          <Text key={line} variant="subhead">
+            {line}
+          </Text>
+        ))}
         {taskCloseEffectLines(impact).map((line) => (
           <Text key={line} variant="footnote" style={styles.muted}>
             {line}
@@ -122,9 +130,11 @@ export function TaskCleanupTargets({
 }: {
   impact: TaskWorktreeImpact;
   removes: boolean;
-}): ReactElement {
+}): ReactElement | null {
   const theme = useAppTheme();
+  const [expanded, setExpanded] = useState(false);
   const { worktreePaths, branchNames, uncommittedFileCount } = impact;
+  if (impact.error) return null;
   if (worktreePaths.length === 0 && branchNames.length === 0) {
     return (
       <Text variant="footnote" style={styles.muted}>
@@ -134,31 +144,42 @@ export function TaskCleanupTargets({
   }
   return (
     <>
-      {worktreePaths.length > 0 ? (
-        <CleanupTarget
-          label={cleanupTargetLabel("worktree", worktreePaths.length)}
-          values={worktreePaths}
-        />
-      ) : null}
-      {branchNames.length > 0 ? (
-        <CleanupTarget
-          label={cleanupTargetLabel("branch", branchNames.length)}
-          values={branchNames}
-        />
-      ) : null}
-      {uncommittedFileCount > 0 ? (
-        <View style={styles.target}>
-          <Text variant="footnote" style={styles.muted}>
-            {COPY.changesLabel}
-          </Text>
-          {/* Only the color changes with the choice, so the row keeps its size. */}
-          <Text
-            variant="footnote"
-            style={{ color: removes ? theme.desktop.warningMuted : theme.desktop.foreground }}
-          >
-            {uncommittedFilesText(uncommittedFileCount)}
-          </Text>
-        </View>
+      <Text
+        variant="footnote"
+        style={{
+          color:
+            removes && uncommittedFileCount > 0
+              ? theme.desktop.warningMuted
+              : theme.desktop.mutedForeground,
+        }}
+      >
+        {uncommittedFileCount > 0
+          ? uncommittedFilesText(uncommittedFileCount) +
+            (removes ? " will be lost." : " will be kept.")
+          : "No uncommitted changes."}
+      </Text>
+      <Button
+        label={expanded ? "Hide worktree details" : "Worktree details"}
+        variant="plain"
+        size="sm"
+        trailingIcon={expanded ? "chevron-up" : "chevron-down"}
+        onPress={() => setExpanded(!expanded)}
+      />
+      {expanded ? (
+        <>
+          {worktreePaths.length > 0 ? (
+            <CleanupTarget
+              label={cleanupTargetLabel("worktree", worktreePaths.length)}
+              values={worktreePaths}
+            />
+          ) : null}
+          {branchNames.length > 0 ? (
+            <CleanupTarget
+              label={cleanupTargetLabel("branch", branchNames.length)}
+              values={branchNames}
+            />
+          ) : null}
+        </>
       ) : null}
     </>
   );
@@ -218,7 +239,7 @@ function TaskCloseMergeStatus({
 
 const styles = StyleSheet.create((theme) => ({
   content: { gap: theme.space.md },
-  lines: { gap: theme.space.xs },
+  lines: { gap: theme.space.sm },
   muted: { color: theme.desktop.mutedForeground },
   target: { gap: 2 },
 }));

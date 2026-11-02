@@ -4,9 +4,10 @@ import {
   type ReactNode,
   type Ref,
   useLayoutEffect,
+  useContext,
   useState,
 } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { View } from "react-native";
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -21,6 +22,7 @@ import { Text } from "./text";
 import { KEYBOARD_DISMISS_ON_DRAG } from "./keyboard-dismiss";
 import { useAnnounce } from "./use-announce";
 import { useCompactHeight } from "./use-wide-layout";
+import { ModalLoadingContext } from "./modal-loading-context";
 
 type FormFooterProps = {
   /** Why the primary action is disabled, or null when it is enabled. */
@@ -33,7 +35,7 @@ type FormFooterProps = {
 
 /**
  * The footer of a workflow form, as the desktop dialog footer: a top rule, the reason why the
- * primary action is disabled, then the actions in a row when they fit. In a sheet, Cancel is the
+ * primary action is disabled, then equally wide actions in a row. In a sheet, Cancel is the
  * close control, so the sheet header shows only its title. The forms show in
  * full sheets, which the keyboard does not resize on iOS or Android, so the footer moves up with
  * the keyboard. A low window, such as a phone in landscape, puts the reason and the actions in one
@@ -51,10 +53,13 @@ export function FormFooter({
   const sheet = useSheetClose();
   const compact = useCompactHeight();
   const claimFooter = sheet?.claimFooter;
+  const loading = useContext(ModalLoadingContext);
   // Before the first paint, so the header never shows its own close control for a frame.
-  useLayoutEffect(() => claimFooter?.(), [claimFooter]);
+  useLayoutEffect(() => {
+    if (!loading) return claimFooter?.();
+  }, [claimFooter, loading]);
   const bottom = Math.max(insets.bottom, compact ? theme.space.sm : theme.space.lg);
-  useAnnounce(note);
+  useAnnounce(loading ? null : note);
   if (!sheet && !note && !primary && !secondary) return null;
   const cancel = sheet ? (
     <Button
@@ -103,7 +108,6 @@ function StackedFooterBar({
   bottom,
   onHeight,
 }: FooterBarProps): ReactElement {
-  const { fontScale } = useWindowDimensions();
   return (
     <View
       style={[styles.bar, { paddingBottom: bottom }]}
@@ -121,8 +125,8 @@ function StackedFooterBar({
       ) : null}
       {inSheet && secondary ? <View style={styles.actions}>{secondary}</View> : null}
       <View style={styles.actions}>
-        {cancel ? <View style={styles.action(fontScale)}>{cancel}</View> : secondary}
-        {primary ? <View style={styles.action(fontScale)}>{primary}</View> : null}
+        {cancel || secondary ? <View style={styles.action}>{cancel ?? secondary}</View> : null}
+        {primary ? <View style={styles.action}>{primary}</View> : null}
       </View>
     </View>
   );
@@ -143,8 +147,8 @@ function OneRowFooterBar({
       style={[styles.bar, styles.compactBar, { paddingBottom: bottom }]}
       onLayout={(event) => onHeight?.(event.nativeEvent.layout.height)}
     >
-      <View style={styles.compactNote}>
-        {note ? (
+      {note ? (
+        <View style={styles.compactNote}>
           <Text
             variant="footnote"
             tone="tertiary"
@@ -153,11 +157,11 @@ function OneRowFooterBar({
           >
             {note}
           </Text>
-        ) : null}
-      </View>
-      {inSheet && secondary ? <View style={styles.compactAction}>{secondary}</View> : null}
-      {cancel ? <View style={styles.compactAction}>{cancel}</View> : secondary}
-      {primary ? <View style={styles.compactAction}>{primary}</View> : null}
+        </View>
+      ) : null}
+      {inSheet && secondary ? <View style={styles.action}>{secondary}</View> : null}
+      {cancel || secondary ? <View style={styles.action}>{cancel ?? secondary}</View> : null}
+      {primary ? <View style={styles.action}>{primary}</View> : null}
     </View>
   );
 }
@@ -207,9 +211,8 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.desktop.popover,
   },
   note: { textAlign: "center" },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm },
-  action: (fontScale: number) => ({ flexGrow: 1, flexShrink: 1, flexBasis: 144 * fontScale }),
+  actions: { flexDirection: "row", gap: theme.space.sm },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
   compactBar: { flexDirection: "row", alignItems: "center", paddingTop: theme.space.sm },
   compactNote: { flex: 1, minWidth: 0 },
-  compactAction: { width: 184, flexGrow: 1 },
 }));

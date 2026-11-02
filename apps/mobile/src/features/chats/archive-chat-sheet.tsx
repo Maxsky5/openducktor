@@ -17,7 +17,7 @@ import {
   isWorktreeChat,
 } from "@openducktor/frontend-core/workspace-sessions/workspace-session-archive-plan";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -39,7 +39,7 @@ import type { ChatSheetParams } from "./chat-sheet-params";
 import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
 
-const TITLE = "Archive Chat";
+const TITLE = "Archive chat";
 
 /** What happens to the worktree, under the worktree switch. The branch name is code. */
 function WorktreeNotice({
@@ -161,7 +161,15 @@ function ArchiveProblems({
           tone="destructive"
           title="Worktree check failed"
           message={errorMessage(checkError)}
-          action={<Button label="Check Again" size="sm" variant="outline" onPress={onCheckAgain} />}
+          action={
+            <Button
+              icon="refresh"
+              label="Check again"
+              size="sm"
+              variant="outline"
+              onPress={onCheckAgain}
+            />
+          }
         />
       ) : null}
       {warnings.map((warning) => (
@@ -196,7 +204,7 @@ function ArchiveChatForm({
   onConfirm: (input: ArchiveWorkspaceSessionInput) => void;
 }): ReactElement {
   const { workspace, record } = target;
-  const router = useRouter();
+  const navigation = useNavigation();
   // Worktree removal starts turned on, as on desktop.
   const [wantsWorktreeRemoval, setWantsWorktreeRemoval] = useState(true);
   const preview = useQuery({
@@ -218,6 +226,12 @@ function ArchiveChatForm({
       title={TITLE}
       subtitle={ARCHIVE_CHAT_TEXT.description}
       closable={!archive.isPending}
+      loading={
+        isWorktreeChat(record) &&
+        preview.data === undefined &&
+        preview.isFetching &&
+        !archive.isPending
+      }
     >
       <View style={styles.body}>
         <ArchivedChatCard record={record} />
@@ -244,8 +258,9 @@ function ArchiveChatForm({
             variant="outline"
             size="lg"
             fill
+            style={styles.action}
             disabled={archive.isPending}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           />
           <Button
             label={archive.isPending ? ARCHIVE_CHAT_TEXT.confirming : ARCHIVE_CHAT_TEXT.confirm}
@@ -253,6 +268,7 @@ function ArchiveChatForm({
             size="lg"
             icon="archive"
             fill
+            style={styles.action}
             command
             loading={archive.isPending}
             disabled={!form.canArchive}
@@ -265,7 +281,7 @@ function ArchiveChatForm({
 }
 
 function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { feedback } = useClientConnection();
   const mounted = useMountedRef();
   const read = useChatRecord(params.workspaceId, params.sessionId);
@@ -273,7 +289,7 @@ function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement 
   // The sheet owns the command, so its result still closes the sheet after the form changes.
   const archive = useArchiveWorkspaceSession(() => {
     feedback.show("success", "Chat archived.");
-    if (mounted.current) router.back();
+    if (mounted.current) navigation.goBack();
   });
   // An archived chat leaves the active list while the sheet closes; show nothing in that time.
   if (archive.isSuccess) return <SheetFrame title={TITLE} closable={false} />;
@@ -341,4 +357,5 @@ const styles = StyleSheet.create((theme) => ({
   warning: { flexDirection: "row", gap: theme.space.sm, alignItems: "flex-start" },
   warningText: { flex: 1, color: theme.desktop.destructiveMuted },
   actions: { flexDirection: "row", gap: theme.space.md },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

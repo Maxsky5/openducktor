@@ -61,7 +61,7 @@ const identity = {
 };
 const point = { messageId: "native-reply" };
 
-function renderFork(
+function mountFork(
   perform: (
     input: WorkspaceSessionForkInput,
     startup: StartupOperationContext | undefined,
@@ -180,6 +180,61 @@ function renderFork(
   };
 }
 
+async function renderFork(...args: Parameters<typeof mountFork>) {
+  const result = mountFork(...args);
+  await result.view.findByRole("radio", { name: "Same folder" });
+  return result;
+}
+
+test("Fork chat opens and keeps worktree edits while repository defaults load", async () => {
+  const config = Promise.withResolvers<ReturnType<typeof repoConfigSchema.parse>>();
+  const fork = mock(async () => {
+    throw new Error("Forking is not part of opening the form");
+  });
+  const { view, closed } = mountFork(fork, source, {
+    client: { workspaceGetRepoConfig: () => config.promise },
+  });
+  try {
+    const dialog = view.getByRole("dialog");
+    expect(dialog.hasAttribute("aria-busy")).toBe(false);
+    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false);
+    fireEvent.click(view.getByRole("radio", { name: "New worktree" }));
+    const name = view.getByRole("textbox", { name: "Worktree name" });
+    fireEvent.change(name, { target: { value: "my-fork" } });
+    name.focus();
+    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("status").textContent).toBe("Loading branch defaults…");
+    await act(async () =>
+      config.resolve(
+        repoConfigSchema.parse({
+          workspaceId: "workspace",
+          workspaceName: "Workspace",
+          repoPath: "/repo",
+          branchPrefix: "team",
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false),
+    );
+    expect(dialog.hasAttribute("aria-busy")).toBe(false);
+    expect(view.getByDisplayValue("my-fork")).toBe(name);
+    expect(document.activeElement === name).toBe(true);
+    fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+    expect(closed()).toBe(1);
+    expect(fork).not.toHaveBeenCalled();
+  } finally {
+    config.resolve(
+      repoConfigSchema.parse({
+        workspaceId: "workspace",
+        workspaceName: "Workspace",
+        repoPath: "/repo",
+      }),
+    );
+    view.unmount();
+  }
+});
+
 test("opening a saved failed same-folder fork retains feedback and session inspection", async () => {
   const child = { ...source, id: "saved-child", externalSessionId: "native-child" };
   const fork = mock(
@@ -201,7 +256,7 @@ test("opening a saved failed same-folder fork retains feedback and session inspe
       });
     },
   );
-  const { view, connection, closed, completed } = renderFork(fork);
+  const { view, connection, closed, completed } = await renderFork(fork);
   try {
     fireEvent.click(view.getByRole("button", { name: "Fork chat" }));
     const open = await view.findByRole("button", { name: "Open session" }, { timeout: 800 });
@@ -317,7 +372,7 @@ test.each([
       },
     );
     const repair = mock(async (input: WorkspaceSessionStartInput) => prepare(input.startup));
-    const harness = renderFork(fork, source, {
+    const harness = await renderFork(fork, source, {
       subscribeStartupProgress: async (listener) => {
         receiveProgress = listener;
         return () => {};
@@ -396,7 +451,7 @@ test.each([
 test("fork dialog defaults to the source folder and blocks duplicate submit and close while pending", async () => {
   const calls: WorkspaceSessionForkInput[] = [];
   let reject!: (cause: Error) => void;
-  const { view, completed, closed } = renderFork((input) => {
+  const { view, completed, closed } = await renderFork((input) => {
     calls.push(input);
     return new Promise((_resolve, fail) => {
       reject = fail;
@@ -453,7 +508,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
 test("new worktree uses New chat defaults and validation and keeps inputs after a failed fork", async () => {
   const calls: WorkspaceSessionForkInput[] = [];
   let reject!: (cause: Error) => void;
-  const { view, completed } = renderFork((input) => {
+  const { view, completed } = await renderFork((input) => {
     calls.push(input);
     return new Promise((_resolve, fail) => {
       reject = fail;
@@ -501,8 +556,8 @@ test("new worktree uses New chat defaults and validation and keeps inputs after 
   }
 });
 
-test("a repository-root source starts with an empty worktree name", () => {
-  const { view } = renderFork(
+test("a repository-root source starts with an empty worktree name", async () => {
+  const { view } = await renderFork(
     async () => {
       throw new Error("Unexpected submit");
     },

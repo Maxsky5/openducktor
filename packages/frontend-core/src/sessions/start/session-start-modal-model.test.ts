@@ -169,7 +169,7 @@ describe("session start blocked reason", () => {
     ).toBe("The runtime settings did not load.");
     expect(blockedReasonOf({ runtimeSettingsError: "Down" })).toBeNull();
     expect(blockedReasonOf({ kickoffPromptError: "Down" })).toBe(
-      "The kickoff prompt did not load.",
+      "Could not load the first message.",
     );
   });
 

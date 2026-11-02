@@ -13,7 +13,7 @@ const renderSheet = ({ ready, opens }: { ready: boolean; opens: boolean }) => {
   const hook = renderHook(
     ({ isReady }: { isReady: boolean }) => {
       const [open, setOpen] = useState(false);
-      const triggered = useWorkflowSheetLifecycle({
+      useWorkflowSheetLifecycle({
         ready: isReady,
         run: () => {
           calls.run += 1;
@@ -22,7 +22,7 @@ const renderSheet = ({ ready, opens }: { ready: boolean; opens: boolean }) => {
         anyOpen: open,
         close,
       });
-      return { triggered, setOpen };
+      return { setOpen };
     },
     { initialProps: { isReady: ready } },
   );
@@ -31,15 +31,13 @@ const renderSheet = ({ ready, opens }: { ready: boolean; opens: boolean }) => {
 
 describe("useWorkflowSheetLifecycle", () => {
   test("waits until it is ready, then runs the action once", () => {
-    const { calls, result, rerender } = renderSheet({ ready: false, opens: true });
+    const { calls, rerender } = renderSheet({ ready: false, opens: true });
     expect(calls).toEqual({ run: 0, close: 0 });
-    expect(result.current.triggered).toBe(false);
 
     rerender({ isReady: true });
     rerender({ isReady: true });
 
     expect(calls).toEqual({ run: 1, close: 0 });
-    expect(result.current.triggered).toBe(true);
   });
 
   test("stays open while the step is open, then closes once when it closes", () => {

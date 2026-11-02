@@ -43,7 +43,7 @@ export function TaskArtifactHtmlPreview({ html, name }: { html: string; name: st
   if (state.status === "loading") {
     preview = (
       <p role="status" className="min-h-0 overflow-auto p-4 text-sm text-muted-foreground">
-        Checking preview isolation...
+        Preparing preview…
       </p>
     );
   } else if (state.status === "error") {
@@ -145,7 +145,7 @@ function IsolatedHtmlFrame({
     <>
       {status === "loading" ? (
         <p role="status" className="min-h-0 overflow-auto p-4 text-sm text-muted-foreground">
-          Loading HTML preview...
+          Loading preview…
         </p>
       ) : null}
       {status === "error" ? (

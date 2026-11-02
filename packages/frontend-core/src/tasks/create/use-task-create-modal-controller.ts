@@ -558,6 +558,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   } = useTaskDocumentEditorState({
     open,
     taskId,
+    repoPath: activeWorkspace?.repoPath ?? null,
     activeSection: activeDocumentSection,
     loadDocument,
   });

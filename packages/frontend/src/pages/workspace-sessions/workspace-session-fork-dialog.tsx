@@ -11,7 +11,7 @@ import {
   workspaceSessionForkInput,
 } from "@openducktor/frontend-core/workspace-sessions/fork/workspace-session-fork-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Folder, GitBranch, LoaderCircle } from "lucide-react";
+import { Folder, GitBranch, GitFork, LoaderCircle } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,7 +94,8 @@ export function WorkspaceSessionForkDialog({
     pending || startupIsPending(attempt) || Boolean(startupAttemptId && !showingProgress);
   const worktreeError = workspaceSessionValidationError(failure);
   const formError = worktreeError ? null : failure;
-  const { name: folderName, directory } = forkSourceFolder(record);
+  const defaultsPending = destination === "new_worktree" && config.isPending;
+  const blockedReason = disabledReason ?? (defaultsPending ? FORK_CHAT_TEXT.loadingDefaults : null);
   const input = workspaceSessionForkInput({
     workspaceId: workspace.workspaceId,
     record,
@@ -102,6 +103,7 @@ export function WorkspaceSessionForkDialog({
     destination,
     worktree,
     branchPrefix: config.data?.branchPrefix,
+    defaultsReady: !config.isPending,
   });
   const changeWorktree = (value: WorkspaceSessionWorktreeInput): void => {
     setFailure(null);
@@ -160,7 +162,7 @@ export function WorkspaceSessionForkDialog({
         >
           <DialogTitle>{FORK_CHAT_TEXT.title}</DialogTitle>
           <DialogDescription className={cn(showingProgress && "sr-only")}>
-            {showingProgress ? "Follow session startup progress." : FORK_CHAT_TEXT.description}
+            {showingProgress ? "See progress as the session starts." : FORK_CHAT_TEXT.description}
           </DialogDescription>
         </DialogHeader>
         {startupAttemptId && showingProgress ? (
@@ -180,79 +182,21 @@ export function WorkspaceSessionForkDialog({
           >
             <fieldset disabled={starting} className="contents">
               <DialogBody className="flex flex-col gap-4 px-6 py-4">
-                <WorkspaceSessionWorkLocationField
-                  value={destination}
-                  onValueChange={setDestination}
+                <ForkLocationFields
+                  workspace={workspace}
+                  record={record}
+                  destination={destination}
+                  onDestinationChange={setDestination}
+                  worktree={worktree}
+                  onWorktreeChange={changeWorktree}
                   disabled={starting}
-                  ariaLabel={FORK_CHAT_TEXT.locationLabel}
-                  options={[
-                    {
-                      value: "same_folder",
-                      label: FORK_CHAT_TEXT.sameFolder,
-                      description: FORK_CHAT_TEXT.sameFolderDescription,
-                      icon: Folder,
-                    },
-                    {
-                      value: "new_worktree",
-                      label: FORK_CHAT_TEXT.newWorktree,
-                      description: FORK_CHAT_TEXT.newWorktreeDescription,
-                      icon: GitBranch,
-                    },
-                  ]}
+                  error={worktreeError}
                 />
-                <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {FORK_CHAT_TEXT.sourceFolder}
-                  </p>
-                  <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                      <Folder aria-hidden="true" className="size-4 shrink-0" />
-                      <span className="min-w-0 break-words">{folderName}</span>
-                    </p>
-                    {record.executionTarget.kind === "local_worktree" &&
-                    record.executionTarget.branchName ? (
-                      <Badge
-                        variant="outline"
-                        className="max-w-full gap-1.5 self-start font-mono font-normal"
-                      >
-                        <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
-                        <span className="sr-only">Source branch: </span>
-                        <span className="min-w-0 break-words">
-                          {record.executionTarget.branchName}
-                        </span>
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 break-words font-mono text-xs leading-relaxed text-muted-foreground dark:text-foreground/80">
-                    {directory}
-                  </p>
-                </div>
-                {destination === "new_worktree" ? (
-                  <div className="flex flex-col gap-3">
-                    <WorktreeNameField
-                      value={worktree}
-                      onChange={changeWorktree}
-                      disabled={starting}
-                      error={worktreeError}
-                    />
-                    <NewWorktreeBranchFields
-                      workspace={workspace}
-                      value={worktree}
-                      onChange={changeWorktree}
-                      disabled={starting}
-                      error={worktreeError}
-                      alwaysExpanded
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      {FORK_CHAT_TEXT.uncommittedChanges}
-                    </p>
-                  </div>
-                ) : null}
               </DialogBody>
               <ForkFooter
                 pending={starting}
                 error={formError}
-                disabledReason={disabledReason}
+                disabledReason={blockedReason}
                 canSubmit={input !== null}
                 onClose={close}
               />
@@ -261,6 +205,93 @@ export function WorkspaceSessionForkDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ForkLocationFields({
+  workspace,
+  record,
+  destination,
+  onDestinationChange,
+  worktree,
+  onWorktreeChange,
+  disabled,
+  error,
+}: {
+  workspace: ActiveWorkspace;
+  record: WorkspaceSession;
+  destination: WorkspaceSessionForkDestination;
+  onDestinationChange: (value: WorkspaceSessionForkDestination) => void;
+  worktree: WorkspaceSessionWorktreeInput;
+  onWorktreeChange: (value: WorkspaceSessionWorktreeInput) => void;
+  disabled: boolean;
+  error: ReturnType<typeof workspaceSessionValidationError>;
+}): ReactElement {
+  const { name: folderName, directory } = forkSourceFolder(record);
+  return (
+    <>
+      <WorkspaceSessionWorkLocationField
+        value={destination}
+        onValueChange={onDestinationChange}
+        disabled={disabled}
+        ariaLabel={FORK_CHAT_TEXT.locationLabel}
+        options={[
+          {
+            value: "same_folder",
+            label: FORK_CHAT_TEXT.sameFolder,
+            description: FORK_CHAT_TEXT.sameFolderDescription,
+            icon: Folder,
+          },
+          {
+            value: "new_worktree",
+            label: FORK_CHAT_TEXT.newWorktree,
+            description: FORK_CHAT_TEXT.newWorktreeDescription,
+            icon: GitBranch,
+          },
+        ]}
+      />
+      <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
+        <p className="text-xs font-medium text-muted-foreground">{FORK_CHAT_TEXT.sourceFolder}</p>
+        <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+            <Folder aria-hidden="true" className="size-4 shrink-0" />
+            <span className="min-w-0 break-words">{folderName}</span>
+          </p>
+          {record.executionTarget.kind === "local_worktree" && record.executionTarget.branchName ? (
+            <Badge
+              variant="outline"
+              className="max-w-full gap-1.5 self-start font-mono font-normal"
+            >
+              <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
+              <span className="sr-only">Source branch: </span>
+              <span className="min-w-0 break-words">{record.executionTarget.branchName}</span>
+            </Badge>
+          ) : null}
+        </div>
+        <p className="mt-2 break-words font-mono text-xs leading-relaxed text-muted-foreground dark:text-foreground/80">
+          {directory}
+        </p>
+      </div>
+      {destination === "new_worktree" ? (
+        <div className="flex flex-col gap-3">
+          <WorktreeNameField
+            value={worktree}
+            onChange={onWorktreeChange}
+            disabled={disabled}
+            error={error}
+          />
+          <NewWorktreeBranchFields
+            workspace={workspace}
+            value={worktree}
+            onChange={onWorktreeChange}
+            disabled={disabled}
+            error={error}
+            alwaysExpanded
+          />
+          <p className="text-sm text-muted-foreground">{FORK_CHAT_TEXT.uncommittedChanges}</p>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -300,7 +331,9 @@ function ForkFooter({
         >
           {pending ? (
             <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />
-          ) : null}
+          ) : (
+            <GitFork data-icon="inline-start" />
+          )}
           {pending ? FORK_CHAT_TEXT.confirming : FORK_CHAT_TEXT.confirm}
         </Button>
       </div>

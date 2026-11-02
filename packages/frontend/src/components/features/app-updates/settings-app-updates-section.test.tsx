@@ -32,9 +32,9 @@ describe("SettingsAppUpdatesSection", () => {
     render(<SettingsAppUpdatesSection disabled={false} />);
 
     expect(await screen.findByText("Loading update status")).toBeTruthy();
-    expect(screen.getByText("Reading update status.")).toBeTruthy();
+    expect(screen.getByText("Loading update information.")).toBeTruthy();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for updates" }).disabled,
     ).toBe(true);
     expect(screen.queryByText("Current version")).toBeNull();
 
@@ -66,7 +66,7 @@ describe("SettingsAppUpdatesSection", () => {
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<SettingsAppUpdatesSection disabled={false} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Check for Updates" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
     await waitFor(() => expect(appUpdates.check).toHaveBeenCalledWith({ initiator: "settings" }));
     expect(await screen.findByText("OpenDucktor is up to date")).toBeTruthy();
@@ -83,7 +83,7 @@ describe("SettingsAppUpdatesSection", () => {
     configureShellBridge(createTestShellBridge(appUpdates));
     render(<SettingsAppUpdatesSection disabled={false} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Check for Updates" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
     const error = await screen.findByRole("alert");
     expect(error.textContent).toBe("bridge check failed");
@@ -107,7 +107,7 @@ describe("SettingsAppUpdatesSection", () => {
     expect(screen.getByText("0.4.2")).toBeTruthy();
     expect(screen.queryByText("Available version")).toBeNull();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for updates" }).disabled,
     ).toBe(true);
   });
 
@@ -158,7 +158,7 @@ describe("SettingsAppUpdatesSection", () => {
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for updates" }).disabled,
     ).toBe(false);
   });
 
@@ -204,7 +204,7 @@ describe("SettingsAppUpdatesSection", () => {
     fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
     expect(screen.queryByRole("button", { name: "Download Signed Release" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Check for Updates" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
 
     await waitFor(() => expect(appUpdates.check).toHaveBeenCalledWith({ initiator: "settings" }));
     expect(await screen.findByRole("button", { name: "Download Update" })).toBeTruthy();
@@ -224,7 +224,7 @@ describe("SettingsAppUpdatesSection", () => {
     expect(await screen.findByText("Installing update")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for updates" }).disabled,
     ).toBe(true);
   });
 
@@ -248,7 +248,7 @@ describe("SettingsAppUpdatesSection", () => {
     expect(screen.queryByText("Quit and reopen OpenDucktor before trying again.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for updates" }).disabled,
     ).toBe(false);
   });
 
@@ -292,7 +292,7 @@ describe("SettingsAppUpdatesSection", () => {
     expect(screen.getByText("0.4.4")).toBeTruthy();
     expect(screen.queryByText("Desktop Updates")).toBeNull();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Check for Updates" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Check for updates" }).disabled,
     ).toBe(true);
   });
 });

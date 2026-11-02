@@ -1,23 +1,14 @@
 import { CircleCheckBig, Loader2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import {
   TASK_CLOSE_COPY,
   taskCloseConfirmLabel,
 } from "@openducktor/frontend-core/tasks/details/task-close-copy";
 import { TaskCloseConfirmContent } from "./task-close-confirm-content";
 import { focusDialogContent } from "@/lib/focus-dialog-content";
-import { TaskIdentity } from "./task-identity";
-import { TaskReadsLoading } from "./task-reads-loading";
+import { TaskDialogHeader } from "./task-dialog-header";
 import type { TaskCloseConfirmDialogModel } from "@openducktor/frontend-core/tasks/details/use-task-close-confirm-dialog";
 
 type TaskCloseConfirmDialogProps = TaskCloseConfirmDialogModel & {
@@ -42,34 +33,32 @@ export function TaskCloseConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg"
+        loading={isPreparing && !operation.isPending}
+        loadingLabel="Loading task details…"
+        className="max-w-lg overflow-hidden p-0"
         onOpenAutoFocus={focusDialogContent}
         onCloseAutoFocus={onCloseAutoFocus}
       >
-        <DialogHeader>
-          <DialogTitle>{TASK_CLOSE_COPY.title}</DialogTitle>
-          <DialogDescription asChild>
-            <TaskIdentity title={impact.taskTitle} taskId={impact.taskId} />
-          </DialogDescription>
-        </DialogHeader>
+        <TaskDialogHeader
+          title={TASK_CLOSE_COPY.title}
+          description={TASK_CLOSE_COPY.description}
+          subject={{ id: impact.taskId, title: impact.taskTitle }}
+          icon={CircleCheckBig}
+        />
 
-        <DialogBody className="grid gap-4 py-4">
-          {isPreparing ? (
-            <TaskReadsLoading />
-          ) : (
-            <TaskCloseConfirmContent
-              impact={impact}
-              removeWorktree={removeWorktree}
-              onRemoveWorktreeChange={onRemoveWorktreeChange}
-              disabled={operation.isPending}
-            />
-          )}
+        <DialogBody className="grid min-h-0 gap-4 overflow-y-auto px-6 pb-6">
+          <TaskCloseConfirmContent
+            impact={impact}
+            removeWorktree={removeWorktree}
+            onRemoveWorktreeChange={onRemoveWorktreeChange}
+            disabled={operation.isPending}
+          />
           {operation.error ? (
             <p className="text-sm text-destructive-muted">{operation.error}</p>
           ) : null}
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 flex-col-reverse justify-between gap-2 border-t border-border px-6 py-4 sm:flex-row">
           <Button type="button" variant="outline" disabled={operation.isPending} onClick={onCancel}>
             Cancel
           </Button>

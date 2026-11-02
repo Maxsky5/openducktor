@@ -48,7 +48,7 @@ function ScanCard({ onPress, disabled }: { onPress: () => void; disabled: boolea
       disabled={disabled}
       radius={theme.radius.xl}
       accessibilityRole="button"
-      accessibilityLabel="Scan QR Code"
+      accessibilityLabel="Scan QR code"
       accessibilityHint="Opens the camera to scan the code that Remote control shows on the host."
       style={styles.scan}
     >
@@ -56,7 +56,7 @@ function ScanCard({ onPress, disabled }: { onPress: () => void; disabled: boolea
         <Icon name="qr-code" size={20} colorValue={theme.desktop.selectedAccent} />
       </View>
       <View style={styles.scanText}>
-        <Text weight="medium">Scan QR Code</Text>
+        <Text weight="medium">Scan QR code</Text>
         <Text variant="subhead" tone="tertiary">
           On your computer, open Settings, Remote control, and show the QR code.
         </Text>
@@ -203,17 +203,26 @@ export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
         />
       </Animated.View>
       <Animated.View layout={SETTLE} style={styles.actions}>
+        {connecting ? (
+          <Button
+            label="Cancel"
+            variant="outline"
+            size="lg"
+            onPress={cancel}
+            fill
+            style={styles.action}
+          />
+        ) : null}
         <Button
           label={connecting ? "Connecting…" : "Connect to host"}
+          icon="server"
           size="lg"
           loading={connecting}
           disabled={!canConnect && !connecting}
           onPress={() => void connect()}
           fill
+          style={styles.action}
         />
-        {connecting ? (
-          <Button label="Cancel" variant="outline" size="lg" onPress={cancel} fill />
-        ) : null}
       </Animated.View>
     </View>
   );
@@ -250,5 +259,6 @@ const styles = StyleSheet.create((theme) => ({
   divider: { flexDirection: "row", alignItems: "center", gap: theme.space.md },
   dividerLine: { flex: 1, height: theme.hairline, backgroundColor: theme.desktop.border },
   fields: { gap: theme.space.lg },
-  actions: { gap: theme.space.sm, paddingTop: theme.space.xs },
+  actions: { flexDirection: "row", gap: theme.space.sm, paddingTop: theme.space.xs },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

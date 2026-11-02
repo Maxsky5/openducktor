@@ -102,11 +102,11 @@ describe("SettingsNotificationsSection", () => {
     );
     await screen.findByText("Allow notifications to receive alerts outside the app.");
     expect(screen.getByRole("button", { name: "Default sound" }).textContent).toBe(label);
-    expect(screen.getByRole("button", { name: "Sound for Permission Prompt" }).textContent).toBe(
+    expect(screen.getByRole("button", { name: "Sound for Permission request" }).textContent).toBe(
       label,
     );
     expect(onUpdate).not.toHaveBeenCalled();
-    for (const name of ["Default sound", "Sound for Permission Prompt"]) {
+    for (const name of ["Default sound", "Sound for Permission request"]) {
       fireEvent.click(screen.getByRole("button", { name }));
       const menu = screen.getByRole("dialog", { name: `${name} menu` });
       fireEvent.click(within(menu).getByRole("button", { name: label }));
@@ -143,11 +143,13 @@ describe("SettingsNotificationsSection", () => {
         />,
       );
 
-      expect(screen.queryByText(/Last OS error/)).toBeNull();
+      expect(screen.queryByText(/Last system notification error/)).toBeNull();
       await screen.findByText(
-        permission === "prompt" ? "Turn on OS notifications" : "OS notifications are off",
+        permission === "prompt" ? "Turn on system notifications" : "System notifications are off",
       );
-      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(false);
+      expect(
+        screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
+      ).toBe(false);
       expect(screen.queryByRole("button", { name: "Allow notifications" }) !== null).toBe(
         permission === "prompt",
       );
@@ -169,10 +171,12 @@ describe("SettingsNotificationsSection", () => {
       fireEvent.click(button);
       expect(requestPermission).toHaveBeenCalledTimes(1);
       expect(button.hasAttribute("disabled")).toBe(true);
-      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(true);
-      expect(screen.getByRole("button", { name: "Test in-app" }).hasAttribute("disabled")).toBe(
-        true,
-      );
+      expect(
+        screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
+      ).toBe(true);
+      expect(
+        screen.getByRole("button", { name: "Test in-app notification" }).hasAttribute("disabled"),
+      ).toBe(true);
       expect(button.textContent).toContain("Waiting for permission");
       await act(async () => {
         pending.resolve({
@@ -185,9 +189,9 @@ describe("SettingsNotificationsSection", () => {
         await pending.promise;
       });
       const title = {
-        granted: "OS notifications are on",
-        denied: "OS notifications are off",
-        prompt: "Turn on OS notifications",
+        granted: "System notifications are on",
+        denied: "System notifications are off",
+        prompt: "Turn on system notifications",
       };
       await screen.findByText(title[permission]);
       if (permission === "prompt")
@@ -196,7 +200,9 @@ describe("SettingsNotificationsSection", () => {
         permission === "prompt",
       );
       expect(testOs).not.toHaveBeenCalled();
-      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(false);
+      expect(
+        screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
+      ).toBe(false);
     },
     2_500,
   );
@@ -232,7 +238,7 @@ describe("SettingsNotificationsSection", () => {
     ["sound", "Last sound error"],
     ["settings", "Last notification settings error"],
     ["coordination", "Last browser notification coordination error"],
-    ["os", "Last OS error"],
+    ["os", "Last system notification error"],
   ] as const)(
     "labels a %s failure separately from OS permission",
     async (channel, label) => {
@@ -251,13 +257,13 @@ describe("SettingsNotificationsSection", () => {
       );
       const failure = screen.getByRole("alert");
       expect(failure.textContent).toBe(`${label}: Delivery detail`);
-      const permissionTitle = await screen.findByText("Turn on OS notifications");
+      const permissionTitle = await screen.findByText("Turn on system notifications");
       expect(permissionTitle.closest('[role="status"]')?.contains(failure)).toBe(false);
-      if (channel !== "os") expect(screen.queryByText(/Last OS error/)).toBeNull();
+      if (channel !== "os") expect(screen.queryByText(/Last system notification error/)).toBeNull();
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(
-          false,
-        ),
+        expect(
+          screen.getByRole("button", { name: "Test system notification" }).hasAttribute("disabled"),
+        ).toBe(false),
       );
       // This flow renders notification controls and handles async updates.
     },
@@ -275,7 +281,7 @@ describe("SettingsNotificationsSection", () => {
         })}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sound for Permission Prompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sound for Permission request" }));
     fireEvent.click(screen.getByRole("button", { name: "Preview Success" }));
     await screen.findByText(/Notification sound could not play: Audio unavailable/);
     fail = false;
@@ -321,7 +327,7 @@ describe("SettingsNotificationsSection", () => {
       AGENT_NOTIFICATION_KIND_VALUES.length + BUILTIN_NOTIFICATION_KINDS.length,
     );
     const delivery = screen.getByRole("radiogroup", {
-      name: "Delivery for Permission Prompt",
+      name: "Delivery for Permission request",
     });
     expect(delivery.getAttribute("data-variant")).toBe("segmented");
     expect(
@@ -332,11 +338,11 @@ describe("SettingsNotificationsSection", () => {
     expect(within(delivery).getByRole("radio", { name: "Both" }).getAttribute("data-state")).toBe(
       "checked",
     );
-    fireEvent.click(within(delivery).getByRole("radio", { name: "OS" }));
-    expect(within(delivery).getByRole("radio", { name: "OS" }).getAttribute("data-state")).toBe(
+    fireEvent.click(within(delivery).getByRole("radio", { name: "System" }));
+    expect(within(delivery).getByRole("radio", { name: "System" }).getAttribute("data-state")).toBe(
       "checked",
     );
-    const idleSwitch = screen.getByRole("switch", { name: "Enable Agent Session Idle" });
+    const idleSwitch = screen.getByRole("switch", { name: "Enable Session idle" });
     expect(idleSwitch.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(idleSwitch);
     expect(idleSwitch.getAttribute("aria-checked")).toBe("true");
@@ -370,11 +376,13 @@ describe("SettingsNotificationsSection", () => {
     expect(testInApp).not.toHaveBeenCalled();
     expect(testOs).not.toHaveBeenCalled();
     await waitFor(() => expect(getCapability).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Test in-app" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test in-app notification" }));
     await waitFor(() => expect(testInApp).toHaveBeenCalledTimes(1));
-    const testOsButton = screen.getByRole("button", { name: "Test OS" });
+    const testOsButton = screen.getByRole("button", { name: "Test system notification" });
     expect(testOsButton.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Test in-app" }).hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Test in-app notification" }).hasAttribute("disabled"),
+    ).toBe(true);
     await act(async () => {
       finishInApp();
       await pendingInApp;
@@ -417,8 +425,8 @@ describe("SettingsNotificationsSection", () => {
     const permissionAlert = description.closest("[role='alert']");
     expect(permissionAlert).not.toBeNull();
     expect(permissionAlert?.className).toContain("bg-warning-surface");
-    expect(permissionAlert?.textContent).toContain("OS notifications are off");
-    const testOsButton = screen.getByRole("button", { name: "Test OS" });
+    expect(permissionAlert?.textContent).toContain("System notifications are off");
+    const testOsButton = screen.getByRole("button", { name: "Test system notification" });
     expect(testOsButton.hasAttribute("disabled")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Open system settings" }));
     await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
@@ -452,7 +460,7 @@ describe("SettingsNotificationsSection", () => {
     const permissionStatus = description.closest("[role='status']");
     expect(permissionStatus).not.toBeNull();
     expect(permissionStatus?.className).toContain("bg-success-surface");
-    expect(permissionStatus?.textContent).toContain("OS notifications are on");
+    expect(permissionStatus?.textContent).toContain("System notifications are on");
     expect(screen.queryByRole("button", { name: "Open system settings" }) !== null).toBe(true);
   });
 
@@ -474,13 +482,13 @@ describe("SettingsNotificationsSection", () => {
     render(<NotificationsHarness context={createNotificationContext({ previewCue })} />);
 
     await screen.findByText("Allow notifications to receive alerts outside the app.");
-    const soundPicker = screen.getByRole("button", { name: "Sound for Permission Prompt" });
+    const soundPicker = screen.getByRole("button", { name: "Sound for Permission request" });
     expect(soundPicker.textContent).toBe("Open");
 
     await act(async () => {
       fireEvent.click(soundPicker);
     });
-    const menu = screen.getByRole("dialog", { name: "Sound for Permission Prompt menu" });
+    const menu = screen.getByRole("dialog", { name: "Sound for Permission request menu" });
     const previews = within(menu).getAllByRole("button", { name: /^Preview / });
     expect(previews.filter((button) => !button.hasAttribute("disabled"))).toHaveLength(11);
     for (const button of previews) {

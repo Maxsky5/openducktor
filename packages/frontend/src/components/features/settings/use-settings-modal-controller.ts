@@ -124,6 +124,7 @@ export type SettingsModalController = {
   selectedRepoModelWarnings: string[];
   setSelectedWorkspaceId: (next: string) => void;
   retrySelectedRepoBranchesLoad: () => void;
+  retrySettings: () => void;
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
@@ -230,13 +231,12 @@ export const useSettingsModalController = ({
     selectedRepoConfig,
     isLoadingSettings,
     settingsError,
-    clearSettingsError,
+    retrySettings,
     requiredWorkspaceSelectionUnresolved,
     requiredWorkspaceRepoPath,
   } = useSettingsModalSnapshotState({
     open,
     workspaceSelectionPolicy: workspacePolicy,
-    loadSettingsSnapshot,
   });
   const {
     azureDevOpsValidationErrorCount,
@@ -448,6 +448,7 @@ export const useSettingsModalController = ({
     submit,
   } = useSettingsModalSaveOrchestration({
     open,
+    loadSettingsSnapshot,
     loadedSnapshot,
     snapshotDraft,
     dirtySections,
@@ -490,7 +491,6 @@ export const useSettingsModalController = ({
     saveGlobalGitConfig,
     previewSettingsSnapshotRuntime,
     saveSettingsSnapshot,
-    loadSettingsSnapshot,
     isAgentModelFavoritesMutationPending,
     isKanbanTaskCardViewMutationPending,
     isSidebarSessionGroupingMutationPending,
@@ -574,10 +574,6 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
   });
 
-  if (!open && settingsError !== null) {
-    clearSettingsError();
-  }
-
   return {
     customAgentRoleValidationState,
     updateCustomAgentRoles,
@@ -635,6 +631,7 @@ export const useSettingsModalController = ({
     selectedRepoModelWarnings,
     setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
+    retrySettings,
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
     checkRuntimeExecutablesAgain,
     detectSelectedRepoGithubRepository,

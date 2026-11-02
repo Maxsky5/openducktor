@@ -29,13 +29,13 @@ export const choiceSheetOptions = (title: string): NativeStackNavigationOptions 
  * A full-height form with long content, such as task editing. iOS shows a form sheet, which asks
  * before a swipe drops unsaved edits. An Android form sheet always closes on a drag down or a tap
  * outside, before the form can ask. Android therefore shows the Material full-screen dialog, which
- * closes only with its Close control or Back. It fades in as it rises a little, so it moves in the
- * first frame; a full slide starts slowly and takes 400 ms. A form with unsaved edits asks first,
- * and a running command blocks both (see `SheetScreen`).
+ * closes only with its Close control or Back. The native fade starts on the first frame in both
+ * directions; fade_from_bottom delays its exit fade by 100 ms. A form with unsaved edits asks
+ * first, and a running command blocks both (see `SheetScreen`).
  */
 export const fullSheetOptions = (title: string): NativeStackNavigationOptions =>
   Platform.OS === "android"
-    ? { presentation: "modal", animation: "fade_from_bottom", headerShown: false, title }
+    ? { presentation: "modal", animation: "fade", headerShown: false, title }
     : { ...sheetOptions(title), sheetAllowedDetents: [1] };
 
 /**

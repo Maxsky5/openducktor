@@ -18,8 +18,6 @@ import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { TaskCleanupChoice } from "../close/task-close-content";
 import { TaskConfirmFrame } from "../confirm/task-confirm-view";
-import { TaskReadsLoading } from "../confirm/task-reads-loading";
-import { titleCase } from "../start-session/start-form-model";
 import { PullRequestLinkButton } from "./pull-request-link-button";
 
 /** The merged pull request that a confirmation links, with the task that the link closes. */
@@ -57,11 +55,11 @@ export function MergedPullRequestConfirm({
     task: { id: taskId, title: taskTitle ?? "" },
     enabled: visible,
   });
-  const isPreparing = useTaskCloseLoader(impact);
+  const isPreparing = useTaskCloseLoader(impact, removeWorktree);
   return (
     <TaskConfirmFrame
       visible={visible}
-      title={titleCase(COPY.confirmLabel)}
+      title={COPY.title}
       tone="warning"
       confirm={{
         label: linking ? COPY.confirmPendingLabel : COPY.confirmLabel,
@@ -69,65 +67,56 @@ export function MergedPullRequestConfirm({
         disabled: isPreparing || linking || isCloseBlocked(impact, removeWorktree),
       }}
       isPending={linking}
+      loading={isPreparing}
+      intro={
+        <View style={styles.group}>
+          <Text variant="body" style={styles.muted}>
+            {COPY.description}
+          </Text>
+          {taskTitle ? (
+            <Text variant="body" weight="medium" numberOfLines={2} selectable>
+              {taskTitle}
+            </Text>
+          ) : null}
+          <Text variant="mono" selectable style={styles.muted}>
+            {taskId}
+          </Text>
+          <PullRequestLinkButton pullRequest={pullRequest} />
+        </View>
+      }
       // The link operation reports its failure in a toast, and the confirmation stays.
       failure={null}
-      icon="check"
+      icon="circle-check-big"
       onCancel={onCancel}
       onConfirm={() => {
         if (removeWorktree !== null) onConfirm({ removeWorktree });
       }}
     >
-      <Text variant="body" style={styles.muted}>
-        {COPY.description}
-      </Text>
       <View style={styles.group}>
-        <Text variant="footnote" style={styles.muted}>
-          {COPY.taskHeading}
-        </Text>
-        {taskTitle ? (
-          <Text variant="body" weight="medium" selectable>
-            {taskTitle}
-          </Text>
-        ) : null}
-        <Text variant="mono" selectable style={styles.muted}>
-          {taskId}
-        </Text>
-      </View>
-      <View style={styles.group}>
-        <Text variant="footnote" style={styles.muted}>
-          {COPY.pullRequestHeading}
-        </Text>
-        <PullRequestLinkButton pullRequest={pullRequest} />
         {pullRequest.mergedAt ? (
           <Text variant="footnote" style={styles.muted}>
             {`${COPY.mergedAtHeading}: ${formatMergedAt(pullRequest.mergedAt)}`}
           </Text>
         ) : null}
       </View>
-      {isPreparing ? (
-        <TaskReadsLoading />
-      ) : (
-        <>
-          <Callout
-            tone="info"
-            size="sm"
-            title={COPY.nextStepsHeading}
-            message={COPY.nextSteps}
-            // A failed session read shows in the read error row, with a retry.
-            detail={
-              impact.activeSessionCount
-                ? formatActiveSessionStopMessage(impact.activeSessionCount, "close")
-                : null
-            }
-          />
-          <TaskCleanupChoice
-            impact={impact}
-            removeWorktree={removeWorktree}
-            onRemoveWorktreeChange={onRemoveWorktreeChange}
-            disabled={linking}
-          />
-        </>
-      )}
+      <Callout
+        tone="info"
+        size="sm"
+        title={COPY.nextStepsHeading}
+        message={COPY.nextSteps}
+        // A failed session read shows in the read error row, with a retry.
+        detail={
+          impact.activeSessionCount
+            ? formatActiveSessionStopMessage(impact.activeSessionCount, "close")
+            : null
+        }
+      />
+      <TaskCleanupChoice
+        impact={impact}
+        removeWorktree={removeWorktree}
+        onRemoveWorktreeChange={onRemoveWorktreeChange}
+        disabled={linking}
+      />
     </TaskConfirmFrame>
   );
 }

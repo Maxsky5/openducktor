@@ -1,8 +1,7 @@
 import type { PullRequest, TaskCard } from "@openducktor/contracts";
-import { Check, CircleAlert } from "lucide-react";
+import { CircleCheckBig, CircleAlert } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { TaskCleanupChoice } from "@/components/features/task-details/task-close-confirm-content";
-import { TaskReadsLoading } from "@/components/features/task-details/task-reads-loading";
 import { formatActiveSessionStopMessage } from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
 import {
   isCloseBlocked,
@@ -44,7 +43,7 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
     task: { id: taskId, title: taskTitle ?? "" },
     enabled: pullRequest != null,
   });
-  const isPreparing = useTaskCloseLoader(impact);
+  const isPreparing = useTaskCloseLoader(impact, removeWorktree);
   return (
     <GitConfirmationDialog
       open={pullRequest != null}
@@ -70,7 +69,9 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
         if (removeWorktree !== null) onConfirm({ removeWorktree });
       }}
       confirmTestId="merged-pr-dialog-confirm-button"
-      confirmIcon={Check}
+      confirmIcon={CircleCheckBig}
+      confirmVariant="warning"
+      loading={isPreparing && !isLinking}
       contentTestId="merged-pr-dialog"
     >
       <div className="grid gap-4">
@@ -102,32 +103,26 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
           </div>
         </div>
 
-        {isPreparing ? (
-          <TaskReadsLoading />
-        ) : (
-          <>
-            <div className="flex items-start gap-3 rounded-md border border-info-border bg-info-surface p-4 text-sm text-info-surface-foreground">
-              <CircleAlert className="mt-0.5 size-4 shrink-0 text-info-muted" aria-hidden="true" />
-              <div className="space-y-1.5">
-                <p className="font-semibold">{COPY.nextStepsHeading}</p>
-                <p className="leading-6">{COPY.nextSteps}</p>
-                {/* A failed session read shows in the read error row, with a retry. */}
-                {impact.activeSessionCount ? (
-                  <p className="leading-6">
-                    {formatActiveSessionStopMessage(impact.activeSessionCount, "close")}
-                  </p>
-                ) : null}
-              </div>
-            </div>
+        <div className="flex items-start gap-3 rounded-md border border-info-border bg-info-surface p-4 text-sm text-info-surface-foreground">
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-info-muted" aria-hidden="true" />
+          <div className="space-y-1.5">
+            <p className="font-semibold">{COPY.nextStepsHeading}</p>
+            <p className="leading-6">{COPY.nextSteps}</p>
+            {/* A failed session read shows in the read error row, with a retry. */}
+            {impact.activeSessionCount ? (
+              <p className="leading-6">
+                {formatActiveSessionStopMessage(impact.activeSessionCount, "close")}
+              </p>
+            ) : null}
+          </div>
+        </div>
 
-            <TaskCleanupChoice
-              impact={impact}
-              removeWorktree={removeWorktree}
-              onRemoveWorktreeChange={onRemoveWorktreeChange}
-              disabled={isLinking}
-            />
-          </>
-        )}
+        <TaskCleanupChoice
+          impact={impact}
+          removeWorktree={removeWorktree}
+          onRemoveWorktreeChange={onRemoveWorktreeChange}
+          disabled={isLinking}
+        />
       </div>
     </GitConfirmationDialog>
   );

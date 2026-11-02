@@ -642,6 +642,16 @@ describe("AppShell", () => {
     Reflect.deleteProperty(globalThis, "localStorage");
   });
 
+  test("opens New chat on the first menu click", async () => {
+    renderAppShellForTest();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
+
+    const dialog = screen.getByRole("dialog", { name: "New chat" });
+    expect(within(dialog).getByRole("textbox", { name: /^Name/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
+  });
+
   test("keeps the active repo config loaded outside Agent Studio", () => {
     const queryClients: QueryClient[] = [];
     renderAppShellForTest({
@@ -1601,7 +1611,7 @@ describe("AppShell command palette", () => {
       fireEvent.keyDown(input, { key: "Enter" });
       const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
       expect(
-        within(chooser).getByRole("button", { name: "Sync workspace OpenDucktor" }),
+        await within(chooser).findByRole("button", { name: "Sync workspace OpenDucktor" }),
       ).toBeTruthy();
       expect(sync).not.toHaveBeenCalled();
       fireEvent.keyDown(chooser, { key: "Escape" });
@@ -1627,7 +1637,9 @@ describe("AppShell command palette", () => {
     const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
     await flushQueryUpdates();
     expect(sync).not.toHaveBeenCalled();
-    fireEvent.click(within(chooser).getByRole("button", { name: "Sync workspace Fairnest" }));
+    fireEvent.click(
+      await within(chooser).findByRole("button", { name: "Sync workspace Fairnest" }),
+    );
     await waitFor(() => expect(sync).toHaveBeenCalledWith("/fairnest", "workspace-2"));
     expect(screen.getByRole("button", { name: "New task in OpenDucktor" })).toBeTruthy();
     expect(screen.getByTestId("current-route").textContent).toBe("/kanban");
@@ -1658,7 +1670,9 @@ describe("AppShell command palette", () => {
       fireEvent.click(actionOption(palette, "Sync pull requests"));
       const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
       await flushQueryUpdates();
-      fireEvent.click(within(chooser).getByRole("button", { name: "Sync all open workspaces" }));
+      fireEvent.click(
+        await within(chooser).findByRole("button", { name: "Sync all open workspaces" }),
+      );
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       const reopened = await openPalette();
       search(reopened, "sync pull requests");

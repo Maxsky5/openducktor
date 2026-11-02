@@ -2,7 +2,7 @@ import { SessionStartKickoffField } from "./session-start-kickoff-field";
 import { SpeedSelect } from "./speed-select";
 import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
-import { LoaderCircle } from "lucide-react";
+import { Layers, Play, LoaderCircle, RefreshCw } from "lucide-react";
 import type { FormEvent, ReactElement } from "react";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
@@ -95,7 +95,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         <DialogHeader className={cn(showingProgress && "border-b border-border px-4 py-3")}>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={cn(showingProgress && "sr-only")}>
-            {showingProgress ? "Follow session startup progress." : description}
+            {showingProgress ? "See progress as the session starts." : description}
           </DialogDescription>
         </DialogHeader>
 
@@ -295,7 +295,7 @@ function StartModeField({
 
   return (
     <div className="grid gap-1.5">
-      <p className="text-sm font-medium text-foreground">Session Mode</p>
+      <p className="text-sm font-medium text-foreground">Session mode</p>
       <SegmentedControlRoot size="lg" className="w-full" aria-label="Session mode">
         {availableStartModes.map((startMode) => {
           const isSelected = selectedStartMode === startMode;
@@ -332,13 +332,13 @@ function ExistingSessionField({
   return (
     <div className="grid gap-1.5" data-testid="session-start-source-field">
       <label className="text-sm font-medium text-foreground" htmlFor="session-start-source">
-        Existing Session
+        Existing session
       </label>
       <Combobox
         value={selectedSourceSessionValue}
         options={existingSessionOptions}
         placeholder="Select session"
-        searchPlaceholder="Search session..."
+        searchPlaceholder="Search sessions…"
         disabled={disabled}
         className="sm:min-w-[28rem]"
         onValueChange={onSelectSourceSessionValue}
@@ -494,7 +494,7 @@ function SessionStartModalFooter({
   onOpenChange,
 }: SessionStartModalFooterProps): ReactElement {
   return (
-    <DialogFooter className="mt-0 flex w-full items-center justify-between border-t border-border pt-5 sm:justify-between">
+    <DialogFooter className="mt-0 flex w-full items-stretch justify-between border-t border-border pt-5 sm:items-center sm:justify-between">
       <Button
         type="button"
         variant="outline"
@@ -504,7 +504,7 @@ function SessionStartModalFooter({
         {cancelLabel}
       </Button>
 
-      <div className="flex items-center gap-2">
+      <div className="flex w-full flex-col-reverse gap-2 [&>button]:w-full sm:w-auto sm:flex-row sm:items-center sm:[&>button]:w-auto">
         {allowRunInBackground ? (
           <Button
             type="button"
@@ -515,14 +515,17 @@ function SessionStartModalFooter({
               (() => onConfirm({ ...confirmInput, runInBackground: true }))
             }
           >
+            <Layers data-icon="inline-start" />
             {onContinueInBackground ? "Continue in background" : backgroundConfirmLabel}
           </Button>
         ) : null}
         <Button type="submit" disabled={confirmDisabled || isStarting} aria-busy={isStarting}>
           {isStarting ? (
             <LoaderCircle aria-hidden="true" className="motion-safe:animate-spin" />
-          ) : null}
-          {isStarting ? "Starting..." : confirmLabel}
+          ) : (
+            <Play data-icon="inline-start" />
+          )}
+          {isStarting ? "Starting…" : confirmLabel}
         </Button>
       </div>
     </DialogFooter>
@@ -563,9 +566,10 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
         role="alert"
       >
         <span className="min-w-0 text-destructive">
-          Runtime definitions unavailable: {runtimeDefinitionsError}
+          Could not load runtimes: {runtimeDefinitionsError}
         </span>
         <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeDefinitions}>
+          <RefreshCw data-icon="inline-start" />
           Retry
         </Button>
       </div>
@@ -575,7 +579,7 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
     return (
       <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
         <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-        Loading agent runtimes...
+        Loading agent runtimes…
       </div>
     );
   }
@@ -589,6 +593,7 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
           Runtime settings unavailable: {runtimeSettingsError}
         </span>
         <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeSettings}>
+          <RefreshCw data-icon="inline-start" />
           Retry
         </Button>
       </div>
@@ -598,7 +603,7 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
     return (
       <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
         <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-        Loading runtime settings...
+        Loading runtime settings…
       </div>
     );
   }

@@ -24,7 +24,7 @@ describe("settings-modal-constants", () => {
       { id: "scripts", label: "Scripts" },
       { id: "git", label: "Git" },
       { id: "agents", label: "Agents" },
-      { id: "prompts", label: "Repo Prompts" },
+      { id: "prompts", label: "Repository prompts" },
     ]);
   });
 });

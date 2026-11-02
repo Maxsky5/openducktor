@@ -20,10 +20,10 @@ describe("settings kanban section", () => {
       }),
     );
 
-    expect(html).toContain("Kanban Settings");
+    expect(html).toContain("Kanban settings");
     expect(html).toContain("Done tasks visible for");
     expect(html).toContain("Empty columns");
-    expect(html).toContain("Choose whether empty lanes stay visible");
+    expect(html).toContain("Show empty columns, hide them");
     expect(html).toContain("Task card view");
     expect(html).toContain('role="radiogroup"');
     expect(html).toContain('aria-labelledby="kanban-task-card-view-label"');

@@ -1,14 +1,14 @@
 /** The text of the confirmation that links a merged pull request and moves its task to Done. */
 export const MERGED_PULL_REQUEST_CONFIRM_COPY = {
-  title: "Attach merged PR and finish task?",
+  title: "Link merged pull request?",
   description:
-    "This branch is already merged. Linking the Pull Request closes the task in one step.",
+    "This pull request is already merged. Link it to this task and move the task to Done.",
   cancelLabel: "Cancel",
   confirmLabel: "Link and mark done",
-  confirmPendingLabel: "Linking merged PR...",
+  confirmPendingLabel: "Linking pull request…",
   taskHeading: "Task to mark done",
-  pullRequestHeading: "Pull Request",
-  mergedAtHeading: "Merged At",
+  pullRequestHeading: "Pull request",
+  mergedAtHeading: "Merged",
   nextStepsHeading: "What happens next",
   nextSteps: "The task moves to Done, and OpenDucktor stops the task terminals and live sessions.",
 } as const;

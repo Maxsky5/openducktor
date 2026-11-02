@@ -22,8 +22,8 @@ enableReactActEnvironment();
 const task = createTaskCardFixture({ id: "odt-1", availableActions: ["reset_task"] });
 const workspaceA = { workspaceId: "workspace-a", repoPath: "/repo-a" };
 const workspaceB = { workspaceId: "workspace-b", repoPath: "/repo-b" };
-const TITLES = { reset_task: "Reset Task", delete: "Delete Task" } as const;
-const CONFIRM_LABELS = { reset_task: "Reset task", delete: "Delete" } as const;
+const TITLES = { reset_task: "Reset task", delete: "Delete task" } as const;
+const CONFIRM_LABELS = { reset_task: "Reset task", delete: "Delete task" } as const;
 
 type HostProps = Parameters<typeof useTaskConfirmDialogHost>[0];
 
@@ -133,13 +133,13 @@ describe("TaskConfirmDialogHost", () => {
     before.focus();
     await request("delete");
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     await settle();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(before);
 
     await request("delete");
-    expect(screen.getByRole("dialog", { name: "Delete Task" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Delete task" })).toBeTruthy();
   });
 
   test.each([
@@ -161,8 +161,9 @@ describe("TaskConfirmDialogHost", () => {
         view = render(<Host workspaceIdentity={workspaceA} {...handlers} />);
         await request(action);
 
+        const confirm = await screen.findByRole("button", { name: CONFIRM_LABELS[action] });
         await act(async () => {
-          fireEvent.click(screen.getByRole("button", { name: CONFIRM_LABELS[action] }));
+          fireEvent.click(confirm);
         });
         await settle();
 
@@ -214,7 +215,7 @@ describe("TaskConfirmDialogHost", () => {
       );
       await request("close");
 
-      expect(screen.getByRole("dialog", { name: "Close Task" })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "Close task" })).toBeTruthy();
       expect(await screen.findByText("Branch merged into origin/main.")).toBeTruthy();
       const checkbox = await screen.findByRole("switch", {
         name: "Remove worktree and branch",
@@ -224,9 +225,10 @@ describe("TaskConfirmDialogHost", () => {
 
       fireEvent.click(checkbox);
       expect(checkbox.getAttribute("data-state")).toBe("unchecked");
+      fireEvent.click(screen.getByRole("button", { name: "Worktree details" }));
       expect(screen.getByText("/worktrees/odt-1")).toBeTruthy();
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Close Task" }));
+        fireEvent.click(screen.getByRole("button", { name: "Close task" }));
       });
       await settle();
 
@@ -317,15 +319,15 @@ describe("TaskConfirmDialogHost", () => {
     );
     await request("close");
 
-    const message =
-      "Unable to check how many active sessions will be stopped: runtime disconnected";
+    const message = "Could not check running sessions: runtime disconnected";
     expect(await screen.findByText(message)).toBeTruthy();
-    const confirm = screen.getByRole<HTMLButtonElement>("button", { name: "Close Task" });
+    const confirm = await screen.findByRole<HTMLButtonElement>("button", { name: "Close task" });
     expect(confirm.disabled).toBe(true);
 
     failRead = false;
+    const retry = await screen.findByRole("button", { name: "Retry" });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(retry);
     });
     await settle();
     await waitFor(() => expect(screen.queryByText(message)).toBeNull());
@@ -338,7 +340,7 @@ describe("TaskConfirmDialogHost", () => {
     await request("delete");
     await request("reset_task");
 
-    expect(screen.getByRole("dialog", { name: "Reset Task" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Reset task" })).toBeTruthy();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 

@@ -16,8 +16,8 @@ export const ARCHIVE_CHAT_TEXT = {
     "Archiving stops this chat's terminals, development servers, and its running session. Your chat history stays available in Archived chats.",
   repositoryFilesStay: "Your repository files will stay on disk.",
   removeWorktree: "Remove worktree and branch",
-  checkingChanges: "Checking worktree changes…",
-  checkingWorktree: "Checking the worktree…",
+  checkingChanges: "Loading worktree details…",
+  checkingWorktree: "Loading worktree details…",
   retryCheck: "Retry check",
   confirm: "Archive chat",
   confirming: "Archiving…",
@@ -50,15 +50,11 @@ const worktreeTaskOwners = (preview: WorkspaceSessionArchivePreviewRead) =>
 export const isWorktreeNeeded = (preview: WorkspaceSessionArchivePreviewRead): boolean =>
   worktreeSharedWith(preview).length > 0 || worktreeTaskOwners(preview).length > 0;
 
-/**
- * A worktree that other saved chats or open tasks need stays, whatever the form asks. Nothing is
- * removed while the worktree check runs.
- */
+/** A worktree stays when other saved chats or open tasks need it. */
 export const effectiveWorktreeRemoval = (
   wantsRemoval: boolean,
   preview: WorkspaceSessionArchivePreviewRead,
-  checking: boolean,
-): boolean => !checking && wantsRemoval && !isWorktreeNeeded(preview);
+): boolean => wantsRemoval && !isWorktreeNeeded(preview);
 
 /** Names the saved chats that keep the worktree, or null when no other chat needs it. */
 export const sharedWorktreeNotice = (
@@ -126,7 +122,7 @@ export const worktreeArchiveNotice = (
       text =
         preview.data.branchName === null
           ? "The worktree is missing. Restore the worktree at this path before restoring the chat."
-          : "The worktree is missing. Restoring this chat creates a fresh worktree from the default branch.";
+          : "The worktree is missing. Restoring this chat creates a new worktree from the chat's target branch.";
     }
     return { kind: "keep", text };
   }

@@ -1,4 +1,5 @@
 import { type ReactElement, useEffect, useRef } from "react";
+import { Layers, Pencil, RefreshCw } from "lucide-react";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
@@ -99,6 +100,7 @@ function Footer({
     return (
       <DialogFooter className="mt-0 min-h-13 items-center border-t border-border px-4 py-2">
         <Button type="button" size="sm" variant="secondary" onClick={onContinueInBackground}>
+          <Layers data-icon="inline-start" />
           Continue in background
         </Button>
       </DialogFooter>
@@ -111,11 +113,13 @@ function Footer({
       </Button>
       {onEditChoices && attempt?.ownership.state === "not_saved" ? (
         <Button type="button" size="sm" variant="secondary" onClick={onEditChoices}>
+          <Pencil data-icon="inline-start" />
           Edit choices
         </Button>
       ) : null}
       {onRepairSavedSession && canRepairSavedWorkspace(attempt) ? (
         <Button type="button" size="sm" variant="secondary" onClick={onRepairSavedSession}>
+          <RefreshCw data-icon="inline-start" />
           Retry session preparation
         </Button>
       ) : null}

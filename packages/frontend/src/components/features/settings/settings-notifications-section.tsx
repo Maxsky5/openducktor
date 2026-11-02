@@ -36,7 +36,7 @@ type SegmentedOption<Value extends string> = {
 
 const targetOptions: SegmentedOption<NotificationTarget>[] = [
   { value: "in_app", label: "In-app" },
-  { value: "os", label: "OS" },
+  { value: "os", label: "System" },
   { value: "both", label: "Both" },
 ];
 
@@ -52,7 +52,7 @@ const soundFocusOptions: SegmentedOption<NotificationSettings["soundFocus"]>[] =
 
 const deliveryFailureLabels = {
   in_app: "Last in-app error",
-  os: "Last OS error",
+  os: "Last system notification error",
   sound: "Last sound error",
   settings: "Last notification settings error",
   coordination: "Last browser notification coordination error",
@@ -334,7 +334,7 @@ export function SettingsNotificationsSection({
               disabled={actionsDisabled}
               onClick={() => void testNotification("in_app")}
             >
-              <Bell data-icon="inline-start" /> Test in-app
+              <Bell data-icon="inline-start" /> Test in-app notification
             </Button>
             <Button
               type="button"
@@ -342,7 +342,7 @@ export function SettingsNotificationsSection({
               disabled={actionsDisabled || isOsTestDisabled}
               onClick={() => void testNotification("os")}
             >
-              <BellRing data-icon="inline-start" /> Test OS
+              <BellRing data-icon="inline-start" /> Test system notification
             </Button>
           </div>
         </div>
@@ -411,8 +411,8 @@ export function SettingsNotificationsSection({
             </div>
           </div>
           <FocusSettingRow
-            title="OS notifications"
-            description="Show OS notices only when the app is unfocused, or show them at all times."
+            title="System notifications"
+            description="Show system notifications when the app is in the background, or show them at all times."
             value={notifications.osFocus}
             options={osFocusOptions}
             disabled={disabled}

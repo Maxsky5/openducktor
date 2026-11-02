@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export const BLANK_KICKOFF_PROMPT_ERROR = "Kickoff prompt must not be blank.";
+export const BLANK_KICKOFF_PROMPT_ERROR = "Enter a first message.";
 
 /** The kickoff prompt that the user can change before a start. */
 export type SessionStartKickoffDraft = {

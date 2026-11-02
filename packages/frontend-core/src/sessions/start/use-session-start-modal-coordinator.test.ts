@@ -16,25 +16,23 @@ describe("use-session-start-modal-coordinator", () => {
   });
 
   test("builds role-specific session start titles", () => {
-    expect(buildSessionStartModalTitle("spec")).toBe("Start Spec Session");
-    expect(buildSessionStartModalTitle("planner")).toBe("Start Planner Session");
-    expect(buildSessionStartModalTitle("build")).toBe("Start Builder Session");
-    expect(buildSessionStartModalTitle("qa")).toBe("Start QA Session");
+    expect(buildSessionStartModalTitle("spec")).toBe("Start Spec session");
+    expect(buildSessionStartModalTitle("planner")).toBe("Start Planner session");
+    expect(buildSessionStartModalTitle("build")).toBe("Start Builder session");
+    expect(buildSessionStartModalTitle("qa")).toBe("Start QA session");
   });
 
   test("builds launch-action and start-mode specific descriptions", () => {
     expect(buildSessionStartModalDescription({ launchActionId: "spec_initial" })).toBe(
-      "Start a fresh session for Spec.",
+      "Start a new session.",
     );
 
     expect(
       buildSessionStartModalDescription({ launchActionId: "build_after_human_request_changes" }),
-    ).toBe("Choose how to start fresh or reuse an existing session for Apply Human Changes.");
+    ).toBe("Choose how to start this session.");
 
     expect(
       buildSessionStartModalDescription({ launchActionId: "build_pull_request_generation" }),
-    ).toBe(
-      "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
-    );
+    ).toBe("Choose how to start this session.");
   });
 });

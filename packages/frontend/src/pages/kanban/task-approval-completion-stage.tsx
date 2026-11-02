@@ -10,10 +10,9 @@ import {
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
 import type { TaskApprovalCompletionModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import type { TaskWorktreeImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import { ArrowRight, CircleCheckBig, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskCleanupChoice } from "@/components/features/task-details/task-close-confirm-content";
-import { TaskReadsLoading } from "@/components/features/task-details/task-reads-loading";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -42,15 +41,11 @@ export function TaskApprovalCompletionStage({
   return (
     <>
       <DialogBody className={STAGE_BODY_CLASS}>
-        {isPreparing ? (
-          <TaskReadsLoading className="h-full min-h-56 px-6 py-6 sm:px-8" />
-        ) : (
-          <TaskApprovalCompletionContent
-            model={model}
-            completionContextError={completionContextError}
-            impact={impact}
-          />
-        )}
+        <TaskApprovalCompletionContent
+          model={model}
+          completionContextError={completionContextError}
+          impact={impact}
+        />
       </DialogBody>
 
       <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -58,7 +53,7 @@ export function TaskApprovalCompletionStage({
           {directMergeCompletionStageDescription(model)}
         </p>
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex w-full flex-col-reverse gap-2 [&>button]:w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:[&>button]:w-auto">
           <Button
             type="button"
             variant="outline"
@@ -69,10 +64,15 @@ export function TaskApprovalCompletionStage({
           </Button>
           <Button
             type="button"
+            variant="warning"
             disabled={completionActionDisabled}
             onClick={model.onCompleteDirectMerge}
           >
-            {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {model.isSubmitting ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <CircleCheckBig data-icon="inline-start" />
+            )}
             {directMergeCompletionButtonLabel(model)}
           </Button>
         </div>

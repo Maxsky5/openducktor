@@ -30,6 +30,8 @@ type GitConfirmationDialogProps = {
   confirmTestId: string;
   confirmIcon: LucideIcon;
   contentTestId: string;
+  loading?: boolean;
+  confirmVariant?: "default" | "warning" | "destructive";
 };
 
 export const GitConfirmationDialog = memo(function GitConfirmationDialog({
@@ -50,20 +52,20 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
   confirmTestId,
   confirmIcon: ConfirmIcon,
   contentTestId,
+  loading,
+  confirmVariant = "default",
 }: GitConfirmationDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        loading={loading}
+        loadingLabel="Loading task details…"
         className="max-w-2xl overflow-hidden border border-border bg-card p-0 shadow-2xl"
         data-testid={contentTestId}
       >
-        <DialogHeader className="space-y-3 px-6 py-6 pr-16 sm:px-8 sm:py-8">
-          <DialogTitle className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-            {title}
-          </DialogTitle>
-          <DialogDescription className="max-w-[42rem] text-sm leading-7 text-muted-foreground sm:text-[15px]">
-            {description}
-          </DialogDescription>
+        <DialogHeader className="gap-2 px-6 py-5 pr-14">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="min-h-0 overflow-y-auto px-6 pb-6 sm:px-8 sm:pb-8">
@@ -80,9 +82,11 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
           >
             {closeLabel}
           </Button>
-          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+          <div className="flex w-full items-center justify-end gap-2 [&>button]:w-full sm:w-auto sm:[&>button]:w-auto">
             <Button
               type="button"
+              variant={confirmVariant}
+              aria-busy={confirmPending}
               onClick={onConfirm}
               disabled={confirmDisabled}
               data-testid={confirmTestId}

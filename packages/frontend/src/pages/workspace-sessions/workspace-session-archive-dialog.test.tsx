@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchivePreview } from "@openducktor/contracts";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { workspaceSessionArchivePreviewQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-archive";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 
 // The dialog keeps its loader for at least 500 ms, then shows the final state.
@@ -27,6 +29,94 @@ const record = (): WorkspaceSession => ({
   updatedAt: 1,
   archivedAt: null,
 });
+
+test.each([false, true])(
+  "archive keeps its choice and focus during refresh, shared=%s",
+  async (shared) => {
+    const refresh = createDeferred<WorkspaceSessionArchivePreview>();
+    const preview: WorkspaceSessionArchivePreview = {
+      branchName: "feature/chat",
+      worktreeExists: true,
+      hasUncommittedChanges: true,
+      sharedWith: [],
+      taskOwners: [],
+    };
+    let reads = 0;
+    const requests: boolean[] = [];
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionArchivePreview: () =>
+          ++reads === 1 ? Promise.resolve(preview) : refresh.promise,
+      },
+    });
+    const view = render(
+      <QueryProvider connection={connection}>
+        <WorkspaceSessionArchiveDialog
+          open
+          workspaceId="test"
+          record={record()}
+          isArchiving={false}
+          error={null}
+          onArchive={(remove) => requests.push(remove)}
+          onClose={() => {}}
+        />
+      </QueryProvider>,
+    );
+    try {
+      const toggle = await view.findByRole("switch", { name: "Remove worktree and branch" });
+      toggle.focus();
+      await act(async () => {
+        void connection.queryClient.invalidateQueries({
+          queryKey: workspaceSessionArchivePreviewQueryOptions("test", "chat").queryKey,
+        });
+      });
+      await waitFor(() => expect(reads).toBe(2));
+      expect(view.queryByRole("switch") === toggle).toBe(true);
+      expect(document.activeElement === toggle).toBe(true);
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      expect(view.getByText(/This worktree has local changes/)).toBeDefined();
+      if (!shared) {
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute("aria-checked")).toBe("false");
+        expect(view.queryByText(/This worktree has local changes/)).toBeNull();
+        expect(view.getByText("The worktree and its branch will stay on disk.")).toBeDefined();
+      }
+      expect(view.getByRole("status").textContent).toBe("Loading worktree details…");
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true");
+      expect(view.getByText("Worktree chat")).toBeDefined();
+      expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
+      const submit = view.getByRole("button", { name: "Archive chat" });
+      expect(submit.hasAttribute("disabled")).toBe(true);
+      fireEvent.submit(submit.closest("form")!);
+      expect(requests).toEqual([]);
+      await act(async () =>
+        refresh.resolve({
+          ...preview,
+          sharedWith: shared
+            ? [{ workspaceId: "test", sessionId: "child", title: "Child chat" }]
+            : [],
+        }),
+      );
+      await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false));
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+      if (shared) {
+        expect(
+          view.getByText(/saved chats need it for files or history: Child chat/),
+        ).toBeDefined();
+        expect(toggle.hasAttribute("disabled")).toBe(true);
+      } else {
+        expect(view.getByText("The worktree and its branch will stay on disk.")).toBeDefined();
+      }
+      fireEvent.click(submit);
+      expect(requests).toEqual([false]);
+    } finally {
+      view.unmount();
+      connection.queryClient.clear();
+      refresh.resolve(preview);
+      await connection.dispose();
+    }
+  },
+);
 
 test.each([false, true])(
   "removal stays enabled by default after the worktree check, dirty=%s",
@@ -57,10 +147,9 @@ test.each([false, true])(
       </QueryProvider>,
     );
     try {
-      expect(view.getByText("Checking the worktree…")).toBeTruthy();
+      expect(view.getByRole("status")).toBeTruthy();
       expect(view.queryByRole("switch")).toBeNull();
-      const submit = view.getByRole("button", { name: "Archive chat" });
-      expect(submit.hasAttribute("disabled")).toBe(true);
+      expect(view.queryByRole("button", { name: "Archive chat" })).toBeNull();
       await waitFor(() => expect(finish).toBeDefined(), SETTLED);
       finish({
         branchName: "feature/chat",
@@ -76,7 +165,8 @@ test.each([false, true])(
       );
       // The final content and buttons appear together, after the minimum loader time.
       expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
-      expect(view.queryByText("Checking the worktree…")).toBeNull();
+      expect(view.queryByRole("status")).toBeNull();
+      const submit = view.getByRole("button", { name: "Archive chat" });
       expect(submit.hasAttribute("disabled")).toBe(false);
       expect(toggle.getAttribute("aria-checked")).toBe("true");
       expect(view.queryByText(/This worktree has local changes/) !== null).toBe(dirty);
@@ -125,6 +215,9 @@ test("saved chat history disables worktree removal and still allows archive", as
     </QueryProvider>,
   );
   try {
+    await waitFor(() =>
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
+    );
     await view.findByText(
       "This worktree stays because these saved chats need it for files or history: Archived child chat.",
       {},
@@ -169,6 +262,9 @@ test("a task that needs the worktree disables its removal, names the task, and s
     </QueryProvider>,
   );
   try {
+    await waitFor(() =>
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
+    );
     await view.findByText(
       "This worktree stays because these tasks need it: Fix login (task-7).",
       {},
@@ -214,6 +310,9 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
     </QueryProvider>,
   );
   try {
+    await waitFor(() =>
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
+    );
     await view.findByText(/This worktree has local changes/, {}, SETTLED);
     expect(
       view.getByText(
@@ -264,6 +363,9 @@ test("a missing detached worktree can be archived without removal", async () => 
     </QueryProvider>,
   );
   try {
+    await waitFor(() =>
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
+    );
     await view.findByText(/No branch is attached/, {}, SETTLED);
     const submit = view.getByRole("button", { name: "Archive chat" });
     expect(submit.hasAttribute("disabled")).toBe(true);
@@ -302,6 +404,9 @@ test("a failed saved history check blocks removal but allows keeping the worktre
     </QueryProvider>,
   );
   try {
+    await waitFor(() =>
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
+    );
     await view.findByText("Cannot check saved chat history.", {}, SETTLED);
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
@@ -347,6 +452,9 @@ test("archive locks the full form and keeps its error and removal choice visible
     </QueryProvider>,
   );
   try {
+    await waitFor(() =>
+      expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
+    );
     await view.findByText(/worktree is already missing/, {}, SETTLED);
     const toggle = view.getByRole("switch");
     expect(toggle.hasAttribute("disabled")).toBe(true);

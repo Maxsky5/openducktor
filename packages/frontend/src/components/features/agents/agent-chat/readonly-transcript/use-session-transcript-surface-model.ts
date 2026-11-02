@@ -189,5 +189,6 @@ export function useSessionTranscriptSurfaceModel({
 
   return {
     model,
+    isPreparing: chatReadiness.transcriptNotice?.severity === "loading",
   };
 }

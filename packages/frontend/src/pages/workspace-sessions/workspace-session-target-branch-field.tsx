@@ -44,9 +44,7 @@ export function WorkspaceSessionTargetBranchField({
         disabled={disabled}
         onValueChange={(selection) => onChange(targetBranchFromSelection(selection))}
       />
-      <p className="text-xs text-muted-foreground">
-        The Git panel and diffs of this chat compare with this branch.
-      </p>
+      <p className="text-xs text-muted-foreground">Compare this chat's changes with this branch.</p>
       {branches.isError && (
         <div role="alert">
           <p className="text-sm text-destructive">{errorMessage(branches.error)}</p>

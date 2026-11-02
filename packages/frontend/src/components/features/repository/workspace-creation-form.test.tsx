@@ -823,7 +823,7 @@ describe("workspace creation", () => {
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "repo" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
-    await screen.findByText(/Default Model is unavailable/);
+    await screen.findByText(/Default model is unavailable/);
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
     expect(commit.mock.calls[0]?.[0].defaultModel).toEqual({

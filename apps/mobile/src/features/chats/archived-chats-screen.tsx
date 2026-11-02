@@ -127,7 +127,7 @@ function ArchivedChatList({
         message={errorMessage(archived.error)}
         action={
           <Button
-            label="Try Again"
+            label="Retry"
             size="sm"
             variant="gray"
             disabled={archived.isFetching}
@@ -145,13 +145,13 @@ function ArchivedChatList({
         {archived.data.length === 0 ? (
           <EmptyState
             icon="archive"
-            title="No Archived Chats"
+            title="No archived chats"
             message={`Chats that you archive in ${workspace.workspaceName} show here. Restore one to use it again.`}
           />
         ) : (
           <EmptyState
             icon="search-x"
-            title="No Results"
+            title="No results"
             message={`No archived chat of ${workspace.workspaceName} matches “${filter.trim()}”.`}
           />
         )}
@@ -214,10 +214,10 @@ export function ArchivedChatsScreen(): ReactElement {
   const searchColors = useSearchBarColors();
   const options = useMemo(
     (): NativeStackNavigationOptions => ({
-      title: "Archived Chats",
+      title: "Archived chats",
       headerSearchBarOptions: {
         ...searchColors,
-        placeholder: "Search Archived Chats",
+        placeholder: "Search archived chats",
         autoCapitalize: "none",
         onChangeText: (event) => setFilter(event.nativeEvent.text),
         onCancelButtonPress: () => setFilter(""),

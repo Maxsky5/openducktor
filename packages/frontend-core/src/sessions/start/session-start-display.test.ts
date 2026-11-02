@@ -40,13 +40,13 @@ describe("session start display", () => {
       variantCount: 2,
     };
     expect(sessionStartVariantPlaceholder({ ...base, isSelectionCatalogLoading: true })).toBe(
-      "Checking compatibility...",
+      "Loading effort options…",
     );
     expect(sessionStartVariantPlaceholder({ ...base, hasSelectedModel: false })).toBe(
-      "Select model first",
+      "Select a model first",
     );
     expect(sessionStartVariantPlaceholder({ ...base, supportsVariants: false })).toBe(
-      "Effort handled by runtime",
+      "Runtime sets effort",
     );
     expect(sessionStartVariantPlaceholder({ ...base, variantCount: 0 })).toBe(
       "This model has no effort options",
@@ -77,7 +77,7 @@ describe("session start display", () => {
       }),
     ).toBeNull();
     expect(sessionStartModelReadOnlyReason(true)).toBe("Session start is in progress.");
-    expect(sessionStartModelPlaceholder(true)).toBe("Loading models...");
+    expect(sessionStartModelPlaceholder(true)).toBe("Loading models…");
     expect(sessionStartTargetBranchPlaceholder(0)).toBe("Branches unavailable");
   });
 });

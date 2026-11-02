@@ -107,7 +107,7 @@ const changeHorizontalScrollbarVisibility = async (
   } satisfies Record<AppearanceSettings["horizontalScrollbarVisibility"], string>;
 
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Horizontal Scrollbars" }));
+    fireEvent.click(screen.getByRole("button", { name: "Horizontal scrollbars" }));
   });
 
   const matchingLabels = await screen.findAllByText(labelByValue[value]);
@@ -208,13 +208,13 @@ describe("settings appearance section", () => {
     renderAppearanceSection(createAppearanceSettings());
 
     expect(screen.getByText("Appearance")).toBeDefined();
-    expect(screen.getByText("Horizontal Scrollbars")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Horizontal Scrollbars" }).textContent).toContain(
+    expect(screen.getByText("Horizontal scrollbars")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Horizontal scrollbars" }).textContent).toContain(
       "System default",
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Horizontal Scrollbars" }));
+      fireEvent.click(screen.getByRole("button", { name: "Horizontal scrollbars" }));
     });
 
     await screen.findByText("Show");
@@ -232,7 +232,7 @@ describe("settings appearance section", () => {
   test("selects the saved visibility mode", () => {
     renderAppearanceSection(createAppearanceSettings({ horizontalScrollbarVisibility: "show" }));
 
-    expect(screen.getByRole("button", { name: "Horizontal Scrollbars" }).textContent).toContain(
+    expect(screen.getByRole("button", { name: "Horizontal scrollbars" }).textContent).toContain(
       "Show",
     );
   });
@@ -241,7 +241,7 @@ describe("settings appearance section", () => {
     renderAppearanceSection(createAppearanceSettings(), true);
 
     expect(
-      screen.getByRole("button", { name: "Horizontal Scrollbars" }).hasAttribute("disabled"),
+      screen.getByRole("button", { name: "Horizontal scrollbars" }).hasAttribute("disabled"),
     ).toBe(true);
   });
 

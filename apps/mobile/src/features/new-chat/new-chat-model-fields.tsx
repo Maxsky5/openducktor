@@ -42,7 +42,7 @@ export function ModelFields({
           message={errorMessage(repoConfig.error)}
           action={
             <Button
-              label="Try Again"
+              label="Retry"
               variant="gray"
               size="sm"
               onPress={() => void repoConfig.refetch()}

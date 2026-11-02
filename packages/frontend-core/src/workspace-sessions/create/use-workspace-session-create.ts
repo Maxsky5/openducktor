@@ -226,19 +226,21 @@ export function useWorkspaceSessionCreate({
   // Worktree name and branch errors belong to New worktree. Other locations show them below.
   const worktreeError =
     location === "local_worktree" ? workspaceSessionValidationError(create.error) : null;
-  const input = buildWorkspaceSessionCreateInput({
-    workspaceId: workspace.workspaceId,
-    name,
-    roleId,
-    location,
-    worktree,
-    existingWorktree: existing.listedWorktree,
-    targetBranch,
-    selection: model.selection,
-    selectedModelAvailable: model.selectedModelAvailable,
-    rolesReady: roles.isSuccess,
-    availableBranches: branches.isSuccess ? branches.data : null,
-  });
+  const input = repoConfig.isPending
+    ? null
+    : buildWorkspaceSessionCreateInput({
+        workspaceId: workspace.workspaceId,
+        name,
+        roleId,
+        location,
+        worktree,
+        existingWorktree: existing.listedWorktree,
+        targetBranch,
+        selection: model.selection,
+        selectedModelAvailable: model.selectedModelAvailable,
+        rolesReady: roles.isSuccess,
+        availableBranches: branches.isSuccess ? branches.data : null,
+      });
   const submit = (): void => {
     if (input) create.mutate(input);
   };

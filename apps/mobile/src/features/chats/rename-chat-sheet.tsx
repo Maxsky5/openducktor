@@ -15,7 +15,7 @@ import {
   useRenameWorkspaceSession,
   workspaceSessionRenameInitialTitle,
 } from "@openducktor/frontend-core/workspace-sessions/workspace-session-rename";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -29,7 +29,7 @@ import type { ChatSheetParams } from "./chat-sheet-params";
 import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
 
-const TITLE = "Rename Chat";
+const TITLE = "Rename chat";
 
 function RenameChatForm({
   workspaceId,
@@ -40,7 +40,7 @@ function RenameChatForm({
   record: WorkspaceSession;
   focus: SheetFieldFocus;
 }): ReactElement {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { feedback } = useClientConnection();
   const mounted = useMountedRef();
   const initialTitle = workspaceSessionRenameInitialTitle(record);
@@ -50,7 +50,7 @@ function RenameChatForm({
     sessionId: record.id,
     onRenamed: () => {
       feedback.show("success", "Chat renamed.");
-      if (mounted.current) router.back();
+      if (mounted.current) navigation.goBack();
     },
   });
   const canSave = canSaveWorkspaceSessionRename({
@@ -96,13 +96,16 @@ function RenameChatForm({
             variant="outline"
             size="lg"
             fill
+            style={styles.action}
             disabled={rename.isPending}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           />
           <Button
             label={RENAME_CHAT_TEXT.save}
+            icon="save"
             size="lg"
             fill
+            style={styles.action}
             command
             loading={rename.isPending}
             disabled={!canSave}
@@ -135,4 +138,5 @@ export function RenameChatSheet({ params }: { params: ChatSheetParams | null }):
 const styles = StyleSheet.create((theme) => ({
   body: { gap: theme.space.lg },
   actions: { flexDirection: "row", gap: theme.space.md },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

@@ -44,7 +44,7 @@ const MINOR_WORDS = new Set([
   "to",
 ]);
 
-/** A desktop button label in the title case of mobile buttons: "Run in background" is "Run in Background". */
+/** A session menu label in title case. */
 export const titleCase = (label: string): string =>
   label
     .split(" ")

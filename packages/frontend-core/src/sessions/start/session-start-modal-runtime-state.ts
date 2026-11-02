@@ -11,8 +11,6 @@ import {
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
 } from "../../lib/agent-runtime";
-import { runtimeReadinessTargetForRuntime } from "../../lib/runtime-readiness";
-import { useRuntimeReadiness } from "../../lib/use-runtime-readiness";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
@@ -20,6 +18,7 @@ import {
 
 type UseSessionStartModalRuntimeStateArgs = {
   initialCatalog: AgentModelCatalog | null | undefined;
+  defaultRuntimeKind: RuntimeKind | null;
   isOpen: boolean;
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -42,6 +41,7 @@ const EMPTY_RUNTIME_KINDS: RuntimeKind[] = [];
 
 export function useSessionStartModalRuntimeState({
   initialCatalog,
+  defaultRuntimeKind,
   isOpen,
   loadRuntimeCatalog,
   runtimeDefinitions,
@@ -57,9 +57,9 @@ export function useSessionStartModalRuntimeState({
     () =>
       resolveRuntimeKindSelection({
         runtimeDefinitions: eligibleRuntimeDefinitions,
-        requestedRuntimeKind,
+        requestedRuntimeKind: requestedRuntimeKind ?? defaultRuntimeKind,
       }),
-    [requestedRuntimeKind, eligibleRuntimeDefinitions],
+    [requestedRuntimeKind, defaultRuntimeKind, eligibleRuntimeDefinitions],
   );
   const selectedRuntimeDescriptor = useMemo(
     () =>
@@ -68,10 +68,6 @@ export function useSessionStartModalRuntimeState({
         : null,
     [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
-  const selectedRuntimeReadiness = useRuntimeReadiness({
-    hasWorkspace: workspaceRepoPath !== null,
-    runtimeTarget: runtimeReadinessTargetForRuntime(selectedRuntimeKind),
-  });
   const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind | null): void => {
     setRequestedRuntimeKindState(runtimeKind);
   }, []);
@@ -115,7 +111,6 @@ export function useSessionStartModalRuntimeState({
   );
   const selectedResource =
     catalogResources.find((resource) => resource.runtimeKind === selectedRuntimeKind) ?? null;
-  const isWaitingForRuntime = selectedRuntimeReadiness.state === "checking";
 
   return {
     catalog: selectedResource?.catalog ?? null,
@@ -126,7 +121,7 @@ export function useSessionStartModalRuntimeState({
       isOpen &&
       selectedStartMode !== "reuse" &&
       selectedRuntimeKind !== null &&
-      (isWaitingForRuntime || selectedResource?.isLoading === true),
+      selectedResource?.isLoading === true,
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,

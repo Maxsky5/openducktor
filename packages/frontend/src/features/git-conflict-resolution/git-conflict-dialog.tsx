@@ -106,7 +106,7 @@ export const GitConflictDialog = memo(function GitConflictDialog({
 const toConflictDescription = (conflict: GitConflict, recipient: string | undefined): ReactNode => {
   const { operationLabel } = getGitConflictCopy(conflict.operation);
   if (!conflict.operation)
-    return "Git reports unmerged files. Restore the operation information before asking for assistance or aborting.";
+    return "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.";
 
   return (
     <>

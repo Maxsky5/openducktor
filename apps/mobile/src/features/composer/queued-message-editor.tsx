@@ -59,7 +59,7 @@ export function QueuedMessageEditorSheet({
   return (
     <InPlaceSheet
       visible={entry !== null}
-      title="Edit Message"
+      title="Edit message"
       onClose={onClose}
       dismissible={!editor.isPending}
       scrolls={false}

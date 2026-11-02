@@ -12,7 +12,13 @@ export const useConfirmDiscard = (): ((copy: DiscardCopy) => Promise<boolean>) =
   const confirm = useConfirm();
   return useCallback(
     (copy: DiscardCopy) =>
-      confirm({ ...copy, confirmLabel: "Discard", cancelLabel: "Keep Editing", destructive: true }),
+      confirm({
+        ...copy,
+        confirmLabel: "Discard",
+        icon: "trash-2",
+        cancelLabel: "Keep editing",
+        destructive: true,
+      }),
     [confirm],
   );
 };

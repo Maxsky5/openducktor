@@ -317,13 +317,11 @@ describe("useKanbanSessionStartFlow", () => {
 
     const modal = harness.getLatest().sessionStartModal;
     expect(modal).not.toBeNull();
-    expect(modal?.title).toBe("Start QA Session");
+    expect(modal?.title).toBe("Start QA session");
     expect(modal?.availableStartModes).toEqual(["fresh", "reuse"]);
     expect(modal?.selectedStartMode).toBe("fresh");
     expect(modal?.existingSessionOptions).toEqual([]);
-    expect(modal?.description).toBe(
-      "Choose how to start fresh or reuse an existing session for QA Review.",
-    );
+    expect(modal?.description).toBe("Choose how to start this session.");
 
     await harness.unmount();
   });
@@ -385,7 +383,7 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(harness.getLatest().sessionStartModal?.title).toBe("Start QA Session");
+      expect(harness.getLatest().sessionStartModal?.title).toBe("Start QA session");
       expect(toastError).not.toHaveBeenCalled();
     } finally {
       toastErrorSpy.mockRestore();
@@ -404,13 +402,11 @@ describe("useKanbanSessionStartFlow", () => {
 
     const modal = harness.getLatest().sessionStartModal;
     expect(modal).not.toBeNull();
-    expect(modal?.title).toBe("Start Builder Session");
+    expect(modal?.title).toBe("Start Builder session");
     expect(modal?.availableStartModes).toEqual(["reuse", "fork"]);
     expect(modal?.selectedStartMode).toBe("reuse");
     expect(modal?.selectedSourceSessionValue).toBe(modal?.existingSessionOptions[0]?.value);
-    expect(modal?.description).toBe(
-      "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
-    );
+    expect(modal?.description).toBe("Choose how to start this session.");
     const latestBuilderDescription = `${new Date(
       "2026-03-20T12:00:00.000Z",
     ).toLocaleString()} · idle · builder-`;
@@ -604,7 +600,11 @@ describe("useKanbanSessionStartFlow", () => {
       state.onDelegate("TASK-1");
     });
 
-    await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+    await harness.waitFor(
+      (state) =>
+        state.sessionStartModal?.selectedModelSelection != null &&
+        state.sessionStartModal.isKickoffPromptLoading === false,
+    );
 
     await harness.run(async (state) => {
       await state.sessionStartModal?.onConfirm({
@@ -747,6 +747,7 @@ describe("useKanbanSessionStartFlow", () => {
         startPromise = state.onPullRequestGenerate("TASK-1");
       });
 
+      await harness.waitFor((state) => state.sessionStartModal?.isKickoffPromptLoading === false);
       const modal = harness.getLatest().sessionStartModal;
       expect(modal).not.toBeNull();
       expect(modal?.selectedStartMode).toBe("reuse");

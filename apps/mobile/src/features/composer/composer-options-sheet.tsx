@@ -1,6 +1,7 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { useRefreshStaleRuntimeCatalog } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
 import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import {
@@ -30,10 +31,11 @@ import { EffortField, ModelField, SpeedField } from "@/features/model-picker/mod
 import { effortPlaceholder, modelSummary } from "@/features/model-picker/model-field-model";
 import { FormBody, FormField, MenuSelect } from "@/ui/form-rows";
 import { useModelFavorites } from "@/features/model-picker/use-model-favorites";
-import { EmptyState, LoadingState } from "@/ui/states";
+import { EmptyState } from "@/ui/states";
+import { ModalLoadingContent } from "@/ui/modal-loading-content";
 import { Callout } from "@/ui/callout";
 
-const TITLE = "Message Options";
+const TITLE = "Message options";
 const NO_RUNTIMES: readonly ModelPickerRuntime[] = [];
 const LOCK_REASON = "An existing session cannot change its runtime.";
 
@@ -47,7 +49,7 @@ export function ComposerOptionsSheet(): ReactElement {
   if (!route.ok) {
     return (
       <SheetScreen title={TITLE} closeLabel="Done" draggable>
-        <EmptyState icon="link-off" title="This Link Is Not Complete" message={route.message} />
+        <EmptyState icon="link-off" title="Incomplete session link" message={route.message} />
       </SheetScreen>
     );
   }
@@ -57,7 +59,7 @@ export function ComposerOptionsSheet(): ReactElement {
       <SheetScreen title={TITLE} closeLabel="Done" draggable>
         <EmptyState
           icon="link-off"
-          title="The Session Is Not Open"
+          title="Session not open"
           message="Open the session again, then open its message options."
         />
       </SheetScreen>
@@ -105,6 +107,7 @@ function SessionOptions({
     loadRuntimeCatalog: loadRepoRuntimeCatalog,
   });
   const catalog = catalogQuery.catalog;
+  const preparing = useMinimumLoader(!facts.present);
   // The catalog stays cached while the session is open, so the picker reads it again when it
   // opens and the cache is stale, as on desktop.
   const refreshStaleCatalog = useRefreshStaleRuntimeCatalog(loadRepoRuntimeCatalog);
@@ -162,9 +165,6 @@ function SessionOptions({
     [handleSelectModelPair, runtime],
   );
 
-  if (!facts.present) {
-    return <LoadingState label="Loading the session" />;
-  }
   const runtimeLabel = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label;
   const supportsProfiles = descriptor?.capabilities.optionalSurfaces.supportsProfiles ?? false;
 
@@ -176,64 +176,66 @@ function SessionOptions({
     : null;
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      {disabled ? (
-        <View style={styles.notice}>
-          <Callout
-            tone="warning"
-            title="Not connected"
-            message="Reconnect to the host to change the message options."
-          />
-        </View>
-      ) : null}
-      <FormBody>
-        {supportsProfiles && profiles.length > 0 ? (
-          <FormField label="Agent" hint={profileHint}>
-            <MenuSelect
-              title="Agent"
-              icon="bot"
-              choices={profiles}
-              selected={selection?.profileId}
-              placeholder="Agent"
-              disabled={disabled}
-              onSelect={actions.handleSelectAgentProfile}
+    <ModalLoadingContent loading={preparing} label="Loading model options…">
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+        {disabled ? (
+          <View style={styles.notice}>
+            <Callout
+              tone="warning"
+              title="Not connected"
+              message="Reconnect to the host to change the message options."
             />
-          </FormField>
+          </View>
         ) : null}
-        <ModelField
-          runtimes={runtime ? [runtime] : NO_RUNTIMES}
-          favorites={favorites}
-          lock={{ runtimeKind, reason: LOCK_REASON }}
-          selection={selection}
-          fallbackRuntimeKind={runtimeKind}
-          placeholder={catalogQuery.isLoading ? "Loading models…" : "Model"}
-          disabled={disabled}
-          pickerDisabled={disabled}
-          hint={`Runtime: ${runtimeLabel}. ${LOCK_REASON} Changes apply to the next turn.`}
-          onOpen={refreshCatalog}
-          onChoose={chooseModel}
-        />
-        <EffortField
-          effort={{
-            options: options.variantOptions,
-            value: selection?.variant,
-            placeholder: effortPlaceholder({
-              loading: catalogQuery.isLoading,
-              hasModel: selection !== null,
-            }),
-            caption: modelName ?? "Effort",
-            disabled,
-            onSelect: actions.handleSelectVariant,
-          }}
-        />
-        <SpeedField
-          key={speed?.key}
-          control={speed}
-          caption={modelName ?? "Speed"}
-          disabled={disabled}
-        />
-      </FormBody>
-    </ScrollView>
+        <FormBody>
+          {supportsProfiles && profiles.length > 0 ? (
+            <FormField label="Agent" hint={profileHint}>
+              <MenuSelect
+                title="Agent"
+                icon="bot"
+                choices={profiles}
+                selected={selection?.profileId}
+                placeholder="Agent"
+                disabled={disabled}
+                onSelect={actions.handleSelectAgentProfile}
+              />
+            </FormField>
+          ) : null}
+          <ModelField
+            runtimes={runtime ? [runtime] : NO_RUNTIMES}
+            favorites={favorites}
+            lock={{ runtimeKind, reason: LOCK_REASON }}
+            selection={selection}
+            fallbackRuntimeKind={runtimeKind}
+            placeholder={catalogQuery.isLoading ? "Loading models…" : "Model"}
+            disabled={disabled}
+            pickerDisabled={disabled}
+            hint={`Runtime: ${runtimeLabel}. ${LOCK_REASON} Changes apply to the next turn.`}
+            onOpen={refreshCatalog}
+            onChoose={chooseModel}
+          />
+          <EffortField
+            effort={{
+              options: options.variantOptions,
+              value: selection?.variant,
+              placeholder: effortPlaceholder({
+                loading: catalogQuery.isLoading,
+                hasModel: selection !== null,
+              }),
+              caption: modelName ?? "Effort",
+              disabled,
+              onSelect: actions.handleSelectVariant,
+            }}
+          />
+          <SpeedField
+            key={speed?.key}
+            control={speed}
+            caption={modelName ?? "Speed"}
+            disabled={disabled}
+          />
+        </FormBody>
+      </ScrollView>
+    </ModalLoadingContent>
   );
 }
 

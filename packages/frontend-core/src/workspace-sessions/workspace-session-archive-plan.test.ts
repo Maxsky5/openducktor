@@ -164,11 +164,11 @@ test("keeps a worktree that other saved chats need and names them", () => {
       { workspaceId: "alpha", sessionId: "b", title: "Docs" },
     ],
   });
-  expect(effectiveWorktreeRemoval(true, shared, false)).toBe(false);
+  expect(effectiveWorktreeRemoval(true, shared)).toBe(false);
   expect(sharedWorktreeNotice(shared)).toBe(
     "This worktree stays because these saved chats need it for files or history: Login fix, Docs.",
   );
-  expect(effectiveWorktreeRemoval(true, settled(), false)).toBe(true);
+  expect(effectiveWorktreeRemoval(true, settled())).toBe(true);
   expect(sharedWorktreeNotice(settled())).toBeNull();
 });
 
@@ -176,20 +176,16 @@ test("keeps a worktree that open tasks need and names them", () => {
   const owned = settled({
     taskOwners: [{ workspaceId: "alpha", taskId: "odt-1", title: "Login" }],
   });
-  expect(effectiveWorktreeRemoval(true, owned, false)).toBe(false);
+  expect(effectiveWorktreeRemoval(true, owned)).toBe(false);
   expect(taskWorktreeNotice(owned)).toBe(
     "This worktree stays because these tasks need it: Login (odt-1).",
   );
   expect(taskWorktreeNotice(settled())).toBeNull();
 });
 
-test("removes nothing while the worktree check runs", () => {
-  expect(effectiveWorktreeRemoval(true, settled(), true)).toBe(false);
-});
-
 test("a missing worktree with a branch restores from the default branch", () => {
   expect(worktreeArchiveNotice(false, settled({ worktreeExists: false }))).toEqual({
     kind: "keep",
-    text: "The worktree is missing. Restoring this chat creates a fresh worktree from the default branch.",
+    text: "The worktree is missing. Restoring this chat creates a new worktree from the chat's target branch.",
   });
 });

@@ -45,9 +45,9 @@ export const archiveChatForm = ({
   isArchiving: boolean;
 }): ArchiveChatForm => {
   const offersWorktreeRemoval = isWorktreeChat(record);
-  // The sheet shows its loader while the worktree check runs, so the check holds the archive.
+  // A refresh keeps the choice but must finish before confirmation.
   const checking = offersWorktreeRemoval && preview.isFetching;
-  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview, checking);
+  const removeWorktree = effectiveWorktreeRemoval(wantsWorktreeRemoval, preview);
   return {
     offersWorktreeRemoval,
     removeWorktree,
@@ -85,7 +85,8 @@ export const archiveChatInput = ({
 }): ArchiveWorkspaceSessionInput => {
   const removes =
     isWorktreeChat(record) &&
-    effectiveWorktreeRemoval(wantsWorktreeRemoval, preview, preview.isFetching);
+    !preview.isFetching &&
+    effectiveWorktreeRemoval(wantsWorktreeRemoval, preview);
   return {
     workspaceId: workspace.workspaceId,
     repoPath: workspace.repoPath,

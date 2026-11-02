@@ -32,7 +32,7 @@ export function WorkspaceSessionExistingWorktreeField({
           value={choice.selected ?? ""}
           options={view.options}
           placeholder={view.placeholder}
-          searchPlaceholder="Search worktrees..."
+          searchPlaceholder="Search worktrees…"
           emptyText="No worktree found."
           wrapLabels
           disabled={disabled || !view.selectable}

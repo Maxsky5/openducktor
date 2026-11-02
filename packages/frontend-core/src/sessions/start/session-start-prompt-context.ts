@@ -19,12 +19,12 @@ type ResolveSessionStartKickoffPromptContextInput = {
   templateId: AgentKickoffTemplateId;
   message?: string;
   taskTargetBranch?: GitTargetBranch;
-  loadRepoDefaultTargetBranch: () => Promise<GitTargetBranch | null>;
+  repoDefaultTargetBranch: GitTargetBranch | null;
 };
 
 type KickoffPromptContextResolver = (
   input: ResolveSessionStartKickoffPromptContextInput,
-) => SessionStartKickoffPromptContext | Promise<SessionStartKickoffPromptContext>;
+) => SessionStartKickoffPromptContext;
 
 const resolveContextFreePrompt: KickoffPromptContextResolver = () => ({});
 
@@ -41,11 +41,10 @@ const resolveHumanFeedbackPrompt: KickoffPromptContextResolver = ({ message }) =
   };
 };
 
-const resolvePullRequestPrompt: KickoffPromptContextResolver = async ({
+const resolvePullRequestPrompt: KickoffPromptContextResolver = ({
   taskTargetBranch,
-  loadRepoDefaultTargetBranch,
+  repoDefaultTargetBranch,
 }) => {
-  const repoDefaultTargetBranch = taskTargetBranch ? null : await loadRepoDefaultTargetBranch();
   const targetBranch = effectiveTaskTargetBranch(taskTargetBranch, repoDefaultTargetBranch);
   resolvePullRequestTarget(targetBranch);
   return {
@@ -61,8 +60,8 @@ const KICKOFF_PROMPT_CONTEXT_RESOLVERS = {
   pull_request: resolvePullRequestPrompt,
 } satisfies Record<KickoffPromptContextKind, KickoffPromptContextResolver>;
 
-export const resolveSessionStartKickoffPromptContext = async (
+export const resolveSessionStartKickoffPromptContext = (
   input: ResolveSessionStartKickoffPromptContextInput,
-): Promise<SessionStartKickoffPromptContext> => {
+): SessionStartKickoffPromptContext => {
   return KICKOFF_PROMPT_CONTEXT_RESOLVERS[kickoffPromptContextKind(input.templateId)](input);
 };

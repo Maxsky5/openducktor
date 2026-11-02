@@ -139,7 +139,7 @@ export function ClaudeToolAvailabilityEditor({
       )}
       {loading && (
         <p role="status" className="text-sm text-muted-foreground">
-          Loading Claude tools...
+          Loading Claude tools…
         </p>
       )}
       <RuntimePolicyDefault labelId={`${id}-default-label`} label="Default tool availability">

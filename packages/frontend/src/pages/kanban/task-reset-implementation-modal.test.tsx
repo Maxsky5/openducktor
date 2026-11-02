@@ -26,46 +26,38 @@ const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalMod
 });
 
 describe("TaskResetImplementationModal", () => {
-  test("warns when legacy implementation worktrees will be deleted", () => {
+  test("warns when older worktrees will be deleted", () => {
     render(<TaskResetImplementationModal model={makeModel(2)} />);
 
-    expect(screen.getByText(/canonical task worktree and branch are retained/i)).toBeDefined();
-    expect(screen.getByText(/2 legacy implementation worktrees/i)).toBeDefined();
-    expect(screen.getByText(/uncommitted changes in those worktrees will be lost/i)).toBeDefined();
+    expect(screen.getByText(/Current worktree, its branch and ignored files/i)).toBeDefined();
+    expect(screen.getByText(/2 older worktrees/i)).toBeDefined();
+    expect(screen.getByText(/Uncommitted and untracked work will be lost/i)).toBeDefined();
   });
 
   test("does not warn about legacy deletion when only the canonical worktree exists", () => {
     render(<TaskResetImplementationModal model={makeModel(0)} />);
 
-    expect(screen.queryByText(/legacy implementation worktree/i)).toBeNull();
-    expect(
-      screen.getByText(/other related local task branches will be deleted if present/i),
-    ).toBeDefined();
+    expect(screen.queryByText(/older worktree/i)).toBeNull();
+    expect(screen.getByText(/Remove other related local branches/i)).toBeDefined();
   });
 
   test("uses singular wording for one legacy worktree", () => {
     render(<TaskResetImplementationModal model={makeModel(1)} />);
 
-    expect(
-      screen.getByText(
-        /1 legacy implementation worktree and its related local branch will be deleted/i,
-      ),
-    ).toBeDefined();
-    expect(screen.getByText(/uncommitted changes in that worktree will be lost/i)).toBeDefined();
+    expect(screen.getByText(/Delete 1 older worktree and related local branches/i)).toBeDefined();
+    expect(screen.getByText(/Uncommitted and untracked work will be lost/i)).toBeDefined();
   });
 
   test("warns when task terminals will be terminated", () => {
     render(<TaskResetImplementationModal model={{ ...makeModel(0), terminalCount: 2 }} />);
 
-    expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
+    expect(screen.getByText(/Close 2 terminals/i)).toBeDefined();
   });
 
   test("says how many active sessions will be stopped before the reset", () => {
     render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: 2 }} />);
 
-    expect(
-      screen.getByText("2 active agent sessions will be stopped before the reset."),
-    ).toBeDefined();
+    expect(screen.getByText("Stop 2 running agent sessions")).toBeDefined();
   });
 
   test("hides session-stop copy when no active sessions exist", () => {
@@ -91,11 +83,7 @@ describe("TaskResetImplementationModal", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        /Unable to check how many active sessions will be stopped: host unavailable/,
-      ),
-    ).toBeDefined();
+    expect(screen.getByText(/Could not check running sessions: host unavailable/)).toBeDefined();
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Reset implementation" }).disabled,
     ).toBe(true);
@@ -112,8 +100,8 @@ describe("TaskResetImplementationModal", () => {
       <TaskResetImplementationModal model={{ ...makeModel(1), hasCanonicalWorktree: false }} />,
     );
 
-    expect(screen.queryByText(/canonical task worktree and branch are retained/i)).toBeNull();
-    expect(screen.getByText(/1 legacy implementation worktree/i)).toBeDefined();
+    expect(screen.queryByText(/Current worktree, its branch and ignored files/i)).toBeNull();
+    expect(screen.getByText(/1 older worktree/i)).toBeDefined();
   });
 
   test("warns that related branches may be deleted when no worktree exists", () => {
@@ -123,8 +111,6 @@ describe("TaskResetImplementationModal", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/related local task branches will be deleted if present/i),
-    ).toBeDefined();
+    expect(screen.getByText(/Remove related local branches/i)).toBeDefined();
   });
 });

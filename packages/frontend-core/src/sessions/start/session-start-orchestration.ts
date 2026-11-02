@@ -29,7 +29,7 @@ type SessionStartContextSession = {
 
 type BuildSessionStartModalRequestArgs = {
   source: SessionStartModalSource;
-  resolveKickoffPrompt?: SessionStartModalOpenRequest["resolveKickoffPrompt"];
+  kickoff?: SessionStartModalOpenRequest["kickoff"];
   request: SessionStartFlowRequest;
   requestedRuntimeKind?: RuntimeKind | null;
   selectedModel: AgentModelSelection | null;
@@ -192,7 +192,7 @@ export const createSessionStartWorkflowRunner = ({
 
 export const buildSessionStartModalRequest = ({
   source,
-  resolveKickoffPrompt,
+  kickoff,
   request,
   requestedRuntimeKind,
   selectedModel,
@@ -219,7 +219,7 @@ export const buildSessionStartModalRequest = ({
     initialTargetBranch,
   };
 
-  if (resolveKickoffPrompt) modalRequest.resolveKickoffPrompt = resolveKickoffPrompt;
+  if (kickoff) modalRequest.kickoff = kickoff;
 
   if (requestedRuntimeKind) {
     modalRequest.requestedRuntimeKind = requestedRuntimeKind;

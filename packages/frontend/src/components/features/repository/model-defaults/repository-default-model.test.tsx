@@ -104,7 +104,7 @@ const renderBlock = ({
   );
 
 const profileControlHtml = (html: string): string =>
-  html.slice(html.indexOf("Agent Profile"), html.indexOf("Effort"));
+  html.slice(html.indexOf("Agent profile"), html.indexOf("Effort"));
 
 const profileTriggerTag = (html: string): string => {
   const profileControl = profileControlHtml(html);

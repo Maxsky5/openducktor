@@ -1,18 +1,21 @@
 import type { PropsWithChildren, ReactElement, ReactNode } from "react";
-import { Modal, Platform, ScrollView, View } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
+import { Platform, ScrollView, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
-import { ModalFeedbackHost } from "@/feedback/feedback-host";
 import { IconButton } from "./icon-button";
 import { Text } from "./text";
 import { Touchable } from "./touchable";
 import { KEYBOARD_DISMISS_ON_DRAG } from "./keyboard-dismiss";
+import { ModalLoadingContent } from "./modal-loading-content";
+import { ModalWindow } from "./modal-window";
 
 export type InPlaceSheetProps = PropsWithChildren<{
   visible: boolean;
   title: string;
+  /** Task identity or a short introduction that stays above the loading body. */
+  intro?: ReactNode;
   /** Closes the sheet. A sheet whose action runs passes `dismissible={false}` instead. */
   onClose: () => void;
   /** False while an action runs: the close control and the system back gesture then do nothing. */
@@ -32,6 +35,10 @@ export type InPlaceSheetProps = PropsWithChildren<{
   background?: "grouped" | "surface" | undefined;
   /** The sheet finished opening. Android opens the keyboard for a field only after this. */
   onShow?: (() => void) | undefined;
+  /** The native window and its closing content have left the screen. */
+  onDismiss?: (() => void) | undefined;
+  loading?: boolean | undefined;
+  loadingLabel?: string | undefined;
 }>;
 
 /**
@@ -43,6 +50,7 @@ export type InPlaceSheetProps = PropsWithChildren<{
 export function InPlaceSheet({
   visible,
   title,
+  intro,
   onClose,
   dismissible = true,
   footer,
@@ -51,75 +59,79 @@ export function InPlaceSheet({
   padded = true,
   background = "grouped",
   onShow,
+  onDismiss,
+  loading = false,
+  loadingLabel,
   children,
 }: InPlaceSheetProps): ReactElement {
   const ios = Platform.OS === "ios";
+  const isLoading = useMinimumLoader(loading, visible);
+  const showCloseControl = closeControl || isLoading;
   // A closed sheet renders with its screen, so it picks plain style entries instead of a
   // stylesheet variant, which runs native code on each render.
   const backgroundStyle = background === "surface" ? styles.surface : styles.grouped;
   return (
-    <Modal
+    <ModalWindow
       visible={visible}
       animationType="slide"
       presentationStyle={ios ? "pageSheet" : "fullScreen"}
-      // Android removes the content of a closing modal at once, while its window still slides
-      // out. A transparent window then slides out unseen, instead of as an empty white screen.
       transparent={!ios}
       onShow={onShow}
+      onDismiss={onDismiss}
       onRequestClose={() => {
         if (dismissible) onClose();
       }}
     >
-      {/* A modal is its own native window, so its touches need their own gesture root. */}
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        {/* The theme background sits on a React Native view, so it follows a theme change. */}
-        <View style={[styles.root, backgroundStyle]}>
-          <SafeAreaView
-            style={styles.fill}
-            edges={ios ? ["bottom", "left", "right"] : ["top", "bottom", "left", "right"]}
-          >
-            <View style={styles.header}>
-              {ios ? <View style={styles.headerSide} /> : null}
-              <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
-                {title}
-              </Text>
-              {ios ? (
-                <View style={[styles.headerSide, styles.headerEnd]}>
-                  {closeControl ? (
-                    <Touchable
-                      feedback="opacity"
-                      onPress={onClose}
-                      disabled={!dismissible}
-                      hitSlop={12}
-                      accessibilityRole="button"
-                      accessibilityLabel="Done"
-                    >
-                      <Text variant="headline" tone="tint">
-                        Done
-                      </Text>
-                    </Touchable>
-                  ) : null}
-                </View>
-              ) : null}
-              {!ios && closeControl ? (
-                <IconButton
-                  icon="x"
-                  variant="filled"
-                  accessibilityLabel="Close"
-                  onPress={onClose}
-                  disabled={!dismissible}
-                />
-              ) : null}
-            </View>
-            {/* An iOS page sheet starts below the screen top, so the view reads its screen position.
+      {/* The theme background sits on a React Native view, so it follows a theme change. */}
+      <View style={[styles.root, backgroundStyle]}>
+        <SafeAreaView
+          style={styles.fill}
+          edges={ios ? ["bottom", "left", "right"] : ["top", "bottom", "left", "right"]}
+        >
+          <View style={styles.header}>
+            {ios ? <View style={styles.headerSide} /> : null}
+            <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+              {title}
+            </Text>
+            {ios ? (
+              <View style={[styles.headerSide, styles.headerEnd]}>
+                {showCloseControl ? (
+                  <Touchable
+                    feedback="opacity"
+                    onPress={onClose}
+                    disabled={!dismissible}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Done"
+                  >
+                    <Text variant="headline" tone="tint">
+                      Done
+                    </Text>
+                  </Touchable>
+                ) : null}
+              </View>
+            ) : null}
+            {!ios && showCloseControl ? (
+              <IconButton
+                icon="x"
+                variant="filled"
+                accessibilityLabel="Close"
+                onPress={onClose}
+                disabled={!dismissible}
+              />
+            ) : null}
+          </View>
+          {intro ? <View style={styles.intro}>{intro}</View> : null}
+          {/* An iOS page sheet starts below the screen top, so the view reads its screen position.
                 The body moves with a transform and changes its size once, so a list in it does not
                 lay out again on each keyboard frame. The clip keeps it under the sheet header. */}
-            <View style={styles.keyboardClip}>
-              <KeyboardAvoidingView
-                behavior="translate-with-padding"
-                automaticOffset
-                style={styles.body}
-              >
+          <View style={styles.keyboardClip}>
+            <KeyboardAvoidingView
+              behavior="translate-with-padding"
+              automaticOffset
+              style={styles.body}
+            >
+              <ModalLoadingContent loading={isLoading} label={loadingLabel}>
                 {scrolls ? (
                   <ScrollView
                     style={styles.body}
@@ -133,20 +145,16 @@ export function InPlaceSheet({
                   <View style={styles.body}>{children}</View>
                 )}
                 {footer ? <View style={[styles.footer, backgroundStyle]}>{footer}</View> : null}
-              </KeyboardAvoidingView>
-            </View>
-          </SafeAreaView>
-        </View>
-        {/* A closing sheet gives its toasts back to the root at once, so they do not slide out
-            with its window. */}
-        {visible ? <ModalFeedbackHost /> : null}
-      </GestureHandlerRootView>
-    </Modal>
+              </ModalLoadingContent>
+            </KeyboardAvoidingView>
+          </View>
+        </SafeAreaView>
+      </View>
+    </ModalWindow>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  gestureRoot: { flex: 1 },
   fill: { flex: 1 },
   root: { flex: 1 },
   grouped: { backgroundColor: theme.colors.groupedBackground },
@@ -166,6 +174,11 @@ const styles = StyleSheet.create((theme) => ({
     default: { ...theme.type.title2, flex: 1, color: theme.colors.label },
   }),
   body: { flex: 1 },
+  intro: {
+    paddingHorizontal: theme.layout.screenPadding,
+    paddingBottom: theme.space.md,
+    gap: theme.space.xs,
+  },
   keyboardClip: { flex: 1, overflow: "hidden" },
   content: { paddingBottom: theme.space.xxxl, gap: theme.space.md },
   padded: { paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space.sm },

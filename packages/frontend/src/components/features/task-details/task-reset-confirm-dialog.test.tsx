@@ -25,19 +25,17 @@ describe("TaskResetConfirmDialog", () => {
       />,
     );
 
-    expect(screen.getByText("Reset Task")).toBeDefined();
-    expect(screen.getByText(/moves the task back to Backlog/i)).toBeDefined();
-    expect(screen.getByText(/All workflow and free artifacts/i)).toBeDefined();
-    expect(screen.getByText(/spec, planner, builder, and QA sessions/i)).toBeDefined();
-    expect(screen.getByText(/pull request and direct-merge metadata/i)).toBeDefined();
-    expect(screen.getByText(/2 linked task worktrees/i)).toBeDefined();
-    expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
-    expect(
-      screen.getByText("1 active agent session will be stopped before the reset."),
-    ).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Reset task" })).toBeDefined();
+    expect(screen.getByText(/Move this task to Backlog/i)).toBeDefined();
+    expect(screen.getByText(/all task artifacts/i)).toBeDefined();
+    expect(screen.getByText(/Spec, Planner, Builder and QA sessions/i)).toBeDefined();
+    expect(screen.getByText(/pull request and merge links/i)).toBeDefined();
+    expect(screen.getByText(/2 linked worktrees/i)).toBeDefined();
+    expect(screen.getByText(/Close 2 terminals/i)).toBeDefined();
+    expect(screen.getByText("Stop 1 running agent session")).toBeDefined();
   });
 
-  test("disables submit while cleanup impact is loading", () => {
+  test("hides submit while cleanup impact is loading", () => {
     render(
       <TaskResetConfirmDialog
         open
@@ -59,9 +57,8 @@ describe("TaskResetConfirmDialog", () => {
       />,
     );
 
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole("status")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Checking…" })).toBeNull();
   });
 
   test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
@@ -86,11 +83,7 @@ describe("TaskResetConfirmDialog", () => {
       />,
     );
 
-    expect(
-      screen.getByText(
-        /Unable to check how many active sessions will be stopped: host unavailable/,
-      ),
-    ).toBeDefined();
+    expect(screen.getByText(/Could not check running sessions: host unavailable/)).toBeDefined();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Reset task" }).disabled).toBe(
       true,
     );

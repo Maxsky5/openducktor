@@ -8,23 +8,18 @@ import type { GitBranch } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback } from "react";
 import type { RepoSettingsInput } from "../../types/session-slices";
-import { orderStartModesForDisplay } from "./session-start-display";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
-  if (startMode === "fresh") {
-    return "Start a fresh session";
-  }
-  if (startMode === "reuse") {
-    return "Reuse an existing session";
-  }
+  if (startMode === "fresh") return "Start a new session";
+  if (startMode === "reuse") return "Continue an existing session";
   return "Fork an existing session";
 };
 
 export const buildSessionStartModalTitle = (role: AgentRole): string => {
   const roleLabel = BUILTIN_ROLE_LABELS[role] ?? role.toUpperCase();
-  return `Start ${roleLabel} Session`;
+  return `Start ${roleLabel} session`;
 };
 
 export const buildSessionStartModalDescription = ({
@@ -32,23 +27,9 @@ export const buildSessionStartModalDescription = ({
 }: {
   launchActionId: SessionLaunchActionId;
 }): string => {
-  const launchAction = getSessionLaunchAction(launchActionId);
-  const actionLabel = launchAction.label;
-  const allowedStartModes = orderStartModesForDisplay(launchAction.startModes);
-  if (allowedStartModes.length > 1) {
-    const allowedModeLabels = allowedStartModes.map((mode) => {
-      if (mode === "fresh") {
-        return "start fresh";
-      }
-      if (mode === "reuse") {
-        return "reuse an existing session";
-      }
-      return "fork an existing session";
-    });
-    const conjunction = allowedModeLabels.length === 2 ? " or " : ", ";
-    return `Choose how to ${allowedModeLabels.join(conjunction)} for ${actionLabel}.`;
-  }
-  return `${startModeLabelFor(launchAction.defaultStartMode)} for ${actionLabel}.`;
+  const action = getSessionLaunchAction(launchActionId);
+  if (action.startModes.length > 1) return "Choose how to start this session.";
+  return `${startModeLabelFor(action.defaultStartMode)}.`;
 };
 
 export type SessionStartModalOpenRequest = Omit<

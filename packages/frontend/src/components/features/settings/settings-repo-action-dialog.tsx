@@ -1,3 +1,4 @@
+import { Save } from "lucide-react";
 import { REPO_ACTION_ICON_VALUES, type RepoAction } from "@openducktor/contracts";
 import { type FormEvent, type ReactElement, useId, useState } from "react";
 import { REPO_ACTION_ICONS } from "@/components/features/repository-actions/repo-action-icons";
@@ -185,7 +186,10 @@ export function RepoActionDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">Save action</Button>
+            <Button type="submit">
+              <Save data-icon="inline-start" />
+              Save action
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

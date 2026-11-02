@@ -29,7 +29,7 @@ export function HeldOutcomesSection({
             tone="destructive"
             title="Autopilot outcomes did not load"
             message={error}
-            action={<Button label="Try Again" size="sm" variant="gray" onPress={reload} />}
+            action={<Button label="Retry" size="sm" variant="gray" onPress={reload} />}
           />
         ) : null}
         {failure ? (

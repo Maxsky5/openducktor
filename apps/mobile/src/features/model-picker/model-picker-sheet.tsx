@@ -60,7 +60,8 @@ function CatalogNotices({ runtimes }: { runtimes: readonly ModelPickerRuntime[] 
           message={resource.error}
           action={
             <Button
-              label="Try Again"
+              icon="refresh"
+              label="Retry"
               variant="gray"
               size="sm"
               onPress={() => void resource.retry()}
@@ -96,7 +97,15 @@ function FavoriteNotice({ state }: { state: AgentModelFavoritesState }): ReactEl
           tone="destructive"
           title="Favorites are not available"
           message={state.readError}
-          action={<Button label="Try Again" variant="gray" size="sm" onPress={state.retryRead} />}
+          action={
+            <Button
+              icon="refresh"
+              label="Retry"
+              variant="gray"
+              size="sm"
+              onPress={state.retryRead}
+            />
+          }
         />
       </View>
     );
@@ -110,7 +119,8 @@ function FavoriteNotice({ state }: { state: AgentModelFavoritesState }): ReactEl
         message={state.mutationError}
         action={
           <Button
-            label="Try Again"
+            icon="refresh"
+            label="Retry"
             variant="gray"
             size="sm"
             command
@@ -129,14 +139,14 @@ function emptyStateOf(
 ): { title: string; message: string; icon: "search-x" | "star" | "cpu" } | null {
   if (picker.searching) {
     return {
-      title: "No Results",
+      title: "No results",
       message: "No model matches. Try another search.",
       icon: "search-x",
     };
   }
   if (picker.view === "favorites") {
     return {
-      title: "No Favorites",
+      title: "No favorites",
       message: "No favorite model is available on this host.",
       icon: "star",
     };
@@ -144,28 +154,21 @@ function emptyStateOf(
   const runtime = picker.shownRuntimes[0];
   if (!runtime || runtime.resource.status !== "ready") return null;
   return {
-    title: "No Models",
+    title: "No models",
     message: `The host lists no ${runtime.descriptor.label} models.`,
     icon: "cpu",
   };
 }
 
 function ModelPickerContent({
-  runtimes,
-  selection,
-  favorites,
-  lock,
+  picker,
   disabled,
   onChoose,
 }: {
-  runtimes: readonly ModelPickerRuntime[];
-  selection: AgentModelSelection | null;
-  favorites: readonly AgentModelFavorite[] | null;
-  lock: ModelPickerLock | null;
+  picker: ModelPicker;
   disabled: boolean;
   onChoose: (value: ModelPickerValue) => void;
 }): ReactElement {
-  const picker = useModelPicker({ runtimes, selection, favorites, lock });
   const { rows } = picker;
   const valuesByKey = useMemo(
     () => new Map(rows.flatMap((row) => (row.type === "model" ? [[row.key, row.item.value]] : []))),
@@ -289,6 +292,7 @@ export function ModelPickerSheet({
   onChoose: (value: ModelPickerValue) => void;
   onClose: () => void;
 }): ReactElement {
+  const picker = useModelPicker({ visible, runtimes, selection, favorites, lock });
   const choose = useCallback(
     (value: ModelPickerValue) => {
       onChoose(value);
@@ -298,6 +302,8 @@ export function ModelPickerSheet({
   );
   return (
     <InPlaceSheet
+      loading={picker.loading}
+      loadingLabel="Loading models…"
       visible={visible}
       title="Model"
       onClose={onClose}
@@ -308,20 +314,11 @@ export function ModelPickerSheet({
       {runtimes.length === 0 ? (
         <EmptyState
           icon="cpu"
-          title="No Runtime"
-          message="No runtime is available on the host. Start one there, then try again."
+          title="No runtime available"
+          message="No runtime is available. Open Settings on the host to enable one, then try again."
         />
       ) : (
-        // The modal unmounts its content after it closes, so search and runtime start fresh on each
-        // open. iOS keeps the content while the sheet slides away.
-        <ModelPickerContent
-          runtimes={runtimes}
-          selection={selection}
-          favorites={favorites}
-          lock={lock}
-          disabled={disabled}
-          onChoose={choose}
-        />
+        <ModelPickerContent picker={picker} disabled={disabled} onChoose={choose} />
       )}
     </InPlaceSheet>
   );

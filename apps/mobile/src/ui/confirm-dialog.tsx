@@ -8,19 +8,20 @@ import {
   useRef,
   useState,
 } from "react";
-import { Modal, Pressable, View } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { ModalFeedbackHost } from "@/feedback/feedback-host";
 import { sansWeight } from "@/theme/tokens";
 import { Button } from "./button";
 import { createQuestionSlot } from "./confirm-question";
+import type { IconName } from "./icon";
 import { Text } from "./text";
+import { ModalWindow } from "./modal-window";
 
 type ConfirmOptions = {
   title: string;
   message: string;
   confirmLabel: string;
+  icon: IconName;
   /** The label of the choice that keeps things as they are. */
   cancelLabel?: string | undefined;
   destructive?: boolean | undefined;
@@ -73,7 +74,7 @@ export function ConfirmDialogHost({
   return (
     <Context value={confirm}>
       {children}
-      <Modal
+      <ModalWindow
         visible={question !== null}
         transparent
         animationType="fade"
@@ -81,18 +82,8 @@ export function ConfirmDialogHost({
         navigationBarTranslucent
         onRequestClose={() => answer(false)}
       >
-        {/* A modal is its own native window, so its buttons need their own gesture root. */}
-        <GestureHandlerRootView style={styles.fill}>
-          {/* A closing dialog gives its toasts back to the root at once, so they do not fade out
-              with its window. */}
-          {question ? (
-            <>
-              <ConfirmDialog question={question} onAnswer={answer} />
-              <ModalFeedbackHost />
-            </>
-          ) : null}
-        </GestureHandlerRootView>
-      </Modal>
+        {question ? <ConfirmDialog question={question} onAnswer={answer} /> : null}
+      </ModalWindow>
     </Context>
   );
 }
@@ -133,6 +124,7 @@ function ConfirmDialog({
           <View style={styles.action}>
             <Button
               label={question.confirmLabel}
+              icon={question.icon}
               variant={question.destructive ? "destructive" : "filled"}
               onPress={() => onAnswer(true)}
               fill
@@ -145,7 +137,6 @@ function ConfirmDialog({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  fill: { flex: 1 },
   root: { flex: 1, alignItems: "center", justifyContent: "center", padding: theme.space.xxl },
   backdrop: {
     position: "absolute",
@@ -175,13 +166,10 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.desktop.foreground,
   },
   message: { fontSize: 14, lineHeight: 20, color: theme.desktop.mutedForeground },
-  // Cancel on the left and the action on the right, as the form footers. Two long labels that do
-  // not fit side by side stack, each at full width.
   footer: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: theme.space.sm,
     marginTop: theme.space.lg,
   },
-  action: { flexGrow: 1 },
+  action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

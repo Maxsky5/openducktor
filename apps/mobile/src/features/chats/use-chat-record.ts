@@ -1,5 +1,6 @@
 import type { WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useQuery } from "@tanstack/react-query";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
@@ -15,9 +16,11 @@ export const useChatRecord = (workspaceId: string, sessionId: string): ChatRecor
   const { workspaces } = useMobileWorkspaces();
   const chats = useQuery(workspaceSessionListQueryOptions(workspaceId));
   const workspace = workspaces.find((candidate) => candidate.workspaceId === workspaceId);
+  const isPreparing = useMinimumLoader(workspace !== undefined && chats.isPending);
   if (!workspace) {
     return { status: "missing", reason: "The workspace of this chat is no longer open." };
   }
+  if (isPreparing) return { status: "loading" };
   if (chats.data === undefined) {
     if (chats.error) {
       return {

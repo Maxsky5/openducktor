@@ -436,7 +436,7 @@ describe("ModelPicker", () => {
 
     const statuses = screen.getAllByRole("status");
     expect(statuses).toHaveLength(1);
-    expect(statuses[0]?.textContent).toBe("Loading models...");
+    expect(statuses[0]?.textContent).toBe("Loading models…");
   });
 
   test("removes a favorite that was saved as an alias", async () => {

@@ -126,7 +126,7 @@ export function BoardFilterSheet({
   return (
     <InPlaceSheet
       visible={visible}
-      title="Filter Tasks"
+      title="Filter tasks"
       onClose={() => {
         setLabelQuery("");
         onClose();
@@ -134,7 +134,7 @@ export function BoardFilterSheet({
       padded={false}
       footer={
         <Button
-          label="Clear Search and Filters"
+          label="Clear search and filters"
           icon="x"
           variant="outline"
           size="lg"

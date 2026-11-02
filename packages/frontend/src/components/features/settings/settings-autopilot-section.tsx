@@ -88,7 +88,7 @@ export function SettingsAutopilotSection({
                   options={options}
                   disabled={disabled}
                   placeholder="Select an action"
-                  searchPlaceholder="Search actions..."
+                  searchPlaceholder="Search actions…"
                   triggerClassName="justify-between"
                   triggerAriaLabelledBy={labelId}
                   onValueChange={(value) => {

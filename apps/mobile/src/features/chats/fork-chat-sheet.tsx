@@ -54,7 +54,7 @@ import { useVisibleHandoff } from "@/features/session-startup/use-visible-handof
 import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
 
-const TITLE = "Fork Chat";
+const TITLE = "Fork chat";
 
 /**
  * Forks a chat after a completed reply, as the desktop Fork chat dialog: the fork works in the
@@ -68,7 +68,7 @@ export function ForkChatSheet({ params }: { params: ForkChatSheetParams | null }
         content={
           <EmptyState
             icon="circle-alert"
-            title="Link Not Valid"
+            title="Invalid chat link"
             message="Close this sheet and select the reply again."
           />
         }
@@ -96,7 +96,7 @@ function ForkChatRead({ params }: { params: ForkChatSheetParams }): ReactElement
   return (
     <ForkChatState
       content={
-        <EmptyState icon="message-square-off" title="Chat Not Available" message={read.reason} />
+        <EmptyState icon="message-square-off" title="Chat unavailable" message={read.reason} />
       }
     />
   );
@@ -121,6 +121,7 @@ function ForkChatForm({
   const { running, failure } = command;
   const fieldError = workspaceSessionValidationError(failure);
   const branchPrefix = config.data?.branchPrefix;
+  const defaultsPending = destination === "new_worktree" && config.isPending;
   const input = workspaceSessionForkInput({
     workspaceId: workspace.workspaceId,
     record,
@@ -128,8 +129,11 @@ function ForkChatForm({
     destination,
     worktree,
     branchPrefix,
+    defaultsReady: !config.isPending,
   });
-  const blockedReason = forkBlockedReason(gate.open, command.hasSource);
+  const blockedReason =
+    forkBlockedReason(gate.open, command.hasSource) ??
+    (defaultsPending ? FORK_CHAT_TEXT.loadingDefaults : null);
   const note = running ? null : (blockedReason ?? (input ? null : "Enter a worktree name."));
   if (command.attemptId && command.showProgress)
     return (
@@ -140,13 +144,18 @@ function ForkChatForm({
       </SheetScreen>
     );
   return (
-    <SheetScreen title={TITLE} closable={!running}>
+    <SheetScreen
+      title={TITLE}
+      closable={!running}
+      intro={<FormLead text={FORK_CHAT_TEXT.description} />}
+    >
       <Screen background="sheet">
         <ActionForm
           note={note}
           primary={
             <Button
-              label={running ? "Forking Chat" : "Fork Chat"}
+              label={running ? "Forking chat…" : "Fork chat"}
+              icon="git-fork"
               size="lg"
               loading={running}
               command
@@ -169,7 +178,6 @@ function ForkChatForm({
             </View>
           ) : null}
           <FormBody>
-            <FormLead text={FORK_CHAT_TEXT.description} />
             <ForkLocation destination={destination} onChange={setDestination} disabled={running} />
             <SourceFolder record={record} />
             {destination === "new_worktree" ? (
@@ -230,12 +238,12 @@ const useForkChatCommand = (
   const close = useCallback(() => {
     if (closed.current) return;
     closed.current = true;
-    // Expo Router needs the guard off until its queued Back action runs.
+    // Keep the guard off while the native close transition runs.
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setClosing(true);
     allowRemoval();
-    router.back();
-  }, [allowRemoval, router]);
+    navigation.goBack();
+  }, [allowRemoval, navigation]);
   useStartupSheetClose(attemptId, close);
   useRepairedStartupHandoff(attempt);
   useEffect(() => {

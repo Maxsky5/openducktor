@@ -92,8 +92,8 @@ describe("taskApprovalModeOptions", () => {
         approvalContextError: null,
       }),
     ).toEqual([
-      { value: "direct_merge", label: "Direct Merge", disabled: false },
-      { value: "close_task", label: "Close Task", disabled: false },
+      { value: "direct_merge", label: "Direct merge", disabled: false },
+      { value: "close_task", label: "Close task", disabled: false },
     ]);
     expect(
       taskApprovalModeOptions({
@@ -102,9 +102,9 @@ describe("taskApprovalModeOptions", () => {
         approvalContextError: null,
       }),
     ).toEqual([
-      { value: "direct_merge", label: "Direct Merge", disabled: false },
-      { value: "pull_request", label: "Pull Request", disabled: true },
-      { value: "close_task", label: "Close Task", disabled: false },
+      { value: "direct_merge", label: "Direct merge", disabled: false },
+      { value: "pull_request", label: "Pull request", disabled: true },
+      { value: "close_task", label: "Close task", disabled: false },
     ]);
   });
 
@@ -116,24 +116,22 @@ describe("taskApprovalModeOptions", () => {
         approvalContextError: "The task worktree is detached.",
       }),
     ).toEqual([
-      { value: "direct_merge", label: "Direct Merge", disabled: true },
-      { value: "pull_request", label: "Pull Request", disabled: true },
-      { value: "close_task", label: "Close Task", disabled: false },
+      { value: "direct_merge", label: "Direct merge", disabled: true },
+      { value: "pull_request", label: "Pull request", disabled: true },
+      { value: "close_task", label: "Close task", disabled: false },
     ]);
   });
 });
 
 describe("getTaskApprovalSubmitState", () => {
   test("labels the confirm control by mode and draft mode", () => {
-    expect(submitState().confirmLabel).toBe("Merge Locally");
-    expect(submitState({ mode: "pull_request" }).confirmLabel).toBe("Create Pull Request");
+    expect(submitState().confirmLabel).toBe("Merge locally");
+    expect(submitState({ mode: "pull_request" }).confirmLabel).toBe("Create pull request");
     expect(
       submitState({ mode: "pull_request", pullRequestDraftMode: "generate_ai" }).confirmLabel,
-    ).toBe("Start PR Generation");
-    expect(submitState({ mode: "close_task" }).confirmLabel).toBe("Close Task");
-    expect(submitState({ mode: "close_task", isSubmitting: true }).confirmLabel).toBe(
-      "Closing Task",
-    );
+    ).toBe("Choose Builder session");
+    expect(submitState({ mode: "close_task" }).confirmLabel).toBe("Close task");
+    expect(submitState({ mode: "close_task", isSubmitting: true }).confirmLabel).toBe("Closing…");
   });
 
   test("blocks the submit for uncommitted changes, missing text, and an unavailable provider", () => {
@@ -197,22 +195,22 @@ describe("approval texts", () => {
       after: " to publish the merged target branch, then move the task to Done.",
     });
     expect(directMergeCompletionButtonLabel({ isSubmitting: false, publishTarget: null })).toBe(
-      "Mark Task Done",
+      "Mark task done",
     );
     expect(
       directMergeCompletionButtonLabel({
         isSubmitting: false,
         publishTarget: publish.publishTarget,
       }),
-    ).toBe("Push main And Mark Done");
+    ).toBe("Push main and mark done");
     expect(
       directMergeCompletionButtonLabel({
         isSubmitting: true,
         publishTarget: publish.publishTarget,
       }),
-    ).toBe("Publishing main");
+    ).toBe("Pushing main…");
     expect(directMergeCompletionButtonLabel({ isSubmitting: true, publishTarget: null })).toBe(
-      "Completing Direct Merge",
+      "Completing merge…",
     );
     expect(directMergeCompletionStageDescription({ publishTarget: null })).toContain(
       "until you are ready to close it",
@@ -226,15 +224,13 @@ describe("approval texts", () => {
         publishTarget: null,
         publicationPreview: null,
       }),
-    ).toBe(
-      "Missing target branch for direct-merge completion. Refresh approval context and retry.",
-    );
+    ).toBe("Close and reopen Approve task to load the target branch.");
     expect(
       getDirectMergeCompletionContextError({
         targetBranch: { remote: "origin", branch: "main" },
         publishTarget: { remote: "origin", branch: "main" },
         publicationPreview: null,
       }),
-    ).toBe("Missing publication destinations. Refresh approval context before publishing.");
+    ).toBe("Close and reopen Approve task to load the push details.");
   });
 });

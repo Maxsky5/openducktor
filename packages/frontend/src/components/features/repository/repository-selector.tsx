@@ -24,7 +24,7 @@ export function RepositorySelector({
   className,
   triggerClassName,
   placeholder = "Select repository",
-  searchPlaceholder = "Search repository...",
+  searchPlaceholder = "Search repositories…",
   errorCountByWorkspaceId,
 }: RepositorySelectorProps) {
   const options = useMemo(

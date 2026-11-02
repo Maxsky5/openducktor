@@ -67,9 +67,9 @@ export function SettingsChatSection({
   return (
     <div className="grid gap-4 p-4">
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-foreground">Chat Settings</h3>
+        <h3 className="text-sm font-semibold text-foreground">Chat settings</h3>
         <p className="text-xs text-muted-foreground">
-          Configure messages and display settings for Chats and Workflows.
+          Choose how chats look and how you send messages.
         </p>
       </div>
 
@@ -85,7 +85,7 @@ export function SettingsChatSection({
       />
 
       <SettingsSwitchRow
-        title="Show Thinking Messages"
+        title="Show thinking messages"
         description="Thinking messages are hidden by default. When enabled, they will appear in session transcripts after you save settings."
         checked={chat.showThinkingMessages}
         disabled={disabled}
@@ -118,7 +118,7 @@ export function SettingsChatSection({
       />
 
       <SettingsSegmentedOptionRow<ChatDiffStyle>
-        title="Diff Style"
+        title="Diff style"
         description="Choose how file diffs are displayed in session transcripts."
         value={chat.diffStyle}
         options={diffStyleOptions}
@@ -127,7 +127,7 @@ export function SettingsChatSection({
       />
 
       <SettingsSegmentedOptionRow<ChatDiffIndicators>
-        title="Diff Indicators"
+        title="Diff indicators"
         description="Choose the visual markers shown next to added and removed lines."
         value={chat.diffIndicators}
         options={diffIndicatorOptions}
@@ -138,7 +138,7 @@ export function SettingsChatSection({
       />
 
       <SettingsSegmentedOptionRow<ChatDiffHeight>
-        title="Diff Height"
+        title="Diff height"
         description="Choose whether transcript diffs expand fully or use the compact scroll area."
         value={chat.diffHeight}
         options={diffHeightOptions}
@@ -147,7 +147,7 @@ export function SettingsChatSection({
       />
 
       <SettingsSegmentedOptionRow<ChatLineOverflow>
-        title="Line Overflow"
+        title="Line overflow"
         description="Choose whether long diff lines wrap or require horizontal scrolling."
         value={chat.lineOverflow}
         options={lineOverflowOptions}
@@ -156,7 +156,7 @@ export function SettingsChatSection({
       />
 
       <SettingsSegmentedOptionRow<ChatHunkSeparators>
-        title="Hunk Separators"
+        title="Hunk separators"
         description="Choose the separator style for collapsed unchanged regions in transcript diffs."
         value={chat.hunkSeparators}
         options={hunkSeparatorOptions}

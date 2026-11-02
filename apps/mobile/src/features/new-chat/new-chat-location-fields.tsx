@@ -55,12 +55,7 @@ export function CustomRoleField({
           title="Custom roles did not load"
           message={errorMessage(roles.error)}
           action={
-            <Button
-              label="Try Again"
-              variant="gray"
-              size="sm"
-              onPress={() => void roles.refetch()}
-            />
+            <Button label="Retry" variant="gray" size="sm" onPress={() => void roles.refetch()} />
           }
         />
       ) : null}

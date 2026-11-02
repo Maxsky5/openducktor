@@ -1,3 +1,4 @@
+import { Link, Save, Unlink } from "lucide-react";
 import { type ChangeEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,18 +15,18 @@ import { Label } from "@/components/ui/label";
 
 const validateLinkDestination = (href: string): string | null => {
   if (!href) {
-    return "Enter a link destination.";
+    return "Enter a web address.";
   }
   if (/\s/.test(href)) {
-    return "Link destinations cannot contain spaces. Encode the destination or use Markdown mode.";
+    return "Use %20 for spaces in the address, or edit the link in Markdown.";
   }
   try {
     const url = new URL(href);
     if ((url.protocol !== "https:" && url.protocol !== "http:") || !url.hostname) {
-      return "Enter an absolute http or https destination.";
+      return "Enter a full web address that starts with http:// or https://.";
     }
   } catch {
-    return "Enter an absolute http or https destination.";
+    return "Enter a full web address that starts with http:// or https://.";
   }
   return null;
 };
@@ -71,10 +72,12 @@ export function TaskDescriptionLinkDialog({
         >
           <DialogHeader>
             <DialogTitle>{editing ? "Edit link" : "Insert link"}</DialogTitle>
-            <DialogDescription>Enter an absolute http or https destination.</DialogDescription>
+            <DialogDescription>
+              Paste a web address that starts with https:// or http://.
+            </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4 flex flex-col gap-2 overflow-visible">
-            <Label htmlFor="task-description-link-destination">Link destination</Label>
+            <Label htmlFor="task-description-link-destination">Web address</Label>
             <Input
               id="task-description-link-destination"
               autoFocus
@@ -98,6 +101,7 @@ export function TaskDescriptionLinkDialog({
           <DialogFooter>
             {editing ? (
               <Button type="button" variant="destructive" disabled={disabled} onClick={onRemove}>
+                <Unlink data-icon="inline-start" />
                 Remove link
               </Button>
             ) : null}
@@ -105,6 +109,7 @@ export function TaskDescriptionLinkDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={disabled}>
+              {editing ? <Save data-icon="inline-start" /> : <Link data-icon="inline-start" />}
               {editing ? "Save link" : "Insert link"}
             </Button>
           </DialogFooter>
