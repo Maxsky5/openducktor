@@ -31,6 +31,14 @@ tester.run("anti-slop/no-test-imports-in-scripts", noTestImportsInScriptsRule, {
       filename: "/repo/apps/electron/scripts/build.ts",
       code: 'import { describe } from "node:test";',
     },
+    {
+      filename: "/repo/scripts/local-require.ts",
+      code: 'function require(name: string) { return name; } require("node:assert");',
+    },
+    {
+      filename: "/repo/scripts/export-other.ts",
+      code: 'export { readFile } from "node:fs/promises";',
+    },
   ],
   invalid: [
     {
@@ -71,6 +79,26 @@ tester.run("anti-slop/no-test-imports-in-scripts", noTestImportsInScriptsRule, {
     {
       filename: "/repo/scripts/dynamic-test.ts",
       code: 'const { test } = await import("bun:test");',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/strict.ts",
+      code: 'import assert from "assert/strict";',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/reexport-test.ts",
+      code: 'export { test } from "bun:test";',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/reexport-assert.ts",
+      code: 'export * from "node:assert";',
+      errors: [error],
+    },
+    {
+      filename: "/repo/scripts/require-assert.ts",
+      code: 'const assert = require("node:assert/strict");',
       errors: [error],
     },
   ],

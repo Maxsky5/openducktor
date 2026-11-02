@@ -60,7 +60,7 @@ The change also removes the private `BrowserTabs` and `TaskSelector` modules, th
 
 Run the five full repository checks from [Contributing](../CONTRIBUTING.md#verification-commands). Also run the dependency gate from [Dependency hygiene](dependency-hygiene.md).
 
-The full test suite builds the image and Claude transcript worker bundles and runs them under Node, Bun, and Electron. Run it with `bun run test`.
+The full test suite builds the image and Claude transcript worker bundles and runs them under Node, Bun, and Electron. Run it with `bun run test`. The tests use the Electron runtime from `apps/electron` and download it on first use when it is missing.
 
 Before a web release, build the package and check its required files:
 

@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import type {
+  GeneratedImageWorkerRequest,
+  GeneratedImageWorkerResponse,
+} from "../adapters/attachments/generated-image-worker-protocol";
 
 const workerPath = process.argv[2];
 if (!workerPath)
@@ -10,15 +14,9 @@ if (!workerPath)
 const worker = new Worker(pathToFileURL(workerPath));
 let id = 0;
 
-type ImageRequest =
-  | { kind: "inline"; base64: string; itemId: string }
-  | { kind: "file"; bytes: Uint8Array; itemId: string; revision: string }
-  | { kind: "file-revision"; bytes: Uint8Array; itemId: string }
-  | { kind: "history-start"; image: unknown; hasInlineOutput: boolean }
-  | { kind: "history-chunk"; chunk: string }
-  | { kind: "history-end" };
+type GeneratedImageWorkerReply = { id: number; result: GeneratedImageWorkerResponse };
 
-const send = (request: ImageRequest): Promise<any> =>
+const send = (request: GeneratedImageWorkerRequest): Promise<GeneratedImageWorkerResponse> =>
   new Promise((resolveReply, reject) => {
     const requestId = id++;
     const cleanup = () => {
@@ -31,7 +29,7 @@ const send = (request: ImageRequest): Promise<any> =>
       reject(cause);
     };
     const exit = (code: number) => error(new Error(`Worker exited before response: ${code}`));
-    const message = (reply: any) => {
+    const message = (reply: GeneratedImageWorkerReply) => {
       cleanup();
       try {
         assert.equal(reply.id, requestId);
@@ -45,7 +43,7 @@ const send = (request: ImageRequest): Promise<any> =>
     worker.once("exit", exit);
     const buffer =
       request.kind === "file" || request.kind === "file-revision" ? request.bytes.buffer : null;
-    worker.postMessage({ id: requestId, request }, buffer instanceof ArrayBuffer ? [buffer] : []);
+    worker.postMessage({ id: requestId, request }, buffer === null ? [] : [buffer]);
   });
 
 const png =
@@ -71,7 +69,9 @@ try {
     itemId: "file",
     revision: "old",
   });
-  assert.equal(stale.kind, "invalid");
+  if (stale.kind !== "invalid") {
+    throw new Error(`Expected an invalid result, received ${stale.kind}.`);
+  }
   assert.ok(stale.message.includes("changed"));
   assert.deepEqual(await send({ kind: "file", bytes, itemId: "file", revision }), {
     kind: "payload",
@@ -98,11 +98,14 @@ try {
   );
   assert.deepEqual(await send({ kind: "history-chunk", chunk: png }), { kind: "ack" });
   const history = await send({ kind: "history-end" });
-  assert.equal(history.kind, "history");
-  assert.equal(
-    history.part.output.revision,
-    createHash("sha256").update(`inline\0${png}`).digest("hex"),
-  );
+  if (history.kind !== "history") {
+    throw new Error(`Expected a history result, received ${history.kind}.`);
+  }
+  const output = history.part.output;
+  if (output === undefined) {
+    throw new Error("Expected the history result to have an output.");
+  }
+  assert.equal(output.revision, createHash("sha256").update(`inline\0${png}`).digest("hex"));
   const limit = 32 * 1024 * 1024;
   const boundary = Buffer.alloc(limit + 1);
   Buffer.from(png, "base64").copy(boundary);
@@ -119,10 +122,14 @@ try {
     base64: boundary.toString("base64"),
     itemId: "oversized",
   });
-  assert.equal(oversized.kind, "invalid");
+  if (oversized.kind !== "invalid") {
+    throw new Error(`Expected an invalid result, received ${oversized.kind}.`);
+  }
   assert.ok(oversized.message.includes("32 MiB"));
   const invalid = await send({ kind: "inline", base64: "!!!!", itemId: "invalid" });
-  assert.equal(invalid.kind, "invalid");
+  if (invalid.kind !== "invalid") {
+    throw new Error(`Expected an invalid result, received ${invalid.kind}.`);
+  }
   assert.ok(!invalid.message.includes("!!!!"));
   console.log(
     `Worker bundle passed: ${process.versions.electron ? "Electron" : process.versions.bun ? "Bun" : "Node"} ${workerPath}`,

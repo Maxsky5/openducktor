@@ -146,6 +146,9 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      - name: Install Electron runtime for worker bundle tests
+        run: node apps/electron/node_modules/electron/install.js
+
       - name: Test workspaces
         run: bun run scripts/test-shard.ts ${{ matrix.shard }}/${{ strategy.job-total }}
 

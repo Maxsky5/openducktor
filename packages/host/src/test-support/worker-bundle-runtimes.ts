@@ -18,6 +18,7 @@ export const workerBundleRuntimes = (): WorkerBundleRuntime[] => {
   if (node === null) throw new Error("The worker bundle test needs Node on PATH.");
   const bun = Bun.which("bun");
   if (bun === null) throw new Error("The worker bundle test needs Bun on PATH.");
+  // Resolving the package downloads the Electron runtime when it is missing.
   const electron: string = createRequire(electronManifest)("electron");
   return [
     { name: "Node", command: node },

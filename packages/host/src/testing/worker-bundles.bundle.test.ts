@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,6 @@ import { runWorkerBundle, workerBundleRuntimes } from "../test-support/worker-bu
 // Electron and the web runner ship these workers as Node bundles. This test builds each worker
 // with its fixture and runs the same protocol checks under Node, Bun, and Electron.
 const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
-const fixtureDirectory = path.join(sourceDirectory, "../testing");
 let outputDirectory = "";
 
 beforeAll(
@@ -16,10 +15,10 @@ beforeAll(
     outputDirectory = await mkdtemp(path.join(tmpdir(), "odt-worker-bundles-"));
     const result = await Bun.build({
       entrypoints: [
-        path.join(sourceDirectory, "attachments/generated-image-worker.ts"),
-        path.join(sourceDirectory, "claude/claude-transcript-worker.ts"),
-        path.join(fixtureDirectory, "generated-image-worker-bundle.fixture.ts"),
-        path.join(fixtureDirectory, "claude-transcript-worker-bundle.fixture.ts"),
+        path.join(sourceDirectory, "../adapters/attachments/generated-image-worker.ts"),
+        path.join(sourceDirectory, "../adapters/claude/claude-transcript-worker.ts"),
+        path.join(sourceDirectory, "generated-image-worker-bundle.fixture.ts"),
+        path.join(sourceDirectory, "claude-transcript-worker-bundle.fixture.ts"),
       ],
       outdir: outputDirectory,
       target: "node",
@@ -28,6 +27,8 @@ beforeAll(
     if (!result.success) {
       throw new AggregateError(result.logs, "The worker bundle build failed.");
     }
+    // The output has no package.json. Mark it as ESM so Node loads the .js bundles as modules.
+    await writeFile(path.join(outputDirectory, "package.json"), '{"type":"module"}\n');
   },
   // The build bundles two workers and their dependencies.
   30_000,
