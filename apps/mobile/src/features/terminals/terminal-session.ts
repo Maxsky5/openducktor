@@ -111,7 +111,10 @@ export const createTerminalSession = (options: TerminalSessionOptions) => {
     for (const listener of listeners) listener();
   };
   const showAttention = (attention: string | null): void => {
-    if (attention === null || attention !== dismissedAttention) update({ attention });
+    if (attention !== null && attention === dismissedAttention) return;
+    // A different problem ends the dismissal, so a later repeat is a new failure.
+    if (attention !== null) dismissedAttention = null;
+    update({ attention });
   };
   const reportAttention = (title: string) => (cause: unknown) => {
     if (!disposed) showAttention(`${title}: ${errorMessage(cause)}`);
