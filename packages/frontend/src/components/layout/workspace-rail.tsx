@@ -11,12 +11,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
 import { EyeOff, Plus, Trash2, TriangleAlert } from "lucide-react";
@@ -27,7 +22,6 @@ import {
   type RefCallback,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -48,6 +42,7 @@ import {
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
 import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
+import { useWorkspaceRailOrder } from "./workspace-rail-order";
 import { WorkspaceTile } from "./workspace-tile";
 import { HostSwitcher } from "./host-connection";
 import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
@@ -231,22 +226,19 @@ export function WorkspaceRail({
   const { openSettings } = useSettingsModal();
   const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const {
-    workspaces,
+    workspaces: workspaceRecords,
     activeWorkspace,
     incompleteRemovals,
     selectWorkspace,
     reorderWorkspaces,
     isSwitchingWorkspace,
   } = useWorkspaceState();
+  const { workspaces, workspaceIds, showDropOrder } = useWorkspaceRailOrder(workspaceRecords);
   const [lifecycleRequest, setLifecycleRequest] = useState<
     | { action: "close" | "remove"; workspace: WorkspaceRecord }
     | { action: "recovery"; removal: IncompleteWorkspaceRemoval }
     | null
   >(null);
-  const workspaceIds = useMemo(
-    () => workspaces.map((workspace) => workspace.workspaceId),
-    [workspaces],
-  );
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const suppressedSelectionWorkspaceIdRef = useRef<string | null>(null);
   const selectionSuppressionFrameRef = useRef<number | null>(null);
@@ -292,17 +284,16 @@ export function WorkspaceRail({
     setActiveWorkspaceId(null);
     scheduleSelectionSuppressionClear();
 
-    if (!overWorkspaceId || draggedWorkspaceId === overWorkspaceId) {
+    if (!overWorkspaceId) {
       return;
     }
 
-    const draggedIndex = workspaceIds.indexOf(draggedWorkspaceId);
-    const overIndex = workspaceIds.indexOf(overWorkspaceId);
-    if (draggedIndex < 0 || overIndex < 0) {
+    const nextWorkspaceIds = showDropOrder(draggedWorkspaceId, overWorkspaceId);
+    if (!nextWorkspaceIds) {
       return;
     }
 
-    void reorderWorkspaces(arrayMove(workspaceIds, draggedIndex, overIndex)).catch(() => undefined);
+    void reorderWorkspaces(nextWorkspaceIds).catch(() => undefined);
   };
 
   return (
