@@ -1,6 +1,10 @@
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { draftHasMeaningfulContent } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { QueuedMessageSteerContext } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
+import type {
+  AgentSessionContextUsage,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useRouter } from "expo-router";
 import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
@@ -15,7 +19,7 @@ import { BorderRay } from "@/ui/border-ray";
 import { useBottomEdgePadding } from "@/ui/keyboard-inset-view";
 import { blurFocusedField } from "@/ui/keyboard-dismiss";
 import { Text } from "@/ui/text";
-import { useSessionFacts } from "@/features/session/use-session-facts";
+import { useSessionSelector } from "@/features/session/use-session-selector";
 import { withAlpha } from "@/theme/color-alpha";
 import { RuntimeIcon } from "@/ui/brand-icons";
 import { HardwareKeyboardView } from "../../../modules/openducktor-keyboard";
@@ -355,9 +359,9 @@ function ComposerControls({
 }): ReactElement {
   const router = useRouter();
   const { target, policy, draft, primaryMode, secondaryMode } = composer;
-  const facts = useSessionFacts();
+  const sessionContextUsage = useSessionSelector(target.identity, selectContextUsage, Object.is);
   const contextUsage = useContextUsage({
-    contextUsage: facts.contextUsage,
+    contextUsage: sessionContextUsage,
     catalog: composer.modelCatalog,
     selectedModel: composer.selectedModel,
   });
@@ -458,6 +462,9 @@ function SecondarySendButton({
 }
 
 const MemoMessageQueuePanel = memo(MessageQueuePanel);
+
+const selectContextUsage = (session: AgentSessionState | null): AgentSessionContextUsage | null =>
+  session?.contextUsage ?? null;
 
 const cardStyleOf = (state: ReturnType<typeof composerCardState>) => {
   switch (state) {
