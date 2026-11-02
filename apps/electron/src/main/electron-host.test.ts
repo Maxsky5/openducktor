@@ -256,6 +256,25 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   ...overrides,
 });
 
+/** Router tests must not reach the real worktree file adapter, which changes this machine. */
+const createWorktreeFiles = (overrides: Partial<WorktreeFilePort> = {}): WorktreeFilePort => ({
+  resolveWorktreeRemovalPath: (worktreePath) => Effect.succeed(worktreePath),
+  prepareWorktreeAliasRemoval: () => Effect.succeed({ remove: Effect.void }),
+  ensureDirectory: () => Effect.void,
+  copyConfiguredPaths: () => Effect.void,
+  removePathIfPresent: () => Effect.void,
+  resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
+  resolvePathWithinRoot: (_root, candidate) =>
+    Effect.succeed({
+      canonicalPath: candidate,
+      cleanupPath: candidate,
+      isSymlink: false,
+      kind: "descendant",
+    }),
+  pathIsWithinRoot: () => Effect.succeed(false),
+  ...overrides,
+});
+
 const createGit = (): GitPort => ({
   releaseReadCaptures: () => Effect.void,
   canonicalizePath: (path) => Effect.succeed(path),
@@ -2383,6 +2402,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
+      worktreeFiles: createWorktreeFiles(),
       config: globalConfig({
         workspaces: {
           repo: repoConfig(),
@@ -2471,23 +2491,12 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      worktreeFiles: {
-        ensureDirectory: () => Effect.void,
-        copyConfiguredPaths: () => Effect.void,
+      worktreeFiles: createWorktreeFiles({
         removePathIfPresent: (worktreePath) =>
           Effect.sync(() => {
             removedMergedWorktreePaths.push(worktreePath);
           }),
-        resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
-        resolvePathWithinRoot: (_root, candidate) =>
-          Effect.succeed({
-            canonicalPath: candidate,
-            cleanupPath: candidate,
-            isSymlink: false,
-            kind: "descendant",
-          }),
-        pathIsWithinRoot: () => Effect.succeed(false),
-      },
+      }),
       config: globalConfig({
         workspaces: {
           repo: repoConfig({
@@ -2684,15 +2693,7 @@ describe("createElectronHostCommandRouter", () => {
       workspaceOrder: ["repo"],
     });
     const runtimeStarter = createRuntimeStarter();
-    const worktreeFiles: WorktreeFilePort = {
-      ensureDirectory: () => Effect.succeed(undefined),
-      copyConfiguredPaths: () => Effect.succeed(undefined),
-      removePathIfPresent: () => Effect.succeed(undefined),
-      resolveWorktreePath(_repoPath, worktreePath) {
-        return worktreePath;
-      },
-      pathIsWithinRoot: () => Effect.succeed(true),
-    };
+    const worktreeFiles = createWorktreeFiles({ pathIsWithinRoot: () => Effect.succeed(true) });
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
